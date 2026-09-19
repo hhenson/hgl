@@ -9,7 +9,7 @@ exploration numbers and of the decision records in `hgraph`.
 
 | # | Decision | Status | Exploration |
 |---|---|---|---|
-| | *none yet* | | |
+| 0001 | [The new compiler back end, runtime and generated code are Rust](0001-rust-end-to-end.md) | accepted | [0001](../explorations/0001-implementation-language-survey.md) |
 
 ## Template
 

@@ -1,0 +1,33 @@
+# cargo-deny: what may enter the dependency graph. Run by `cargo xtask ci`
+# when installed, and always by CI.
+
+[graph]
+all-features = true
+
+[advisories]
+# Defaults: known vulnerabilities and unmaintained crates are errors.
+
+[licenses]
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Zlib",
+]
+confidence-threshold = 0.9
+
+[licenses.private]
+ignore = true # workspace crates are `publish = false` and carry no licence
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true # path dependencies between workspace crates
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

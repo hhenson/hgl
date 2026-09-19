@@ -1,40 +1,51 @@
 # hgl
 
-A private scratch space for experimenting with the design and evolution of the
-**hgraph language** (HGL).
+A private experiment: a new compiler back end and a compact runtime for the
+**hgraph language** (HGL), written in Rust — and, as much as the code, a
+method for describing a system so that AI agents produce code that stays
+clean, compact and understandable.
 
-**Status:** experimental and probably throw-away. Nothing here is a commitment,
-a specification, or a release. Do not share.
+**Status:** experimental and possibly throw-away. Nothing here is a
+commitment, a specification, or a release. Do not share.
 
-## What this is for
+## Relationship to hgraph
 
-The working language — compiler, standard library, examples and its design
-corpus — lives in the [`hgraph`](https://github.com/hhenson/hgraph) repository
-under `language/`. That tree is held to a standard: docs are authoritative,
-changes land green, structural proposals go through an RFC.
+The language is specified in the [`hgraph`](https://github.com/hhenson/hgraph)
+repository under `language/`, and this repository accepts it as it stands.
 
-This repository is the opposite. It is where ideas get written down quickly,
-argued with, rewritten and thrown away, without the cost of keeping a compiler
-and a test suite in step. An idea that survives graduates back to `hgraph` as
-an RFC or a design decision record; one that does not is left here as a record
-of why.
+- **The specification is upstream.** HGL's syntax and semantics are whatever
+  `hgraph/language/docs` says. Implementation choices — how programs are
+  built and executed — are free to differ here.
+- **Extensions land upstream first.** A needed language extension is proposed
+  in hgraph, made to work there, and only then used here.
+- **The hgraph runtime is the reference.** It mostly does what is needed; its
+  behaviour is the oracle the new runtime is checked against, tick for tick.
+  The emitter and the native bindings here are new.
 
 ## What is here
 
-Docs only, for now. No compiler, no build, no code.
-
 | Path | Contents |
 |---|---|
-| [`docs/README.md`](docs/README.md) | Index and the conventions the docs follow |
-| [`docs/explorations/`](docs/explorations/README.md) | One file per idea being explored |
-| [`docs/decisions/`](docs/decisions/README.md) | Short records of what was settled, and why |
-| [`docs/open-questions.md`](docs/open-questions.md) | Running list of questions nobody has answered yet |
+| [`docs/decisions/`](docs/decisions/README.md) | What is settled, and why |
+| [`docs/explorations/`](docs/explorations/README.md) | What is being worked out, one file per topic |
+| [`docs/guides/rust-practices.md`](docs/guides/rust-practices.md) | The Rust setup, how to read Rust from C++, how to review a diff |
+| [`docs/open-questions.md`](docs/open-questions.md) | Questions nobody has picked up yet |
+| `Cargo.toml`, `clippy.toml`, `deny.toml`, `rust-toolchain.toml` | The workspace and its gates |
+| `xtask/` | Repository automation |
+| `CLAUDE.md` | The rules for agents working here |
 
-## Why markdown
+No compiler or runtime code exists yet; the shape is described in
+[exploration 0005](docs/explorations/0005-code-shape.md) and the order of
+work in [0006](docs/explorations/0006-build-sequence.md).
 
-Everything is plain markdown because it is the quickest format to read and to
-edit, for a person and for an AI session alike. No build step, no rendered
-site, no cross-reference machinery: a doc is a file, a link is a relative path.
+## Building
+
+```sh
+cargo xtask ci    # format, clippy, tests, docs, dependency policy
+```
+
+That command is the definition of done. CI runs it on Linux and Windows;
+macOS is run locally.
 
 ## Baseline
 
@@ -44,5 +55,5 @@ When a doc here says "today", it means the language as implemented in
 - `language/docs/design/` — language model, control flow, iteration, operators,
   modules, native interface, roadmap, and the numbered decision records
 - `language/docs/developer-guide/syntax-and-semantics.md` — the closest thing to
-  a reference
+  a reference, including the EBNF grammar
 - `language/examples/` and `language/stdlib/` — what actually parses and runs

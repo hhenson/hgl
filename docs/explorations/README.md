@@ -5,7 +5,13 @@ started; the number is only there to give a stable way to refer to it.
 
 | # | Title | Status |
 |---|---|---|
-| | *none yet* | |
+| 0001 | [Implementation language and tooling for the new runtime](0001-implementation-language-survey.md) | accepted |
+| 0002 | [Profile of the reference implementation](0002-reference-implementation-profile.md) | sketch |
+| 0003 | [What the evidence says about AI agents, languages and clean code](0003-ai-codegen-evidence.md) | sketch |
+| 0004 | [Languages and tools for writing compilers, 2026](0004-compiler-tooling-survey.md) | sketch |
+| 0005 | [The shape of the code](0005-code-shape.md) | sketch |
+| 0006 | [What we need to do, and in what order](0006-build-sequence.md) | sketch |
+| 0007 | [Where hgraph's own documents disagree](0007-hgraph-doc-conflicts.md) | sketch |
 
 ## Template
 

@@ -1,0 +1,6 @@
+# Stable options only. Formatting is not a matter of taste here: whatever
+# `cargo fmt` produces is the style.
+edition = "2024"
+newline_style = "Unix"
+use_field_init_shorthand = true
+use_try_shorthand = true

@@ -1,0 +1,86 @@
+# One workspace for compiler, runtime and tooling. The crate graph is the
+# layering rule: a crate can only use what its own Cargo.toml declares.
+# See docs/guides/rust-practices.md for why each setting is here.
+
+[workspace]
+resolver = "3"
+# Add "crates/*" with the first crate; cargo rejects a glob that matches nothing.
+members = ["xtask"]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.98"
+publish = false
+
+# Every third-party crate is declared once, here, with its version. Member
+# crates inherit it with `name.workspace = true`. Adding a line to this table
+# is a reviewed decision (see CLAUDE.md), not a convenience.
+[workspace.dependencies]
+
+# Lints are "warn" so local iteration is not blocked; `cargo xtask ci` and CI
+# run with `-D warnings`, which turns every one of them into an error.
+# A crate opts in with `[lints] workspace = true`.
+[workspace.lints.rust]
+unsafe_code = "forbid" # cannot be overridden with an attribute, by design
+missing_docs = "warn"
+missing_debug_implementations = "warn"
+unreachable_pub = "warn" # keeps the public surface honest and small
+single_use_lifetimes = "warn"
+trivial_casts = "warn"
+trivial_numeric_casts = "warn"
+unused_qualifications = "warn"
+rust_2018_idioms = { level = "warn", priority = -1 }
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+# Pedantic lints that produce noise rather than signal.
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+missing_errors_doc = "allow"
+
+# Shortcuts that hide failure instead of handling it.
+unwrap_used = "warn"
+expect_used = "warn"
+unwrap_in_result = "warn"
+panic = "warn"
+todo = "warn"
+unimplemented = "warn"
+exit = "warn"
+let_underscore_must_use = "warn"
+map_err_ignore = "warn"
+mem_forget = "warn"
+
+# Shortcuts that dodge the ownership model instead of following it.
+clone_on_ref_ptr = "warn"
+redundant_clone = "warn"
+rc_buffer = "warn"
+rc_mutex = "warn"
+
+# Exhaustiveness: no `_ =>` on an enum, so a new variant lists every site.
+wildcard_enum_match_arm = "warn"
+
+# A lint may only be silenced with `#[expect(lint, reason = "...")]`, which
+# also fails once the lint stops firing.
+allow_attributes = "warn"
+allow_attributes_without_reason = "warn"
+
+# Libraries do not print; tools that do say so explicitly.
+dbg_macro = "warn"
+print_stdout = "warn"
+print_stderr = "warn"
+
+# Shape.
+excessive_nesting = "warn"
+mod_module_files = "warn" # `foo.rs` + `foo/bar.rs`, never `foo/mod.rs`
+
+# For the one crate that may ever be allowed `unsafe`.
+undocumented_unsafe_blocks = "warn"
+multiple_unsafe_ops_per_block = "warn"
+
+[profile.dev]
+debug = "line-tables-only" # backtraces keep line numbers; builds stay fast
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+debug = "line-tables-only"

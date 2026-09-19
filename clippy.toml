@@ -1,0 +1,18 @@
+# Thresholds for the lints enabled in Cargo.toml. A crate may carry its own
+# clippy.toml (nearest file wins) to add bans, e.g. the kernel banning
+# `Rc`, `RefCell`, `Arc` and `Mutex` on the evaluation path.
+# Never raise a threshold to make code pass; restructure the code.
+
+too-many-lines-threshold = 80
+too-many-arguments-threshold = 6
+excessive-nesting-threshold = 5
+
+# Nothing here is published, so lints may suggest changes to public items.
+avoid-breaking-exported-api = false
+
+# Tests may fail loudly.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+allow-dbg-in-tests = true
+allow-print-in-tests = true

@@ -1,0 +1,7 @@
+# Read by rustup (locally and on CI runners): everyone builds with exactly
+# this compiler, so lints and formatting cannot drift between machines.
+# Bump deliberately, in its own commit.
+[toolchain]
+channel = "1.98.1"
+profile = "minimal"
+components = ["rustfmt", "clippy"]

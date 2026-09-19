@@ -5,8 +5,15 @@
 - [Explorations](explorations/README.md) — ideas in progress, one file each
 - [Decisions](decisions/README.md) — what was settled, and why
 - [Open questions](open-questions.md) — unanswered, unowned
+- [Rust practices](guides/rust-practices.md) — the setup, reading Rust from
+  C++, reviewing a diff
+- [Runtime specification](runtime_spec/overview.md) — what an HGraph runtime
+  is, concept by concept; in progress
 
-Nothing is filed yet.
+Reading order: [decision 0001](decisions/0001-rust-end-to-end.md) (Rust, end
+to end) and the survey behind it (explorations 0001–0004); then
+[0005 — the shape of the code](explorations/0005-code-shape.md) and
+[0006 — the order of work](explorations/0006-build-sequence.md), both sketches.
 
 ## Conventions
 
