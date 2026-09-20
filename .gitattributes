@@ -1,0 +1,4 @@
+# The formatter pins Unix newlines (`rustfmt.toml`), so every checkout has to
+# use them: Git for Windows converts on checkout by default, and the format
+# gate then fails on a file nobody has touched.
+* text=auto eol=lf
