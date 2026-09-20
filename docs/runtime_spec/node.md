@@ -1,6 +1,10 @@
 Node
 ====
 
+Status: proposed consolidated specification; intended rules and implementation
+evidence are distinguished in [Evidence](evidence.md). No full runtime
+conformance is claimed.
+
 A node is the unit of behaviour in a graph. Everything a graph *does* — take
 in an event, compute, remember, schedule, report a failure, write to the
 outside world — is done by a node.
@@ -131,7 +135,11 @@ Injectables).
 **State** is a private value. It exists from instantiation until disposal,
 it is read and written only by the node, it never ticks, and nothing outside
 the node can see it. It is a cache: a node must behave the same whether its
-state survived or was rebuilt from what the node can see.
+state survived or was rebuilt from equivalent authoritative inputs,
+recordable history and pending work. With the same future events, outputs,
+validity, deltas and effects must agree. Losing a running total is not cache
+reconstruction. This is the intended contract, not a claim that arbitrary
+native `State` use is checked for reconstructibility.
 
 **Recordable state** is a time-series the node owns, and it **works the same
 as the output**. The node reads what it holds and writes to it during eval —
@@ -151,9 +159,10 @@ when start is called, and must not overwrite it. Its plain state is empty,
 and start rebuilds it.
 
 In HGL, `state` is recordable state and `cache` is state. HGL hides the
-machinery: to the code, a `state` is a variable that is read and assigned,
-and that it is a time-series underneath — ticking, recordable, restorable —
-does not show.
+intended machinery: to the code, a `state` is a variable that is read and
+assigned, and that it is a time-series underneath — ticking, recordable, restorable —
+does not show. Mixed HGL state/cache lowering remains separate work; see
+[implementation evidence](evidence.md).
 
 
 Behaviour

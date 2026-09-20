@@ -1,6 +1,10 @@
 Injectables
 ===========
 
+Status: proposed consolidated specification; intended rules and implementation
+evidence are distinguished in [Evidence](evidence.md). No full runtime
+conformance is claimed.
+
 An injectable is a facility of the runtime that a node asks for by name: the
 clock, its scheduler, a logger, its own output. It is how a node reaches
 anything that is not an input, an output it writes, or a scalar it was

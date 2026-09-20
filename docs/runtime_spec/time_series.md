@@ -1,6 +1,10 @@
 Time-series types
 =================
 
+Status: proposed consolidated specification; intended rules and implementation
+evidence are distinguished in [Evidence](evidence.md). No full runtime
+conformance is claimed.
+
 A time-series is a value that changes over time. It is what flows along every
 edge of a graph, what every node reads and writes, and the thing that makes
 the runtime incremental: a time-series knows not only what it is, but what
@@ -11,6 +15,9 @@ Concept
 -------
 
 ### What every time-series has
+
+The timestamp definitions below describe owned outputs. Inputs reflect them
+or add the sampling and binding observations specified in TS-1 and TS-14–TS-15.
 
 | Property | Meaning |
 |---|---|
@@ -58,9 +65,9 @@ A time-series **notifies** whoever is watching it when its state changes.
 Every tick notifies. So do two things that are not ticks: **becoming
 invalid**, and some **changes of binding**. Notification is what wakes nodes
 (see Graph); *modified* is what a woken node reads to find out what changed.
-The two usually coincide. When they do not — a node woken because an input
-went invalid — every input reads unmodified, and the node finds the change by
-reading *valid*.
+The two usually coincide. When an input goes invalid it reads unmodified;
+other inputs may still be modified. A node can therefore be scheduled when
+none of its inputs reads modified and discover the change through *valid*.
 
 ### The kinds
 
@@ -102,8 +109,8 @@ classDiagram
     TimeSeriesInput "1" *-- "0..*" TimeSeriesInput : children
     TimeSeriesInput "0..*" --> "0..1" TimeSeriesOutput : bound to
     TimeSeriesOutput "1" --> "0..*" TimeSeriesInput : notifies
-    Node "1" *-- "0..*" TimeSeriesOutput
-    Node "1" *-- "0..1" TimeSeriesInput
+    Node "1" *-- "0..1" TimeSeriesOutput : ordinary output
+    Node "1" *-- "0..*" TimeSeriesInput
     Reference ..> TimeSeriesOutput : designates
 ```
 
@@ -134,11 +141,10 @@ State
 | bound to | An input | An output, or nothing |
 | role | An input | Peered, non-peered or local. Fixed by the graph description, except for the members of a collection that come and go |
 | active | An input | Set from the node type when the node starts; the node may change it |
-| notified at | An input | The last evaluation time at which it was notified; this is what makes it schedule its node only once a cycle |
 
 A **non-peered** input's state is its own, derived from its children: it is
-valid when *any* child is valid, all valid when *every* child is, and its
-last modified time is the latest at which a child notified it.
+valid when *any* child is valid, all valid when itself and *every* child are
+valid, and its last modified time is the latest at which a child notified it.
 
 ```mermaid
 stateDiagram-v2
@@ -191,7 +197,9 @@ sequenceDiagram
     end
 ```
 
-- Writing the value a time-series already holds is still a tick.
+- An admitted publication of the value a time-series already holds is still
+  a tick. An operator may suppress an equal result before publication; a
+  conformance adapter must identify that boundary.
 - However many times a time-series is written in one cycle, it notifies once,
   and its delta at the end describes the net change.
 - The delta is read through *modified*: in any later cycle it reads nil,
@@ -238,8 +246,9 @@ that cycle.
 Sampling is how an input brought into a running graph — a new branch of a
 switch, a new key of a map — sees values that were set before it existed.
 
-When an output is disposed of, the inputs bound to it become unbound, without
-notification.
+When an output is disposed of, its bindings must be detached before its
+storage is destroyed. Teardown itself must not schedule work against that
+storage; this is distinct from an explicit keyed withdrawal while running.
 
 ### References
 
@@ -287,10 +296,12 @@ it is".
 Rules
 -----
 
-- **TS-1** A time-series is modified exactly when its last modified time
-  equals the evaluation time, and valid exactly when its last modified time
-  is not *never*. A non-peered input derives both from its children; an
-  unbound input is not valid.
+- **TS-1** An owned output is modified exactly when its last modified time
+  equals the evaluation time, and valid exactly when that time is not
+  *never*. A plain peered input reflects the output. A non-peered input
+  derives its observations from its children; sampling adds the input-side
+  observation in TS-14. An unbound input is not valid; keyed withdrawal
+  retains the removal observation in TS-15 (see Points to settle).
 - **TS-2** The value of a time-series that is not valid is nil. The delta of
   one that is not modified is nil.
 - **TS-3** Last modified time never decreases, except that invalidation
@@ -309,7 +320,10 @@ Rules
 - **TS-8** A passive input never schedules its node. Making an input active
   or passive does not change what it reads, and never itself schedules the
   node — not even when its source has already ticked in the cycle.
-- **TS-9** All valid implies valid, and looks one level down only.
+- **TS-9** All valid implies valid. TSB, TSL and TSD additionally require
+  every immediate live child to be valid, without asking its all_valid.
+  Removed children do not count. TS, TSS and REF use valid; TSW additionally
+  requires its minimum. An empty collection passes only if itself valid.
 - **TS-10** In a set's delta, *added* and *removed* share no element. An
   element added and removed in one cycle is in neither.
 - **TS-11** A key removed from a dictionary, and its child, are readable for

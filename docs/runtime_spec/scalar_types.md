@@ -1,6 +1,10 @@
 Scalar types
 ============
 
+Status: proposed consolidated specification; intended rules and implementation
+evidence are distinguished in [Evidence](evidence.md). No full runtime
+conformance is claimed.
+
 A scalar value is a piece of data with no time in it. It is what a
 time-series carries from one tick to the next, what a node is configured
 with, and what a node keeps as state. "Scalar" here means *not a
@@ -299,17 +303,14 @@ Points to settle
    when its *key* has equality and hash; the value type is not mentioned. It
    presumably has to have equality too. The capability table follows the
    registry and should be checked.
-7. **A struct that contains itself: the language is behind the runtime.**
-   Settled as a concept (VAL-18). hgraph's value layer supports it: a
-   recursive field is held through an owned one-pointer handle, and there are
-   registrations for a struct that refers to itself and for a group that
-   refer to one another. HGL was meant to have it and does not yet: the
-   compiler rejects any struct whose field mentions the struct itself. The
-   design is proposed upstream as HGL ADR 0012. Two things there bear on the
-   runtime: a recursive field has to stop the derivation of a time-series
-   type, or the bundle would never end; and recursion through a container
-   (`children: list<Node>`) is not something hgraph's registrations can
-   express today.
+7. **Recursive fields across modules.** VAL-18 is settled. HGL ADR 0012 is
+   accepted and implemented for its admitted domain in both backends at the
+   [audited revision](evidence.md). A recursive edge is optional and an atomic
+   boundary, so temporalization terminates. Direct and mutual recursive edges
+   are supported; recursion through containers remains excluded by that ADR.
+   Importing a struct from another module still waits for general struct
+   imports. The earlier statement that HGL rejects all recursive fields is
+   superseded.
 
 
 Sources

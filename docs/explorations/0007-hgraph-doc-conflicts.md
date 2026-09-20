@@ -1,6 +1,7 @@
 # 0007 — Where hgraph's own documents disagree
 
-Status: sketch
+Status: historical survey; current evidence is in the
+[runtime evidence ledger](../runtime_spec/evidence.md).
 
 Input to the [runtime specification](../runtime_spec/overview.md). Collected
 2026-09-19 by reading hgraph's documents against each other and against the
