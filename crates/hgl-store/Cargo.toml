@@ -1,0 +1,19 @@
+[package]
+name = "hgl-store"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "Where time-series live and how a tick travels: every value, last-modified time and binding of a run."
+
+[package.metadata.hgl]
+line-budget = 500
+
+[dependencies]
+hgl-types = { path = "../hgl-types" }
+
+[dev-dependencies]
+hgl-alloc-count = { path = "../hgl-alloc-count" }
+
+[lints]
+workspace = true

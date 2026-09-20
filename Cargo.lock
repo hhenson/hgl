@@ -3,5 +3,74 @@
 version = 4
 
 [[package]]
+name = "hgl-alloc-count"
+version = "0.0.0"
+
+[[package]]
+name = "hgl-bench-twin"
+version = "0.0.0"
+dependencies = [
+ "hgl-alloc-count",
+ "hgl-describe",
+ "hgl-kernel",
+ "hgl-proto-nodes",
+ "hgl-store",
+ "hgl-types",
+]
+
+[[package]]
+name = "hgl-describe"
+version = "0.0.0"
+dependencies = [
+ "hgl-kernel",
+ "hgl-store",
+ "hgl-types",
+]
+
+[[package]]
+name = "hgl-kernel"
+version = "0.0.0"
+dependencies = [
+ "hgl-alloc-count",
+ "hgl-store",
+ "hgl-types",
+]
+
+[[package]]
+name = "hgl-proto-nodes"
+version = "0.0.0"
+dependencies = [
+ "hgl-alloc-count",
+ "hgl-describe",
+ "hgl-kernel",
+ "hgl-store",
+ "hgl-types",
+]
+
+[[package]]
+name = "hgl-store"
+version = "0.0.0"
+dependencies = [
+ "hgl-alloc-count",
+ "hgl-types",
+]
+
+[[package]]
+name = "hgl-testkit"
+version = "0.0.0"
+dependencies = [
+ "hgl-alloc-count",
+ "hgl-describe",
+ "hgl-kernel",
+ "hgl-proto-nodes",
+ "hgl-store",
+ "hgl-types",
+]
+
+[[package]]
+name = "hgl-types"
+version = "0.0.0"
+
+[[package]]
 name = "xtask"
 version = "0.0.0"

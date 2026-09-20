@@ -1,0 +1,266 @@
+//! What a node supplies so that it can be built, what it is given while it is
+//! built, and where implementations are found by name.
+
+use std::collections::HashMap;
+
+use hgl_kernel::Node;
+use hgl_store::{In, InputId, Out, OutputId, Scalar, Store};
+use hgl_types::{NodeId, NodeType, ScalarType, TsType};
+
+use crate::{BuildError, NodeDescription};
+
+/// The second half of a node, after its [`Node`] impl: its node type, and
+/// how it is made from its ports.
+///
+/// ```
+/// use hgl_describe::{Buildable, BuildError, Ports};
+/// use hgl_kernel::{Ctx, Node, NodeResult};
+/// use hgl_store::{In, Out};
+/// use hgl_types::{NodeType, ScalarType, TsType};
+///
+/// struct Sum {
+///     lhs: In<i64>,
+///     rhs: In<i64>,
+///     out: Out<i64>,
+/// }
+///
+/// impl Node for Sum {
+///     fn eval(&mut self, ctx: &mut Ctx<'_>) -> NodeResult {
+///         ctx.set(self.out, ctx.get(self.lhs) + ctx.get(self.rhs));
+///         Ok(())
+///     }
+/// }
+///
+/// impl Buildable for Sum {
+///     fn node_type() -> NodeType {
+///         let i64s = TsType::Ts(ScalarType::I64);
+///         NodeType {
+///             name: "sum",
+///             inputs: vec![("lhs", i64s.clone()), ("rhs", i64s.clone())],
+///             output: Some(i64s),
+///             scalars: Vec::new(),
+///             active_inputs: None,
+///             valid_inputs: None,
+///             uses_scheduler: false,
+///             schedule_on_start: false,
+///         }
+///     }
+///     fn build(ports: &mut Ports<'_>) -> Result<Self, BuildError> {
+///         Ok(Self { lhs: ports.input("lhs")?, rhs: ports.input("rhs")?, out: ports.output()? })
+///     }
+/// }
+/// ```
+pub trait Buildable: Node + Sized {
+    /// What the runtime must know to make and run the node. Its name is the
+    /// one the node is registered under, and that a description names it by
+    /// (GRF-9).
+    fn node_type() -> NodeType;
+    /// Take the node's handles and scalars, by name: the only time they are
+    /// looked up.
+    fn build(ports: &mut Ports<'_>) -> Result<Self, BuildError>;
+}
+
+/// A node's typed handles and scalars, by name, while it is being built.
+///
+/// Asking for an input or the output makes it in the store, owned by this
+/// node. Whatever the build does not ask for is made when it returns, so the
+/// store holds every port the node type declares whether the node reads it
+/// or not.
+#[derive(Debug)]
+pub struct Ports<'a> {
+    pub(crate) store: &'a mut Store,
+    /// The node being built: the owner of every port made for it.
+    pub(crate) node: NodeId,
+    pub(crate) node_type: &'a NodeType,
+    pub(crate) description: &'a NodeDescription,
+    /// One entry per input of the node type, filled when the input is made.
+    pub(crate) inputs: Vec<Option<InputId>>,
+    pub(crate) output: Option<OutputId>,
+}
+
+impl Ports<'_> {
+    /// The input called `name`, active or passive as the node type says.
+    ///
+    /// Errors: the node type has no such input, or declares another type
+    /// for it; the input was taken already.
+    pub fn input<T: Scalar>(&mut self, name: &str) -> Result<In<T>, BuildError> {
+        let node_type = self.node_type;
+        let label = &self.description.label;
+        let inputs = &node_type.inputs;
+        let Some(position) = inputs.iter().position(|&(input, _)| input == name) else {
+            return Err(BuildError::unknown_input(label, name));
+        };
+        let TsType::Ts(declared) = inputs[position].1;
+        if declared != T::TYPE {
+            return Err(BuildError::wrong_type(label, name));
+        }
+        if self.inputs[position].is_some() {
+            return Err(BuildError::bound_twice(label, name));
+        }
+        let input = self.store.add_input(self.node, active(node_type, position));
+        self.inputs[position] = Some(input.id());
+        Ok(input)
+    }
+
+    /// The node's output.
+    ///
+    /// Errors: the node type declares none, or declares another type; the
+    /// output was taken already.
+    pub fn output<T: Scalar>(&mut self) -> Result<Out<T>, BuildError> {
+        let label = &self.description.label;
+        let Some(TsType::Ts(declared)) = self.node_type.output else {
+            return Err(BuildError::no_output(label));
+        };
+        if self.output.is_some() {
+            return Err(BuildError::no_output(label));
+        }
+        if declared != T::TYPE {
+            return Err(BuildError::wrong_type(label, "output"));
+        }
+        let output = self.store.add_output(self.node);
+        self.output = Some(output.id());
+        Ok(output)
+    }
+
+    /// The scalar called `name`, as the description gives it.
+    ///
+    /// Errors: the description gives no such scalar, or gives another type.
+    pub fn scalar<T: Scalar>(&self, name: &str) -> Result<T, BuildError> {
+        let scalars = &self.description.scalars;
+        let label = &self.description.label;
+        let Some(&(_, value)) = scalars.iter().find(|(scalar, _)| scalar == name) else {
+            return Err(BuildError::unknown_scalar(label, name));
+        };
+        T::from_value(value).ok_or_else(|| BuildError::wrong_type(label, name))
+    }
+
+    /// Every port the node type declares, in its order, making each one the
+    /// build did not ask for.
+    pub(crate) fn into_ids(self) -> (Vec<InputId>, Option<OutputId>) {
+        let mut inputs = Vec::with_capacity(self.inputs.len());
+        for (position, (_, declared)) in self.node_type.inputs.iter().enumerate() {
+            let active = active(self.node_type, position);
+            let made = self.inputs[position];
+            inputs.push(made.unwrap_or_else(|| add_input(self.store, declared, self.node, active)));
+        }
+        let output = match (self.output, &self.node_type.output) {
+            (None, Some(declared)) => Some(add_output(self.store, declared, self.node)),
+            (made, _) => made,
+        };
+        (inputs, output)
+    }
+}
+
+/// Whether the input at `position` wakes its node when notified (NOD-4,
+/// GRF-17).
+fn active(node_type: &NodeType, position: usize) -> bool {
+    match &node_type.active_inputs {
+        None => true,
+        Some(active) => active.contains(&position),
+    }
+}
+
+/// An input the build did not ask for, made from its declared type.
+fn add_input(store: &mut Store, declared: &TsType, owner: NodeId, active: bool) -> InputId {
+    match declared {
+        TsType::Ts(ScalarType::Bool) => store.add_input::<bool>(owner, active).id(),
+        TsType::Ts(ScalarType::I64) => store.add_input::<i64>(owner, active).id(),
+        TsType::Ts(ScalarType::F64) => store.add_input::<f64>(owner, active).id(),
+    }
+}
+
+/// An output the build did not ask for, made from its declared type.
+fn add_output(store: &mut Store, declared: &TsType, owner: NodeId) -> OutputId {
+    match declared {
+        TsType::Ts(ScalarType::Bool) => store.add_output::<bool>(owner).id(),
+        TsType::Ts(ScalarType::I64) => store.add_output::<i64>(owner).id(),
+        TsType::Ts(ScalarType::F64) => store.add_output::<f64>(owner).id(),
+    }
+}
+
+/// What the registry keeps for one implementation.
+#[derive(Debug)]
+pub(crate) struct Implementation {
+    pub(crate) node_type: NodeType,
+    /// `N::build` for its `N`, boxed: one shape for every implementation.
+    pub(crate) build: fn(&mut Ports<'_>) -> Result<Box<dyn Node>, BuildError>,
+}
+
+/// Every implementation a description may name, by the name it is
+/// registered under.
+#[derive(Debug, Default)]
+pub struct Registry {
+    implementations: HashMap<&'static str, Implementation>,
+}
+
+impl Registry {
+    /// A registry holding nothing.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Make `N` available under its node type's name. Errors if that name is
+    /// taken, or the node type is not well formed; either way what is
+    /// registered stays as it was.
+    pub fn register<N: Buildable>(&mut self) -> Result<(), BuildError> {
+        let node_type = N::node_type();
+        let name = node_type.name;
+        if self.implementations.contains_key(name) {
+            return Err(BuildError::DuplicateImplementation(name));
+        }
+        check_node_type(&node_type)?;
+        let implementation = Implementation {
+            node_type,
+            build: build::<N>,
+        };
+        self.implementations.insert(name, implementation);
+        Ok(())
+    }
+
+    /// The node type of the implementation registered as `implementation`.
+    pub fn node_type(&self, implementation: &str) -> Option<&NodeType> {
+        let found = self.implementations.get(implementation)?;
+        Some(&found.node_type)
+    }
+
+    /// The implementation registered as `implementation` (GRF-9).
+    pub(crate) fn find(&self, implementation: &str) -> Result<&Implementation, BuildError> {
+        self.implementations
+            .get(implementation)
+            .ok_or_else(|| BuildError::UnknownImplementation(implementation.to_owned()))
+    }
+}
+
+fn build<N: Buildable>(ports: &mut Ports<'_>) -> Result<Box<dyn Node>, BuildError> {
+    Ok(Box::new(N::build(ports)?))
+}
+
+/// What a node type must hold for the rest of the crate to trust it, and the
+/// compiler cannot: the positions in `active_inputs` and `valid_inputs` are
+/// inputs it has, and its input names tell its inputs apart.
+fn check_node_type(node_type: &NodeType) -> Result<(), BuildError> {
+    let invalid = |what: String| BuildError::InvalidNodeType {
+        node: node_type.name,
+        what,
+    };
+    let inputs = &node_type.inputs;
+    for (position, &(input, _)) in inputs.iter().enumerate() {
+        if inputs[..position]
+            .iter()
+            .any(|&(earlier, _)| earlier == input)
+        {
+            return Err(invalid(format!("input {input} twice")));
+        }
+    }
+    let listed = [
+        ("active", &node_type.active_inputs),
+        ("valid", &node_type.valid_inputs),
+    ];
+    for (list, positions) in listed {
+        let Some(positions) = positions else { continue };
+        if let Some(position) = positions.iter().find(|&&position| position >= inputs.len()) {
+            return Err(invalid(format!("{list} input {position}")));
+        }
+    }
+    Ok(())
+}

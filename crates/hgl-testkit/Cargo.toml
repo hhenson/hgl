@@ -1,0 +1,24 @@
+[package]
+name = "hgl-testkit"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "Test support for the runtime: the case tables and the eval harness that runs them."
+
+[package.metadata.hgl]
+# Includes the case tables, which are data and grow with the slices.
+line-budget = 650
+
+[dependencies]
+hgl-types = { path = "../hgl-types" }
+hgl-store = { path = "../hgl-store" }
+hgl-kernel = { path = "../hgl-kernel" }
+hgl-describe = { path = "../hgl-describe" }
+
+[dev-dependencies]
+hgl-proto-nodes = { path = "../hgl-proto-nodes" }
+hgl-alloc-count = { path = "../hgl-alloc-count" }
+
+[lints]
+workspace = true

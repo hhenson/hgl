@@ -1,0 +1,151 @@
+//! What a node can reach while one of its hooks runs.
+
+use hgl_store::{In, Out, Scalar, Store};
+use hgl_types::{EngineDelta, EngineTime, NodeId, NodeType};
+
+use crate::schedule::Schedule;
+use crate::{NodeError, NodeResult, Phase};
+
+/// Everything a node may touch while one of its hooks runs. Borrowed for the
+/// call; a node cannot keep it (INJ-3).
+///
+/// It is made for one node and one hook. The node it was made for is who
+/// writes, and the graph's schedule is who is woken; a node author sees
+/// neither. Nothing here can move the clock (INJ-6).
+///
+/// INJ-3 is proved by the signature, not by a run: a hook is lent `ctx` for
+/// the call, so a node that tries to keep it does not compile.
+///
+/// ```compile_fail
+/// use hgl_kernel::{Ctx, Node, NodeResult};
+///
+/// struct Keeps {
+///     kept: Option<&'static mut Ctx<'static>>,
+/// }
+///
+/// impl Node for Keeps {
+///     fn eval(&mut self, ctx: &mut Ctx<'_>) -> NodeResult {
+///         // Refused: the borrow ends with the call.
+///         self.kept = Some(ctx);
+///         Ok(())
+///     }
+/// }
+/// ```
+#[derive(Debug)]
+pub struct Ctx<'a> {
+    pub(crate) store: &'a mut Store,
+    pub(crate) schedule: &'a mut Schedule,
+    pub(crate) stop_requested: &'a mut bool,
+    pub(crate) node_type: &'a NodeType,
+    pub(crate) node: NodeId,
+    pub(crate) now: EngineTime,
+    pub(crate) phase: Phase,
+    pub(crate) scheduled_now: bool,
+}
+
+impl Ctx<'_> {
+    /// The input's value. The input must be valid: one the node requires is;
+    /// any other is asked first.
+    #[inline]
+    pub fn get<T: Scalar>(&self, input: In<T>) -> T {
+        self.store.get(input)
+    }
+
+    /// Whether the input has a value.
+    #[inline]
+    pub fn valid<T: Scalar>(&self, input: In<T>) -> bool {
+        self.store.valid(input)
+    }
+
+    /// Whether the input ticked in this cycle.
+    #[inline]
+    pub fn modified<T: Scalar>(&self, input: In<T>) -> bool {
+        self.store.modified(input, self.now)
+    }
+
+    /// When the input last ticked; `NEVER` if it has not.
+    #[inline]
+    pub fn last_modified<T: Scalar>(&self, input: In<T>) -> EngineTime {
+        self.store.last_modified(input)
+    }
+
+    /// Choose whether the input wakes this node from now on.
+    #[inline]
+    pub fn set_active<T: Scalar>(&mut self, input: In<T>, active: bool) {
+        self.store.set_active(input, active);
+    }
+
+    /// Tick the node's own output. In eval only (NOD-22, INJ-8).
+    #[inline]
+    pub fn set<T: Scalar>(&mut self, output: Out<T>, value: T) {
+        debug_assert!(
+            self.phase == Phase::Eval,
+            "NOD-22, INJ-8: an output is written in eval only"
+        );
+        self.store
+            .set(output, value, self.now, self.node, self.schedule);
+    }
+
+    /// What the node's own output holds: `None` until it has ticked.
+    #[inline]
+    pub fn output_value<T: Scalar>(&self, output: Out<T>) -> Option<T> {
+        self.store.output_value(output)
+    }
+
+    /// The time of this cycle; in start, the start time.
+    #[inline]
+    pub fn evaluation_time(&self) -> EngineTime {
+        self.now
+    }
+
+    /// The earliest time a following cycle could have.
+    #[inline]
+    pub fn next_cycle_evaluation_time(&self) -> EngineTime {
+        self.now
+            .checked_add(EngineDelta::STEP)
+            .unwrap_or(EngineTime::FOREVER)
+    }
+
+    /// Ask to be evaluated `delay` after the evaluation time. The node has
+    /// one pending request, which this replaces.
+    ///
+    /// Errors: the node type does not use a scheduler (INJ-2); the time is
+    /// not in the future, or in start is before the start time (GRF-12,
+    /// NOD-14); the time is after `FOREVER`.
+    #[inline]
+    pub fn schedule_in(&mut self, delay: EngineDelta) -> NodeResult {
+        if !self.node_type.uses_scheduler {
+            return Err(NodeError::new(
+                "INJ-2: the node type does not use a scheduler",
+            ));
+        }
+        let soonest = match self.phase {
+            Phase::Start => EngineDelta::from_micros(0),
+            Phase::Eval | Phase::Stop => EngineDelta::STEP,
+        };
+        if delay < soonest {
+            return Err(NodeError::new(
+                "GRF-12, NOD-14: the time asked for is not in the future",
+            ));
+        }
+        let Some(time) = self.now.checked_add(delay) else {
+            return Err(NodeError::new(
+                "ENG-16: the time asked for is after forever",
+            ));
+        };
+        self.schedule.set_request(self.node, time);
+        Ok(())
+    }
+
+    /// Whether the node's own request is why it is being evaluated now.
+    #[inline]
+    pub fn is_scheduled_now(&self) -> bool {
+        self.scheduled_now
+    }
+
+    /// End the run once this cycle is complete (INJ-10).
+    #[inline]
+    pub fn request_stop(&mut self) {
+        *self.stop_requested = true;
+    }
+}

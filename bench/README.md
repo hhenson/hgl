@@ -13,7 +13,7 @@ Every scenario exists twice and the two are kept side by side:
 | Half | Where | What it is |
 |---|---|---|
 | Baseline | `baselines/cpp/` | The scenario written against hgraph's C++ interface, as plain static nodes |
-| Twin | *(arrives with the prototype)* | The same graph on this runtime |
+| Twin | `twin/` | The same graph on this runtime. A skeleton until the prototype's first slice: it reports `"ok":false` and exits with a failure |
 
 Both halves print one line of JSON with `"ns_per_cycle"`, a `"checksum"`, and
 `"ok"`. `ok` is true only if the checksum equals a closed form worked out

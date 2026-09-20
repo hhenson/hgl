@@ -1,0 +1,18 @@
+[package]
+name = "hgl-describe"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "The graph description, a builder for writing one by hand, and instantiation."
+
+[package.metadata.hgl]
+line-budget = 500
+
+[dependencies]
+hgl-types = { path = "../hgl-types" }
+hgl-store = { path = "../hgl-store" }
+hgl-kernel = { path = "../hgl-kernel" }
+
+[lints]
+workspace = true
