@@ -1,0 +1,197 @@
+# Card: hgl-store
+
+## Purpose
+
+Where time-series live and how a tick travels. The store owns every value,
+every last-modified time and every binding in a run. It knows nothing about
+nodes beyond an id to wake.
+
+## May use
+
+`hgl-types`.
+
+## The layout
+
+Struct of arrays, everything addressed by a dense `u32` index, nothing
+addressed by pointer. Indices survive a vector growing, so plain `Vec`s are
+enough and the crate is **safe Rust**.
+
+```text
+columns     bools: Vec<bool>   i64s: Vec<i64>   f64s: Vec<f64>      one per scalar type
+outputs     modified_at: Vec<EngineTime>   slot: Vec<u32>           indexed by OutputId
+            owner: Vec<NodeId>             watchers: Vec<Vec<InputId>>
+            scalar_type: Vec<ScalarType>
+inputs      source: Vec<Option<OutputId>>  source_slot: Vec<u32>    indexed by InputId
+            owner: Vec<NodeId>             active: Vec<bool>
+            scalar_type: Vec<ScalarType>
+```
+
+`source_slot` repeats what `outputs.slot[source]` says, so that reading an
+input's value is two loads — the slot, then the value — rather than three.
+
+## Surface
+
+```rust
+#[derive(Debug, Clone, Copy, PartialEq, Eq)] pub struct OutputId(pub u32);
+#[derive(Debug, Clone, Copy, PartialEq, Eq)] pub struct InputId(pub u32);
+
+/// A scalar the store has a column for. Sealed: implemented for bool, i64, f64.
+/// The seal is a supertrait in a private module (`+ columns::Column`), which
+/// another crate cannot implement. Its methods can still be reached through a
+/// `T: Scalar` bound, but only on a `Columns` of the caller's own making,
+/// never a store's.
+pub trait Scalar: Copy + PartialEq + std::fmt::Debug + 'static {
+    const TYPE: ScalarType;
+    fn into_value(self) -> ScalarValue;
+    fn from_value(value: ScalarValue) -> Option<Self>;
+}
+
+/// A node's handle to its own `TS<T>` output. Eight bytes.
+#[derive(Debug, Clone, Copy)] pub struct Out<T: Scalar> { /* OutputId, slot */ }
+/// A node's handle to one of its `TS<T>` inputs. Four bytes.
+#[derive(Debug, Clone, Copy)] pub struct In<T: Scalar> { /* InputId */ }
+impl<T: Scalar> Out<T> { pub fn id(self) -> OutputId; }
+impl<T: Scalar> In<T>  { pub fn id(self) -> InputId; }
+
+/// Who is told that a node must be evaluated in this cycle. The kernel's
+/// schedule implements it. Generic, not `dyn`: a wake is inlined. Must be
+/// idempotent: a node is woken twice in one cycle when two of its active
+/// inputs tick, or when one input is re-bound to an output that then ticks.
+/// (An output notifies once per cycle, TS-6; that a node so woken is
+/// evaluated once, GRF-16, is the schedule's to keep.)
+pub trait Wake { fn wake(&mut self, node: NodeId); }
+
+#[derive(Debug, Default)]
+pub struct Store { /* private */ }
+
+impl Store {
+    pub fn new() -> Self;
+
+    // --- instantiation: may allocate ---
+    pub fn add_output<T: Scalar>(&mut self, owner: NodeId) -> Out<T>;
+    pub fn add_input<T: Scalar>(&mut self, owner: NodeId, active: bool) -> In<T>;
+    /// By id, for the builder, which knows types only at run time.
+    /// Errors: either id unknown; the types differ; the input already bound.
+    pub fn bind(&mut self, input: InputId, output: OutputId) -> Result<(), BindError>;
+    pub fn unbind(&mut self, input: InputId);
+    pub fn input_type(&self, input: InputId) -> ScalarType;
+    pub fn output_type(&self, output: OutputId) -> ScalarType;
+
+    // --- per tick: never allocates, never searches ---
+    /// The bound output's value. Debug builds assert the input is valid.
+    pub fn get<T: Scalar>(&self, input: In<T>) -> T;
+    pub fn valid<T: Scalar>(&self, input: In<T>) -> bool;
+    /// `valid`, by id: what the kernel asks of a node's required inputs
+    /// before it calls `eval` (NOD-2). The same two loads and a compare.
+    pub fn input_valid(&self, input: InputId) -> bool;
+    pub fn modified<T: Scalar>(&self, input: In<T>, now: EngineTime) -> bool;
+    pub fn last_modified<T: Scalar>(&self, input: In<T>) -> EngineTime;
+    pub fn set_active<T: Scalar>(&mut self, input: In<T>, active: bool);
+
+    /// Write the value. If this is the output's first write at `now`, stamp
+    /// it and wake the owner of every active watcher; a later write at `now`
+    /// only changes the value (TS-6). `writer` is the node being
+    /// evaluated; debug builds assert it owns `output` (TS-21). Release builds
+    /// do not read it.
+    pub fn set<T: Scalar, W: Wake>(&mut self, output: Out<T>, value: T, now: EngineTime,
+                                   writer: NodeId, wake: &mut W);
+    /// A node reading its own output (INJ-8): `None` until it has ticked.
+    pub fn output_value<T: Scalar>(&self, output: Out<T>) -> Option<T>;
+
+    // --- the erased path: tests and tools, never a node's eval ---
+    pub fn output_value_erased(&self, output: OutputId) -> Option<ScalarValue>;
+    pub fn output_modified(&self, output: OutputId, now: EngineTime) -> bool;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BindError { UnknownInput(InputId), UnknownOutput(OutputId),
+                     TypeMismatch { input: ScalarType, output: ScalarType }, AlreadyBound(InputId) }
+```
+
+## Rules
+
+TS-1 (valid and modified are read from the last modified time), TS-2 (an
+invalid input has no value — `get` asserts in debug; callers check `valid`),
+TS-3, TS-6 (an output notifies on its first write in a cycle only), TS-8 (a
+passive input never wakes; `set_active` changes no reading), TS-14 (a plain
+bind notifies nothing), TS-21, TS-22 (only `set` writes; `get` returns a
+copy), NOD-7, GRF-16, GRF-17.
+
+*Revised after the first build (2026-09-19): the type columns were missing
+from the layout; `set` could not assert its writer; `Wake` must be idempotent.
+A new output's slot holds the scalar's default until its first `set`, which
+nothing can observe. An id that does not exist is a bug in the caller and
+panics by indexing; only `bind`, which the builder calls with ids it did not
+make, returns an error. TS-3's "invalidation returns it to never" has no
+entry point here yet. `modified` is read from the output's `modified_at`.
+A rule whose proof is a signature has no test that can fail — TS-22's `get`
+returns a `Copy` value; TS-14's `bind` has no `Wake` — and the test's comment
+says that instead of claiming to check it. `output_modified` asserts about
+`NEVER` as `modified` does.
+**The per-input `notified_at` column is gone.** A reviewer deleted it and
+every test passed; the reference settles why: hgraph's C++ keeps
+once-per-cycle on the output (a write at a time already stamped returns
+before the observers are walked) and lets the node's schedule slot be
+idempotent. Only the Python runtime stamps inputs. So `set` on a time already
+stamped is a value write and nothing else, and the walk reads two columns per
+watcher, not three. Making an input active never wakes its node, in C++, even
+if its source has ticked; a wiring-time bind never notifies — which is why
+`set_active` and `bind` take no `Wake`. A run-time rebind does notify, and
+arrives with references.
+Revised again when the kernel was built: the kernel holds a node's required
+inputs as ids and had no way to ask whether one is valid — `input_valid`.*
+
+## Speed
+
+- The eight per-tick methods — `get`, `valid`, `input_valid`, `modified`,
+  `last_modified`, `set_active`, `set`, `output_value` — contain no allocation, no hashing, no
+  `dyn`, and no loop except `set`'s walk of the watcher list.
+- `watchers` may allocate when a binding is made, never when a tick is sent.
+- No `unsafe`. If a benchmark misses its 5%, the first things to try are
+  `get_unchecked` behind debug assertions, then raw pointers cached at bind
+  time over chunks that never move — in that order, each justified by a
+  measurement in the commit that adds it.
+- Debug assertions check what release trusts, each naming its rule: a
+  handle's type matches its entry (a handle from another store of the same
+  type is not caught — it names the wrong entry); `set`'s `writer` owns the
+  output (TS-21); an input is valid before it is read (TS-2); time never
+  runs backwards (TS-3); `NEVER` is never an evaluation time, for `set`,
+  `modified` and `output_modified`.
+
+## Budget
+
+500 lines.
+
+## Done when
+
+Unit tests, each naming its rule: a tick stamps and wakes; a second `set` in
+one cycle overwrites and wakes nobody again; a passive watcher is not woken
+and still reads the value and `modified`; an unbound input is not valid;
+`bind` rejects a type mismatch; after warm-up, 10,000 `set` + `get` rounds
+make zero allocations (with `hgl-alloc-count`).
+
+## Mutants
+
+Each must make a test fail.
+
+- `set` wakes passive watchers as well as active ones.
+- `set` walks the watchers on every write, not only the first at a time.
+- A second write at one time does not change the value.
+- A watcher bound between two writes of one cycle is woken by the second.
+- (That `bind` wakes nobody is held by its signature, which has no `Wake`:
+  say so where TS-14 is tested, and do not assert on a `Wake` that `bind`
+  cannot reach. The same holds for `set_active` and TS-8.)
+- A refused `bind` — either reason — changes something before it returns:
+  the watcher list, `source`, or `source_slot`.
+- `modified` reads false for an input bound after its source's tick in the
+  same cycle, or true for one unbound after it.
+- `output_value` indexes the column by the output's id, not its slot.
+- `set_active` always writes input 0.
+- The first write at `MIN_START` wakes nobody.
+- Any one of the Speed section's debug assertions is deleted. (Debug
+  builds only.)
+- `valid` ignores `NEVER` (a bound input is always valid).
+- `modified` compares with `>=` instead of `==`.
+- `unbind` leaves the input reading its old source.
+- `bind` accepts a type mismatch.
+- `input_valid` is true for any bound input, ticked or not.

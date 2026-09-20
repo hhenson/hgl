@@ -2,10 +2,16 @@
 //!
 //! `cargo xtask ci` runs every gate that CI runs, in the same order, and ends
 //! with one line per gate. Work is not done until it passes.
+//!
+//! `cargo xtask bench` measures one benchmark program; see [`mod@bench`].
 #![expect(clippy::print_stdout, reason = "xtask is a command-line tool")]
+
+mod bench;
+mod budget;
 
 use std::env;
 use std::ffi::{OsStr, OsString};
+use std::path::Path;
 use std::process::{Command, ExitCode, Stdio};
 
 /// One check: the cargo arguments that run it and the environment it needs.
@@ -43,6 +49,14 @@ const GATES: &[Gate] = &[
         env: &[],
         optional: false,
     },
+    // Debug builds check the assertions; release builds run what ships, where
+    // a wrong schedule can hang or allocate instead of asserting.
+    Gate {
+        name: "test --release",
+        args: &["test", "--workspace", "--release", "--quiet"],
+        env: &[],
+        optional: false,
+    },
     Gate {
         name: "docs",
         args: &["doc", "--workspace", "--no-deps", "--quiet"],
@@ -75,11 +89,27 @@ impl Outcome {
 }
 
 fn main() -> ExitCode {
-    if env::args().nth(1).as_deref() == Some("ci") {
+    let args: Vec<String> = env::args().skip(1).collect();
+    let (task, rest) = args
+        .split_first()
+        .map_or(("", &[][..]), |(task, rest)| (task.as_str(), rest));
+    if task == "ci" {
         ci()
+    } else if task == "bench" {
+        report(bench::run(rest))
     } else {
-        println!("usage: cargo xtask ci");
+        println!("usage: cargo xtask ci | bench");
         ExitCode::FAILURE
+    }
+}
+
+fn report(outcome: Result<(), String>) -> ExitCode {
+    match outcome {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(message) => {
+            println!("{message}");
+            ExitCode::FAILURE
+        }
     }
 }
 
@@ -87,14 +117,47 @@ fn ci() -> ExitCode {
     let cargo = env::var_os("CARGO").unwrap_or_else(|| OsString::from("cargo"));
     let outcomes: Vec<Outcome> = GATES.iter().map(|gate| run(&cargo, gate)).collect();
 
+    println!("== budget");
+    let budget = budgets();
+
     println!();
     for (gate, outcome) in GATES.iter().zip(&outcomes) {
-        println!("{:<8}{}", gate.name, outcome.label());
+        println!("{:<16}{}", gate.name, outcome.label());
     }
-    if outcomes.contains(&Outcome::Failed) {
+    println!("{:<16}{}", "budget", budget.label());
+    if outcomes.contains(&Outcome::Failed) || budget == Outcome::Failed {
         ExitCode::FAILURE
     } else {
         ExitCode::SUCCESS
+    }
+}
+
+/// Print every crate's size against its declared line budget.
+fn budgets() -> Outcome {
+    let root = env::var_os("CARGO_MANIFEST_DIR").map_or_else(
+        || Path::new(".").to_path_buf(),
+        |xtask| Path::new(&xtask).join(".."),
+    );
+    match budget::measure(&root) {
+        Ok(lines) => {
+            for line in &lines {
+                let budget = line.budget.map_or_else(
+                    || "no line-budget declared".to_owned(),
+                    |budget| budget.to_string(),
+                );
+                let verdict = if line.within() { "" } else { "  <-- OVER" };
+                println!("{:<18}{:>5} / {budget}{verdict}", line.name, line.lines);
+            }
+            if lines.iter().all(budget::Line::within) {
+                Outcome::Passed
+            } else {
+                Outcome::Failed
+            }
+        }
+        Err(message) => {
+            println!("{message}");
+            Outcome::Failed
+        }
     }
 }
 

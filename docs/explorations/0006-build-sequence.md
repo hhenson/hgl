@@ -53,6 +53,11 @@ Every review comment that could be a lint becomes one.
 
 ## Part A — the runtime, no compiler anywhere
 
+Steps A0 to A2, and the dictionary, reference and nested-graph parts of A4
+and A6, are drawn together as one prototype in
+[0008](0008-prototype-outline.md), built under the speed rules of
+[0009](0009-designing-for-speed.md).
+
 | # | Step | Done when |
 |---|---|---|
 | A0 | **Spike the ownership model** (throwaway, outside the workspace): TSD of TS, a REF into it, a switch that tears a branch down; per-tick overhead against the reference | Positions 6 and 7 in 0005 are accepted, amended or replaced — with numbers |

@@ -92,14 +92,22 @@ None is settled; each names what it costs and how it gets tested.
 
 **Runtime**
 
-6. **One erased representation.** Time-series data holds `Value` (a closed
+6. *Superseded by [0009](0009-designing-for-speed.md): a tag test and
+   16–24 bytes per access is ruled out by the speed requirement. Typed
+   value columns replace it; a general `Value` survives only as the erased
+   interchange form.*
+   **One erased representation.** Time-series data holds `Value` (a closed
    enum with one arm for native atomics), not `Ts<T>` generics. Generated
    code reads and writes through a small typed-accessor trait. One copy of
    the endpoint machinery serves the interpreter, generated code, Python and
    record/replay. *Cost:* a tag check per access and 16–24-byte values where
    the reference plans exact layouts. *Test:* per-tick overhead against the
    reference, in the spike.
-7. **Engine-owned arenas, typed generational ids, no pointers between
+7. *Superseded by [0009](0009-designing-for-speed.md): a generation check
+   on every read and two moves per evaluation are ruled out. Handles are
+   checked at bind time and producers unbind their watchers on disposal;
+   the "fallback" below — `unsafe` in one audited crate — becomes the plan.*
+   **Engine-owned arenas, typed generational ids, no pointers between
    nodes.** An input stores the id of the output it is bound to; an output
    stores the ids of its subscribers. A node is lifted out of its slot while
    it evaluates, giving it exclusive access to itself and shared access to

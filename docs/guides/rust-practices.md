@@ -47,6 +47,26 @@ installer (`rustup-init.exe` on Windows).
 
 Until then everything works; `deny` reports itself as skipped.
 
+### Building on the Linux validation host
+
+Performance figures only count from the owner's private Linux validation
+host ([decision 0002](../decisions/0002-performance-parity-with-cpp.md)). It
+has rustup, and rustup reads `rust-toolchain.toml`, so it builds with exactly
+the compiler used everywhere else. This repository is checked out in the home
+directory there as `hgl`.
+
+rustup puts `cargo` on the path from the shell's start-up files, which a
+plain `ssh <host> 'cargo ...'` does not read. Run commands through a login
+shell instead:
+
+```sh
+ssh <host> 'bash -lc "cd ~/hgl && git pull --ff-only && cargo xtask ci"'
+```
+
+Not installed there yet, and needed later: `cargo-deny` (the `deny` gate
+reports itself as skipped until it is) and a nightly toolchain with Miri for
+the store crate.
+
 ### Why the lints are what they are
 
 Each group answers a measured habit of agent-written code
@@ -64,9 +84,11 @@ Each group answers a measured habit of agent-written code
 - **Silencing** — `#[allow]` is banned; `#[expect(lint, reason = "...")]` is
   the only way to suppress, it must say why, and it becomes an error itself
   once the lint no longer fires.
-- **`unsafe_code = "forbid"`** — not overridable from source. If `unsafe` is
-  ever justified it lives in one small crate with its own lint table, every
-  block carries a `// SAFETY:` comment, and the crate runs under Miri.
+- **`unsafe_code = "forbid"`** — not overridable from source. `unsafe` is
+  allowed in exactly one crate, the store
+  ([decision 0003](../decisions/0003-unsafe-confined-to-the-store.md)), which
+  has its own lint table: every block carries a `// SAFETY:` comment, debug
+  builds assert what release builds trust, and the crate runs under Miri.
 - **Shape** — 80-line functions, nesting depth 5, six arguments. Thresholds
   are not raised to make code pass.
 

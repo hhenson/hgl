@@ -274,7 +274,7 @@ classDiagram
 | Item | Values | Changed by |
 |---|---|---|
 | lifecycle | instantiated, starting, started, evaluating, stopping, stopped | The graph, when its owner asks |
-| evaluation time | The time of the cycle in progress, or of the last one completed | The graph, at the start of each cycle, from what its owner supplies |
+| evaluation time | The time of the cycle in progress, or of the last one completed. Before the first cycle it is one step before the start time, so that the first cycle may be *at* the start time | The graph, at the start of each cycle, from what its owner supplies |
 | schedule | For each node: the next time it needs evaluating, or *never* | Notification, a node's scheduler, schedule-on-start |
 | next scheduled time | The earliest schedule entry later than the evaluation time; *forever* if there is none | Follows the schedule |
 | owner | The engine, or a node together with whatever that node uses to tell its graphs apart — a key, a branch | Fixed at instantiation |
@@ -304,14 +304,20 @@ stateDiagram-v2
 To schedule node *n* for time *t*:
 
 - If *t* is before the evaluation time, it is an error.
-- If *t* is the evaluation time, *n* will be evaluated in the current cycle,
-  provided the scan has not yet reached it. It always can be, when the graph
-  was wired correctly: whatever schedules *n* for now is of lower rank than
-  *n*. Before the first cycle, scheduling for the start time is how the first
-  cycle comes to exist.
+- If *t* is the evaluation time, *n*'s entry becomes *t*, whatever it held,
+  and *n* will be evaluated in the current cycle, provided the scan has not
+  yet reached it. It always can be, when the graph was wired correctly:
+  whatever schedules *n* for now is of lower rank than *n*. Before the first
+  cycle, scheduling for the start time is how the first cycle comes to exist.
 - Otherwise *n*'s entry becomes *t* if it has no entry, if its entry has
-  already been used, or if *t* is earlier than its entry. An entry never moves
-  later.
+  already been used, or if *t* is earlier than its entry. An unused entry
+  never moves later.
+
+Evaluating a node uses its entry, whatever woke it. A later time the node
+had asked for is not lost: its scheduler still holds the request and writes
+it back after the eval (Node, "The scheduler"). So a node woken early by an
+input, which then replaces its request with a later one, is next evaluated
+at the later time — not also at the one it replaced.
 
 Everything that wakes a node does it this way: a notification on an active
 input, the node's own scheduler, schedule-on-start, and a nested graph
@@ -319,12 +325,14 @@ reporting its next scheduled time to its owner.
 
 #### Notification becomes scheduling
 
-When an output notifies — it ticked, or it became invalid, or a binding to it
-changed — every input bound to it is told. The input records that it was
-notified in this cycle, passing the fact up through any non-peered parents it
-has, and, if it is **active**, schedules its node for the current evaluation
-time. An input schedules its node at most once in a cycle, however many times
-it is notified: many notifications, one evaluation.
+When an output notifies — it first ticked in this cycle, or it became
+invalid, or a binding to it changed — every input bound to it is told, passing
+the fact up through any non-peered parents it has, and each **active** input
+schedules its node for the current evaluation time. An output notifies once
+per cycle (TS-6): a second write in the cycle changes the value and tells
+nobody. A node can still be scheduled several times in one cycle — by two
+inputs, or by an input and its own scheduler — and scheduling is idempotent:
+many notifications, one evaluation (GRF-16).
 
 #### The evaluation cycle
 
@@ -411,6 +419,7 @@ of what the runtime provides for a graph that changes shape as it runs.
   passed is a fault in the graph. It is never silently carried to a later
   cycle.
 - **GRF-14** A schedule entry, once set, moves only earlier until it is used.
+  Evaluating a node uses its entry, however the node was woken.
 - **GRF-15** A node that produces is evaluated before every node bound to it
   that is evaluated in the same cycle — however the binding was made: by an
   edge, at a nested graph's boundary, or through a reference.

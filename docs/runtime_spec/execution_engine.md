@@ -298,6 +298,10 @@ Rules
 - **ENG-15** Simulation is deterministic: the same graph, inputs, start time
   and end time produce the same sequence of cycles and the same ticks,
   provided no node's behaviour depends on *now* or the lag.
+- **ENG-16** *never* is before *earliest start*, which is before *latest
+  end*, which is before *forever*. *Earliest start* is *never* plus one
+  smallest step, and *latest end* is *forever* minus one. No arithmetic on a
+  time gives a result outside *never* to *forever*.
 
 
 Deferred

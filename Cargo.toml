@@ -4,8 +4,7 @@
 
 [workspace]
 resolver = "3"
-# Add "crates/*" with the first crate; cargo rejects a glob that matches nothing.
-members = ["xtask"]
+members = ["crates/*", "bench/twin", "xtask"]
 
 [workspace.package]
 edition = "2024"

@@ -12,6 +12,8 @@ started; the number is only there to give a stable way to refer to it.
 | 0005 | [The shape of the code](0005-code-shape.md) | sketch |
 | 0006 | [What we need to do, and in what order](0006-build-sequence.md) | sketch |
 | 0007 | [Where hgraph's own documents disagree](0007-hgraph-doc-conflicts.md) | sketch |
+| 0008 | [Prototype runtime: outline](0008-prototype-outline.md) | sketch |
+| 0009 | [Designing for speed](0009-designing-for-speed.md) | sketch |
 
 ## Template
 
