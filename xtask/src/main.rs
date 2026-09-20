@@ -21,7 +21,14 @@ struct Gate {
     env: &'static [(&'static str, &'static str)],
     /// Reported as skipped, not failed, when the cargo subcommand is missing.
     optional: bool,
+    /// Run under a cap on the address space. Set for the gates that run this
+    /// project's own tests, which is where an allocation can be sized from a
+    /// computed value; a tool's own appetite is not this cap's business.
+    capped: bool,
 }
+
+/// The cap a test gate runs under, in kilobytes as `ulimit` takes it.
+const ADDRESS_SPACE_KB: &str = "8000000";
 
 const GATES: &[Gate] = &[
     Gate {
@@ -29,6 +36,7 @@ const GATES: &[Gate] = &[
         args: &["fmt", "--all", "--", "--check"],
         env: &[],
         optional: false,
+        capped: false,
     },
     Gate {
         name: "clippy",
@@ -42,12 +50,14 @@ const GATES: &[Gate] = &[
         ],
         env: &[],
         optional: false,
+        capped: false,
     },
     Gate {
         name: "test",
         args: &["test", "--workspace", "--quiet"],
         env: &[],
         optional: false,
+        capped: true,
     },
     // Debug builds check the assertions; release builds run what ships, where
     // a wrong schedule can hang or allocate instead of asserting.
@@ -56,18 +66,21 @@ const GATES: &[Gate] = &[
         args: &["test", "--workspace", "--release", "--quiet"],
         env: &[],
         optional: false,
+        capped: true,
     },
     Gate {
         name: "docs",
         args: &["doc", "--workspace", "--no-deps", "--quiet"],
         env: &[("RUSTDOCFLAGS", "-D warnings")],
         optional: false,
+        capped: false,
     },
     Gate {
         name: "deny",
         args: &["deny", "check"],
         env: &[],
         optional: true,
+        capped: false,
     },
 ];
 
@@ -166,15 +179,34 @@ fn run(cargo: &OsStr, gate: &Gate) -> Outcome {
         return Outcome::Skipped;
     }
     println!("== {}", gate.name);
-    let status = Command::new(cargo)
-        .args(gate.args)
-        .envs(gate.env.iter().copied())
-        .status();
+    let status = command(cargo, gate).envs(gate.env.iter().copied()).status();
     if status.is_ok_and(|status| status.success()) {
         Outcome::Passed
     } else {
         Outcome::Failed
     }
+}
+
+/// The gate's command, under a cap on its address space where it asks for one:
+/// a test that sizes an allocation from a computed value then fails the gate
+/// instead of taking the machine down with it. Building and running the tests
+/// fits well inside the cap. macOS cannot set the limit, so there every gate
+/// runs uncapped.
+fn command(cargo: &OsStr, gate: &Gate) -> Command {
+    if !gate.capped || !cfg!(target_os = "linux") {
+        let mut direct = Command::new(cargo);
+        direct.args(gate.args);
+        return direct;
+    }
+    // `bash -c SCRIPT NAME ARGS...` leaves the arguments in `"$@"`.
+    let mut shell = Command::new("bash");
+    shell
+        .arg("-c")
+        .arg(format!("ulimit -v {ADDRESS_SPACE_KB}; exec \"$@\""))
+        .arg("xtask")
+        .arg(cargo)
+        .args(gate.args);
+    shell
 }
 
 /// Whether the cargo subcommand behind `gate` exists on this machine.
