@@ -115,6 +115,12 @@ things (0009); a line budget per crate; for every rule in a slice, at least
 one test that names it; and every benchmark scenario within 5% of its C++
 baseline, measured on the validation host (0009).
 
+Miri is a nightly component and the pinned stable does not carry it, so the
+store is checked under a nightly installed beside the pin — built or fetched
+when it is wanted, not held as a second pin. Nothing asks for it yet: P1's
+store is safe Rust, and `unsafe` enters only if a benchmark misses
+([0003](../decisions/0003-unsafe-confined-to-the-store.md)).
+
 The gates that run the tests run under a cap on their address space, so that
 a test which sizes an allocation from a computed value fails the gate instead
 of taking the machine down — which one of them did. Building and running the
