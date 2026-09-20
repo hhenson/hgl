@@ -7,6 +7,8 @@
 - [Open questions](open-questions.md) — unanswered, unowned
 - [Rust practices](guides/rust-practices.md) — the setup, reading Rust from
   C++, reviewing a diff
+- [Contract cards](cards/README.md) — the one page an agent is given to build
+  one crate; the first slice's six are written and await review
 - [Runtime specification](runtime_spec/overview.md) — what an HGraph runtime
   is, concept by concept; in progress
 

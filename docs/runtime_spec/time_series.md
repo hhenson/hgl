@@ -299,12 +299,16 @@ Rules
   that cycle.
 - **TS-5** Applying an output's deltas, in order, starting from when it was
   last not valid, reproduces its value.
-- **TS-6** A time-series notifies at most once in a cycle. An input schedules
-  its node at most once in a cycle.
+- **TS-6** A time-series notifies at most once in a cycle, when it first
+  ticks. A later write in that cycle changes the value and notifies nobody —
+  not even an input that began watching between the two writes. A node may
+  still be notified more than once in a cycle, by several inputs; it is
+  evaluated once (GRF-16).
 - **TS-7** Becoming invalid notifies, and is not a tick. The time-series
   reads neither valid nor modified. Its parent reads modified.
 - **TS-8** A passive input never schedules its node. Making an input active
-  or passive does not change what it reads.
+  or passive does not change what it reads, and never itself schedules the
+  node — not even when its source has already ticked in the cycle.
 - **TS-9** All valid implies valid, and looks one level down only.
 - **TS-10** In a set's delta, *added* and *removed* share no element. An
   element added and removed in one cycle is in neither.
