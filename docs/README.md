@@ -10,7 +10,7 @@
 - [Contract cards](cards/README.md) — the one page an agent is given to build
   one crate; the first slice's six are written and await review
 - [Runtime specification](runtime_spec/overview.md) — what an HGraph runtime
-  is, concept by concept; in progress
+  is, concept by concept; includes extracted conformance cases and evidence
 
 Reading order: [decision 0001](decisions/0001-rust-end-to-end.md) (Rust, end
 to end) and the survey behind it (explorations 0001–0004); then
@@ -58,3 +58,7 @@ When an exploration is settled enough to build:
 3. Mark the exploration here `superseded by` the upstream record.
 
 This repository never becomes the source of truth for anything that ships.
+
+The runtime model is backported to hgraph under `docs/source/runtime_spec/`.
+Keep this working copy synchronized with that upstream model; see the
+[consolidation record](runtime_spec/extraction.md).

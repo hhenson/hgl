@@ -1,6 +1,8 @@
 HGraph Runtime Specification
 ============================
 
+Status: draft. See [Evidence](evidence.md) for implementation status.
+
 This specification describes what an HGraph runtime *is*: the concepts it is
 made of, how they relate, and the behaviour a program running on it can rely
 on. It is written from the existing hgraph runtime and its documentation, but
@@ -70,7 +72,7 @@ classDiagram
     Graph "0..*" ..> "1" GraphDescription : instantiated from
     Graph "1" *-- "0..*" Node : in rank order
     Node "1" *-- "0..*" Graph : nested graphs
-    Node "1" *-- "0..*" TimeSeriesInput
+    Node "1" *-- "0..1" TimeSeriesInput : input bundle
     Node "1" *-- "0..1" TimeSeriesOutput
     Node "1" *-- "0..1" RecordableState
     Node "1" *-- "0..1" State
@@ -126,14 +128,15 @@ A run is a sequence of **evaluation cycles**, each at exactly one
 that happens at the same time happens in the same cycle. Nothing in the
 runtime reads a wall clock except through the clock.
 
-**Time-series.** A time-series has a **value** (its current state, which
+**Time-series.** An owned output has a **value** (its current state, which
 persists until changed), a **delta value** (what changed in this cycle), a
 **last modified time**, and two flags read from that time: it is **valid**
 (it has a value) once its last modified time is no longer *never*, and it is
 **modified** when its last modified time equals the evaluation time — and
 only then. A modification is a **tick**. Reading the value of a time-series
 that is not valid gives **nil**, the standard representation of no value; so
-does reading the delta of one that is not modified.
+does reading the delta of one that is not modified. Inputs can add sampling
+and binding observations; TS-1 and TS-14–TS-15 describe those cases.
 
 Separately, a time-series **notifies** whoever is watching it when its state
 changes. Every tick notifies. So does *losing* validity, which is not a tick:
@@ -145,8 +148,8 @@ inputs reads modified.
 There are eight kinds: a single value (TS), a bundle of named time-series
 (TSB), a list (TSL), a set (TSS), a keyed dictionary of time-series (TSD), a
 rolling window (TSW), a reference to another time-series (REF), and a
-payload-free tick (SIGNAL). Collections contain child time-series, and a
-child's tick is a tick of every one of its ancestors.
+payload-free input observation (SIGNAL). Collections contain child time-series,
+and a child's tick is a tick of every one of its ancestors.
 
 **Scalar values.** What a time-series carries. The atomic values are
 booleans, numbers, strings, bytes, the date and time types, and enums. The
@@ -281,14 +284,16 @@ rests on.
 7. A node may schedule a later-ranked node for the current time, and any node
    for a future time. Never an earlier-ranked node for the current time, and
    never any node for the past.
-8. A time-series is modified exactly when its last modified time equals the
-   evaluation time, and valid exactly when its last modified time is not
-   *never*. The value of one that is not valid is nil; so is the delta of one
-   that is not modified.
+8. An owned output is modified exactly when its last modified time equals
+   the evaluation time, and valid exactly when that time is not *never*.
+   Sampled and non-peered inputs have the observation rules in Time-series
+   types. The logical value of an invalid series is nil; so is the delta of
+   an unmodified one.
 9. Becoming invalid resets the last modified time to *never*. It is
    therefore not a tick — the time-series reads neither valid nor modified —
    but it notifies, and an active input bound to it schedules its node.
-10. Applying an output's successive deltas reproduces its value.
+10. Applying an output's successive deltas reproduces its value; dictionaries
+    also need their membership changes (TS-5).
 11. A child's tick is its ancestors' tick.
 12. Evaluation is single-threaded. Other threads meet the graph only at a push
     source's queue.
@@ -309,6 +314,14 @@ Chapters
 | 4 | Time-series types | [time_series.md](time_series.md) | first draft |
 | 5 | Scalar types | [scalar_types.md](scalar_types.md) | first draft |
 | 6 | Injectables | [injectables.md](injectables.md) | first draft |
+
+Cases and supporting notes:
+
+- [Conformance](conformance.md) and cases for [atomic series](cases_atomic.md),
+  [collections](cases_collections.md), and [lifecycle](cases_lifecycle.md).
+- [Representations](representations.md) and the bounded [layout example](layout_example.md).
+- [Boundary contracts](boundaries.md), [evidence](evidence.md), and the
+  [PR extraction and model review](extraction.md).
 
 Concepts that cut across the six live in one chapter and are referred to from
 the others:
@@ -336,6 +349,9 @@ language bridges; checkpointing; distribution.
 How this specification is written
 ---------------------------------
 
+These are intended rules. Proposals and implementation gaps are marked in
+[Evidence](evidence.md); the written cases do not certify a runtime.
+
 **Concept first.** The specification starts from the concept and is refined
 only as far as working behaviour requires. A facility hgraph has that no
 concept here yet needs — externally driven stepping, observers, run-wide
@@ -354,6 +370,8 @@ its chapter's Deferred section and specified when an implementation needs it.
 5. **Rules** — numbered statements a test could check (`ENG-1`, `GRF-1`,
    `NOD-1`, `TS-1`, `VAL-1`, `INJ-1`). A test names the rule it checks.
 6. **Deferred**, and **Points to settle**.
+7. **Evidence and cases** — what supports a rule, and what a test should see.
+   See [Evidence](evidence.md) and [Conformance](conformance.md).
 
 **What belongs.** Could a node author, a graph author, or a test observing
 ticks tell the difference? Evaluation order, validity, what a delta contains
@@ -367,7 +385,7 @@ implementation holds the original design intent and is used to disambiguate
 where the C++ documents are silent or unclear. hgraph's older specification
 chapters describe the Python-era runtime and are used for framing only. The
 known disagreements are listed in
-[exploration 0007](../explorations/0007-hgraph-doc-conflicts.md).
+[evidence and compatibility record](evidence.md).
 
 
 Vocabulary
@@ -384,7 +402,7 @@ Vocabulary
 | Evaluation time | The time of the current cycle; the graph's logical "now" |
 | Graph description | What the wiring phase produces and a graph is instantiated from: plain data, never live |
 | Lag | The real time that has passed since the current cycle began. Also called cycle time, or evaluation lag |
-| Modified | Last modified time equals evaluation time, and only then. Becoming invalid is not a modification |
+| Modified | For an owned output, last modified time equals evaluation time. Inputs also observe sampling and keyed withdrawal (TS-14–TS-15). Invalidation of an owned output is not a modification |
 | Nil | The standard representation of no value: what an invalid time-series gives for its value, and an unmodified one for its delta |
 | Notify | Tell whoever is watching a time-series that its state changed. Every tick notifies; so does becoming invalid, and so can a change of binding |
 | Now | The engine's estimate of wall-clock time. In real time, the computer's clock; in simulation, evaluation time plus the lag |
@@ -394,7 +412,7 @@ Vocabulary
 | Schedule | For each node, the next time it needs evaluating |
 | Signature | A node's inputs, output and scalars: what a caller sees and wiring connects. State, recordable state and the other injectables are not in it |
 | Tick | A modification of a time-series |
-| Valid | The time-series has a value: its last modified time is not *never*. Invalidation resets it to *never* |
+| Valid | The endpoint supplies a value under its shape and binding rules. An owned output has a last modified time other than *never* |
 | View / copy | A view is a read-only look at a value someone else owns, stable for the cycle. A copy is an independent value, and the only way to keep one beyond the cycle |
 | Wiring | The phase in which a graph is described. Nothing is instantiated and nothing can tick |
 
@@ -429,15 +447,12 @@ Notes for the chapters
 
 Settled here, with a detail left for the chapter that owns it.
 
-- **Time-series: one rule for modified.** Modified is read from the last
-  modified time and nothing else, for every time-series including a parent
-  collection. It follows that modified implies valid wherever validity is
-  read from the same time. The chapter follows hgraph in having a child's
-  invalidation mark its parent modified (TS-7), and says where validity is
-  *not* read from the time alone (TS-1): a non-peered input is valid when
-  any child is, and an unbound input is not valid whatever it last saw.
-  hgraph's one case of modified and not valid together — a keyed input whose
-  reference is withdrawn — is that chapter's point 2.
+- **Time-series: output modification and input observation.** An owned
+  output derives modified and valid from its last modified time. A child's
+  invalidation marks its parent modified (TS-7). A non-peered input derives
+  validity from its children; sampling adds an input-side observation. Keyed
+  withdrawal may report removals while unbound (TS-15); the chapter keeps
+  that compatibility question explicit.
 - **Time-series: dictionaries.** *Added* and *removed* are about membership.
   A key is added when it joins, whether or not its child is valid (TS-19).
 - **Time-series: references keep rank order** (TS-20).
