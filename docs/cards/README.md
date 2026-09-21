@@ -81,3 +81,12 @@ first are **hgl-kernel**, for the interface a node author sees, and
   per-implementation slabs of 0009 matter when graphs are instantiated by the
   hundred thousand, which is P4, and they do not change what a node author
   writes.
+
+## Dynamic slice
+
+The [accepted traces](../runtime_spec/validation.md) drive one combined
+TSD/REF/nested-graph slice. Scalar storage stays in `hgl-store`;
+[hgl-bindings](hgl-bindings.md) owns endpoint identity and graph scopes,
+[hgl-nested](hgl-nested.md) owns child instances, and
+[hgl-deadlines](hgl-deadlines.md) shares a bounded schedule heap between the
+kernel and child manager. Existing crate budgets stay unchanged.

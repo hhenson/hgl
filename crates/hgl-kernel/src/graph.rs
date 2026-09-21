@@ -4,7 +4,7 @@
 use std::any::Any;
 use std::fmt;
 
-use hgl_store::{InputId, Store};
+use hgl_store::{InputId, ScopeId, Store, Wake};
 use hgl_types::{EngineDelta, EngineTime, NodeId, NodeType};
 
 use crate::schedule::Schedule;
@@ -55,6 +55,7 @@ pub enum Lifecycle {
 /// until its owner asks.
 #[derive(Debug)]
 pub struct Graph {
+    pub(crate) scope: ScopeId,
     label: String,
     slots: Vec<NodeSlot>,
     schedule: Schedule,
@@ -90,6 +91,7 @@ impl Graph {
     /// holds the node the store knows as `NodeId(i)`.
     pub fn new(label: String, slots: Vec<NodeSlot>) -> Self {
         Self {
+            scope: ScopeId::default(),
             label,
             schedule: Schedule::new(slots.len()),
             slots,
@@ -98,6 +100,11 @@ impl Graph {
             stop_requested: false,
             started: 0,
         }
+    }
+
+    /// This graph instance's scope, independent of its local ranks.
+    pub fn scope(&self) -> ScopeId {
+        self.scope
     }
 
     /// Where the graph is in its life.
@@ -112,11 +119,22 @@ impl Graph {
     /// Errors: a node's start failed; the graph is not newly instantiated
     /// (GRF-20).
     pub fn start(&mut self, store: &mut Store, now: EngineTime) -> NodeResult {
+        let previous = store.enter_scope(self.scope);
+        store.reserve_scope(self.scope, self.slots.len());
+
+        let result = self.start_scoped(store, now);
+        store.enter_scope(previous);
+        result
+    }
+    fn start_scoped(&mut self, store: &mut Store, now: EngineTime) -> NodeResult {
         if self.lifecycle != Lifecycle::Instantiated {
             let mut error = NodeError::new("GRF-20: a graph is started once");
             error.label.clone_from(&self.label);
             error.phase = Phase::Start;
             return Err(error);
+        }
+        if self.scope == ScopeId::default() {
+            store.start_run();
         }
         self.lifecycle = Lifecycle::Starting;
         self.last_cycle = EngineTime::from_micros(now.micros() - EngineDelta::STEP.micros());
@@ -137,6 +155,12 @@ impl Graph {
                 self.schedule.schedule_now(node, now);
             }
         }
+        while let Some(node) = store.take_wake(self.scope) {
+            self.schedule.schedule_now(node, now);
+        }
+        while let Some(node) = self.schedule.take_ready() {
+            self.schedule.schedule_now(node, now);
+        }
         self.lifecycle = Lifecycle::Started;
         Ok(())
     }
@@ -149,6 +173,14 @@ impl Graph {
     /// still to reach lose the cycle, and the graph is left for its owner to
     /// stop.
     pub fn evaluate(&mut self, store: &mut Store, now: EngineTime) -> NodeResult {
+        let previous = store.enter_scope(self.scope);
+        store.reserve_scope(self.scope, self.slots.len());
+        store.begin_cycle(now);
+        let result = self.evaluate_scoped(store, now);
+        store.enter_scope(previous);
+        result
+    }
+    fn evaluate_scoped(&mut self, store: &mut Store, now: EngineTime) -> NodeResult {
         debug_assert!(
             self.lifecycle == Lifecycle::Started,
             "NOD-1: eval is called only while started"
@@ -162,7 +194,13 @@ impl Graph {
         self.schedule.begin_pass(now);
         // `None` is less than every `Some`, so the first node taken passes.
         let mut passed = None;
-        while let Some(node) = self.schedule.take_ready() {
+        loop {
+            while let Some(node) = store.take_wake(self.scope) {
+                self.schedule.wake(node);
+            }
+            let Some(node) = self.schedule.take_ready() else {
+                break;
+            };
             debug_assert!(
                 passed < Some(node),
                 "GRF-13: a node was woken after the scan had passed it"
@@ -180,7 +218,6 @@ impl Graph {
                 return evaluated;
             }
         }
-        self.schedule.end_pass();
         self.lifecycle = Lifecycle::Started;
         Ok(())
     }
@@ -194,6 +231,14 @@ impl Graph {
     /// Each is stopped once however often this is called. A graph that never
     /// started has nothing to stop, and is left as it was, still to start.
     pub fn stop(&mut self, store: &mut Store, now: EngineTime) -> NodeResult {
+        let previous = store.enter_scope(self.scope);
+        store.reserve_scope(self.scope, self.slots.len());
+
+        let result = self.stop_scoped(store, now);
+        store.enter_scope(previous);
+        result
+    }
+    fn stop_scoped(&mut self, store: &mut Store, now: EngineTime) -> NodeResult {
         if self.lifecycle == Lifecycle::Instantiated {
             return Ok(());
         }
@@ -206,6 +251,7 @@ impl Graph {
                 first_failure = stopped;
             }
         }
+        self.schedule.clear();
         self.lifecycle = Lifecycle::Stopped;
         first_failure
     }
@@ -256,9 +302,13 @@ impl Graph {
             Phase::Stop => slot.node.stop(&mut ctx),
         };
         outcome.map_err(|mut error| {
-            error.node = node;
-            error.label.clone_from(&slot.label);
-            error.phase = phase;
+            if error.label.is_empty() {
+                error.node = node;
+                error.label.clone_from(&slot.label);
+                error.phase = phase;
+            } else {
+                error.label = format!("{}/{}", slot.label, error.label);
+            }
             error
         })
     }

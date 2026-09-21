@@ -1,10 +1,10 @@
 //! What a node can reach while one of its hooks runs.
 
-use hgl_store::{In, Out, Scalar, Store};
+use hgl_store::{DictOut, In, InputId, Out, OutputId, Reference, Scalar, ScopeId, Store};
 use hgl_types::{EngineDelta, EngineTime, NodeId, NodeType};
 
 use crate::schedule::Schedule;
-use crate::{NodeError, NodeResult, Phase};
+use crate::{Graph, NodeError, NodeResult, Phase};
 
 /// Everything a node may touch while one of its hooks runs. Borrowed for the
 /// call; a node cannot keep it (INJ-3).
@@ -147,5 +147,101 @@ impl Ctx<'_> {
     #[inline]
     pub fn request_stop(&mut self) {
         *self.stop_requested = true;
+    }
+}
+
+impl Ctx<'_> {
+    fn writes(&self, output: OutputId) {
+        let endpoint = self.store.bindings().output(output);
+        debug_assert!(self.phase == Phase::Eval, "NOD-22: writes only in eval");
+        debug_assert_eq!(endpoint.owner, self.node, "TS-21: not the owner");
+        debug_assert_eq!(endpoint.scope, self.store.scope(), "TS-21: foreign graph");
+    }
+    /// Logical data observations, without mutable store access.
+    pub fn store(&self) -> &Store {
+        self.store
+    }
+    /// Sample a designation at this cycle's time.
+    pub fn sample(&mut self, input: InputId, r: Reference) -> NodeResult {
+        self.store
+            .sample(input, r, self.now, self.schedule)
+            .map_err(|e| NodeError::new(format!("{e:?}")))
+    }
+    /// Publish an independently tracked reference designation.
+    pub fn set_reference(&mut self, output: OutputId, r: Reference) -> NodeResult {
+        self.writes(output);
+        self.store
+            .set_reference(output, r, self.now, self.schedule)
+            .map_err(|e| NodeError::new(format!("{e:?}")))
+    }
+    /// Invalidate an owned output and notify its collection.
+    pub fn invalidate(&mut self, output: OutputId) {
+        self.writes(output);
+        self.store.invalidate(output, self.now, self.schedule);
+    }
+    /// Create or restore a dictionary member.
+    pub fn get_or_create<T: Scalar>(&mut self, dict: DictOut<T>, key: i64) -> Out<T> {
+        self.writes(dict.id());
+        self.store.get_or_create(dict, key, self.now, self.schedule)
+    }
+    /// Attach a child graph's output to this node's dictionary.
+    pub fn attach<T: Scalar>(&mut self, dict: DictOut<T>, key: i64, child: Out<T>) -> NodeResult {
+        self.writes(dict.id());
+        self.store
+            .attach(dict, key, child, self.now, self.schedule)
+            .map_err(|e| NodeError::new(format!("{e:?}")))
+    }
+    /// Remove membership now, preserving the removed child this cycle.
+    pub fn remove<T: Scalar>(&mut self, dict: DictOut<T>, key: i64) {
+        self.writes(dict.id());
+        self.store.remove(dict, key, self.now, self.schedule);
+    }
+    /// Build and start a fresh scoped graph; roll back failed construction.
+    pub fn create_child<T>(
+        &mut self,
+        build: impl FnOnce(&mut Store) -> Result<(Graph, T), Box<NodeError>>,
+    ) -> Result<(Graph, T), Box<NodeError>> {
+        let scope = self.store.child_scope(self.node);
+        let previous = self.store.enter_scope(scope);
+        let construction = build(self.store);
+        self.store.enter_scope(previous);
+        let result = construction.and_then(|(mut graph, value)| {
+            graph.scope = scope;
+            graph.start(self.store, self.now)?;
+            if graph.stop_requested() {
+                self.request_stop();
+            }
+            Ok((graph, value))
+        });
+        if result.is_err() {
+            self.store.release_scope(scope, self.now, self.schedule);
+        }
+        result
+    }
+    /// Evaluate a child at the parent's current time.
+    pub fn evaluate_child(&mut self, graph: &mut Graph) -> NodeResult {
+        let result = graph.evaluate(self.store, self.now);
+        if graph.stop_requested() {
+            self.request_stop();
+        }
+        result
+    }
+    /// Stop once, detach ports and cancel the child's remaining schedule.
+    pub fn stop_child(&mut self, graph: &mut Graph) -> NodeResult {
+        if graph.lifecycle() == crate::Lifecycle::Stopped {
+            return Ok(());
+        }
+        let result = graph.stop(self.store, self.now);
+        self.store
+            .release_scope(graph.scope, self.now, self.schedule);
+        result
+    }
+    /// A directly owned child with a pending input notification.
+    pub fn take_child(&mut self) -> Option<ScopeId> {
+        self.store.take_child(self.node)
+    }
+    /// Replace the internal wake-up for owned children, independently of timers.
+    pub fn schedule_children(&mut self, time: EngineTime) {
+        self.schedule.set_child_request(self.node, time);
     }
 }

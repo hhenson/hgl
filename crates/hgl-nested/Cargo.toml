@@ -1,21 +1,18 @@
 [package]
-name = "hgl-kernel"
+name = "hgl-nested"
 version = "0.0.0"
 edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
-description = "What runs a graph: the node interface, the schedule, the evaluation cycle, node lifecycle and the simulation engine."
-
+description = "Keyed child graph ownership and deadline propagation."
 [package.metadata.hgl]
-line-budget = 700
-
+line-budget = 350
 [dependencies]
 hgl-deadlines = { path = "../hgl-deadlines" }
-hgl-types = { path = "../hgl-types" }
+hgl-kernel = { path = "../hgl-kernel" }
 hgl-store = { path = "../hgl-store" }
-
+hgl-types = { path = "../hgl-types" }
 [dev-dependencies]
 hgl-alloc-count = { path = "../hgl-alloc-count" }
-
 [lints]
 workspace = true

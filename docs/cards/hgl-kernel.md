@@ -8,7 +8,7 @@ a node author — or an emitter — writes.
 
 ## May use
 
-`hgl-types`, `hgl-store`.
+`hgl-types`, `hgl-store`, `hgl-deadlines`.
 
 ## What a node looks like
 
@@ -120,8 +120,8 @@ pub fn run_simulation(graph: &mut Graph, store: &mut Store, config: &RunConfig) 
 ## Inside
 
 - **The schedule** is a ready set over ranks for the current cycle and a
-  min-heap of `(time, node)` for later, with a per-node "scheduled for" time
-  so that a stale heap entry is recognised and dropped. It implements the
+  min-heap of `(time, node)` for later, indexed by node for replacement and
+  cancellation. It retains one deadline per node. It implements the
   store's `Wake`, idempotently. Nothing scans every node: the ready set is a
   64-way tree of bitmaps, so finding the lowest ready rank costs one word per
   level (three levels up to 262,144 nodes), not one per 64 nodes.
@@ -134,9 +134,9 @@ pub fn run_simulation(graph: &mut Graph, store: &mut Store, config: &RunConfig) 
   same pass.
 - **A visit uses the node's entry, whatever woke it** (GRF-14). After the
   visit the node's entry is its pending request — earlier *or later* than
-  the entry it had — and a heap entry is pushed only when the entry changed.
-  `entry_at` and `request` are two per-node arrays; that is their invariant
-  between cycles: a node's entry is its request — except a node scheduled on
+  the entry it had. The deadline is replaced only when it changes.
+  `entry_at`, `request` and `child_request` are per-node arrays. Between
+  cycles the entry is the earlier live request, except a node scheduled on
   start, which holds the start time until its first visit. An input's wake
   only sets the ready bit; the entry is reconciled by the visit that wake
   brings. Nothing can read an entry mid-pass, so that is the specification's
@@ -268,3 +268,38 @@ Each must make a test fail.
 - `stop` on a graph that never started marks it stopped.
 - A pass cut short by a failure leaves a ready bit set or a due request
   unconsumed.
+
+## Dynamic slice
+
+Status: implementation contract. Existing budget stays.
+Graph adds `scope` and enters/restores that scope for every hook. Each cycle
+expires removed endpoints before evaluation and drains foreign notifications
+into the local rank schedule. Stop cancels its schedule.
+
+Ctx adds read-only `store`, `sample`, `set_reference`, `invalidate`,
+`get_or_create`, `attach`, `remove`, `create_child`, `evaluate_child`,
+`stop_child`, `take_child`, and `schedule_children`. Child factories return a
+Graph and a boundary handle using the shared Store. Child scopes are created
+before allocating ports and retired on construction/start failure or stop.
+Internal child deadlines are independent of the owner's scheduler request.
+Errors preserve the failing child hook and include the owner path.
+
+`Graph::scope(&self) -> ScopeId` exposes graph identity. New `Ctx` methods:
+
+```rust
+fn store(&self) -> &Store;
+fn sample(&mut self, input: InputId, r: Reference) -> NodeResult;
+fn set_reference(&mut self, output: OutputId, r: Reference) -> NodeResult;
+fn invalidate(&mut self, output: OutputId);
+fn get_or_create<T: Scalar>(&mut self, dict: DictOut<T>, key: i64) -> Out<T>;
+fn attach<T: Scalar>(&mut self, dict: DictOut<T>, key: i64, child: Out<T>) -> NodeResult;
+fn remove<T: Scalar>(&mut self, dict: DictOut<T>, key: i64);
+fn create_child<T>( &mut self, build: impl FnOnce(&mut Store) -> Result<(Graph, T), Box<NodeError>>) -> Result<(Graph, T), Box<NodeError>>;
+fn evaluate_child(&mut self, graph: &mut Graph) -> NodeResult;
+fn stop_child(&mut self, graph: &mut Graph) -> NodeResult;
+fn take_child(&mut self) -> Option<ScopeId>;
+fn schedule_children(&mut self, time: EngineTime);
+```
+
+A child stop request propagates to its owner after successful start as well as
+after evaluation, even when the child has no scheduled evaluation.

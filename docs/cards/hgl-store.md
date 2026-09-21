@@ -8,26 +8,16 @@ nodes beyond an id to wake.
 
 ## May use
 
-`hgl-types`.
+`hgl-types`, `hgl-bindings`.
 
 ## The layout
 
-Struct of arrays, everything addressed by a dense `u32` index, nothing
-addressed by pointer. Indices survive a vector growing, so plain `Vec`s are
-enough and the crate is **safe Rust**.
-
-```text
-columns     bools: Vec<bool>   i64s: Vec<i64>   f64s: Vec<f64>      one per scalar type
-outputs     modified_at: Vec<EngineTime>   slot: Vec<u32>           indexed by OutputId
-            owner: Vec<NodeId>             watchers: Vec<Vec<InputId>>
-            scalar_type: Vec<ScalarType>
-inputs      source: Vec<Option<OutputId>>  source_slot: Vec<u32>    indexed by InputId
-            owner: Vec<NodeId>             active: Vec<bool>
-            scalar_type: Vec<ScalarType>
-```
-
-`source_slot` repeats what `outputs.slot[source]` says, so that reading an
-input's value is two loads — the slot, then the value — rather than three.
+Scalar values remain in typed columns, addressed by dense indices. Endpoint
+metadata is owned by `hgl-bindings`: input source/slot, local sample time,
+output time/generation, subscriptions, dictionary membership and graph scope.
+Inputs cache the value slot. Output handles carry slot identity and generation
+in eight bytes, so a retained writing handle cannot address a reused endpoint.
+Both crates are safe Rust; no stored reference is a borrowed pointer.
 
 ## Surface
 
@@ -47,7 +37,7 @@ pub trait Scalar: Copy + PartialEq + std::fmt::Debug + 'static {
 }
 
 /// A node's handle to its own `TS<T>` output. Eight bytes.
-#[derive(Debug, Clone, Copy)] pub struct Out<T: Scalar> { /* OutputId, slot */ }
+#[derive(Debug, Clone, Copy)] pub struct Out<T: Scalar> { /* OutputId, generation */ }
 /// A node's handle to one of its `TS<T>` inputs. Four bytes.
 #[derive(Debug, Clone, Copy)] pub struct In<T: Scalar> { /* InputId */ }
 impl<T: Scalar> Out<T> { pub fn id(self) -> OutputId; }
@@ -195,3 +185,53 @@ Each must make a test fail.
 - `unbind` leaves the input reading its old source.
 - `bind` accepts a type mismatch.
 - `input_valid` is true for any bound input, ticked or not.
+
+## Dynamic slice
+
+Status: implementation contract. The original scalar methods and budget stay.
+Endpoint metadata moves to [hgl-bindings](hgl-bindings.md); Store keeps typed
+columns and exposes its read-only `bindings()` for logical observations.
+
+New surface: `DictOut<T>`/`DictIn<T>` with `id`; dictionary allocation,
+`child`/`removed_child`, `get_or_create`, `attach`, `remove`; `invalidate`,
+`reference`, `sample`, `add_reference`, `follow`, `set_reference`; and
+`begin_cycle` and `start_run`. Root startup begins independent cycle
+bookkeeping without resetting output values; child startup shares its parent
+clock. Dictionary keys are i64 in this admitted slice. No value is
+copied when attaching a child graph's output. References carry generations.
+
+Graph integration adds `scope`, `enter_scope`, `child_scope`, `reserve_scope`,
+`release_scope`, `take_wake` and `take_child`. These operate on scope identity,
+not local rank. Existing scalar handles retain their size and indexed reads.
+
+The new handles are `Copy`; both have `fn id(self)` returning their
+corresponding endpoint id. `Reference` and `ScopeId` are re-exported.
+`output_value_erased` returns `None` for non-scalar shapes; their observations
+come from `bindings()`. Raw endpoint ids and input handles are local to their owning graph lifetime;
+retain a `Reference` when a designation must outlive that graph.
+
+```rust
+fn bindings(&self) -> &Bindings;
+fn start_run(&mut self);
+fn begin_cycle(&mut self, now: EngineTime);
+fn invalidate<W: Wake>(&mut self, output: OutputId, now: EngineTime, wake: &mut W);
+fn reference(&self, output: OutputId) -> Reference;
+fn sample<W: Wake>( &mut self, input: InputId, r: Reference, now: EngineTime, wake: &mut W) -> Result<(), BindError>;
+fn add_reference( &mut self, owner: NodeId, scalar: ScalarType, dictionary: bool) -> OutputId;
+fn follow<W: Wake>( &mut self, input: InputId, reference: OutputId, now: EngineTime, wake: &mut W) -> Result<(), BindError>;
+fn set_reference<W: Wake>( &mut self, output: OutputId, r: Reference, now: EngineTime, wake: &mut W) -> Result<(), BindError>;
+fn add_dictionary<T: Scalar>(&mut self, owner: NodeId) -> DictOut<T>;
+fn add_dictionary_input<T: Scalar>(&mut self, owner: NodeId, active: bool) -> DictIn<T>;
+fn child<T: Scalar>(&self, input: DictIn<T>, key: i64) -> Option<In<T>>;
+fn removed_child<T: Scalar>(&self, input: DictIn<T>, key: i64) -> Option<In<T>>;
+fn get_or_create<T: Scalar, W: Wake>( &mut self, dict: DictOut<T>, key: i64, now: EngineTime, wake: &mut W) -> Out<T>;
+fn attach<T: Scalar, W: Wake>( &mut self, dict: DictOut<T>, key: i64, child: Out<T>, now: EngineTime, wake: &mut W) -> Result<(), BindError>;
+fn remove<T: Scalar, W: Wake>( &mut self, dict: DictOut<T>, key: i64, now: EngineTime, wake: &mut W);
+fn scope(&self) -> ScopeId;
+fn enter_scope(&mut self, scope: ScopeId) -> ScopeId;
+fn child_scope(&mut self, owner: NodeId) -> ScopeId;
+fn reserve_scope(&mut self, scope: ScopeId, nodes: usize);
+fn release_scope<W: Wake>(&mut self, scope: ScopeId, now: EngineTime, wake: &mut W);
+fn take_wake(&mut self, scope: ScopeId) -> Option<NodeId>;
+fn take_child(&mut self, owner: NodeId) -> Option<ScopeId>;
+```

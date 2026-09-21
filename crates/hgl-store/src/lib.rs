@@ -3,9 +3,9 @@
 //! The store owns every value, every last-modified time and every binding of
 //! a run. It knows nothing about nodes beyond an id to wake.
 //!
-//! The layout is struct of arrays. Everything is addressed by a dense `u32`
-//! index and nothing by pointer; an index survives its vector growing, so
-//! plain `Vec`s are enough and the crate is safe Rust.
+//! Values live in typed columns; endpoint metadata and graph scopes live in
+//! `hgl-bindings`. Indices survive vector growth. References and scalar write
+//! handles carry generations so reused child slots cannot revive old endpoints.
 //!
 //! Instantiation and binding may allocate. A tick never does: everything it
 //! needs was settled by then (`docs/explorations/0009-designing-for-speed.md`).
@@ -23,21 +23,15 @@ use hgl_types::{EngineTime, NodeId, ScalarType, ScalarValue};
 
 use columns::Columns;
 pub use columns::Scalar;
-
-/// Names one output of a [`Store`]: its position in the output table.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct OutputId(pub u32);
-
-/// Names one input of a [`Store`]: its position in the input table.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct InputId(pub u32);
+pub use hgl_bindings::{BindError, InputId, OutputId, Reference, ScopeId, Wake};
+use hgl_bindings::{Bindings, Kind};
 
 /// A node's handle to its own `TS<T>` output. Eight bytes.
 #[derive(Debug, Clone, Copy)]
 pub struct Out<T: Scalar> {
     id: OutputId,
-    /// Settled when the output is added, so that a write looks nothing up.
-    slot: u32,
+    /// Keeps a retained writing handle from addressing a reused child slot.
+    generation: u32,
     /// Zero-sized: it carries `T` at compile time only, as a tag template
     /// parameter does in C++.
     value_type: PhantomData<T>,
@@ -67,69 +61,36 @@ impl<T: Scalar> In<T> {
     }
 }
 
-/// Who is told that a node must be evaluated in this cycle. The kernel's
-/// schedule implements it. Generic, not `dyn`: a wake is inlined. Must be
-/// idempotent: a node with two active inputs that both tick is woken twice.
-/// (An output notifies once per cycle, TS-6; that a node so woken is
-/// evaluated once, GRF-16, is the schedule's to keep.)
-pub trait Wake {
-    /// `node` has an active input whose source has just ticked.
-    fn wake(&mut self, node: NodeId);
-}
-
-/// Why [`Store::bind`] refused.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum BindError {
-    /// The store has no such input.
-    UnknownInput(InputId),
-    /// The store has no such output.
-    UnknownOutput(OutputId),
-    /// An input reads only an output of its own scalar type.
-    TypeMismatch {
-        /// What the input reads.
-        input: ScalarType,
-        /// What the output holds.
-        output: ScalarType,
-    },
-    /// The input must be unbound before it is bound again.
-    AlreadyBound(InputId),
-}
-
-/// One entry per output, indexed by [`OutputId`].
-#[derive(Debug, Default)]
-struct Outputs {
-    /// `NEVER` until the first tick. Valid and modified are both read from
-    /// this and from nothing else (TS-1), and so is whether the output has
-    /// already notified in this cycle (TS-6).
-    modified_at: Vec<EngineTime>,
-    slot: Vec<u32>,
-    scalar_type: Vec<ScalarType>,
-    owner: Vec<NodeId>,
-    /// Every input bound to the output, active or passive.
-    watchers: Vec<Vec<InputId>>,
-}
-
-/// One entry per input, indexed by [`InputId`].
-#[derive(Debug, Default)]
-struct Inputs {
-    /// `None` while unbound. Eight bytes an entry, where a reserved id would
-    /// take four; the plainer form stays until a benchmark says otherwise.
-    source: Vec<Option<OutputId>>,
-    /// Repeats `outputs.slot[source]`, so that reading a value is two loads,
-    /// the slot and then the value, rather than three.
-    source_slot: Vec<u32>,
-    scalar_type: Vec<ScalarType>,
-    owner: Vec<NodeId>,
-    active: Vec<bool>,
-}
-
-/// Every time-series of a run: the values, the last-modified times and the
-/// bindings.
+/// Every value and binding of a run, shared by its graph scopes.
 #[derive(Debug, Default)]
 pub struct Store {
     columns: Columns,
-    outputs: Outputs,
-    inputs: Inputs,
+    bindings: Bindings,
+}
+
+/// A dictionary with i64 keys and scalar children.
+#[derive(Debug, Clone, Copy)]
+pub struct DictOut<T: Scalar> {
+    id: OutputId,
+    value_type: PhantomData<T>,
+}
+/// An input view of a dictionary, including its membership delta.
+#[derive(Debug, Clone, Copy)]
+pub struct DictIn<T: Scalar> {
+    id: InputId,
+    value_type: PhantomData<T>,
+}
+impl<T: Scalar> DictOut<T> {
+    /// The endpoint's identity.
+    pub fn id(self) -> OutputId {
+        self.id
+    }
+}
+impl<T: Scalar> DictIn<T> {
+    /// The input's identity.
+    pub fn id(self) -> InputId {
+        self.id
+    }
 }
 
 /// The index the next entry gets in a table that holds `len` entries.
@@ -143,156 +104,86 @@ fn next_index(len: usize) -> u32 {
 }
 
 impl Store {
-    /// A store holding nothing.
+    /// An empty run.
     pub fn new() -> Self {
         Self::default()
     }
-
-    /// A new output of `owner`, not valid until its first [`Self::set`].
+    /// Allocate a scalar output in the current graph scope.
     pub fn add_output<T: Scalar>(&mut self, owner: NodeId) -> Out<T> {
-        let id = OutputId(next_index(self.outputs.owner.len()));
-        let column = T::column_mut(&mut self.columns);
-        let slot = next_index(column.len());
-        // Never read before the first `set`: an output that has not ticked
-        // has no value (TS-2).
-        column.push(T::default());
-        self.outputs.modified_at.push(EngineTime::NEVER);
-        self.outputs.slot.push(slot);
-        self.outputs.scalar_type.push(T::TYPE);
-        self.outputs.owner.push(owner);
-        self.outputs.watchers.push(Vec::new());
+        let (id, fresh) = self.bindings.add_output(
+            owner,
+            Kind::Scalar(T::TYPE),
+            next_index(T::column(&self.columns).len()),
+        );
+        if fresh {
+            T::column_mut(&mut self.columns).push(T::default());
+        }
         Out {
             id,
-            slot,
+            generation: self.bindings.output(id).generation,
             value_type: PhantomData,
         }
     }
-
-    /// A new, unbound input of `owner`. An active input wakes its owner when
-    /// it is notified; a passive one reads the same and wakes nobody.
+    /// Allocate an unbound scalar input.
     pub fn add_input<T: Scalar>(&mut self, owner: NodeId, active: bool) -> In<T> {
-        let id = InputId(next_index(self.inputs.owner.len()));
-        self.inputs.source.push(None);
-        self.inputs.source_slot.push(0);
-        self.inputs.scalar_type.push(T::TYPE);
-        self.inputs.owner.push(owner);
-        self.inputs.active.push(active);
         In {
-            id,
+            id: self
+                .bindings
+                .add_input(owner, Kind::Scalar(T::TYPE), active),
             value_type: PhantomData,
         }
     }
-
-    /// Make `input` a view of `output`. By id, for the builder, which knows
-    /// types only at run time.
-    ///
-    /// Nothing is notified and nobody is woken (TS-14): the input shows the
-    /// output as it is, its last modified time included.
-    ///
-    /// Errors: either id unknown; the types differ; the input already bound.
+    /// Plain, silent wiring-time binding.
     pub fn bind(&mut self, input: InputId, output: OutputId) -> Result<(), BindError> {
-        let (input_index, output_index) = (input.0 as usize, output.0 as usize);
-        let Some(&input_type) = self.inputs.scalar_type.get(input_index) else {
-            return Err(BindError::UnknownInput(input));
-        };
-        let Some(&output_type) = self.outputs.scalar_type.get(output_index) else {
-            return Err(BindError::UnknownOutput(output));
-        };
-        if input_type != output_type {
-            return Err(BindError::TypeMismatch {
-                input: input_type,
-                output: output_type,
-            });
-        }
-        if self.inputs.source[input_index].is_some() {
-            return Err(BindError::AlreadyBound(input));
-        }
-        self.inputs.source[input_index] = Some(output);
-        self.inputs.source_slot[input_index] = self.outputs.slot[output_index];
-        self.outputs.watchers[output_index].push(input);
-        Ok(())
+        self.bindings.bind(input, output)
     }
-
-    /// Leave `input` bound to nothing, and so not valid. Nothing is notified.
-    /// Unbinding an unbound input does nothing.
+    /// Silent teardown; also detaches any designation subscription.
     pub fn unbind(&mut self, input: InputId) {
-        if let Some(output) = self.inputs.source[input.0 as usize].take() {
-            self.outputs.watchers[output.0 as usize].retain(|&watcher| watcher != input);
-        }
+        self.bindings.unbind(input);
     }
-
-    /// The scalar type `input` reads.
+    /// The scalar type a port reads.
     pub fn input_type(&self, input: InputId) -> ScalarType {
-        self.inputs.scalar_type[input.0 as usize]
+        self.bindings.input(input).kind.scalar()
     }
-
-    /// The scalar type `output` holds.
+    /// The scalar type a port writes.
     pub fn output_type(&self, output: OutputId) -> ScalarType {
-        self.outputs.scalar_type[output.0 as usize]
+        self.bindings.output(output).kind.scalar()
     }
-
-    /// The bound output's value. Debug builds assert the input is valid;
-    /// release builds trust the caller to have checked [`Self::valid`] (TS-2).
+    /// Read a valid scalar input.
     #[inline]
     pub fn get<T: Scalar>(&self, input: In<T>) -> T {
-        let index = input.id.0 as usize;
-        debug_assert_eq!(self.inputs.scalar_type[index], T::TYPE, "foreign handle");
+        debug_assert_eq!(self.input_type(input.id), T::TYPE, "foreign handle");
         debug_assert!(self.valid(input), "TS-2: not valid, so no value");
-        T::column(&self.columns)[self.inputs.source_slot[index] as usize]
+        T::column(&self.columns)[self.bindings.input(input.id).slot as usize]
     }
-
-    /// Whether the input has a value: it is bound, and to an output that has
-    /// ticked (TS-1).
+    /// Whether the input has a value.
     #[inline]
     pub fn valid<T: Scalar>(&self, input: In<T>) -> bool {
         self.input_valid(input.id)
     }
-
-    /// `valid`, by id: what the kernel asks of a node's required inputs
-    /// before it calls `eval` (NOD-2). The same two loads and a compare.
+    /// Admission by id.
     #[inline]
     pub fn input_valid(&self, input: InputId) -> bool {
-        self.source_modified_at(input) != EngineTime::NEVER
+        self.bindings.last_modified(input) != EngineTime::NEVER
     }
-
-    /// Whether the input ticked in the cycle at `now`: it is bound, and to an
-    /// output last modified at `now` (TS-1).
+    /// Whether a scalar input ticked in this cycle.
     #[inline]
     pub fn modified<T: Scalar>(&self, input: In<T>, now: EngineTime) -> bool {
-        // An unbound input reads `NEVER`, which is no cycle's time.
         debug_assert!(now != EngineTime::NEVER, "NEVER is not an evaluation time");
-        self.last_modified(input) == now
+        self.bindings.modified(input.id, now)
     }
-
-    /// When the bound output last ticked; `NEVER` if it has not, or if the
-    /// input is unbound.
+    /// Last output publication or input sample; NEVER while invalid.
     #[inline]
     pub fn last_modified<T: Scalar>(&self, input: In<T>) -> EngineTime {
-        self.source_modified_at(input.id)
+        self.bindings.last_modified(input.id)
     }
-
-    /// The one place a binding is followed, so that valid, modified and last
-    /// modified, typed or by id, cannot come to disagree.
-    #[inline]
-    fn source_modified_at(&self, input: InputId) -> EngineTime {
-        match self.inputs.source[input.0 as usize] {
-            Some(output) => self.outputs.modified_at[output.0 as usize],
-            None => EngineTime::NEVER,
-        }
-    }
-
-    /// Choose whether notifications wake the input's owner from now on. It
-    /// changes nothing the input reads (TS-8, NOD-7).
-    #[inline]
+    /// Passivity changes notification only.
     pub fn set_active<T: Scalar>(&mut self, input: In<T>, active: bool) {
-        self.inputs.active[input.id.0 as usize] = active;
+        self.bindings.set_active(input.id, active);
     }
-
-    /// Write the value. If this is the output's first write at `now`, stamp
-    /// it and wake the owner of every active watcher; a later write at `now`
-    /// only changes the value (TS-6). `writer` is the node being
-    /// evaluated; debug builds assert it owns `output` (TS-21). Release builds
-    /// do not read it.
+    /// Publish a scalar from its writing node.
+    /// # Panics
+    /// A writing handle kept after its endpoint expires is a caller error.
     #[inline]
     pub fn set<T: Scalar, W: Wake>(
         &mut self,
@@ -302,56 +193,210 @@ impl Store {
         writer: NodeId,
         wake: &mut W,
     ) {
-        let index = output.id.0 as usize;
-        debug_assert_eq!(self.outputs.scalar_type[index], T::TYPE, "foreign handle");
-        debug_assert_eq!(self.outputs.owner[index], writer, "TS-21: not the owner");
-        let last = self.outputs.modified_at[index];
+        let o = self.bindings.output(output.id);
+        debug_assert_eq!(o.kind, Kind::Scalar(T::TYPE), "foreign handle");
+        debug_assert_eq!(o.owner, writer, "TS-21: not the owner");
+        debug_assert_eq!(o.scope, self.bindings.scope(), "TS-21: foreign graph");
         debug_assert!(now != EngineTime::NEVER, "NEVER is not an evaluation time");
-        debug_assert!(now >= last, "TS-3: last modified time never decreases");
-        T::column_mut(&mut self.columns)[output.slot as usize] = value;
-        // Once per cycle is kept on the output, as hgraph's C++ keeps it: a
-        // watcher bound or made active since the first write is not woken.
-        if last == now {
-            return;
-        }
-        self.outputs.modified_at[index] = now;
-        for &watcher in &self.outputs.watchers[index] {
-            let watcher = watcher.0 as usize;
-            if self.inputs.active[watcher] {
-                wake.wake(self.inputs.owner[watcher]);
-            }
-        }
+        debug_assert!(
+            now >= o.modified_at,
+            "TS-3: last modified time never decreases"
+        );
+        assert!(
+            o.alive && o.generation == output.generation,
+            "TS-23: expired output handle"
+        );
+        T::column_mut(&mut self.columns)[o.slot as usize] = value;
+        self.bindings.publish(output.id, now, wake);
     }
-
-    /// A node reading its own output (INJ-8): `None` until it has ticked.
+    /// Read an output without mistaking its uninitialized slot for a value.
     #[inline]
     pub fn output_value<T: Scalar>(&self, output: Out<T>) -> Option<T> {
-        let index = output.id.0 as usize;
-        debug_assert_eq!(self.outputs.scalar_type[index], T::TYPE, "foreign handle");
-        let ticked = self.outputs.modified_at[index] != EngineTime::NEVER;
-        if ticked {
-            Some(T::column(&self.columns)[output.slot as usize])
-        } else {
-            None
-        }
+        let o = self.bindings.output(output.id);
+        debug_assert_eq!(o.kind, Kind::Scalar(T::TYPE), "foreign handle");
+        (o.alive && o.generation == output.generation && o.modified_at != EngineTime::NEVER)
+            .then(|| T::column(&self.columns)[o.slot as usize])
     }
-
-    /// The erased path, for tests and tools, never a node's eval: the
-    /// output's value, `None` until it has ticked.
+    /// Erased scalar observation; aggregate and REF endpoints have no scalar value.
     pub fn output_value_erased(&self, output: OutputId) -> Option<ScalarValue> {
-        let index = output.0 as usize;
-        let ticked = self.outputs.modified_at[index] != EngineTime::NEVER;
-        let slot = self.outputs.slot[index] as usize;
-        if ticked {
-            Some(self.columns.value(self.outputs.scalar_type[index], slot))
-        } else {
-            None
-        }
+        let o = self.bindings.output(output);
+        (matches!(o.kind, Kind::Scalar(_)) && o.modified_at != EngineTime::NEVER)
+            .then(|| self.columns.value(o.kind.scalar(), o.slot as usize))
     }
-
-    /// The erased path: whether the output ticked in the cycle at `now`.
+    /// Whether an output published in this cycle.
     pub fn output_modified(&self, output: OutputId, now: EngineTime) -> bool {
         debug_assert!(now != EngineTime::NEVER, "NEVER is not an evaluation time");
-        self.outputs.modified_at[output.0 as usize] == now
+        self.bindings.output(output).modified_at == now
+    }
+    /// Metadata observations and scoped scheduling, without mutable access.
+    pub fn bindings(&self) -> &Bindings {
+        &self.bindings
+    }
+    /// Begin an independent root run, preserving existing output values.
+    pub fn start_run(&mut self) {
+        self.bindings.start_run();
+    }
+    /// Advance the engine boundary, expiring removed endpoints.
+    pub fn begin_cycle(&mut self, now: EngineTime) {
+        self.bindings.begin_cycle(now);
+    }
+    /// Invalidate an endpoint, notifying its owning collection.
+    pub fn invalidate<W: Wake>(&mut self, output: OutputId, now: EngineTime, wake: &mut W) {
+        self.bindings.invalidate(output, now, wake);
+    }
+    /// A saved, lifetime-checked designation.
+    pub fn reference(&self, output: OutputId) -> Reference {
+        self.bindings.reference(output)
+    }
+    /// Sample a designation without changing its producer's timestamp.
+    pub fn sample<W: Wake>(
+        &mut self,
+        input: InputId,
+        r: Reference,
+        now: EngineTime,
+        wake: &mut W,
+    ) -> Result<(), BindError> {
+        self.bindings.sample(input, r, now, wake)
+    }
+    /// Allocate a reference output to a scalar or dictionary.
+    pub fn add_reference(
+        &mut self,
+        owner: NodeId,
+        scalar: ScalarType,
+        dictionary: bool,
+    ) -> OutputId {
+        self.bindings
+            .add_output(owner, Kind::Reference { scalar, dictionary }, 0)
+            .0
+    }
+    /// Follow designation changes and target publications independently.
+    pub fn follow<W: Wake>(
+        &mut self,
+        input: InputId,
+        reference: OutputId,
+        now: EngineTime,
+        wake: &mut W,
+    ) -> Result<(), BindError> {
+        self.bindings.follow(input, reference, now, wake)
+    }
+    /// Publish a reference value.
+    pub fn set_reference<W: Wake>(
+        &mut self,
+        output: OutputId,
+        r: Reference,
+        now: EngineTime,
+        wake: &mut W,
+    ) -> Result<(), BindError> {
+        self.bindings.set_reference(output, r, now, wake)
+    }
+    /// Create a dictionary output.
+    pub fn add_dictionary<T: Scalar>(&mut self, owner: NodeId) -> DictOut<T> {
+        DictOut {
+            id: self
+                .bindings
+                .add_output(owner, Kind::Dictionary(T::TYPE), 0)
+                .0,
+            value_type: PhantomData,
+        }
+    }
+    /// Create a dictionary input.
+    pub fn add_dictionary_input<T: Scalar>(&mut self, owner: NodeId, active: bool) -> DictIn<T> {
+        DictIn {
+            id: self
+                .bindings
+                .add_input(owner, Kind::Dictionary(T::TYPE), active),
+            value_type: PhantomData,
+        }
+    }
+    /// Find a live child input.
+    pub fn child<T: Scalar>(&self, input: DictIn<T>, key: i64) -> Option<In<T>> {
+        self.bindings.child_input(input.id, key).map(|id| In {
+            id,
+            value_type: PhantomData,
+        })
+    }
+    /// Find a retained removed child input.
+    pub fn removed_child<T: Scalar>(&self, input: DictIn<T>, key: i64) -> Option<In<T>> {
+        self.bindings.removed_input(input.id, key).map(|id| In {
+            id,
+            value_type: PhantomData,
+        })
+    }
+    /// Create or restore an invalid child, without inventing a value tick.
+    pub fn get_or_create<T: Scalar, W: Wake>(
+        &mut self,
+        dict: DictOut<T>,
+        key: i64,
+        now: EngineTime,
+        wake: &mut W,
+    ) -> Out<T> {
+        self.begin_cycle(now);
+        let old = self.bindings.child_output(dict.id, key);
+        let id = old
+            .or_else(|| self.bindings.removed_output(dict.id, key))
+            .unwrap_or_else(|| self.add_output::<T>(self.bindings.output(dict.id).owner).id);
+        let out = Out {
+            id,
+            generation: self.bindings.output(id).generation,
+            value_type: PhantomData,
+        };
+        if old.is_none() {
+            let result = self.bindings.insert(dict.id, key, id, now, wake);
+            debug_assert!(result.is_ok(), "typed dictionary child");
+        }
+        out
+    }
+    /// Attach a child graph's output without copying its value.
+    pub fn attach<T: Scalar, W: Wake>(
+        &mut self,
+        dict: DictOut<T>,
+        key: i64,
+        child: Out<T>,
+        now: EngineTime,
+        wake: &mut W,
+    ) -> Result<(), BindError> {
+        let endpoint = self.bindings.output(child.id);
+        if !endpoint.alive || endpoint.generation != child.generation {
+            return Err(BindError::UnknownOutput(child.id));
+        }
+        self.bindings.insert(dict.id, key, child.id, now, wake)
+    }
+    /// Remove a member, retaining its value through this engine cycle.
+    pub fn remove<T: Scalar, W: Wake>(
+        &mut self,
+        dict: DictOut<T>,
+        key: i64,
+        now: EngineTime,
+        wake: &mut W,
+    ) {
+        self.bindings.remove(dict.id, key, now, wake);
+    }
+    /// Current graph scope.
+    pub fn scope(&self) -> ScopeId {
+        self.bindings.scope()
+    }
+    /// Enter a scope and return the previous one.
+    pub fn enter_scope(&mut self, scope: ScopeId) -> ScopeId {
+        self.bindings.enter_scope(scope)
+    }
+    /// Create a scope owned by a local node.
+    pub fn child_scope(&mut self, owner: NodeId) -> ScopeId {
+        self.bindings.child_scope(owner)
+    }
+    /// Allocate mailbox capacity during graph construction.
+    pub fn reserve_scope(&mut self, scope: ScopeId, nodes: usize) {
+        self.bindings.reserve_scope(scope, nodes);
+    }
+    /// Retire a stopped child's storage.
+    pub fn release_scope<W: Wake>(&mut self, scope: ScopeId, now: EngineTime, wake: &mut W) {
+        self.bindings.release_scope(scope, now, wake);
+    }
+    /// A pending local node from an enclosing or sibling graph.
+    pub fn take_wake(&mut self, scope: ScopeId) -> Option<NodeId> {
+        self.bindings.take_wake(scope)
+    }
+    /// A direct child that needs its owner to run it.
+    pub fn take_child(&mut self, owner: NodeId) -> Option<ScopeId> {
+        self.bindings.take_child(owner)
     }
 }

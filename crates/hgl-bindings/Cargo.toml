@@ -1,0 +1,16 @@
+[package]
+name = "hgl-bindings"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "Endpoint identity, collection membership, reference binding and scoped notifications."
+
+[package.metadata.hgl]
+line-budget = 1100
+
+[dependencies]
+hgl-types = { path = "../hgl-types" }
+
+[lints]
+workspace = true
