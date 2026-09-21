@@ -217,10 +217,10 @@ impl Store {
         (o.alive && o.generation == output.generation && o.modified_at != EngineTime::NEVER)
             .then(|| T::column(&self.columns)[o.slot as usize])
     }
-    /// Erased observation for tests and tools.
+    /// Erased scalar observation; aggregate and REF endpoints have no scalar value.
     pub fn output_value_erased(&self, output: OutputId) -> Option<ScalarValue> {
         let o = self.bindings.output(output);
-        (o.modified_at != EngineTime::NEVER)
+        (matches!(o.kind, Kind::Scalar(_)) && o.modified_at != EngineTime::NEVER)
             .then(|| self.columns.value(o.kind.scalar(), o.slot as usize))
     }
     /// Whether an output published in this cycle.

@@ -5,7 +5,7 @@ Status: measured on the private Linux validation host, 2026-09-21.
 Fresh paired measurements of the unchanged P1 scenarios. Same C++ binary
 and conditions as [P1](2026-09-20-p1-twins.md): hgraph `36c054c`, GCC 14.3.0,
 CMake Release (`-O3 -DNDEBUG`); Rust 1.98.1, release with thin LTO and one
-codegen unit. Fifteen fresh processes per half, pinned to core 8. Load average
+codegen unit, runtime sources at `b6c0bcf`. Fifteen fresh processes per half, pinned to core 8. Load average
 was 4.43 after the build and 2.49 after measurement. Every sample checks its checksum.
 
 Nanoseconds per cycle; median and median absolute deviation (MAD).

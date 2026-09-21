@@ -206,7 +206,8 @@ not local rank. Existing scalar handles retain their size and indexed reads.
 
 The new handles are `Copy`; both have `fn id(self)` returning their
 corresponding endpoint id. `Reference` and `ScopeId` are re-exported.
-Raw endpoint ids and input handles are local to their owning graph lifetime;
+`output_value_erased` returns `None` for non-scalar shapes; their observations
+come from `bindings()`. Raw endpoint ids and input handles are local to their owning graph lifetime;
 retain a `Reference` when a designation must outlive that graph.
 
 ```rust

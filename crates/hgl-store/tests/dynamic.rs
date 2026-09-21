@@ -441,3 +441,27 @@ fn expired_dictionary_drops_child_views_but_keeps_following_its_ref()
     assert_eq!(store.get(view), 9);
     Ok(())
 }
+
+#[test]
+fn erased_scalar_observation_does_not_read_collection_or_ref_metadata_as_a_value()
+-> Result<(), hgl_store::BindError> {
+    let mut store = Store::new();
+    let mut wakes = Wakes::default();
+    let dictionary = store.add_dictionary::<i64>(NodeId(0));
+    let child = store.get_or_create(dictionary, 0, at(0), &mut wakes);
+    store.set(child, 7, at(0), NodeId(0), &mut wakes);
+    let reference = store.add_reference(NodeId(1), ScalarType::I64, true);
+    store.set_reference(
+        reference,
+        store.reference(dictionary.id()),
+        at(0),
+        &mut wakes,
+    )?;
+    assert_eq!(store.output_value_erased(dictionary.id()), None);
+    assert_eq!(store.output_value_erased(reference), None);
+    assert_eq!(
+        store.output_value_erased(child.id()),
+        Some(hgl_types::ScalarValue::I64(7))
+    );
+    Ok(())
+}
