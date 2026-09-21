@@ -19,6 +19,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "hgl-bindings"
+version = "0.0.0"
+dependencies = [
+ "hgl-types",
+]
+
+[[package]]
+name = "hgl-deadlines"
+version = "0.0.0"
+dependencies = [
+ "hgl-types",
+]
+
+[[package]]
 name = "hgl-describe"
 version = "0.0.0"
 dependencies = [
@@ -32,6 +46,18 @@ name = "hgl-kernel"
 version = "0.0.0"
 dependencies = [
  "hgl-alloc-count",
+ "hgl-deadlines",
+ "hgl-store",
+ "hgl-types",
+]
+
+[[package]]
+name = "hgl-nested"
+version = "0.0.0"
+dependencies = [
+ "hgl-alloc-count",
+ "hgl-deadlines",
+ "hgl-kernel",
  "hgl-store",
  "hgl-types",
 ]
@@ -52,6 +78,7 @@ name = "hgl-store"
 version = "0.0.0"
 dependencies = [
  "hgl-alloc-count",
+ "hgl-bindings",
  "hgl-types",
 ]
 

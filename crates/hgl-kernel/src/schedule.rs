@@ -5,8 +5,7 @@
 //! that gives up its lowest member; *later* is a min-heap whose top is the
 //! graph's next scheduled time.
 
-use std::cmp::Reverse;
-use std::collections::BinaryHeap;
+use hgl_deadlines::Deadlines;
 
 use hgl_store::Wake;
 use hgl_types::{EngineTime, NodeId};
@@ -98,10 +97,8 @@ impl RankSet {
 pub(crate) struct Schedule {
     /// The nodes the pass in progress has still to reach.
     ready: RankSet,
-    /// Wake-ups to come, earliest on top. An entry is live while `entry_at`
-    /// for its node equals its time. Any other is stale: it is dropped when it
-    /// surfaces, so that moving a node earlier never searches the heap.
-    later: BinaryHeap<Reverse<(EngineTime, NodeId)>>,
+    /// One replaceable deadline per node; cancellation releases the entry.
+    later: Deadlines,
     /// Per node, the time of its live entry in `later`; `NEVER` for none.
     ///
     /// Between cycles a node's entry is its request: every visit, whatever
@@ -111,15 +108,19 @@ pub(crate) struct Schedule {
     entry_at: Vec<EngineTime>,
     /// Per node, its scheduler's one pending request; `NEVER` for none.
     request: Vec<EngineTime>,
+    child_request: Vec<EngineTime>,
 }
 
 impl Schedule {
     pub(crate) fn new(nodes: usize) -> Self {
+        let mut later = Deadlines::default();
+        later.reserve(nodes);
         Self {
             ready: RankSet::new(nodes),
-            later: BinaryHeap::with_capacity(nodes),
+            later,
             entry_at: vec![EngineTime::NEVER; nodes],
             request: vec![EngineTime::NEVER; nodes],
+            child_request: vec![EngineTime::FOREVER; nodes],
         }
     }
 
@@ -130,7 +131,7 @@ impl Schedule {
         let entry = &mut self.entry_at[node.0 as usize];
         if *entry != now {
             *entry = now;
-            self.later.push(Reverse((now, node)));
+            self.later.set(node.0 as usize, now);
         }
     }
 
@@ -140,12 +141,17 @@ impl Schedule {
         self.later.clear();
         self.entry_at.fill(EngineTime::NEVER);
         self.request.fill(EngineTime::NEVER);
+        self.child_request.fill(EngineTime::FOREVER);
     }
 
     /// The node's scheduler is asked for `time`, replacing what it held.
     #[inline]
     pub(crate) fn set_request(&mut self, node: NodeId, time: EngineTime) {
         self.request[node.0 as usize] = time;
+    }
+
+    pub(crate) fn set_child_request(&mut self, node: NodeId, time: EngineTime) {
+        self.child_request[node.0 as usize] = time;
     }
 
     /// Use up the node's request if it fell due at `now`, and say whether it
@@ -162,27 +168,42 @@ impl Schedule {
 
     /// After a node's start or visit: its entry becomes its pending request,
     /// earlier or later than the entry it had, since a visit uses the entry
-    /// however the node was woken (GRF-14). A heap entry is pushed only when
-    /// the entry changes, so a node whose request stands pushes nothing; the
-    /// entry it replaces is left stale.
+    /// however the node was woken (GRF-14). Replacement is indexed; repeated
+    /// rearming cannot accumulate stale entries.
     #[inline]
     pub(crate) fn rearm(&mut self, node: NodeId) {
         let index = node.0 as usize;
         let request = self.request[index];
+        let request = if request == EngineTime::NEVER {
+            self.child_request[index]
+        } else {
+            request.min(self.child_request[index])
+        };
+        let request = if request == EngineTime::FOREVER {
+            EngineTime::NEVER
+        } else {
+            request
+        };
         if self.entry_at[index] != request {
             self.entry_at[index] = request;
-            if request != EngineTime::NEVER {
-                self.later.push(Reverse((request, node)));
-            }
+            self.later.set(
+                index,
+                if request == EngineTime::NEVER {
+                    EngineTime::FOREVER
+                } else {
+                    request
+                },
+            );
         }
     }
 
     /// Make ready every node whose entry is due at `now`.
     pub(crate) fn begin_pass(&mut self, now: EngineTime) {
-        while let Some(&Reverse((time, node))) = self.later.peek()
+        while let Some((time, slot)) = self.later.first()
             && time <= now
         {
-            self.later.pop();
+            self.later.remove(slot);
+            let node = NodeId(u32::try_from(slot).unwrap_or_else(|_| unreachable!("node rank")));
             let entry = &mut self.entry_at[node.0 as usize];
             if *entry == time {
                 debug_assert!(time == now, "ENG-4: a scheduled time was skipped");
@@ -198,16 +219,6 @@ impl Schedule {
         self.ready.take_first().map(NodeId)
     }
 
-    /// Drop the stale entries on top of the heap, so that its top is the next
-    /// scheduled time and reading it changes nothing.
-    pub(crate) fn end_pass(&mut self) {
-        while let Some(&Reverse((time, node))) = self.later.peek()
-            && self.entry_at[node.0 as usize] != time
-        {
-            self.later.pop();
-        }
-    }
-
     /// End a pass that a failure cut short, leaving the schedule as a
     /// completed pass would: the nodes it had still to reach lose this cycle,
     /// and so does what they had asked for in it.
@@ -216,13 +227,12 @@ impl Schedule {
             self.take_due_request(node, now);
             self.rearm(node);
         }
-        self.end_pass();
     }
 
     /// `FOREVER` when nothing is scheduled.
     pub(crate) fn next_time(&self) -> EngineTime {
-        match self.later.peek() {
-            Some(&Reverse((time, _))) => time,
+        match self.later.first() {
+            Some((time, _)) => time,
             None => EngineTime::FOREVER,
         }
     }
