@@ -231,7 +231,7 @@ fn scope(&self) -> ScopeId;
 fn enter_scope(&mut self, scope: ScopeId) -> ScopeId;
 fn child_scope(&mut self, owner: NodeId) -> ScopeId;
 fn reserve_scope(&mut self, scope: ScopeId, nodes: usize);
-fn release_scope(&mut self, scope: ScopeId, now: EngineTime);
+fn release_scope<W: Wake>(&mut self, scope: ScopeId, now: EngineTime, wake: &mut W);
 fn take_wake(&mut self, scope: ScopeId) -> Option<NodeId>;
 fn take_child(&mut self, owner: NodeId) -> Option<ScopeId>;
 ```

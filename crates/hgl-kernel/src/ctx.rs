@@ -211,7 +211,7 @@ impl Ctx<'_> {
             Ok((graph, value))
         });
         if result.is_err() {
-            self.store.release_scope(scope, self.now);
+            self.store.release_scope(scope, self.now, self.schedule);
         }
         result
     }
@@ -229,7 +229,8 @@ impl Ctx<'_> {
             return Ok(());
         }
         let result = graph.stop(self.store, self.now);
-        self.store.release_scope(graph.scope, self.now);
+        self.store
+            .release_scope(graph.scope, self.now, self.schedule);
         result
     }
     /// A directly owned child with a pending input notification.

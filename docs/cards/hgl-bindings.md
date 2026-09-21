@@ -18,7 +18,7 @@ Compound children and HGL compiler lowering remain later slices.
 - `Wake::wake(NodeId)`: same-scope scheduling; foreign notifications queue in
   their target scope and wake its owner through the enclosing scopes.
 - `Bindings`: allocate inputs/outputs, bind/unbind/sample/follow references,
-  publish/invalidate/retire endpoints, start a root run and advance the engine
+  publish/invalidate endpoints, start a root run and advance the engine
   cycle. `storage_counts` reports retained slots and subscriptions for diagnostics.
 - Read-only `Input` and `Output` metadata, including resolved value slot,
   observed time, ownership and type. No public mutable metadata access.
@@ -26,7 +26,10 @@ Compound children and HGL compiler lowering remain later slices.
   queries and immediate-child validity. A dictionary owns logical membership;
   an attached child graph remains the writer of its output.
 - Scope creation/entry/release and queued node/child retrieval. Releasing a
-  scope detaches inputs and retires outputs after the current cycle.
+  scope detaches inputs, removes attached outputs from their parent dictionaries
+  with a removal notification, and expires those outputs after the current cycle.
+  A replacement at the same key is unaffected. Retirement is internal; callers
+  remove membership or release its owning scope.
 
 ## Rules and cost
 
@@ -97,7 +100,6 @@ fn follow<W: Wake>( &mut self, input: InputId, reference: OutputId, now: EngineT
 fn set_reference<W: Wake>( &mut self, output: OutputId, r: Reference, now: EngineTime, wake: &mut W) -> Result<(), BindError>;
 fn publish<W: Wake>(&mut self, output: OutputId, now: EngineTime, wake: &mut W);
 fn invalidate<W: Wake>(&mut self, output: OutputId, now: EngineTime, wake: &mut W);
-fn retire(&mut self, output: OutputId, now: EngineTime);
 fn start_run(&mut self);
 fn begin_cycle(&mut self, now: EngineTime);
 fn child_output(&self, id: OutputId, key: i64) -> Option<OutputId>;
@@ -119,5 +121,5 @@ fn child_scope(&mut self, owner: NodeId) -> ScopeId;
 fn reserve_scope(&mut self, scope: ScopeId, nodes: usize);
 fn take_wake(&mut self, scope: ScopeId) -> Option<NodeId>;
 fn take_child(&mut self, owner: NodeId) -> Option<ScopeId>;
-fn release_scope(&mut self, scope: ScopeId, now: EngineTime);
+fn release_scope<W: Wake>(&mut self, scope: ScopeId, now: EngineTime, wake: &mut W);
 ```

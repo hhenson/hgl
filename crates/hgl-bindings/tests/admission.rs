@@ -63,11 +63,11 @@ fn releasing_notified_children_cancels_their_parent_mailbox_entries()
     let now = EngineTime::MIN_START;
     bindings.publish(output, now, &mut wakes);
     for scope in children {
-        bindings.release_scope(scope, now);
+        bindings.release_scope(scope, now, &mut wakes);
     }
     // Queued, dead children must not count against the next child's mailbox.
     let fresh = bindings.child_scope(NodeId(1));
     assert_eq!(bindings.take_child(NodeId(1)), None);
-    bindings.release_scope(fresh, now);
+    bindings.release_scope(fresh, now, &mut wakes);
     Ok(())
 }

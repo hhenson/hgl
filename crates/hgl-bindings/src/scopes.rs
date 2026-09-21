@@ -236,7 +236,7 @@ impl Bindings {
         }
     }
     /// Disconnect a stopped child's ports; outputs expire at the next cycle.
-    pub fn release_scope(&mut self, scope: ScopeId, now: EngineTime) {
+    pub fn release_scope<W: Wake>(&mut self, scope: ScopeId, now: EngineTime, wake: &mut W) {
         if !self.scopes.alive(scope) || scope.index == 0 {
             return;
         }
@@ -248,6 +248,11 @@ impl Bindings {
         }
         while let Some(o) = self.scopes.entries[scope.index].outputs.pop() {
             if self.output(o).alive && self.output(o).scope == scope {
+                if let Some((parent, key)) = self.output(o).parent
+                    && self.child_output(parent, key) == Some(o)
+                {
+                    self.remove(parent, key, now, wake);
+                }
                 self.retire(o, now);
             }
         }

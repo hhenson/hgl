@@ -554,7 +554,7 @@ impl Bindings {
         }
     }
     /// Retain until the first later engine cycle, even with no later writes.
-    pub fn retire(&mut self, output: OutputId, now: EngineTime) {
+    pub(crate) fn retire(&mut self, output: OutputId, now: EngineTime) {
         let o = &mut self.outputs[output.0 as usize];
         o.retired_at = now;
         if !o.retirement_queued {

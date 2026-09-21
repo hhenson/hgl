@@ -388,8 +388,8 @@ impl Store {
         self.bindings.reserve_scope(scope, nodes);
     }
     /// Retire a stopped child's storage.
-    pub fn release_scope(&mut self, scope: ScopeId, now: EngineTime) {
-        self.bindings.release_scope(scope, now);
+    pub fn release_scope<W: Wake>(&mut self, scope: ScopeId, now: EngineTime, wake: &mut W) {
+        self.bindings.release_scope(scope, now, wake);
     }
     /// A pending local node from an enclosing or sibling graph.
     pub fn take_wake(&mut self, scope: ScopeId) -> Option<NodeId> {

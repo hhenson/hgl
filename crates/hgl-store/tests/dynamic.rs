@@ -425,7 +425,7 @@ fn expired_dictionary_drops_child_views_but_keeps_following_its_ref()
     store.follow(input.id(), reference, at(0), &mut wakes)?;
     store.set_reference(reference, store.reference(old.id()), at(0), &mut wakes)?;
     store.begin_cycle(at(1));
-    store.release_scope(scope, at(1));
+    store.release_scope(scope, at(1), &mut wakes);
     assert!(store.input_valid(input.id()));
     store.begin_cycle(at(2));
     assert!(!store.input_valid(input.id()));
