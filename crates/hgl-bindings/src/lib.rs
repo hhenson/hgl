@@ -501,6 +501,9 @@ impl Bindings {
     }
     /// Invalidate the child while recording its parent's change.
     pub fn invalidate<W: Wake>(&mut self, output: OutputId, now: EngineTime, wake: &mut W) {
+        if self.output(output).modified_at == EngineTime::NEVER {
+            return;
+        }
         match self.output(output).kind {
             Kind::Dictionary(_) => {
                 let children = std::mem::take(&mut self.outputs[output.0 as usize].members.live);

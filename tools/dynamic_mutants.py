@@ -6,7 +6,17 @@ import subprocess
 import tempfile
 
 repo = Path(__file__).resolve().parents[1]
-cases = [('released_parent_membership',
+cases = [('child_start_stop',
+  'crates/hgl-kernel/src/ctx.rs',
+  'graph.start(self.store, self.now)?;\n            if graph.stop_requested()',
+  'graph.start(self.store, self.now)?;\n            if false',
+  ['-p', 'hgl-nested', '--test', 'start_stop']),
+ ('repeated_invalidation',
+  'crates/hgl-bindings/src/lib.rs',
+  'if self.output(output).modified_at == EngineTime::NEVER {',
+  'if false {',
+  ['-p', 'hgl-store', '--test', 'invalidation']),
+ ('released_parent_membership',
   'crates/hgl-bindings/src/scopes.rs',
   'self.remove(parent, key, now, wake);',
   '// deliberately retain the parent membership',

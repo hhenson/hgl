@@ -208,6 +208,9 @@ impl Ctx<'_> {
         let result = construction.and_then(|(mut graph, value)| {
             graph.scope = scope;
             graph.start(self.store, self.now)?;
+            if graph.stop_requested() {
+                self.request_stop();
+            }
             Ok((graph, value))
         });
         if result.is_err() {

@@ -71,3 +71,38 @@ fn releasing_notified_children_cancels_their_parent_mailbox_entries()
     bindings.release_scope(fresh, now, &mut wakes);
     Ok(())
 }
+
+#[test]
+fn each_shape_notifies_only_when_it_becomes_invalid() -> Result<(), hgl_bindings::BindError> {
+    for kind in [
+        Kind::Scalar(ScalarType::I64),
+        Kind::Dictionary(ScalarType::I64),
+        Kind::Reference {
+            scalar: ScalarType::I64,
+            dictionary: false,
+        },
+        Kind::Reference {
+            scalar: ScalarType::I64,
+            dictionary: true,
+        },
+    ] {
+        let mut bindings = Bindings::default();
+        let mut wakes = Wakes::default();
+        let (output, _) = bindings.add_output(NodeId(0), kind, 0);
+        let input = bindings.add_input(NodeId(1), kind, true);
+        bindings.bind(input, output)?;
+        for cycle in 1..=6 {
+            let now = EngineTime::from_micros(cycle);
+            bindings.begin_cycle(now);
+            wakes.0.clear();
+            if cycle == 2 || cycle == 5 {
+                bindings.publish(output, now, &mut wakes);
+            } else {
+                bindings.invalidate(output, now, &mut wakes);
+            }
+            let transition = cycle != 1 && cycle != 4;
+            assert_eq!(!wakes.0.is_empty(), transition, "{kind:?} at {cycle}");
+        }
+    }
+    Ok(())
+}

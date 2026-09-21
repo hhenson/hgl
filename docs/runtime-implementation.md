@@ -25,6 +25,8 @@ These tests establish the following subset, not all 243 observations:
 | [Timers and lifecycle](../crates/hgl-nested/tests/timers.rs) | Child-only deadlines, cancellation, siblings, coincident input/timer, failed construction/start/evaluation and bounded churn |
 | [Allocation](../crates/hgl-nested/tests/no_alloc.rs) | Zero allocations over 10,000 warm steady cycles with REF switching, a child graph, attached TSD output and timer replacement |
 | [Released members](../crates/hgl-store/tests/released_members.rs) | Parent removal notification/retention, slot reuse, late binding, same-cycle replacement isolation and REF-expiry detachment |
+| [Child stop](../crates/hgl-nested/tests/start_stop.rs) | Unscheduled child start-hook stop propagation through owners, from root start or evaluation |
+| [Invalidation](../crates/hgl-store/tests/invalidation.rs) | Silent repeated invalidation; retained parent timestamp and empty delta |
 | [Bindings](../crates/hgl-bindings/tests/admission.rs) | Collection passivity and cancelled notifications from released child scopes |
 | [Deadlines](../crates/hgl-deadlines/tests/model.rs) | 100,000 replacements/cancellations against an ordered model; reservations preserve live slots |
 
@@ -41,12 +43,13 @@ existing line budgets. Local Windows had no Cargo; hosted Windows CI is
 reported on the PR.
 
 `python3 tools/dynamic_mutants.py` tests a disposable checkout, then tests the
-restored baseline. Eighteen compiled mutations fail their intended tests:
+restored baseline. Twenty compiled mutations fail their intended tests:
 generation checking/wraparound, endpoint and child-view expiry, sample time, repeated following,
 subscription detachment, collection activity, ancestor wakes, released-child
 mailboxes, retained deadlines, duplicate child evaluation, failed-start stop,
 graph restart, released-parent membership, same-key replacement isolation, and
-both heap repair invariants. The active detachment test
+both heap repair invariants, child-start stop propagation and repeated
+invalidation. The active detachment test
 was added after its mutation survived the passive trace. Scope release now
 removes dictionary views before expiry; its mutation checks cover that removal
 and the separate teardown when a REF expires while its target stays alive.

@@ -34,7 +34,7 @@ Compound children and HGL compiler lowering remain later slices.
 ## Rules and cost
 
 TS-1–TS-11, TS-14–TS-23 and GRF-16–GRF-18. Sampled input time is local to the
-binding. Reference designation and target publication are separate events.
+binding. Invalidating an already-invalid endpoint is silent. Reference designation and target publication are separate events.
 Removal retains the child until the next engine cycle; restoration within the
 cycle retains its identity. Reusing storage never revives an old reference.
 

@@ -300,3 +300,6 @@ fn stop_child(&mut self, graph: &mut Graph) -> NodeResult;
 fn take_child(&mut self) -> Option<ScopeId>;
 fn schedule_children(&mut self, time: EngineTime);
 ```
+
+A child stop request propagates to its owner after successful start as well as
+after evaluation, even when the child has no scheduled evaluation.
