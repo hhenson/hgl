@@ -5,7 +5,7 @@ use std::marker::PhantomData;
 impl Store {
     /// Construct an output and its fixed descendants in the current scope.
     pub fn add_shaped_output(&mut self, owner: NodeId, kind: Kind) -> OutputId {
-        if let Kind::Scalar(t) = kind {
+        if let Kind::Ts(t) = kind {
             return match t {
                 ScalarType::Bool => self.add_output::<bool>(owner).id(),
                 ScalarType::I64 => self.add_output::<i64>(owner).id(),
@@ -28,7 +28,7 @@ impl Store {
     /// Project a scalar writing handle once during construction.
     pub fn scalar_output<T: Scalar>(&self, id: OutputId) -> Result<Out<T>, BindError> {
         let o = self.bindings.output(id);
-        if o.kind != Kind::Scalar(T::TYPE) {
+        if o.kind != Kind::Ts(T::TYPE) {
             return Err(BindError::ShapeMismatch);
         }
         Ok(Out {
@@ -39,7 +39,7 @@ impl Store {
     }
     /// Project a typed scalar read handle once during construction.
     pub fn scalar_input<T: Scalar>(&self, id: InputId) -> Result<In<T>, BindError> {
-        if self.bindings.input(id).kind != Kind::Scalar(T::TYPE) {
+        if self.bindings.input(id).kind != Kind::Ts(T::TYPE) {
             return Err(BindError::ShapeMismatch);
         }
         Ok(In {

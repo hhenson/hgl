@@ -1,11 +1,12 @@
 //! Writing a description by hand: the prototype's stand-in for wiring.
 
-use std::collections::{HashSet, VecDeque};
+use std::collections::VecDeque;
 
 use hgl_types::{NodeType, ScalarValue};
 
 use crate::{
-    BuildError, Edge, GraphDescription, NodeDescription, Registry, check_edge, check_scalars, index,
+    BuildError, Catalog, ChildDescription, Edge, GraphDescription, InputPort, NodeDescription,
+    OutputPort, Step, check_edge, check_scalars, index,
 };
 
 /// A node added to a [`Builder`], by the order it was added in. Only that
@@ -17,7 +18,7 @@ pub struct NodeRef(u32);
 /// input name. Each call checks what it adds; [`Builder::finish`] ranks.
 #[derive(Debug)]
 pub struct Builder<'r> {
-    registry: &'r Registry,
+    registry: &'r dyn Catalog,
     label: String,
     /// In the order they were added, until `finish` ranks them.
     nodes: Vec<NodeDescription>,
@@ -25,19 +26,19 @@ pub struct Builder<'r> {
     types: Vec<&'r NodeType>,
     edges: Vec<Edge>,
     /// The (node, input) of every edge so far (GRF-6).
-    bound: HashSet<(u32, u32)>,
+    bound: Vec<InputPort>,
 }
 
 impl<'r> Builder<'r> {
     /// An empty graph called `label`, of implementations from `registry`.
-    pub fn new(label: &str, registry: &'r Registry) -> Self {
+    pub fn new(label: &str, registry: &'r dyn Catalog) -> Self {
         Self {
             registry,
             label: label.to_owned(),
             nodes: Vec::new(),
             types: Vec::new(),
             edges: Vec::new(),
-            bound: HashSet::new(),
+            bound: Vec::new(),
         }
     }
 
@@ -50,9 +51,13 @@ impl<'r> Builder<'r> {
         implementation: &str,
         scalars: &[(&str, ScalarValue)],
     ) -> Result<NodeRef, BuildError> {
-        let node_type = &self.registry.find(implementation)?.node_type;
+        let node_type = self
+            .registry
+            .node_type(implementation)
+            .ok_or_else(|| BuildError::UnknownImplementation(implementation.into()))?;
         let node = NodeDescription {
             implementation: implementation.to_owned(),
+            children: Vec::new(),
             label: implementation.to_owned(),
             scalars: scalars
                 .iter()
@@ -76,18 +81,51 @@ impl<'r> Builder<'r> {
         target: NodeRef,
         input: &str,
     ) -> Result<(), BuildError> {
+        self.connect_path(source, Vec::new(), target, input, Vec::new())
+    }
+
+    /// Connect checked fixed descendants instead of whole ports.
+    pub fn connect_path(
+        &mut self,
+        source: NodeRef,
+        source_path: Vec<Step>,
+        target: NodeRef,
+        input: &str,
+        target_path: Vec<Step>,
+    ) -> Result<(), BuildError> {
         let inputs = &self.types[target.0 as usize].inputs;
         let Some(position) = inputs.iter().position(|&(name, _)| name == input) else {
             let label = &self.nodes[target.0 as usize].label;
             return Err(BuildError::unknown_input(label, input));
         };
         let edge = Edge {
-            source_node: source.0,
-            target_node: target.0,
-            target_input: index(position),
+            source: OutputPort {
+                node: source.0,
+                path: source_path,
+            },
+            target: InputPort {
+                node: target.0,
+                input: index(position),
+                path: target_path,
+            },
         };
-        check_edge(&self.nodes, &self.types, edge, &mut self.bound)?;
+        check_edge(&self.nodes, &self.types, &edge, &mut self.bound)?;
         self.edges.push(edge);
+        Ok(())
+    }
+
+    /// Set the reusable child templates of one owner node.
+    pub fn children(
+        &mut self,
+        node: NodeRef,
+        children: Vec<ChildDescription>,
+    ) -> Result<(), BuildError> {
+        if children.len() != self.types[node.0 as usize].child_graphs {
+            return Err(BuildError::InvalidChildren(
+                self.nodes[node.0 as usize].label.clone(),
+            ));
+        }
+        self.nodes[node.0 as usize].children = children;
         Ok(())
     }
 
@@ -104,21 +142,23 @@ impl<'r> Builder<'r> {
         // hgraph reaches a producer's consumers by walking the consumers in
         // insertion order and each one's inputs in order. Sorting first puts
         // the edges in that order, which is the order the ranking then sees.
-        edges.sort_unstable_by_key(|edge| (edge.target_node, edge.target_input));
+        edges.sort_unstable_by(|a, b| a.target.cmp(&b.target));
         let ranks = ranks(self.nodes.len(), &edges)?;
         let mut ranked: Vec<(u32, NodeDescription)> =
             ranks.iter().copied().zip(self.nodes).collect();
         ranked.sort_unstable_by_key(|&(rank, _)| rank);
         for edge in &mut edges {
-            edge.source_node = ranks[edge.source_node as usize];
-            edge.target_node = ranks[edge.target_node as usize];
+            edge.source.node = ranks[edge.source.node as usize];
+            edge.target.node = ranks[edge.target.node as usize];
         }
-        edges.sort_unstable_by_key(|edge| (edge.target_node, edge.target_input));
-        Ok(GraphDescription {
+        edges.sort_unstable_by(|a, b| a.target.cmp(&b.target));
+        let description = GraphDescription {
             label: self.label,
             nodes: ranked.into_iter().map(|(_, node)| node).collect(),
             edges,
-        })
+        };
+        crate::validate(&description, self.registry)?;
+        Ok(description)
     }
 }
 
@@ -129,8 +169,8 @@ fn ranks(count: usize, edges: &[Edge]) -> Result<Vec<u32>, BuildError> {
     let mut consumers = vec![Vec::new(); count];
     let mut unranked_producers = vec![0_usize; count];
     for edge in edges {
-        consumers[edge.source_node as usize].push(edge.target_node);
-        unranked_producers[edge.target_node as usize] += 1;
+        consumers[edge.source.node as usize].push(edge.target.node);
+        unranked_producers[edge.target.node as usize] += 1;
     }
     let mut ready: VecDeque<u32> = (0..index(count))
         .filter(|&node| unranked_producers[node as usize] == 0)

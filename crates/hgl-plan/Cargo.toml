@@ -1,22 +1,17 @@
 [package]
-name = "hgl-describe"
+name = "hgl-plan"
 version = "0.0.0"
 edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
-description = "The graph description, a builder for writing one by hand, and instantiation."
+description = "Plain recursive graph descriptions and construction-time checks."
 
 [package.metadata.hgl]
 line-budget = 500
 
 [dependencies]
-hgl-plan = { path = "../hgl-plan" }
 hgl-types = { path = "../hgl-types" }
 hgl-store = { path = "../hgl-store" }
-hgl-kernel = { path = "../hgl-kernel" }
 
 [lints]
 workspace = true
-
-[dev-dependencies]
-hgl-nested = { path = "../hgl-nested" }

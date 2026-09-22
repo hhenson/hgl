@@ -1,5 +1,5 @@
 //! Endpoint storage without binding or notification policy.
-use hgl_types::{EngineTime, NodeId, ScalarType};
+use hgl_types::{EngineTime, NodeId};
 use std::collections::BTreeMap;
 /// One output slot in a run.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -7,65 +7,8 @@ pub struct OutputId(pub u32);
 /// One input slot in a run.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct InputId(pub u32);
-/// Recursive shape, independent of endpoint bindings.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Kind {
-    /// A scalar column.
-    Scalar(ScalarType),
-    /// An i64 keyed dictionary.
-    Dictionary(Box<Kind>),
-    /// A designation to this shape.
-    Reference(Box<Kind>),
-    /// Fixed element shape and length.
-    List(Box<Kind>, usize),
-    /// Ordered, named fields.
-    Bundle(Vec<(String, Kind)>),
-}
-impl Kind {
-    /// Scalar column type. Aggregates have no scalar column.
-    /// # Panics
-    /// Called on a non-scalar shape.
-    pub fn scalar(&self) -> ScalarType {
-        let Self::Scalar(t) = self else {
-            unreachable!("not a scalar endpoint")
-        };
-        *t
-    }
-    /// Number of dense children.
-    pub fn len(&self) -> usize {
-        match self {
-            Self::List(_, n) => *n,
-            Self::Bundle(fields) => fields.len(),
-            Self::Scalar(_) | Self::Dictionary(_) | Self::Reference(_) => 0,
-        }
-    }
-    /// Whether the shape has no dense children.
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-    /// Fixed child shape at a wiring-time position.
-    pub fn child(&self, position: usize) -> &Self {
-        match self {
-            Self::List(child, n) if position < *n => child,
-            Self::Bundle(fields) => &fields[position].1,
-            Self::Scalar(_) | Self::Dictionary(_) | Self::Reference(_) | Self::List(_, _) => {
-                unreachable!("not a fixed child")
-            }
-        }
-    }
-    /// Resolve a declared field while wiring.
-    pub fn field(&self, name: &str) -> Option<usize> {
-        if let Self::Bundle(fields) = self {
-            fields.iter().position(|(n, _)| n == name)
-        } else {
-            None
-        }
-    }
-    /// Whether this shape is a fixed collection.
-    pub fn fixed(&self) -> bool {
-        matches!(self, Self::List(..) | Self::Bundle(_))
-    }
-}
+/// Recursive shape shared with graph descriptions.
+pub use hgl_types::TsType as Kind;
 /// A designation; retaining it does not retain its endpoint.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct Reference {
@@ -223,6 +166,22 @@ fn index(n: usize) -> u32 {
     u32::try_from(n).unwrap_or_else(|_| unreachable!("endpoint capacity exceeded"))
 }
 impl Endpoints {
+    /// A current peer, excluding retained removed-member projections (TS-11).
+    pub fn has_peer(&self, mut input: InputId) -> bool {
+        if self.input(input).source.is_none() {
+            return false;
+        }
+        while let Some((parent, key)) = self.input(input).parent {
+            if !self.input(parent).kind.fixed()
+                && self.input(parent).members.live.get(&key) != Some(&input)
+            {
+                return false;
+            }
+            input = parent;
+        }
+        true
+    }
+
     /// Output metadata. An unknown id is a caller error.
     pub fn output(&self, id: OutputId) -> &Output {
         &self.outputs[id.0 as usize]

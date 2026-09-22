@@ -145,6 +145,25 @@ cases.extend([
   ['-p', 'hgl-store', '--test', 'fixed', 'accepted_collection']),
 ])
 
+cases.extend([
+ ('description_overlap', 'crates/hgl-plan/src/paths.rs',
+  'previous.node == edge.target.node', 'false',
+  ['-p', 'hgl-describe', '--test', 'recursive', 'whole_and_descendant']),
+ ('description_boundary_overlap', 'crates/hgl-plan/src/validation.rs',
+  'earlier.node == edge.target.node', 'false',
+  ['-p', 'hgl-describe', '--test', 'recursive', 'child_boundaries']),
+ ('frozen_parent_capture', 'crates/hgl-describe/src/child.rs',
+  '.follow(target, reference, now, &mut Quiet)',
+  '.sample(target, store.bindings().output(reference).reference, now, &mut Quiet)',
+  ['-p', 'hgl-describe', '--test', 'recursive', 'validated_nested_descriptions']),
+ ('removed_descendant_peer', 'crates/hgl-endpoints/src/lib.rs',
+  'self.input(parent).members.live.get(&key) != Some(&input)', 'false',
+  ['-p', 'hgl-describe', '--test', 'recursive', 'validated_nested_descriptions']),
+ ('frozen_projected_capture', 'crates/hgl-describe/src/child.rs',
+  'store.bindings().input(source).reference_source.is_some()', 'false',
+  ['-p', 'hgl-describe', '--test', 'recursive', 'projecting_through']),
+])
+
 with tempfile.TemporaryDirectory(prefix="hgl-dynamic-mutants-") as directory:
     root = Path(directory)
     files = subprocess.check_output(
@@ -163,7 +182,7 @@ with tempfile.TemporaryDirectory(prefix="hgl-dynamic-mutants-") as directory:
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=120
         )
 
-    baseline = run(["-p", "hgl-store", "-p", "hgl-nested", "-p", "hgl-deadlines", "-p", "hgl-bindings"])
+    baseline = run(["-p", "hgl-store", "-p", "hgl-nested", "-p", "hgl-deadlines", "-p", "hgl-bindings", "-p", "hgl-describe"])
     if baseline.returncode:
         raise RuntimeError("Unmodified baseline failed:\n" + baseline.stdout)
     results = []
@@ -185,7 +204,7 @@ with tempfile.TemporaryDirectory(prefix="hgl-dynamic-mutants-") as directory:
         finally:
             path.write_text(original)
             path.touch()
-    restored = run(["-p", "hgl-store", "-p", "hgl-nested", "-p", "hgl-deadlines", "-p", "hgl-bindings"])
+    restored = run(["-p", "hgl-store", "-p", "hgl-nested", "-p", "hgl-deadlines", "-p", "hgl-bindings", "-p", "hgl-describe"])
     if restored.returncode:
         raise RuntimeError("Restored baseline failed:\n" + restored.stdout)
     if not all(row["killed"] for row in results):

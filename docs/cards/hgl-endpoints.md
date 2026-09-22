@@ -2,7 +2,8 @@
 
 Status: implemented for the fixed collection slice.
 
-Own endpoint records, recursive shapes and reusable slot allocation. No
+Own endpoint records and reusable slot allocation. Re-export recursive shapes
+from hgl-types. No
 notifications, scalar values or binding policy. May use `hgl-types`.
 Budget: 650 source lines. Existing crate budgets remain unchanged.
 
@@ -52,3 +53,9 @@ next cycle boundary. Retained output references still need their original
 scope ancestry to validate forward bindings during the removal cycle.
 `Scopes::reclaim(EngineTime, bool)` shares the output expiry boundary, including
 independent root runs; entering the retirement cycle itself does not reclaim.
+
+`Kind` is re-exported from `hgl-types::TsType`; its scalar variant is `Ts`.
+Descriptions and live endpoints share one recursive shape definition.
+
+`Endpoints::has_peer(input)` excludes a removed-member projection at any
+ancestor; retained source handles provide removal-cycle reads, not peering.

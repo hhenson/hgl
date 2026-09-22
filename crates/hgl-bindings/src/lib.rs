@@ -117,7 +117,7 @@ impl Bindings {
             .get(output.0 as usize)
             .filter(|o| o.alive)
             .ok_or(BindError::UnknownOutput(output))?;
-        if let (Kind::Scalar(a), Kind::Scalar(b)) = (&i.kind, &o.kind)
+        if let (Kind::Ts(a), Kind::Ts(b)) = (&i.kind, &o.kind)
             && a != b
         {
             return Err(BindError::TypeMismatch {
@@ -395,7 +395,7 @@ impl Bindings {
                     self.invalidate(self.output(output).fixed[n], now, wake);
                 }
             }
-            Kind::Scalar(_) => {}
+            Kind::Ts(_) => {}
         }
         self.endpoints.outputs[output.0 as usize].modified_at = EngineTime::NEVER;
         self.notify_output(output, now, wake);
@@ -545,7 +545,7 @@ mod tests {
     #[test]
     fn exhausted_generation_is_never_reused() {
         let mut bindings = Bindings::default();
-        let kind = Kind::Scalar(ScalarType::I64);
+        let kind = Kind::Ts(ScalarType::I64);
         let (old, _) = bindings.add_output(NodeId(0), kind.clone(), 0);
         bindings.endpoints.outputs[old.0 as usize].generation = u32::MAX;
         let saved = bindings.reference(old);

@@ -13,8 +13,8 @@ fn changing_collection_activity_reaches_existing_and_future_children()
 -> Result<(), hgl_bindings::BindError> {
     let mut bindings = Bindings::default();
     let mut wakes = Wakes::default();
-    let scalar = Kind::Scalar(ScalarType::I64);
-    let dictionary = Kind::Dictionary(Box::new(Kind::Scalar(ScalarType::I64)));
+    let scalar = Kind::Ts(ScalarType::I64);
+    let dictionary = Kind::Dictionary(Box::new(Kind::Ts(ScalarType::I64)));
     let (output, _) = bindings.add_output(NodeId(0), dictionary.clone(), 0);
     let input = bindings.add_input(NodeId(1), dictionary, true);
     bindings.bind(input, output)?;
@@ -53,7 +53,7 @@ fn releasing_notified_children_cancels_their_parent_mailbox_entries()
 -> Result<(), hgl_bindings::BindError> {
     let mut bindings = Bindings::default();
     let mut wakes = Wakes::default();
-    let scalar = Kind::Scalar(ScalarType::I64);
+    let scalar = Kind::Ts(ScalarType::I64);
     let (output, _) = bindings.add_output(NodeId(0), scalar.clone(), 0);
     let root = bindings.scope();
     let mut children = Vec::new();
@@ -81,10 +81,10 @@ fn releasing_notified_children_cancels_their_parent_mailbox_entries()
 #[test]
 fn each_shape_notifies_only_when_it_becomes_invalid() -> Result<(), hgl_bindings::BindError> {
     for kind in [
-        Kind::Scalar(ScalarType::I64),
-        Kind::Dictionary(Box::new(Kind::Scalar(ScalarType::I64))),
-        Kind::Reference(Box::new(Kind::Scalar(ScalarType::I64))),
-        Kind::Reference(Box::new(Kind::Dictionary(Box::new(Kind::Scalar(
+        Kind::Ts(ScalarType::I64),
+        Kind::Dictionary(Box::new(Kind::Ts(ScalarType::I64))),
+        Kind::Reference(Box::new(Kind::Ts(ScalarType::I64))),
+        Kind::Reference(Box::new(Kind::Dictionary(Box::new(Kind::Ts(
             ScalarType::I64,
         ))))),
     ] {
@@ -114,7 +114,7 @@ fn stopped_scope_outputs_remain_readable_but_cannot_be_inserted()
 -> Result<(), hgl_bindings::BindError> {
     let mut bindings = Bindings::default();
     let root = bindings.scope();
-    let scalar = Kind::Scalar(ScalarType::I64);
+    let scalar = Kind::Ts(ScalarType::I64);
     let (dict, _) = bindings.add_output(NodeId(0), Kind::Dictionary(Box::new(scalar.clone())), 0);
     let scope = bindings.child_scope(NodeId(0));
     bindings.enter_scope(scope);

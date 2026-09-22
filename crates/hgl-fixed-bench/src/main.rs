@@ -82,8 +82,8 @@ impl Node for Sink {
 fn shape() -> Kind {
     Kind::List(
         Box::new(Kind::Bundle(vec![
-            ("left".into(), Kind::Scalar(ScalarType::I64)),
-            ("right".into(), Kind::Scalar(ScalarType::I64)),
+            ("left".into(), Kind::Ts(ScalarType::I64)),
+            ("right".into(), Kind::Ts(ScalarType::I64)),
         ])),
         2,
     )

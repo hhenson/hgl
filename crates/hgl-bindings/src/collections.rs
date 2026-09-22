@@ -274,6 +274,10 @@ impl Bindings {
             m.changed.clear();
         }
     }
+    /// A current binding, excluding retained removed-member projections.
+    pub fn has_peer(&self, input: InputId) -> bool {
+        self.endpoints.has_peer(input)
+    }
     /// Reference to an input's current source, without copying the value.
     pub fn input_reference(&self, input: InputId) -> Reference {
         let i = self.input(input);

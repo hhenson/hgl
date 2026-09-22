@@ -15,6 +15,7 @@ fn node_type(inputs: Vec<(&'static str, TsType)>, output: Option<TsType>) -> Nod
         valid_inputs: None,
         uses_scheduler: false,
         schedule_on_start: false,
+        child_graphs: 0,
     }
 }
 
@@ -92,4 +93,13 @@ fn node_id_and_scalar_type_are_copy_and_one_word() {
 #[test]
 fn node_ids_order_as_their_positions() {
     assert!(NodeId(1) < NodeId(2));
+}
+
+#[test]
+fn a_template_owner_is_nested_regardless_of_its_signature() {
+    let owner = NodeType {
+        child_graphs: 1,
+        ..NodeType::default()
+    };
+    assert_eq!(owner.kind(), NodeKind::Nested);
 }

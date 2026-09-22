@@ -154,3 +154,8 @@ cycle but cannot be reattached. `restorable_output` admits only a live writer;
 restoration otherwise allocates fresh parent-owned storage. Insertion rejects
 dead endpoints and stopped scopes before changing membership. Compound
 attachment uses a peer `Reference`, checking generation even after slot reuse.
+
+`has_peer(input)` reports a current binding. A retained removed member and its
+fixed descendants have no peer, though their source handles keep removal-cycle
+values readable (TS-11). This diagnostic follows parent membership; storage
+retention alone does not establish peering.

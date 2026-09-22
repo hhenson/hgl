@@ -51,6 +51,7 @@ fn slot(node: impl Node, uses_scheduler: bool) -> NodeSlot {
         valid_inputs: None,
         uses_scheduler,
         schedule_on_start: false,
+        child_graphs: 0,
     };
     NodeSlot {
         node: Box::new(node),

@@ -104,7 +104,7 @@ impl Store {
     pub fn add_output<T: Scalar>(&mut self, owner: NodeId) -> Out<T> {
         let (id, fresh) = self.bindings.add_output(
             owner,
-            Kind::Scalar(T::TYPE),
+            Kind::Ts(T::TYPE),
             u32::try_from(T::column(&self.columns).len())
                 .unwrap_or_else(|_| unreachable!("column capacity exceeded")),
         );
@@ -120,9 +120,7 @@ impl Store {
     /// Allocate an unbound scalar input.
     pub fn add_input<T: Scalar>(&mut self, owner: NodeId, active: bool) -> In<T> {
         In {
-            id: self
-                .bindings
-                .add_input(owner, Kind::Scalar(T::TYPE), active),
+            id: self.bindings.add_input(owner, Kind::Ts(T::TYPE), active),
             value_type: PhantomData,
         }
     }
@@ -187,7 +185,7 @@ impl Store {
         wake: &mut W,
     ) {
         let o = self.bindings.output(output.id);
-        debug_assert_eq!(o.kind, Kind::Scalar(T::TYPE), "foreign handle");
+        debug_assert_eq!(o.kind, Kind::Ts(T::TYPE), "foreign handle");
         debug_assert_eq!(o.owner, writer, "TS-21: not the owner");
         debug_assert_eq!(o.scope, self.bindings.scope(), "TS-21: foreign graph");
         debug_assert!(now != EngineTime::NEVER, "NEVER is not an evaluation time");
@@ -206,14 +204,14 @@ impl Store {
     #[inline]
     pub fn output_value<T: Scalar>(&self, output: Out<T>) -> Option<T> {
         let o = self.bindings.output(output.id);
-        debug_assert_eq!(o.kind, Kind::Scalar(T::TYPE), "foreign handle");
+        debug_assert_eq!(o.kind, Kind::Ts(T::TYPE), "foreign handle");
         (o.alive && o.generation == output.generation && o.modified_at != EngineTime::NEVER)
             .then(|| T::column(&self.columns)[o.slot as usize])
     }
     /// Erased scalar observation; aggregate and REF endpoints have no scalar value.
     pub fn output_value_erased(&self, output: OutputId) -> Option<ScalarValue> {
         let o = self.bindings.output(output);
-        (matches!(o.kind, Kind::Scalar(_)) && o.modified_at != EngineTime::NEVER)
+        (matches!(o.kind, Kind::Ts(_)) && o.modified_at != EngineTime::NEVER)
             .then(|| self.columns.value(o.kind.scalar(), o.slot as usize))
     }
     /// Whether an output published in this cycle.
@@ -261,9 +259,9 @@ impl Store {
         self.add_shaped_output(
             owner,
             Kind::Reference(Box::new(if dictionary {
-                Kind::Dictionary(Box::new(Kind::Scalar(scalar)))
+                Kind::Dictionary(Box::new(Kind::Ts(scalar)))
             } else {
-                Kind::Scalar(scalar)
+                Kind::Ts(scalar)
             })),
         )
     }
@@ -292,7 +290,7 @@ impl Store {
         DictOut {
             id: self
                 .bindings
-                .add_output(owner, Kind::Dictionary(Box::new(Kind::Scalar(T::TYPE))), 0)
+                .add_output(owner, Kind::Dictionary(Box::new(Kind::Ts(T::TYPE))), 0)
                 .0,
             value_type: PhantomData,
         }
@@ -302,7 +300,7 @@ impl Store {
         DictIn {
             id: self.bindings.add_input(
                 owner,
-                Kind::Dictionary(Box::new(Kind::Scalar(T::TYPE))),
+                Kind::Dictionary(Box::new(Kind::Ts(T::TYPE))),
                 active,
             ),
             value_type: PhantomData,

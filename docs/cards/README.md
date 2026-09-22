@@ -97,3 +97,9 @@ kernel and child manager. Existing crate budgets stay unchanged.
 from binding policy. Fixed children use dense, stable slots.
 [hgl-fixed-bench](hgl-fixed-bench.md) pairs three native collection scenarios
 with C++; the 44 accepted semantic traces remain the correctness oracle.
+
+## Recursive description infrastructure
+
+[hgl-plan](hgl-plan.md) holds plain templates and structural checks;
+[hgl-describe](hgl-describe.md) resolves them into scoped runtime instances.
+This establishes the target for the later Rust compiler review.
