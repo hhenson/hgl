@@ -1,0 +1,38 @@
+use hgl_describe::{BuildError, Buildable, Ports, Registry};
+use hgl_kernel::{Ctx, Node, NodeResult};
+use hgl_store::{In, Out};
+use hgl_types::{NodeType, ScalarType, ScalarValue, TsType};
+use hgl_emitted_spike::{hgl_affine, hgl_grouped, hgl_forward, shape_nested};
+
+struct Affine { x: In<i64>, y: In<i64>, out: Out<i64> }
+impl Node for Affine {
+    fn eval(&mut self, ctx: &mut Ctx<'_>) -> NodeResult {
+        ctx.set(self.out, hgl_affine(ctx.get(self.x), ctx.get(self.y))); Ok(())
+    }
+}
+impl Buildable for Affine {
+    fn node_type() -> NodeType {
+        NodeType { name: "affine", inputs: vec![("x", TsType::Ts(ScalarType::I64)), ("y", TsType::Ts(ScalarType::I64))], output: Some(TsType::Ts(ScalarType::I64)), ..NodeType::default() }
+    }
+    fn build(p: &mut Ports<'_>) -> Result<Self, BuildError> { Ok(Self { x: p.input("x")?, y: p.input("y")?, out: p.output()? }) }
+}
+#[test]
+fn emitted_scalar_body_runs_through_engine_ticks() {
+    use hgl_testkit::cases::{Case, Slice};
+    let mut r = Registry::new();
+    r.register::<hgl_testkit::Replay>().unwrap(); r.register::<hgl_testkit::Record>().unwrap(); r.register::<Affine>().unwrap();
+    hgl_testkit::run(&Case {
+        name: "emitted affine", source: "compiler-tools/corpus/runtime.hgl", node: "affine", scalars: &[],
+        inputs: &[("x", &[Some(ScalarValue::I64(1)), None, Some(ScalarValue::I64(3)), None]), ("y", &[Some(ScalarValue::I64(10)), Some(ScalarValue::I64(20)), None, None])],
+        expected: &[Some(ScalarValue::I64(21)), Some(ScalarValue::I64(41)), Some(ScalarValue::I64(43)), None], cycles: Some(4), slice: Slice::P1,
+    }, &r).unwrap();
+    assert_eq!([hgl_grouped(1, 10), hgl_grouped(1, 20), hgl_grouped(3, 20)], [22, 42, 46]);
+}
+#[test]
+fn emitted_reference_forwarding_and_intervening_collection_are_preserved() {
+    let mut store = hgl_store::Store::new();
+    let out = store.add_output::<i64>(hgl_types::NodeId(0));
+    let reference = store.reference(out.id());
+    assert_eq!(hgl_forward(reference), reference);
+    assert_eq!(shape_nested(), TsType::List(Box::new(TsType::Reference(Box::new(TsType::List(Box::new(TsType::Ts(ScalarType::I64)), 2)))), 2));
+}

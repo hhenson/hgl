@@ -1,0 +1,8 @@
+module spike.runtime
+fn affine(x: i64, y: i64) -> i64 => x + y * 2
+fn grouped(x: i64, y: i64) -> i64 => (x + y) * 2
+
+test arithmetic {
+    assert eval(affine, x: [1, _, 3, _], y: [10, 20, _, _]) == [21, 41, 43, _]
+    assert eval(grouped, x: [1, _, 3, _], y: [10, 20, _, _]) == [22, 42, 46, _]
+}

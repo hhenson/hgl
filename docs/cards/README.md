@@ -103,3 +103,6 @@ with C++; the 44 accepted semantic traces remain the correctness oracle.
 [hgl-plan](hgl-plan.md) holds plain templates and structural checks;
 [hgl-describe](hgl-describe.md) resolves them into scoped runtime instances.
 This establishes the target for the later Rust compiler review.
+
+The [compiler tooling spike](compiler-tools-spike.md) is an isolated comparison,
+not a production compiler crate.
