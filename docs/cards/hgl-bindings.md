@@ -75,7 +75,7 @@ comparable; default is empty. `Bindings` is defaultable.
 
 ```rust
 enum Kind {
-    Scalar(ScalarType), Dictionary(Box<Kind>), Reference(Box<Kind>),
+    Ts(ScalarType), Dictionary(Box<Kind>), Reference(Box<Kind>),
     List(Box<Kind>, usize), Bundle(Vec<(String, Kind)>),
 }
 enum BindError {
