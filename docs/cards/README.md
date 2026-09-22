@@ -90,3 +90,10 @@ TSD/REF/nested-graph slice. Scalar storage stays in `hgl-store`;
 [hgl-nested](hgl-nested.md) owns child instances, and
 [hgl-deadlines](hgl-deadlines.md) shares a bounded schedule heap between the
 kernel and child manager. Existing crate budgets stay unchanged.
+
+## Fixed collection slice
+
+[hgl-endpoints](hgl-endpoints.md) separates recursive shapes and slot storage
+from binding policy. Fixed children use dense, stable slots.
+[hgl-fixed-bench](hgl-fixed-bench.md) pairs three native collection scenarios
+with C++; the 44 accepted semantic traces remain the correctness oracle.

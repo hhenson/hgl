@@ -1,16 +1,15 @@
-# Dynamic runtime slice
+# Runtime implementation
 
 Status: implemented through the Rust API; HGL lowering remains pending.
 
-The prototype can now run TSD, REF and nested graphs together. Endpoint
+The prototype runs fixed TSL/TSB, TSD, REF and nested graphs together. Endpoint
 identity belongs to the shared store; node rank belongs to a graph scope.
 A child owns its state and scheduler. Its owner runs it only when notified or
 due, and exposes its output without copying it.
 
-The admitted shapes are `TS[bool/i64/f64]`, `TSD[i64, TS[T]]`, and REF to either.
-The existing description builder remains scalar-only. Compound children,
-REF-valued dictionary children, key-set output ports and captured child errors
-are outside this slice. Independent root graphs can run sequentially in one
+Shapes compose recursively: `TS[bool/i64/f64]`, fixed TSL, named TSB fields,
+`TSD[i64, child]` and REF. The description builder remains scalar-only.
+Growing TSL, key-set output ports and captured child errors remain pending. Independent root graphs can run sequentially in one
 store; concurrent root clock domains are not implemented.
 
 ## Contract coverage
@@ -43,7 +42,7 @@ existing line budgets. Local Windows had no Cargo; hosted Windows CI is
 reported on the PR.
 
 `python3 tools/dynamic_mutants.py` tests a disposable checkout, then tests the
-restored baseline. Twenty compiled mutations fail their intended tests:
+restored baseline. Twenty-eight compiled mutations fail their intended tests:
 generation checking/wraparound, endpoint and child-view expiry, sample time, repeated following,
 subscription detachment, collection activity, ancestor wakes, released-child
 mailboxes, retained deadlines, duplicate child evaluation, failed-start stop,
@@ -57,5 +56,31 @@ and the separate teardown when a REF expires while its target stays alive.
 [Paired scalar measurements](../bench/results/2026-09-21-dynamic-foundation.md)
 remain below the C++ ceiling but show the added metadata cost over P1. They
 do not establish dynamic-case performance parity. A paired dynamic benchmark,
-compound children and compiler/description integration remain required before
-calling this the complete prototype.
+compiler/description integration remain required before calling this the
+complete prototype.
+
+## Fixed collection acceptance
+
+All 44 accepted scenarios replay against Rust: 12,142 assertions, including
+four real switch/map child graphs with timers and fresh state. Fixtures are
+exported from the initial reasoning, recorded corrections and user rulings;
+Python/C++ observations remain unchanged. Run `python3 tools/fixed_fixtures.py --check` to detect fixture drift. Known reference deviations remain in the
+[comparison report](runtime_spec/validation/fixed/README.md).
+
+Fixed children keep their handles across whole, assembled and empty bindings.
+An assembled parent caches child validity and time; ordinary reads do not scan
+for its timestamp. Owned collections keep publication validity until whole
+invalidation. TSB observations retain every declared field; invalid children
+read nil and deltas select valid modified children. Equal REF publication is
+silent after the first tick. Structured designations are interned during
+wiring and reused when switching; their arena lasts for the Store.
+
+Tests also cover rejected shape/rank changes, compound subtree expiry,
+same-cycle restoration, bounded endpoint/subscription churn and 10,000 warmed
+nested ticks/REF switches with zero allocations. Eight fixed-slice mutations
+exercise duplicate REF ticks, unchanged-child resampling, reset, immediate
+all_valid, subtree expiry, descendant rank, ancestor timestamps and compound dictionary sample time.
+
+[Paired measurements](../bench/results/2026-09-22-fixed-collections.md) cover
+native owned/assembled TSL[TSB] graphs and alternating whole REF routes.
+They do not establish a performance bound for every dynamic nested graph.

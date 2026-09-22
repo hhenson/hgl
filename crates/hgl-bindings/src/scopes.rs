@@ -1,113 +1,8 @@
 //! Graph-local ranks and notifications crossing their ownership boundaries.
-use crate::{Bindings, InputId, OutputId, Wake};
+use crate::{Bindings, InputId, OutputId, ScopeId, Wake};
 use hgl_types::{EngineTime, NodeId};
 
-/// A graph lifetime; local node ranks are meaningful only within this scope.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct ScopeId {
-    index: usize,
-    generation: u64,
-}
-#[derive(Debug, Default, PartialEq, Eq)]
-enum Phase {
-    #[default]
-    Constructing,
-    Running,
-    Releasing,
-    Dead,
-}
-#[derive(Debug, Default)]
-struct Scope {
-    generation: u64,
-    phase: Phase,
-    parent: Option<(ScopeId, NodeId)>,
-    pending: Vec<NodeId>,
-    queued: Vec<bool>,
-    children: Vec<Vec<ScopeId>>,
-    child_count: Vec<usize>,
-    enqueued: bool,
-    inputs: Vec<InputId>,
-    outputs: Vec<OutputId>,
-}
-#[derive(Debug)]
-pub(crate) struct Scopes {
-    entries: Vec<Scope>,
-    free: Vec<usize>,
-    pub(crate) current: ScopeId,
-}
-impl Default for Scopes {
-    fn default() -> Self {
-        Self {
-            entries: vec![Scope {
-                phase: Phase::Running,
-                ..Scope::default()
-            }],
-            free: Vec::new(),
-            current: ScopeId::default(),
-        }
-    }
-}
-impl Scopes {
-    fn alive(&self, id: ScopeId) -> bool {
-        self.entries
-            .get(id.index)
-            .is_some_and(|s| s.phase != Phase::Dead && s.generation == id.generation)
-    }
-    pub(crate) fn reserve(&mut self, id: ScopeId, node: NodeId) {
-        let s = &mut self.entries[id.index];
-        let count = node.0 as usize + 1;
-        if count > s.queued.len() {
-            s.queued.resize(count, false);
-            s.children.resize_with(count, Vec::new);
-            s.child_count.resize(count, 0);
-            s.pending.reserve(count - s.pending.len());
-        }
-    }
-    pub(crate) fn record_output(&mut self, id: OutputId) -> usize {
-        let scope = &mut self.entries[self.current.index];
-        let position = scope.outputs.len();
-        if self.current.index != 0 {
-            scope.outputs.push(id);
-        }
-        position
-    }
-    pub(crate) fn record_input(&mut self, id: InputId) -> usize {
-        let scope = &mut self.entries[self.current.index];
-        let position = scope.inputs.len();
-        if self.current.index != 0 {
-            scope.inputs.push(id);
-        }
-        position
-    }
-    pub(crate) fn wake<W: Wake>(&mut self, mut scope: ScopeId, mut node: NodeId, wake: &mut W) {
-        loop {
-            if !self.alive(scope) {
-                return;
-            }
-            if scope == self.current && self.entries[scope.index].phase == Phase::Running {
-                wake.wake(node);
-                return;
-            }
-            let s = &mut self.entries[scope.index];
-            if !s.queued[node.0 as usize] {
-                s.queued[node.0 as usize] = true;
-                s.pending.push(node);
-            }
-            if scope == self.current {
-                return;
-            }
-            let Some((parent, owner)) = s.parent else {
-                return;
-            };
-            if !s.enqueued {
-                s.enqueued = true;
-                self.entries[parent.index].children[owner.0 as usize].push(scope);
-            }
-            scope = parent;
-            node = owner;
-        }
-    }
-}
+use hgl_endpoints::{Phase, Scope};
 impl Bindings {
     pub(crate) fn owns_child(&self, dict: OutputId, child: OutputId) -> bool {
         let parent = self.output(dict);
@@ -122,49 +17,15 @@ impl Bindings {
         }
         owner == parent.owner
     }
-    pub(crate) fn forward(
-        &self,
-        mut out_scope: ScopeId,
-        mut out: NodeId,
-        mut in_scope: ScopeId,
-        mut input: NodeId,
-    ) -> bool {
-        let depth = |mut scope: ScopeId| {
-            let mut n = 0;
-            while let Some((p, _)) = self.scopes.entries[scope.index].parent {
-                n += 1;
-                scope = p;
-            }
-            n
-        };
-        let (mut a, mut b) = (depth(out_scope), depth(in_scope));
-        while out_scope != in_scope {
-            if a >= b {
-                let Some((p, n)) = self.scopes.entries[out_scope.index].parent else {
-                    return false;
-                };
-                out_scope = p;
-                out = n;
-                a -= 1;
-            } else {
-                let Some((p, n)) = self.scopes.entries[in_scope.index].parent else {
-                    return false;
-                };
-                in_scope = p;
-                input = n;
-                b -= 1;
-            }
-        }
-        out < input
-    }
     /// Retained output, input and scope slots, then live subscriptions.
     /// Diagnostic only; computing subscriptions visits the output table.
     pub fn storage_counts(&self) -> [usize; 4] {
         [
-            self.outputs.len(),
-            self.inputs.len(),
+            self.endpoints.outputs.len(),
+            self.endpoints.inputs.len(),
             self.scopes.entries.len(),
-            self.outputs
+            self.endpoints
+                .outputs
                 .iter()
                 .map(|o| o.watchers.len() + o.followers.len())
                 .sum(),
@@ -277,11 +138,17 @@ impl Bindings {
         let ids = &mut self.scopes.entries[scope.index].outputs;
         ids.swap_remove(position);
         if let Some(&moved) = ids.get(position) {
-            self.outputs[moved.0 as usize].scope_position = position;
+            self.endpoints.outputs[moved.0 as usize].scope_position = position;
         }
     }
     pub(crate) fn release_input(&mut self, input: InputId) {
+        if !self.input(input).alive {
+            return;
+        }
         self.unbind(input);
+        while let Some(child) = self.endpoints.inputs[input.0 as usize].fixed.pop() {
+            self.release_input(child);
+        }
         self.dirty_inputs.retain(|&id| id != input);
         let scope = self.input(input).scope;
         if scope.index != 0 && self.scopes.entries[scope.index].phase != Phase::Releasing {
@@ -289,13 +156,13 @@ impl Bindings {
             let ids = &mut self.scopes.entries[scope.index].inputs;
             ids.swap_remove(position);
             if let Some(&moved) = ids.get(position) {
-                self.inputs[moved.0 as usize].scope_position = position;
+                self.endpoints.inputs[moved.0 as usize].scope_position = position;
             }
         }
-        let i = &mut self.inputs[input.0 as usize];
+        let i = &mut self.endpoints.inputs[input.0 as usize];
         if i.alive {
             i.alive = false;
-            self.free_inputs.push(input);
+            self.endpoints.free_inputs.push(input);
         }
     }
 }

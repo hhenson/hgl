@@ -23,8 +23,10 @@ use hgl_types::{EngineTime, NodeId, ScalarType, ScalarValue};
 
 use columns::Columns;
 pub use columns::Scalar;
+use hgl_bindings::Bindings;
+pub use hgl_bindings::Kind;
 pub use hgl_bindings::{BindError, InputId, OutputId, Reference, ScopeId, Wake};
-use hgl_bindings::{Bindings, Kind};
+mod fixed;
 
 /// A node's handle to its own `TS<T>` output. Eight bytes.
 #[derive(Debug, Clone, Copy)]
@@ -93,16 +95,6 @@ impl<T: Scalar> DictIn<T> {
     }
 }
 
-/// The index the next entry gets in a table that holds `len` entries.
-#[expect(
-    clippy::cast_possible_truncation,
-    reason = "indices are u32 by design and adding an entry cannot fail; debug builds assert the count fits"
-)]
-fn next_index(len: usize) -> u32 {
-    debug_assert!(u32::try_from(len).is_ok(), "more than u32::MAX entries");
-    len as u32
-}
-
 impl Store {
     /// An empty run.
     pub fn new() -> Self {
@@ -113,7 +105,8 @@ impl Store {
         let (id, fresh) = self.bindings.add_output(
             owner,
             Kind::Scalar(T::TYPE),
-            next_index(T::column(&self.columns).len()),
+            u32::try_from(T::column(&self.columns).len())
+                .unwrap_or_else(|_| unreachable!("column capacity exceeded")),
         );
         if fresh {
             T::column_mut(&mut self.columns).push(T::default());
@@ -164,7 +157,7 @@ impl Store {
     /// Admission by id.
     #[inline]
     pub fn input_valid(&self, input: InputId) -> bool {
-        self.bindings.last_modified(input) != EngineTime::NEVER
+        self.bindings.valid(input)
     }
     /// Whether a scalar input ticked in this cycle.
     #[inline]
@@ -266,7 +259,15 @@ impl Store {
         dictionary: bool,
     ) -> OutputId {
         self.bindings
-            .add_output(owner, Kind::Reference { scalar, dictionary }, 0)
+            .add_output(
+                owner,
+                Kind::Reference(Box::new(if dictionary {
+                    Kind::Dictionary(Box::new(Kind::Scalar(scalar)))
+                } else {
+                    Kind::Scalar(scalar)
+                })),
+                0,
+            )
             .0
     }
     /// Follow designation changes and target publications independently.
@@ -294,7 +295,7 @@ impl Store {
         DictOut {
             id: self
                 .bindings
-                .add_output(owner, Kind::Dictionary(T::TYPE), 0)
+                .add_output(owner, Kind::Dictionary(Box::new(Kind::Scalar(T::TYPE))), 0)
                 .0,
             value_type: PhantomData,
         }
@@ -302,9 +303,11 @@ impl Store {
     /// Create a dictionary input.
     pub fn add_dictionary_input<T: Scalar>(&mut self, owner: NodeId, active: bool) -> DictIn<T> {
         DictIn {
-            id: self
-                .bindings
-                .add_input(owner, Kind::Dictionary(T::TYPE), active),
+            id: self.bindings.add_input(
+                owner,
+                Kind::Dictionary(Box::new(Kind::Scalar(T::TYPE))),
+                active,
+            ),
             value_type: PhantomData,
         }
     }
@@ -330,21 +333,9 @@ impl Store {
         now: EngineTime,
         wake: &mut W,
     ) -> Out<T> {
-        self.begin_cycle(now);
-        let old = self.bindings.child_output(dict.id, key);
-        let id = old
-            .or_else(|| self.bindings.removed_output(dict.id, key))
-            .unwrap_or_else(|| self.add_output::<T>(self.bindings.output(dict.id).owner).id);
-        let out = Out {
-            id,
-            generation: self.bindings.output(id).generation,
-            value_type: PhantomData,
-        };
-        if old.is_none() {
-            let result = self.bindings.insert(dict.id, key, id, now, wake);
-            debug_assert!(result.is_ok(), "typed dictionary child");
-        }
-        out
+        let id = self.get_or_create_shaped(dict.id, key, now, wake);
+        self.scalar_output(id)
+            .unwrap_or_else(|_| unreachable!("typed dictionary"))
     }
     /// Attach a child graph's output without copying its value.
     pub fn attach<T: Scalar, W: Wake>(

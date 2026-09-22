@@ -1,19 +1,33 @@
 # Card: hgl-bindings
 
-Status: implemented for the admitted dynamic slice; see [coverage](../runtime-implementation.md).
+Status: implemented for the dynamic and fixed collection slices; see [coverage](../runtime-implementation.md).
 
 Own endpoint metadata, lifetime and binding independently of scalar storage.
-May use `hgl-types`; `hgl-store` owns the typed columns and delegates metadata
+May use `hgl-types` and `hgl-endpoints`; `hgl-store` owns the typed columns and delegates metadata
 here. This is the same store, not a second runtime. Budget: 1,100 source lines.
 
-The admitted shapes are scalar TS, TSD with i64 keys and scalar children, and
-REF to either. Keys in the recorded examples map to distinct i64 values.
-Compound children and HGL compiler lowering remain later slices.
+Shapes are recursive: scalar TS, fixed TSL, named TSB, TSD with i64 keys,
+and REF. HGL compiler lowering and growing TSL remain separate slices.
+
+Fixed children occupy stable dense slots. `fixed_input`/`fixed_output` address
+positions; `items_reference` builds a reusable child designation. `valid`,
+`all_valid`, `last_modified` and `modified` are independent observations.
+Assembled validity and time are cached from child events. An invalidated child
+retains its event time while its enclosing structure stays valid; a wholly
+invalid structure resets descendant observation times. A bind to an invalid
+target resets observation time. Whole and item rebinding preserve unchanged
+child bindings. Equal REF publication is silent after the first publication.
+`input_reference` preserves the current whole or assembled designation.
+
+Retirement visits every descendant, including compound TSD members. Scope
+release uses the same lifetime path. Fixed unbinding retains child handles;
+releasing the owning scope releases them. Read-only children preserve every
+TSB field and TSL position; sparse deltas include only valid modified children.
 
 ## Surface
 
 - `InputId(u32)`, `OutputId(u32)`, `ScopeId`, `Reference`, `Kind` and `BindError`.
-  References carry an endpoint generation. Empty and expired references bind
+  References carry an endpoint generation or an interned item designation. Empty and expired peers bind
   to nothing. Scope identity is independent of a graph's local node rank.
 - `Wake::wake(NodeId)`: same-scope scheduling; foreign notifications queue in
   their target scope and wake its owner through the enclosing scopes.
@@ -56,14 +70,13 @@ bound retained endpoint and subscription storage.
 
 ## Signatures
 
-`InputId` and `OutputId` are public u32 newtypes. `ScopeId` is opaque,
-ordered and defaultable (root). `Reference` is opaque, copyable and
+`InputId` and `OutputId` are public u32 newtypes. `ScopeId` is ordered and defaultable (root). `Reference` is copyable and
 comparable; default is empty. `Bindings` is defaultable.
 
 ```rust
 enum Kind {
-    Scalar(ScalarType), Dictionary(ScalarType),
-    Reference { scalar: ScalarType, dictionary: bool },
+    Scalar(ScalarType), Dictionary(Box<Kind>), Reference(Box<Kind>),
+    List(Box<Kind>, usize), Bundle(Vec<(String, Kind)>),
 }
 enum BindError {
     UnknownInput(InputId), UnknownOutput(OutputId),
@@ -78,11 +91,17 @@ struct Output {
 }
 ```
 
-Fields shown are public, exposed through shared borrows only. `Kind::scalar`
+The complete storage records are in [hgl-endpoints](hgl-endpoints.md);
+actual runtime records are exposed through shared borrows only. `Kind::scalar`
 and `Bindings` methods:
 
 ```rust
-fn scalar(self) -> ScalarType;
+fn scalar(&self) -> ScalarType; // scalar shapes only
+fn len(&self) -> usize;
+fn is_empty(&self) -> bool;
+fn child(&self, position: usize) -> &Kind;
+fn field(&self, name: &str) -> Option<usize>;
+fn fixed(&self) -> bool;
 fn output(&self, id: OutputId) -> &Output;
 fn input(&self, id: InputId) -> &Input;
 fn add_output(&mut self, owner: NodeId, kind: Kind, next_slot: u32) -> (OutputId, bool);
@@ -110,7 +129,12 @@ fn keys(&self, id: InputId) -> impl Iterator<Item = i64> + '_;
 fn changed_keys(&self, id: InputId) -> &[i64];
 fn added_keys(&self, id: InputId) -> impl Iterator<Item = i64> + '_;
 fn removed_keys(&self, id: InputId) -> impl Iterator<Item = i64> + '_;
+fn valid(&self, id: InputId) -> bool;
 fn all_valid(&self, id: InputId) -> bool;
+fn fixed_input(&self, id: InputId, position: usize) -> InputId;
+fn fixed_output(&self, id: OutputId, position: usize) -> OutputId;
+fn append_fixed(&mut self, parent: OutputId, child: OutputId) -> Result<(), BindError>;
+fn items_reference(&mut self, kind: Kind, children: Vec<Reference>) -> Result<Reference, BindError>;
 fn insert<W: Wake>( &mut self, dict: OutputId, key: i64, child: OutputId, now: EngineTime, wake: &mut W) -> Result<(), BindError>;
 fn remove<W: Wake>(&mut self, dict: OutputId, key: i64, now: EngineTime, wake: &mut W);
 fn input_reference(&self, input: InputId) -> Reference;
