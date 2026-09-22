@@ -1,0 +1,107 @@
+[
+  {
+    "case": "owned",
+    "path": "/ticks/5/retired/0/peer",
+    "previous": true,
+    "expected": false,
+    "reason": "A removed input is detached. Retained data does not imply a current peer; both root observations and Python child observations confirm detachment."
+  },
+  {
+    "case": "owned",
+    "path": "/ticks/5/retired/0/children/left/peer",
+    "previous": true,
+    "expected": false,
+    "reason": "A removed input is detached. Retained data does not imply a current peer; both root observations and Python child observations confirm detachment."
+  },
+  {
+    "case": "owned",
+    "path": "/ticks/5/retired/0/children/right/peer",
+    "previous": true,
+    "expected": false,
+    "reason": "A removed input is detached. Retained data does not imply a current peer; both root observations and Python child observations confirm detachment."
+  },
+  {
+    "case": "assembled",
+    "path": "/ticks/5/retired/0/peer",
+    "previous": true,
+    "expected": false,
+    "reason": "A removed input is detached. Retained data does not imply a current peer; both root observations and Python child observations confirm detachment."
+  },
+  {
+    "case": "assembled",
+    "path": "/ticks/5/retired/0/children/left/peer",
+    "previous": true,
+    "expected": false,
+    "reason": "A removed input is detached. Retained data does not imply a current peer; both root observations and Python child observations confirm detachment."
+  },
+  {
+    "case": "assembled",
+    "path": "/ticks/5/retired/0/children/right/peer",
+    "previous": true,
+    "expected": false,
+    "reason": "A removed input is detached. Retained data does not imply a current peer; both root observations and Python child observations confirm detachment."
+  },
+  {
+    "case": "mixed",
+    "path": "/ticks/5/retired/0/peer",
+    "previous": true,
+    "expected": false,
+    "reason": "A removed input is detached. Retained data does not imply a current peer; both root observations and Python child observations confirm detachment."
+  },
+  {
+    "case": "mixed",
+    "path": "/ticks/5/retired/0/children/left/peer",
+    "previous": true,
+    "expected": false,
+    "reason": "A removed input is detached. Retained data does not imply a current peer; both root observations and Python child observations confirm detachment."
+  },
+  {
+    "case": "mixed",
+    "path": "/ticks/5/retired/0/children/right/peer",
+    "previous": true,
+    "expected": false,
+    "reason": "A removed input is detached. Retained data does not imply a current peer; both root observations and Python child observations confirm detachment."
+  },
+  {
+    "case": "owned_capture",
+    "path": "/ticks/5/retired/0/peer",
+    "previous": true,
+    "expected": false,
+    "reason": "A removed input is detached. Retained data does not imply a current peer; both root observations and Python child observations confirm detachment."
+  },
+  {
+    "case": "owned_capture",
+    "path": "/ticks/5/retired/0/children/left/peer",
+    "previous": true,
+    "expected": false,
+    "reason": "A removed input is detached. Retained data does not imply a current peer; both root observations and Python child observations confirm detachment."
+  },
+  {
+    "case": "owned_capture",
+    "path": "/ticks/5/retired/0/children/right/peer",
+    "previous": true,
+    "expected": false,
+    "reason": "A removed input is detached. Retained data does not imply a current peer; both root observations and Python child observations confirm detachment."
+  },
+  {
+    "case": "mixed_capture",
+    "path": "/ticks/5/retired/0/peer",
+    "previous": true,
+    "expected": false,
+    "reason": "A removed input is detached. Retained data does not imply a current peer; both root observations and Python child observations confirm detachment."
+  },
+  {
+    "case": "mixed_capture",
+    "path": "/ticks/5/retired/0/children/left/peer",
+    "previous": true,
+    "expected": false,
+    "reason": "A removed input is detached. Retained data does not imply a current peer; both root observations and Python child observations confirm detachment."
+  },
+  {
+    "case": "mixed_capture",
+    "path": "/ticks/5/retired/0/children/right/peer",
+    "previous": true,
+    "expected": false,
+    "reason": "A removed input is detached. Retained data does not imply a current peer; both root observations and Python child observations confirm detachment."
+  }
+]
