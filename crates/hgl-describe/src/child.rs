@@ -40,6 +40,9 @@ pub fn instantiate_child(
     for (edge, source) in template.inputs.iter().zip(sources) {
         copy_binding(store, built.input(&edge.target, store)?, source, now)?;
     }
+    for &input in built.inputs.iter().flatten() {
+        assemble(store, input, now)?;
+    }
     Ok(built)
 }
 

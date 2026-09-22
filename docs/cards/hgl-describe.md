@@ -41,6 +41,8 @@ designation is insufficient. Bind valid targets with current-cycle sampling,
 without changing producer times. Ordinary edges constructed before start bind
 silently. Distinct child instances keep independent ports and state. Construction
 failure inside `Ctx::create_child` uses its existing scope rollback.
+After all boundaries are wired, assembled root designations include their final
+descendants and preserve sibling bindings and observation times.
 
 Acceptance: the scalar description tests remain; new rejection tests pin
 GRF-4/6/7/9. Described child graphs replay all five validated boundary scenarios,

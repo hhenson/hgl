@@ -211,4 +211,5 @@ pub(crate) fn run(case: &str) -> usize {
         count
     })
 }
+mod boundaries;
 mod contracts;
