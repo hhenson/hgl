@@ -10,6 +10,7 @@ description = "Endpoint identity, collection membership, reference binding and s
 line-budget = 1100
 
 [dependencies]
+hgl-endpoints = { path = "../hgl-endpoints" }
 hgl-types = { path = "../hgl-types" }
 
 [lints]

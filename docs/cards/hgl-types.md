@@ -53,10 +53,12 @@ pub enum ScalarType { Bool, I64, F64 }
 pub enum ScalarValue { Bool(bool), I64(i64), F64(f64) }
 impl ScalarValue { pub fn scalar_type(self) -> ScalarType; }
 
-/// P1 has one kind. The enum is closed: a new kind makes every `match` fail
-/// to compile until it is handled.
+/// Recursive, closed shape vocabulary shared by descriptions and endpoints.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum TsType { Ts(ScalarType) }
+pub enum TsType {
+    Ts(ScalarType), Dictionary(Box<TsType>), Reference(Box<TsType>),
+    List(Box<TsType>, usize), Bundle(Vec<(String, TsType)>),
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum NodeKind { PushSource, PullSource, Compute, Sink, Nested }
@@ -69,6 +71,7 @@ pub enum NodeKind { PushSource, PullSource, Compute, Sink, Nested }
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct NodeType {
     pub name: &'static str,
+    pub child_graphs: usize,
     pub inputs: Vec<(&'static str, TsType)>,
     pub output: Option<TsType>,
     pub scalars: Vec<(&'static str, ScalarType)>,
@@ -82,8 +85,7 @@ pub struct NodeType {
 impl NodeType {
     /// From the signature: no inputs and an output is a pull source; inputs
     /// and an output, compute; inputs and no output, a sink; neither, compute
-    /// (as hgraph). P1 never yields `PushSource` or `Nested`: a stored kind
-    /// arrives with the slice that needs one.
+    /// (as hgraph). Child templates make the owner `Nested`.
     pub fn kind(&self) -> NodeKind;
 }
 ```
@@ -117,3 +119,13 @@ for instantiation and tests; nothing reads them during a tick.
 Tests cover: the ordering `NEVER < MIN_START < MAX_END < FOREVER`;
 `checked_add` refusing to leave the range; `NodeType::kind` for each
 signature shape.
+
+## Recursive descriptions
+
+`TsType` is the single recursive shape vocabulary: `Ts(ScalarType)`,
+`List(Box<TsType>, usize)`, `Bundle(Vec<(String, TsType)>)`,
+`Dictionary(Box<TsType>)` (i64 keys), and `Reference(Box<TsType>)`. It exposes
+`scalar`, `len`, `is_empty`, `child`, `field`, `fixed`; these are the existing
+endpoint-shape operations. `hgl-endpoints::Kind` re-exports this type.
+`NodeType::child_graphs: usize` declares the required template count; nonzero
+classifies the node as Nested. Existing budgets are unchanged.

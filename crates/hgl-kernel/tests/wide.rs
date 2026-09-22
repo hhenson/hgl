@@ -51,6 +51,7 @@ fn slot(node: Probe) -> NodeSlot {
         valid_inputs: None,
         uses_scheduler: true,
         schedule_on_start: false,
+        child_graphs: 0,
     };
     NodeSlot {
         node: Box::new(node),

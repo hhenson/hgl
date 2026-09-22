@@ -32,6 +32,7 @@ fn signature(
         valid_inputs: None,
         uses_scheduler: false,
         schedule_on_start: false,
+        child_graphs: 0,
     }
 }
 
@@ -448,6 +449,7 @@ fn written(
         nodes: nodes
             .iter()
             .map(|&(implementation, scalars)| NodeDescription {
+                children: Vec::new(),
                 implementation: implementation.to_owned(),
                 label: implementation.to_owned(),
                 scalars: scalars
@@ -459,9 +461,15 @@ fn written(
         edges: edges
             .iter()
             .map(|&(source_node, target_node, target_input)| Edge {
-                source_node,
-                target_node,
-                target_input,
+                source: hgl_describe::OutputPort {
+                    node: source_node,
+                    path: vec![],
+                },
+                target: hgl_describe::InputPort {
+                    node: target_node,
+                    input: target_input,
+                    path: vec![],
+                },
             })
             .collect(),
     }

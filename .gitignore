@@ -5,3 +5,7 @@ scratchpad/
 
 # Rust
 /target/
+
+# Python validation tools
+__pycache__/
+*.py[cod]

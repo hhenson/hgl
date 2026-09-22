@@ -1,14 +1,14 @@
 # TSL and TSB runtime slice
 
-Status: design review; [contract rulings](runtime_spec/validation/fixed/README.md)
-recorded; implementation remains to be done.
+Status: implemented through the Rust API; [validation](runtime-implementation.md).
+The [contract rulings](runtime_spec/validation/fixed/README.md) remain the oracle.
 
-The current scalar-shaped endpoint model cannot represent this slice.
-`Dictionary(ScalarType)` and the REF `dictionary` flag must become recursive
-shape descriptions. Adding more scalar-specific collection variants would
-leave nested fields, dictionary children and REF targets incompatible.
+Recursive `Kind` descriptions replace the scalar-only dictionary and REF
+shapes. `hgl-endpoints` owns storage records and scope mailboxes;
+`hgl-bindings` owns binding, notification and retirement policy. Existing
+crate budgets remain unchanged.
 
-| Area | Required change |
+| Area | Implementation contract |
 |---|---|
 | Shape | Describe scalars, fixed list length, named bundle fields, dictionary child shape and REF target shape independently of bindings. Reject incompatible shapes before changing any binding. |
 | Storage | Keep scalar columns and generation-checked handles. Allocate fixed child slots when the graph instance is built; use dense positional access. Field-name lookup belongs to graph construction. TSB values preserve all declared fields; invalid child values are nil. |
@@ -18,11 +18,9 @@ leave nested fields, dictionary children and REF targets incompatible.
 | Lifetime | Retire a removed TSD member's entire fixed subtree at the next cycle. Clear descendant bindings and expire saved references before reusing slots. |
 | Child graphs | Reuse the existing scope and timer machinery. Bind nested inputs before start; preserve their peering and sample state. Detach recursively on stop and removal. |
 
-The fixed-child path should be separated from keyed membership. A dictionary's
+The fixed-child path is separated from keyed membership. A dictionary's
 map and removal bookkeeping are appropriate for dynamic keys; fixed fields
-need neither insertion nor lookup on each tick. The current projection code
-also releases and recreates children on unbind; that must not invalidate a
-node's cached fixed-child handles.
+need neither insertion nor lookup on each tick. Fixed input slots survive unbinding so cached child handles stay valid.
 
 Implement against the accepted traces, then exercise shape rejection,
 passivity, duplicate notifications, stale descendant handles and bounded

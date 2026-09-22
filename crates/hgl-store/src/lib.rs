@@ -23,8 +23,10 @@ use hgl_types::{EngineTime, NodeId, ScalarType, ScalarValue};
 
 use columns::Columns;
 pub use columns::Scalar;
+use hgl_bindings::Bindings;
+pub use hgl_bindings::Kind;
 pub use hgl_bindings::{BindError, InputId, OutputId, Reference, ScopeId, Wake};
-use hgl_bindings::{Bindings, Kind};
+mod fixed;
 
 /// A node's handle to its own `TS<T>` output. Eight bytes.
 #[derive(Debug, Clone, Copy)]
@@ -93,16 +95,6 @@ impl<T: Scalar> DictIn<T> {
     }
 }
 
-/// The index the next entry gets in a table that holds `len` entries.
-#[expect(
-    clippy::cast_possible_truncation,
-    reason = "indices are u32 by design and adding an entry cannot fail; debug builds assert the count fits"
-)]
-fn next_index(len: usize) -> u32 {
-    debug_assert!(u32::try_from(len).is_ok(), "more than u32::MAX entries");
-    len as u32
-}
-
 impl Store {
     /// An empty run.
     pub fn new() -> Self {
@@ -112,8 +104,9 @@ impl Store {
     pub fn add_output<T: Scalar>(&mut self, owner: NodeId) -> Out<T> {
         let (id, fresh) = self.bindings.add_output(
             owner,
-            Kind::Scalar(T::TYPE),
-            next_index(T::column(&self.columns).len()),
+            Kind::Ts(T::TYPE),
+            u32::try_from(T::column(&self.columns).len())
+                .unwrap_or_else(|_| unreachable!("column capacity exceeded")),
         );
         if fresh {
             T::column_mut(&mut self.columns).push(T::default());
@@ -127,9 +120,7 @@ impl Store {
     /// Allocate an unbound scalar input.
     pub fn add_input<T: Scalar>(&mut self, owner: NodeId, active: bool) -> In<T> {
         In {
-            id: self
-                .bindings
-                .add_input(owner, Kind::Scalar(T::TYPE), active),
+            id: self.bindings.add_input(owner, Kind::Ts(T::TYPE), active),
             value_type: PhantomData,
         }
     }
@@ -164,7 +155,7 @@ impl Store {
     /// Admission by id.
     #[inline]
     pub fn input_valid(&self, input: InputId) -> bool {
-        self.bindings.last_modified(input) != EngineTime::NEVER
+        self.bindings.valid(input)
     }
     /// Whether a scalar input ticked in this cycle.
     #[inline]
@@ -194,7 +185,7 @@ impl Store {
         wake: &mut W,
     ) {
         let o = self.bindings.output(output.id);
-        debug_assert_eq!(o.kind, Kind::Scalar(T::TYPE), "foreign handle");
+        debug_assert_eq!(o.kind, Kind::Ts(T::TYPE), "foreign handle");
         debug_assert_eq!(o.owner, writer, "TS-21: not the owner");
         debug_assert_eq!(o.scope, self.bindings.scope(), "TS-21: foreign graph");
         debug_assert!(now != EngineTime::NEVER, "NEVER is not an evaluation time");
@@ -213,14 +204,14 @@ impl Store {
     #[inline]
     pub fn output_value<T: Scalar>(&self, output: Out<T>) -> Option<T> {
         let o = self.bindings.output(output.id);
-        debug_assert_eq!(o.kind, Kind::Scalar(T::TYPE), "foreign handle");
+        debug_assert_eq!(o.kind, Kind::Ts(T::TYPE), "foreign handle");
         (o.alive && o.generation == output.generation && o.modified_at != EngineTime::NEVER)
             .then(|| T::column(&self.columns)[o.slot as usize])
     }
     /// Erased scalar observation; aggregate and REF endpoints have no scalar value.
     pub fn output_value_erased(&self, output: OutputId) -> Option<ScalarValue> {
         let o = self.bindings.output(output);
-        (matches!(o.kind, Kind::Scalar(_)) && o.modified_at != EngineTime::NEVER)
+        (matches!(o.kind, Kind::Ts(_)) && o.modified_at != EngineTime::NEVER)
             .then(|| self.columns.value(o.kind.scalar(), o.slot as usize))
     }
     /// Whether an output published in this cycle.
@@ -265,9 +256,14 @@ impl Store {
         scalar: ScalarType,
         dictionary: bool,
     ) -> OutputId {
-        self.bindings
-            .add_output(owner, Kind::Reference { scalar, dictionary }, 0)
-            .0
+        self.add_shaped_output(
+            owner,
+            Kind::Reference(Box::new(if dictionary {
+                Kind::Dictionary(Box::new(Kind::Ts(scalar)))
+            } else {
+                Kind::Ts(scalar)
+            })),
+        )
     }
     /// Follow designation changes and target publications independently.
     pub fn follow<W: Wake>(
@@ -294,7 +290,7 @@ impl Store {
         DictOut {
             id: self
                 .bindings
-                .add_output(owner, Kind::Dictionary(T::TYPE), 0)
+                .add_output(owner, Kind::Dictionary(Box::new(Kind::Ts(T::TYPE))), 0)
                 .0,
             value_type: PhantomData,
         }
@@ -302,9 +298,11 @@ impl Store {
     /// Create a dictionary input.
     pub fn add_dictionary_input<T: Scalar>(&mut self, owner: NodeId, active: bool) -> DictIn<T> {
         DictIn {
-            id: self
-                .bindings
-                .add_input(owner, Kind::Dictionary(T::TYPE), active),
+            id: self.bindings.add_input(
+                owner,
+                Kind::Dictionary(Box::new(Kind::Ts(T::TYPE))),
+                active,
+            ),
             value_type: PhantomData,
         }
     }
@@ -330,21 +328,9 @@ impl Store {
         now: EngineTime,
         wake: &mut W,
     ) -> Out<T> {
-        self.begin_cycle(now);
-        let old = self.bindings.child_output(dict.id, key);
-        let id = old
-            .or_else(|| self.bindings.removed_output(dict.id, key))
-            .unwrap_or_else(|| self.add_output::<T>(self.bindings.output(dict.id).owner).id);
-        let out = Out {
-            id,
-            generation: self.bindings.output(id).generation,
-            value_type: PhantomData,
-        };
-        if old.is_none() {
-            let result = self.bindings.insert(dict.id, key, id, now, wake);
-            debug_assert!(result.is_ok(), "typed dictionary child");
-        }
-        out
+        let id = self.get_or_create_shaped(dict.id, key, now, wake);
+        self.scalar_output(id)
+            .unwrap_or_else(|_| unreachable!("typed dictionary"))
     }
     /// Attach a child graph's output without copying its value.
     pub fn attach<T: Scalar, W: Wake>(

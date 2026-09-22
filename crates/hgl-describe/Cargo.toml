@@ -10,9 +10,13 @@ description = "The graph description, a builder for writing one by hand, and ins
 line-budget = 500
 
 [dependencies]
+hgl-plan = { path = "../hgl-plan" }
 hgl-types = { path = "../hgl-types" }
 hgl-store = { path = "../hgl-store" }
 hgl-kernel = { path = "../hgl-kernel" }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+hgl-nested = { path = "../hgl-nested" }

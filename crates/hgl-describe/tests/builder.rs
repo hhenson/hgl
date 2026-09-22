@@ -31,6 +31,7 @@ fn signature(
         valid_inputs: None,
         uses_scheduler: false,
         schedule_on_start: false,
+        child_graphs: 0,
     }
 }
 
@@ -193,9 +194,15 @@ fn order(description: &GraphDescription) -> Vec<String> {
 
 fn edge(source_node: u32, target_node: u32, target_input: u32) -> Edge {
     Edge {
-        source_node,
-        target_node,
-        target_input,
+        source: hgl_describe::OutputPort {
+            node: source_node,
+            path: vec![],
+        },
+        target: hgl_describe::InputPort {
+            node: target_node,
+            input: target_input,
+            path: vec![],
+        },
     }
 }
 

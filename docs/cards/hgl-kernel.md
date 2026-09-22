@@ -303,3 +303,9 @@ fn schedule_children(&mut self, time: EngineTime);
 
 A child stop request propagates to its owner after successful start as well as
 after evaluation, even when the child has no scheduled evaluation.
+
+Fixed collection mutation uses the existing ownership and cycle checks:
+`Ctx::get_or_create_shaped(OutputId, i64) -> OutputId`,
+`attach_shaped(OutputId, i64, Reference) -> NodeResult` and
+`remove_shaped(OutputId, i64)`. New child graphs may return any shaped output;
+fixed leaf handles are projected during construction and use ordinary `set`.
