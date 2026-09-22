@@ -262,7 +262,7 @@ fn run(bundle: bool, peered: bool) -> Result<(), Box<NodeError>> {
             Kind::List(Box::new(child), 2)
         }
     };
-    let shape = pair(bundle, pair(!bundle, Kind::Scalar(ScalarType::I64)));
+    let shape = pair(bundle, pair(!bundle, Kind::Ts(ScalarType::I64)));
     let a = store.add_shaped_output(NodeId(0), shape.clone());
     let b = store.add_shaped_output(NodeId(0), shape.clone());
     let prices = [a, b].map(|o| {

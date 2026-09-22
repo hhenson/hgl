@@ -1,70 +1,8 @@
-//! Observations compared with the independently accepted cross-runtime corpus.
-use hgl_store::{BindError, InputId, Kind, OutputId, Reference, Store, Wake};
-use hgl_types::{EngineTime, NodeId, ScalarType};
+use hgl_store::{InputId, Kind, OutputId, Store};
+use hgl_types::{EngineTime, ScalarType, ScalarValue};
 use std::collections::BTreeMap;
-
-#[derive(Default)]
-pub(crate) struct Wakes(pub(crate) usize);
-impl Wake for Wakes {
-    fn wake(&mut self, _: NodeId) {
-        self.0 += 1;
-    }
-}
 pub(crate) fn at(n: i64) -> EngineTime {
     EngineTime::from_micros(n + 1)
-}
-pub(crate) fn scalar() -> Kind {
-    Kind::Ts(ScalarType::I64)
-}
-pub(crate) fn pair(bundle: bool, child: Kind) -> Kind {
-    if bundle {
-        Kind::Bundle(vec![
-            ("left".into(), child.clone()),
-            ("right".into(), child),
-        ])
-    } else {
-        Kind::List(Box::new(child), 2)
-    }
-}
-pub(crate) fn leaf(store: &Store, mut output: OutputId, positions: &[usize]) -> OutputId {
-    for &p in positions {
-        output = store.bindings().fixed_output(output, p);
-    }
-    output
-}
-pub(crate) fn set(
-    store: &mut Store,
-    output: OutputId,
-    positions: &[usize],
-    value: i64,
-    t: i64,
-    wakes: &mut Wakes,
-) -> Result<(), BindError> {
-    let id = leaf(store, output, positions);
-    let out = store.scalar_output::<i64>(id)?;
-    store.set(out, value, at(t), NodeId(0), wakes);
-    Ok(())
-}
-pub(crate) fn assembled(
-    store: &mut Store,
-    output: OutputId,
-    mixed: bool,
-) -> Result<Reference, BindError> {
-    let kind = store.bindings().output(output).kind.clone();
-    if !kind.fixed() {
-        return Ok(store.reference(output));
-    }
-    let children = (0..kind.len())
-        .map(|n| {
-            let child = store.bindings().fixed_output(output, n);
-            if mixed && n == 0 {
-                Ok(store.reference(child))
-            } else {
-                assembled(store, child, false)
-            }
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    store.items_reference(kind, children)
 }
 pub(crate) type Observed = BTreeMap<String, String>;
 fn object(fields: &BTreeMap<String, String>) -> String {
@@ -87,7 +25,7 @@ fn keys(names: impl Iterator<Item = String>) -> String {
     )
 }
 fn key(n: i64) -> String {
-    if n == 0 { "X".into() } else { "Y".into() }
+    n.to_string()
 }
 #[expect(
     clippy::too_many_lines,
@@ -150,7 +88,7 @@ pub(crate) fn snapshot(
         rows.insert(
             format!("{path}/retired"),
             if retired.is_empty() {
-                "{}".into()
+                "[]".into()
             } else {
                 keys(retired.into_keys())
             },
@@ -216,36 +154,89 @@ pub(crate) fn snapshot(
         ),
         ("value", value.clone()),
         ("delta", delta.clone()),
-        ("peer", b.input(input).source.is_some().to_string()),
+        ("peer", b.has_peer(input).to_string()),
     ] {
         rows.insert(format!("{path}/{name}"), value);
     }
     rows.insert(
         format!("{path}/children"),
         if fields.is_empty() {
-            "{}".into()
+            "[]".into()
         } else {
             keys(fields.into_keys())
         },
     );
     (value, delta)
 }
-pub(crate) fn verify(case: &str, rows: &Observed, length: usize) {
-    let mut checked = 0;
-    for line in include_str!("accepted.tsv").lines() {
-        let parts: Vec<_> = line.split('\t').collect();
-        if parts[0] != case {
-            continue;
-        }
-        let actual = if parts[2] == "length" {
-            length.to_string()
+pub(crate) fn output(store: &Store, id: OutputId, t: i64, path: &str, rows: &mut Observed) {
+    let b = store.bindings();
+    let out = b.output(id);
+    let valid = out.modified_at != EngineTime::NEVER;
+    let modified = store.output_modified(id, at(t));
+    let mut fields = BTreeMap::new();
+    let mut deltas = BTreeMap::new();
+    for (n, &child) in out.fixed.iter().enumerate() {
+        let name = if let Kind::Bundle(fs) = &out.kind {
+            fs[n].0.clone()
         } else {
-            rows.get(parts[1])
-                .cloned()
-                .unwrap_or_else(|| format!("missing {}", parts[1]))
+            n.to_string()
         };
-        assert_eq!(actual, parts[3], "{case} {}", parts[1]);
-        checked += 1;
+        let p = format!("{path}/children/{name}");
+        output(store, child, t, &p, rows);
+        fields.insert(name.clone(), rows[&format!("{p}/value")].clone());
+        if (b.output(child).modified_at != EngineTime::NEVER) && store.output_modified(child, at(t))
+        {
+            deltas.insert(name, rows[&format!("{p}/delta")].clone());
+        }
     }
-    assert!(checked > 0, "missing accepted case {case}");
+    let value = if !valid {
+        "null".into()
+    } else if out.kind.fixed() {
+        if matches!(out.kind, Kind::List(..)) {
+            format!(
+                "[{}]",
+                fields.values().cloned().collect::<Vec<_>>().join(",")
+            )
+        } else {
+            object(&fields)
+        }
+    } else {
+        match store.output_value_erased(id).unwrap() {
+            ScalarValue::I64(v) => v.to_string(),
+            ScalarValue::Bool(v) => v.to_string(),
+            ScalarValue::F64(v) => v.to_string(),
+        }
+    };
+    let delta = if !valid || !modified {
+        "null".into()
+    } else if out.kind.fixed() {
+        object(&deltas)
+    } else {
+        value.clone()
+    };
+    for (name, value) in [
+        ("valid", valid.to_string()),
+        ("modified", modified.to_string()),
+        (
+            "last",
+            if out.modified_at == EngineTime::NEVER {
+                "\"never\"".into()
+            } else {
+                (out.modified_at.micros() - 1).to_string()
+            },
+        ),
+        ("value", value),
+        ("delta", delta),
+        ("all_valid", all_valid(store, id).to_string()),
+        ("children", keys(fields.into_keys())),
+    ] {
+        rows.insert(format!("{path}/{name}"), value);
+    }
+}
+fn all_valid(s: &Store, id: OutputId) -> bool {
+    let o = s.bindings().output(id);
+    o.modified_at != EngineTime::NEVER
+        && o.fixed
+            .iter()
+            .all(|&c| s.bindings().output(c).modified_at != EngineTime::NEVER)
 }

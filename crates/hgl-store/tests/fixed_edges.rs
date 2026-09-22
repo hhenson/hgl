@@ -10,7 +10,7 @@ fn at(n: i64) -> EngineTime {
 }
 fn shape() -> Kind {
     Kind::List(
-        Box::new(Kind::List(Box::new(Kind::Scalar(ScalarType::I64)), 2)),
+        Box::new(Kind::List(Box::new(Kind::Ts(ScalarType::I64)), 2)),
         2,
     )
 }
@@ -23,7 +23,7 @@ fn rebind_rejects_shape_and_backward_descendants_atomically() -> Result<(), Bind
     let late = store.add_shaped_output(NodeId(3), shape.clone());
     let wrong = store.add_shaped_output(
         NodeId(0),
-        Kind::List(Box::new(Kind::Scalar(ScalarType::I64)), 2),
+        Kind::List(Box::new(Kind::Ts(ScalarType::I64)), 2),
     );
     let input = store.add_shaped_input(NodeId(2), shape.clone(), true);
     let r = store.add_shaped_output(NodeId(1), Kind::Reference(Box::new(shape.clone())));
@@ -134,7 +134,7 @@ fn compound_churn_reuses_every_descendant_and_never_revives_saved_handles() -> R
 fn sampling_valid_owned_structure_with_invalid_children_preserves_root_time()
 -> Result<(), BindError> {
     let mut store = Store::new();
-    let shape = Kind::List(Box::new(Kind::Scalar(ScalarType::I64)), 2);
+    let shape = Kind::List(Box::new(Kind::Ts(ScalarType::I64)), 2);
     let output = store.add_shaped_output(NodeId(0), shape.clone());
     let leaf = store.scalar_output::<i64>(store.bindings().fixed_output(output, 0))?;
     store.set(leaf, 7, at(1), NodeId(0), &mut Quiet);

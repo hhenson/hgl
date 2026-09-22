@@ -39,22 +39,15 @@ impl Bindings {
         for (n, &r) in children.iter().enumerate() {
             self.check_shape(kind.child(n), r)?;
         }
-        let index = self
+        let scope = self.scope().index;
+        Ok(self
             .items
-            .iter()
-            .position(|(k, rs)| k == &kind && rs == &children)
-            .unwrap_or_else(|| {
-                self.items.push((kind, children));
-                self.items.len() - 1
-            });
-        Ok(Reference {
-            items: Some(index),
-            ..Reference::default()
-        })
+            .intern(kind, children, &mut self.scopes.entries[scope].assemblies))
     }
+
     pub(crate) fn check_shape(&self, kind: &Kind, r: Reference) -> Result<(), BindError> {
-        if let Some(n) = r.items {
-            if self.items.get(n).is_none_or(|(k, _)| k != kind) {
+        if r.items.is_some() {
+            if self.items.get(r).is_some_and(|(k, _)| k != kind) {
                 return Err(BindError::ShapeMismatch);
             }
         } else if let Some(o) = self.resolve(r)
@@ -69,9 +62,9 @@ impl Bindings {
         if let Some(o) = self.resolve(r) {
             self.check_reference(input, o)?;
         }
-        if let Some(n) = r.items {
+        if let Some((_, children)) = self.items.get(r) {
             for (pos, &child) in self.input(input).fixed.iter().enumerate() {
-                self.check_designation(child, self.items[n].1[pos])?;
+                self.check_designation(child, children[pos])?;
             }
         }
         Ok(())
@@ -79,8 +72,8 @@ impl Bindings {
     pub(crate) fn sync_fixed(&mut self, input: InputId, r: Reference, now: EngineTime) {
         for n in 0..self.input(input).fixed.len() {
             let child = self.input(input).fixed[n];
-            let target = if let Some(items) = r.items {
-                self.items[items].1[n]
+            let target = if let Some((_, children)) = self.items.get(r) {
+                children[n]
             } else {
                 self.resolve(r).map_or(Reference::default(), |o| {
                     self.reference(self.fixed_output(o, n))
@@ -91,13 +84,14 @@ impl Bindings {
     }
     pub(crate) fn apply_sample(&mut self, input: InputId, r: Reference, now: EngineTime) -> bool {
         let source = self.resolve(r);
-        if self.input(input).source == source && self.input(input).designation.items == r.items {
+        if self.input(input).source == source && self.input(input).designation.same_items(r) {
             return false;
         }
         self.detach(input);
         if let Some(o) = source {
             self.attach(input, o);
         }
+        self.items.replace(self.input(input).designation, r);
         self.endpoints.inputs[input.0 as usize].designation = r;
         self.endpoints.inputs[input.0 as usize].sampled_at = now;
         self.sync_fixed(input, r, now);

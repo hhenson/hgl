@@ -10,7 +10,7 @@ fn at(n: i64) -> EngineTime {
 }
 fn shape() -> Kind {
     Kind::List(
-        Box::new(Kind::List(Box::new(Kind::Scalar(ScalarType::I64)), 2)),
+        Box::new(Kind::List(Box::new(Kind::Ts(ScalarType::I64)), 2)),
         2,
     )
 }

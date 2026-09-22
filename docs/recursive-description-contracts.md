@@ -1,6 +1,6 @@
 # Recursive graph descriptions
 
-Status: boundary scenarios validated; description implementation pending.
+Status: validated and implemented for the five boundary scenarios.
 
 The graph description remains plain, reusable data (GRF-1–3). Recursive port
 shapes and fixed endpoint paths must survive ranking and instantiation.
@@ -34,3 +34,15 @@ exercised by Rust written in the form a future compiler could emit. Once
 that target is sufficient, review the Rust compiler architecture and available
 Rust libraries and tools. Then implement compile, check and emit. Decision 0001
 stands: the compiler is rebuilt in Rust; the C++ compiler remains a reference.
+
+`hgl-plan` owns the reusable descriptions, hand builder and checks;
+`hgl-describe` constructs scoped instances. Their tests compare all 9,990
+accepted assertions, reject malformed descriptions before allocation, and
+repeat failed child startup 200 times without growing storage or subscriptions.
+No third-party dependency or existing budget changed.
+
+Boundary paths currently reject descent through a live REF capture. Pass the
+whole target and project inside the child; a one-time target copy would lose
+rebinding. Ordinary fixed paths and whole-target live captures are supported.
+The compiler review must account for this lowering constraint before widening
+that interface. Compiler parsing, checking and emission remain unimplemented.

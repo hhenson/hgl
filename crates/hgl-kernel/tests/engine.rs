@@ -22,6 +22,7 @@ fn slot(label: &str, node: impl Node, required: &[In<i64>]) -> NodeSlot {
         valid_inputs: None,
         uses_scheduler: true,
         schedule_on_start: false,
+        child_graphs: 0,
     };
     NodeSlot {
         node: Box::new(node),

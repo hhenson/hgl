@@ -14,8 +14,8 @@ fn warmed_nested_ticks_and_reference_switches_allocate_nothing() -> Result<(), B
     let mut store = Store::new();
     let shape = Kind::List(
         Box::new(Kind::Bundle(vec![
-            ("left".into(), Kind::Scalar(ScalarType::I64)),
-            ("right".into(), Kind::Scalar(ScalarType::Bool)),
+            ("left".into(), Kind::Ts(ScalarType::I64)),
+            ("right".into(), Kind::Ts(ScalarType::Bool)),
         ])),
         2,
     );

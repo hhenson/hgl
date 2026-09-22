@@ -75,7 +75,7 @@ comparable; default is empty. `Bindings` is defaultable.
 
 ```rust
 enum Kind {
-    Scalar(ScalarType), Dictionary(Box<Kind>), Reference(Box<Kind>),
+    Ts(ScalarType), Dictionary(Box<Kind>), Reference(Box<Kind>),
     List(Box<Kind>, usize), Bundle(Vec<(String, Kind)>),
 }
 enum BindError {
@@ -154,3 +154,15 @@ cycle but cannot be reattached. `restorable_output` admits only a live writer;
 restoration otherwise allocates fresh parent-owned storage. Insertion rejects
 dead endpoints and stopped scopes before changing membership. Compound
 attachment uses a peer `Reference`, checking generation even after slot reuse.
+
+`has_peer(input)` reports a current binding. A retained removed member and its
+fixed descendants have no peer, though their source handles keep removal-cycle
+values readable (TS-11). This diagnostic follows parent membership; storage
+retention alone does not establish peering.
+
+Assembly storage is generation checked and reusable. `assembly_counts()` reports
+retained slots and live records. Construction scopes, current input designations,
+REF outputs and enclosing assemblies retain records; copying a handle does not.
+Scope claims end at the next cycle after teardown. Retaining a record never
+retains its target endpoints. Rebinding, unbinding and output expiry release
+old claims. Interning uses a hash index rather than a scan of historical records.

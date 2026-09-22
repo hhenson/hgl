@@ -30,7 +30,7 @@ fn collection_case(case: &str) -> Result<(), BindError> {
     if heterogeneous {
         shape = Kind::Bundle(vec![
             ("left".into(), scalar()),
-            ("right".into(), Kind::Scalar(ScalarType::Bool)),
+            ("right".into(), Kind::Ts(ScalarType::Bool)),
         ]);
     }
     let mut store = Store::new();

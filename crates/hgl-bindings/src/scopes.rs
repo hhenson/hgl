@@ -20,16 +20,11 @@ impl Bindings {
     /// Retained output, input and scope slots, then live subscriptions.
     /// Diagnostic only; computing subscriptions visits the output table.
     pub fn storage_counts(&self) -> [usize; 4] {
-        [
-            self.endpoints.outputs.len(),
-            self.endpoints.inputs.len(),
-            self.scopes.entries.len(),
-            self.endpoints
-                .outputs
-                .iter()
-                .map(|o| o.watchers.len() + o.followers.len())
-                .sum(),
-        ]
+        self.endpoints.storage_counts(self.scopes.entries.len())
+    }
+    /// Retained and live interned assembly records, including nested designations.
+    pub fn assembly_counts(&self) -> [usize; 2] {
+        self.items.counts()
     }
     /// Enter a graph; return the previous scope for restoration after the hook.
     /// # Panics

@@ -3,7 +3,7 @@ mod collections;
 mod fixed;
 mod scopes;
 
-use hgl_endpoints::Scopes;
+use hgl_endpoints::{Assemblies, Scopes};
 use hgl_types::{EngineTime, NodeId, ScalarType};
 
 use hgl_endpoints::Endpoints;
@@ -36,7 +36,7 @@ pub enum BindError {
 #[derive(Debug)]
 pub struct Bindings {
     endpoints: Endpoints,
-    items: Vec<(Kind, Vec<Reference>)>,
+    items: Assemblies,
     retired: Vec<OutputId>,
     dirty_outputs: Vec<OutputId>,
     dirty_inputs: Vec<InputId>,
@@ -48,7 +48,7 @@ impl Default for Bindings {
     fn default() -> Self {
         Self {
             endpoints: Endpoints::default(),
-            items: Vec::new(),
+            items: Assemblies::default(),
             retired: Vec::new(),
             dirty_outputs: Vec::new(),
             dirty_inputs: Vec::new(),
@@ -117,7 +117,7 @@ impl Bindings {
             .get(output.0 as usize)
             .filter(|o| o.alive)
             .ok_or(BindError::UnknownOutput(output))?;
-        if let (Kind::Scalar(a), Kind::Scalar(b)) = (&i.kind, &o.kind)
+        if let (Kind::Ts(a), Kind::Ts(b)) = (&i.kind, &o.kind)
             && a != b
         {
             return Err(BindError::TypeMismatch {
@@ -162,6 +162,7 @@ impl Bindings {
         self.refresh(input, self.now, false);
         self.reset_observation(input);
         self.endpoints.inputs[input.0 as usize].notified_at = EngineTime::NEVER;
+        self.items.release(self.input(input).designation);
         self.endpoints.inputs[input.0 as usize].designation = Reference::default();
         let mut parent = self.input(input).parent;
         while let Some((p, _)) = parent {
@@ -282,7 +283,7 @@ impl Bindings {
     /// The logical reference value, empty once its target expires.
     pub fn reference_value(&self, output: OutputId) -> Reference {
         let r = self.output(output).reference;
-        if r.items.is_some() || self.resolve(r).is_some() {
+        if self.items.get(r).is_some() || self.resolve(r).is_some() {
             r
         } else {
             Reference::default()
@@ -359,6 +360,7 @@ impl Bindings {
             let i = self.output(output).followers[n];
             self.sample(i, r, now, wake)?;
         }
+        self.items.replace(self.output(output).reference, r);
         self.endpoints.outputs[output.0 as usize].reference = r;
         self.publish(output, now, wake);
         Ok(())
@@ -388,6 +390,7 @@ impl Bindings {
                     let result = self.sample(input, Reference::default(), now, wake);
                     debug_assert!(result.is_ok());
                 }
+                self.items.release(self.output(output).reference);
                 self.endpoints.outputs[output.0 as usize].reference = Reference::default();
             }
             Kind::List(..) | Kind::Bundle(_) => {
@@ -395,7 +398,7 @@ impl Bindings {
                     self.invalidate(self.output(output).fixed[n], now, wake);
                 }
             }
-            Kind::Scalar(_) => {}
+            Kind::Ts(_) => {}
         }
         self.endpoints.outputs[output.0 as usize].modified_at = EngineTime::NEVER;
         self.notify_output(output, now, wake);
@@ -490,6 +493,7 @@ impl Bindings {
             self.endpoints.inputs[i.0 as usize].reference_source = None;
             self.unbind(i);
         }
+        self.items.release(self.output(id).reference);
         self.forget_output(id);
         let o = &mut self.endpoints.outputs[id.0 as usize];
         o.alive = false;
@@ -535,7 +539,7 @@ impl Bindings {
             self.expire(id);
             self.retired.swap_remove(n);
         }
-        self.scopes.reclaim(now, fresh_run);
+        self.scopes.reclaim(now, fresh_run, &mut self.items);
     }
 }
 
@@ -545,7 +549,7 @@ mod tests {
     #[test]
     fn exhausted_generation_is_never_reused() {
         let mut bindings = Bindings::default();
-        let kind = Kind::Scalar(ScalarType::I64);
+        let kind = Kind::Ts(ScalarType::I64);
         let (old, _) = bindings.add_output(NodeId(0), kind.clone(), 0);
         bindings.endpoints.outputs[old.0 as usize].generation = u32::MAX;
         let saved = bindings.reference(old);

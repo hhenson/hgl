@@ -1,5 +1,5 @@
 //! Graph scope mailbox storage.
-use crate::{InputId, OutputId, ScopeId, Wake};
+use crate::{Assemblies, InputId, OutputId, Reference, ScopeId, Wake};
 use hgl_types::{EngineTime, NodeId};
 #[derive(Debug, Default, PartialEq, Eq)]
 /// Scope lifecycle admission.
@@ -17,6 +17,8 @@ pub enum Phase {
 #[derive(Debug, Default)]
 /// Graph scope storage, owned privately by bindings.
 pub struct Scope {
+    /// Construction claims, released after the removal cycle.
+    pub assemblies: Vec<Reference>,
     /// Scope mailbox storage.
     pub generation: u64,
     /// Scope mailbox storage.
@@ -171,9 +173,12 @@ impl Scopes {
 
 impl Scopes {
     /// Release stopped scope slots at the same boundary as their output lifetimes.
-    pub fn reclaim(&mut self, now: EngineTime, fresh_run: bool) {
+    pub fn reclaim(&mut self, now: EngineTime, fresh_run: bool, items: &mut Assemblies) {
         self.retired.retain(|&(index, time)| {
             if fresh_run || time < now {
+                for reference in self.entries[index].assemblies.drain(..) {
+                    items.release(reference);
+                }
                 self.free.push(index);
                 false
             } else {
