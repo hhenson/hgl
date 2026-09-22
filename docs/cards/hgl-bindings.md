@@ -159,3 +159,10 @@ attachment uses a peer `Reference`, checking generation even after slot reuse.
 fixed descendants have no peer, though their source handles keep removal-cycle
 values readable (TS-11). This diagnostic follows parent membership; storage
 retention alone does not establish peering.
+
+Assembly storage is generation checked and reusable. `assembly_counts()` reports
+retained slots and live records. Construction scopes, current input designations,
+REF outputs and enclosing assemblies retain records; copying a handle does not.
+Scope claims end at the next cycle after teardown. Retaining a record never
+retains its target endpoints. Rebinding, unbinding and output expiry release
+old claims. Interning uses a hash index rather than a scan of historical records.

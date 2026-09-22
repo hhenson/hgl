@@ -125,7 +125,7 @@ cases.extend([
   '&& self.output(output).reference == r', '&& false',
   ['-p', 'hgl-store', '--test', 'fixed', 'accepted_reference']),
  ('unchanged_child_resampling', 'crates/hgl-bindings/src/fixed.rs',
-  'if self.input(input).source == source && self.input(input).designation.items == r.items {',
+  'if self.input(input).source == source && self.input(input).designation.same_items(r) {',
   'if false {', ['-p', 'hgl-store', '--test', 'fixed', 'accepted_reference']),
  ('whole_reset', 'crates/hgl-bindings/src/fixed.rs',
   'self.reset_observation(input);', '/* retain local observation */',
@@ -138,7 +138,7 @@ cases.extend([
   'self.expire(self.output(id).fixed[n]);', 'let _ = n;',
   ['-p', 'hgl-store', '--test', 'fixed', 'accepted_compound']),
  ('descendant_rank', 'crates/hgl-bindings/src/fixed.rs',
-  'self.check_designation(child, self.items[n].1[pos])?;', 'let _ = (child, n, pos);',
+  'self.check_designation(child, children[pos])?;', 'let _ = (child, children, pos);',
   ['-p', 'hgl-store', '--test', 'fixed_edges', 'rebind_rejects']),
  ('fixed_ancestor_time', 'crates/hgl-bindings/src/lib.rs',
   'self.notify_input(p, now, event, wake);', 'let _ = p;',
@@ -165,6 +165,24 @@ cases.extend([
  ('frozen_projected_capture', 'crates/hgl-describe/src/child.rs',
   'store.bindings().input(source).reference_source.is_some()', 'false',
   ['-p', 'hgl-describe', '--test', 'recursive', 'projecting_through']),
+])
+
+cases.extend([
+ ('assembly_scope_release', 'crates/hgl-endpoints/src/scopes.rs',
+  'items.release(reference);', 'let _ = reference;',
+  ['-p', 'hgl-describe', '--test', 'recursive', 'child_churn_bounds']),
+ ('assembly_generation', 'crates/hgl-endpoints/src/assemblies.rs',
+  '.filter(|s| s.generation == reference.generation)?', '.filter(|_| true)?',
+  ['-p', 'hgl-store', '--test', 'assemblies', 'retired_assemblies']),
+ ('assembly_replacement_release', 'crates/hgl-endpoints/src/assemblies.rs',
+  'self.release(old);', 'let _ = old;',
+  ['-p', 'hgl-store', '--test', 'assemblies', 'replacing_external']),
+ ('assembly_dependency', 'crates/hgl-endpoints/src/assemblies.rs',
+  'self.retain(child);', 'let _ = child;',
+  ['-p', 'hgl-store', '--test', 'assemblies', 'enclosing_assembly']),
+ ('assembly_generation_wrap', 'crates/hgl-endpoints/src/assemblies.rs',
+  'slot.generation.checked_add(1)', 'Some(slot.generation.wrapping_add(1))',
+  ['-p', 'hgl-endpoints', '--lib']),
 ])
 
 with tempfile.TemporaryDirectory(prefix="hgl-dynamic-mutants-") as directory:

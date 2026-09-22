@@ -51,7 +51,7 @@ fn add_input(&mut self, owner: NodeId, kind: Kind, active: bool, scope: ScopeId)
 Stopped scope slots and their retirement time enter `Scopes::retired` and become reusable only at the
 next cycle boundary. Retained output references still need their original
 scope ancestry to validate forward bindings during the removal cycle.
-`Scopes::reclaim(EngineTime, bool)` shares the output expiry boundary, including
+`Scopes::reclaim(EngineTime, bool, &mut Assemblies)` shares the output expiry boundary, including
 independent root runs; entering the retirement cycle itself does not reclaim.
 
 `Kind` is re-exported from `hgl-types::TsType`; its scalar variant is `Ts`.
@@ -59,3 +59,12 @@ Descriptions and live endpoints share one recursive shape definition.
 
 `Endpoints::has_peer(input)` excludes a removed-member projection at any
 ancestor; retained source handles provide removal-cycle reads, not peering.
+
+`Assemblies` stores interned `(Kind, Vec<Reference>)` records in reusable,
+generation-checked slots. `intern(kind, children, scope_claims)`, `get(reference)`,
+`retain(reference)`, `release(reference)`, `replace(old, new)` and `counts()`
+manage structural ownership; no scalar tick visits this table. `Scope::assemblies`
+records construction claims, released by `Scopes::reclaim(now, fresh_run, items)`.
+`Reference::same_items(other)` compares both slot and generation for assemblies;
+its generation field names the peer or assembly lifetime. `Endpoints::storage_counts`
+accepts the scope count and reports the existing four diagnostic counts.

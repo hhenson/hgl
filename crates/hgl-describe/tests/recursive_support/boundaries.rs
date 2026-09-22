@@ -141,3 +141,42 @@ fn descendant_boundaries_export_complete_references() {
         }
     }
 }
+
+#[test]
+fn child_churn_bounds_interned_assembly_storage() {
+    let catalog = registry();
+    let template = child_template(&catalog, false, false);
+    let mut store = Store::new();
+    let parent = store.scope();
+    let source = store.add_shaped_output(NodeId(0), shape());
+    let owner = store.add_shaped_input(NodeId(1), shape(), false);
+    store.bind(owner, source).unwrap();
+    let mut steady = None;
+    for cycle in 0..200 {
+        store.begin_cycle(at(cycle));
+        let scope = store.child_scope(NodeId(1));
+        store.enter_scope(scope);
+        let child =
+            instantiate_child(&template, &catalog, &mut store, &[owner], None, at(cycle)).unwrap();
+        let root = child.input(&input(1, 1), &store).unwrap();
+        assert!(
+            !store
+                .bindings()
+                .input_reference(root)
+                .eq(&hgl_store::Reference::default())
+        );
+        store.enter_scope(parent);
+        store.release_scope(scope, at(cycle), &mut Quiet);
+        let counts = (
+            store.bindings().storage_counts(),
+            store.bindings().assembly_counts(),
+        );
+        if cycle == 3 {
+            steady = Some(counts);
+        } else if cycle > 3 {
+            assert_eq!(Some(counts), steady);
+        }
+    }
+    store.begin_cycle(at(200));
+    assert_eq!(store.bindings().assembly_counts()[1], 0);
+}

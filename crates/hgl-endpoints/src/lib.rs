@@ -2,7 +2,7 @@
 use hgl_types::{EngineTime, NodeId};
 use std::collections::BTreeMap;
 /// One output slot in a run.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct OutputId(pub u32);
 /// One input slot in a run.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -10,14 +10,20 @@ pub struct InputId(pub u32);
 /// Recursive shape shared with graph descriptions.
 pub use hgl_types::TsType as Kind;
 /// A designation; retaining it does not retain its endpoint.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Reference {
     /// Peer designation, absent for empty and items.
     pub output: Option<OutputId>,
-    /// Peer lifetime.
+    /// Peer or assembly lifetime.
     pub generation: u32,
     /// Interned child designation index.
     pub items: Option<usize>,
+}
+impl Reference {
+    /// Peers use source identity; assembly slots also require their lifetime.
+    pub fn same_items(self, other: Self) -> bool {
+        self.items == other.items && (self.items.is_none() || self.generation == other.generation)
+    }
 }
 /// A graph lifetime; local node ranks are meaningful only within this scope.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -190,6 +196,18 @@ impl Endpoints {
     pub fn input(&self, id: InputId) -> &Input {
         &self.inputs[id.0 as usize]
     }
+    /// Endpoint and scope slots, then live subscriptions; diagnostic only.
+    pub fn storage_counts(&self, scopes: usize) -> [usize; 4] {
+        [
+            self.outputs.len(),
+            self.inputs.len(),
+            scopes,
+            self.outputs
+                .iter()
+                .map(|o| o.watchers.len() + o.followers.len())
+                .sum(),
+        ]
+    }
     /// Allocate or reuse a slot; the bool says whether a scalar column must grow.
     pub fn add_output(
         &mut self,
@@ -295,3 +313,6 @@ pub trait Wake {
 
 mod scopes;
 pub use scopes::{Phase, Scope, Scopes};
+
+mod assemblies;
+pub use assemblies::Assemblies;
