@@ -14,15 +14,15 @@ fn changing_collection_activity_reaches_existing_and_future_children()
     let mut bindings = Bindings::default();
     let mut wakes = Wakes::default();
     let scalar = Kind::Scalar(ScalarType::I64);
-    let dictionary = Kind::Dictionary(ScalarType::I64);
-    let (output, _) = bindings.add_output(NodeId(0), dictionary, 0);
+    let dictionary = Kind::Dictionary(Box::new(Kind::Scalar(ScalarType::I64)));
+    let (output, _) = bindings.add_output(NodeId(0), dictionary.clone(), 0);
     let input = bindings.add_input(NodeId(1), dictionary, true);
     bindings.bind(input, output)?;
     for cycle in 1..=4 {
         let now = EngineTime::from_micros(cycle * 2);
         bindings.begin_cycle(now);
         let child = if cycle <= 2 {
-            let (child, _) = bindings.add_output(NodeId(0), scalar, 0);
+            let (child, _) = bindings.add_output(NodeId(0), scalar.clone(), 0);
             bindings.insert(output, cycle, child, now, &mut wakes)?;
             child
         } else {
@@ -31,6 +31,12 @@ fn changing_collection_activity_reaches_existing_and_future_children()
                 .ok_or(hgl_bindings::BindError::ShapeMismatch)?
         };
         bindings.set_active(input, cycle == 4);
+        for key in bindings.keys(input) {
+            let view = bindings
+                .child_input(input, key)
+                .ok_or(hgl_bindings::BindError::ShapeMismatch)?;
+            assert_eq!(bindings.input(view).active, cycle == 4);
+        }
         wakes.0.clear();
         // Use the next cycle so prior membership notification cannot mask activity.
         let tick = EngineTime::from_micros(cycle * 2 + 1);
@@ -48,13 +54,13 @@ fn releasing_notified_children_cancels_their_parent_mailbox_entries()
     let mut bindings = Bindings::default();
     let mut wakes = Wakes::default();
     let scalar = Kind::Scalar(ScalarType::I64);
-    let (output, _) = bindings.add_output(NodeId(0), scalar, 0);
+    let (output, _) = bindings.add_output(NodeId(0), scalar.clone(), 0);
     let root = bindings.scope();
     let mut children = Vec::new();
     for _ in 0..3 {
         let scope = bindings.child_scope(NodeId(1));
         bindings.enter_scope(scope);
-        let input = bindings.add_input(NodeId(0), scalar, true);
+        let input = bindings.add_input(NodeId(0), scalar.clone(), true);
         bindings.bind(input, output)?;
         bindings.reserve_scope(scope, 1);
         bindings.enter_scope(root);
@@ -76,20 +82,16 @@ fn releasing_notified_children_cancels_their_parent_mailbox_entries()
 fn each_shape_notifies_only_when_it_becomes_invalid() -> Result<(), hgl_bindings::BindError> {
     for kind in [
         Kind::Scalar(ScalarType::I64),
-        Kind::Dictionary(ScalarType::I64),
-        Kind::Reference {
-            scalar: ScalarType::I64,
-            dictionary: false,
-        },
-        Kind::Reference {
-            scalar: ScalarType::I64,
-            dictionary: true,
-        },
+        Kind::Dictionary(Box::new(Kind::Scalar(ScalarType::I64))),
+        Kind::Reference(Box::new(Kind::Scalar(ScalarType::I64))),
+        Kind::Reference(Box::new(Kind::Dictionary(Box::new(Kind::Scalar(
+            ScalarType::I64,
+        ))))),
     ] {
         let mut bindings = Bindings::default();
         let mut wakes = Wakes::default();
-        let (output, _) = bindings.add_output(NodeId(0), kind, 0);
-        let input = bindings.add_input(NodeId(1), kind, true);
+        let (output, _) = bindings.add_output(NodeId(0), kind.clone(), 0);
+        let input = bindings.add_input(NodeId(1), kind.clone(), true);
         bindings.bind(input, output)?;
         for cycle in 1..=6 {
             let now = EngineTime::from_micros(cycle);
@@ -104,5 +106,40 @@ fn each_shape_notifies_only_when_it_becomes_invalid() -> Result<(), hgl_bindings
             assert_eq!(!wakes.0.is_empty(), transition, "{kind:?} at {cycle}");
         }
     }
+    Ok(())
+}
+
+#[test]
+fn stopped_scope_outputs_remain_readable_but_cannot_be_inserted()
+-> Result<(), hgl_bindings::BindError> {
+    let mut bindings = Bindings::default();
+    let root = bindings.scope();
+    let scalar = Kind::Scalar(ScalarType::I64);
+    let (dict, _) = bindings.add_output(NodeId(0), Kind::Dictionary(Box::new(scalar.clone())), 0);
+    let scope = bindings.child_scope(NodeId(0));
+    bindings.enter_scope(scope);
+    let (child, _) = bindings.add_output(NodeId(0), scalar, 0);
+    let saved = bindings.reference(child);
+    bindings.enter_scope(root);
+    let now = EngineTime::MIN_START;
+    bindings.insert(dict, 0, child, now, &mut Wakes::default())?;
+    bindings.release_scope(scope, now, &mut Wakes::default());
+    assert_eq!(bindings.resolve(saved), Some(child));
+    assert_eq!(
+        bindings.insert(dict, 0, child, now, &mut Wakes::default()),
+        Err(hgl_bindings::BindError::UnknownOutput(child))
+    );
+    assert_eq!(bindings.child_output(dict, 0), None);
+    bindings.begin_cycle(EngineTime::from_micros(2));
+    assert_eq!(
+        bindings.insert(
+            dict,
+            0,
+            child,
+            EngineTime::from_micros(2),
+            &mut Wakes::default()
+        ),
+        Err(hgl_bindings::BindError::UnknownOutput(child))
+    );
     Ok(())
 }

@@ -34,9 +34,9 @@ repository under `language/`, and this repository accepts it as it stands.
 | `xtask/` | Repository automation |
 | `CLAUDE.md` | The rules for agents working here |
 
-No compiler or runtime code exists yet; the shape is described in
-[exploration 0005](docs/explorations/0005-code-shape.md) and the order of
-work in [0006](docs/explorations/0006-build-sequence.md).
+The Rust runtime supports scalar values, fixed collections, dictionaries,
+references and nested graphs through its API; see [coverage and validation](docs/runtime-implementation.md).
+Compiler lowering and recursive description-builder integration remain pending.
 
 ## Building
 

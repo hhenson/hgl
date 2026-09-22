@@ -1,52 +1,14 @@
 //! Logical endpoints, binding and lifetime; scalar values live in hgl-store.
 mod collections;
+mod fixed;
 mod scopes;
 
+use hgl_endpoints::Scopes;
 use hgl_types::{EngineTime, NodeId, ScalarType};
-pub use scopes::ScopeId;
-use scopes::Scopes;
-use std::collections::BTreeMap;
 
-/// One output slot in a run.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct OutputId(pub u32);
-/// One input slot in a run.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct InputId(pub u32);
-/// The admitted endpoint shapes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Kind {
-    /// A scalar output or view.
-    Scalar(ScalarType),
-    /// A dictionary with i64 keys and scalar children.
-    Dictionary(ScalarType),
-    /// A reference to a scalar or dictionary endpoint.
-    Reference {
-        /// Child scalar type.
-        scalar: ScalarType,
-        /// Whether the target is a dictionary.
-        dictionary: bool,
-    },
-}
-impl Kind {
-    /// The scalar column used by this shape's values.
-    pub fn scalar(self) -> ScalarType {
-        match self {
-            Self::Scalar(t) | Self::Dictionary(t) | Self::Reference { scalar: t, .. } => t,
-        }
-    }
-}
-/// A designation; retaining it does not retain its endpoint.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub struct Reference {
-    output: Option<OutputId>,
-    generation: u32,
-}
-/// Who is woken by a publication in the current scope.
-pub trait Wake {
-    /// Make a local node ready, idempotently.
-    fn wake(&mut self, node: NodeId);
-}
+use hgl_endpoints::Endpoints;
+pub use hgl_endpoints::Wake;
+pub use hgl_endpoints::{Input, InputId, Kind, Output, OutputId, Reference, ScopeId};
 /// A binding rejected before changing its previous state.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BindError {
@@ -63,88 +25,18 @@ pub enum BindError {
     },
     /// Different endpoint shapes.
     ShapeMismatch,
+    /// Attachment requires a live generation-checked peer.
+    InvalidReference,
     /// A plain bind cannot replace an existing binding.
     AlreadyBound(InputId),
     /// A reference would route against graph rank.
     BackwardReference,
 }
-#[derive(Debug)]
-pub(crate) struct Members<I> {
-    pub(crate) live: BTreeMap<i64, I>,
-    pub(crate) removed: BTreeMap<i64, I>,
-    pub(crate) initial: BTreeMap<i64, bool>,
-    pub(crate) changed: Vec<i64>,
-    pub(crate) epoch: EngineTime,
-}
-impl<I> Default for Members<I> {
-    fn default() -> Self {
-        Self {
-            live: BTreeMap::new(),
-            removed: BTreeMap::new(),
-            initial: BTreeMap::new(),
-            changed: Vec::new(),
-            epoch: EngineTime::NEVER,
-        }
-    }
-}
-/// Read-only output metadata, owned by Bindings.
-#[derive(Debug)]
-pub struct Output {
-    /// Typed column slot, unused for aggregate and reference outputs.
-    pub slot: u32,
-    /// Shape fixed when allocated.
-    pub kind: Kind,
-    /// Local writing node.
-    pub owner: NodeId,
-    /// Owning graph scope.
-    pub scope: ScopeId,
-    scope_position: usize,
-    /// NEVER while invalid.
-    pub modified_at: EngineTime,
-    /// Lifetime generation; exhausted generations are never reused.
-    pub generation: u32,
-    /// Whether this slot still designates an endpoint.
-    pub alive: bool,
-    notified_at: EngineTime,
-    parent: Option<(OutputId, i64)>,
-    parent_at: EngineTime,
-    watchers: Vec<InputId>,
-    followers: Vec<InputId>,
-    reference: Reference,
-    retired_at: EngineTime,
-    retirement_queued: bool,
-    members: Members<OutputId>,
-}
-/// Read-only input metadata, owned by Bindings.
-#[derive(Debug)]
-pub struct Input {
-    /// Currently followed endpoint.
-    pub source: Option<OutputId>,
-    /// Cached scalar slot.
-    pub slot: u32,
-    /// Declared shape.
-    pub kind: Kind,
-    owner: NodeId,
-    scope: ScopeId,
-    scope_position: usize,
-    active: bool,
-    alive: bool,
-    sampled_at: EngineTime,
-    reference_source: Option<OutputId>,
-    source_position: usize,
-    reference_position: usize,
-    parent: Option<(InputId, i64)>,
-    parent_at: EngineTime,
-    members: Members<InputId>,
-    withdrawal: EngineTime,
-}
 /// Endpoint tables and the notifications between graph scopes.
 #[derive(Debug)]
 pub struct Bindings {
-    outputs: Vec<Output>,
-    inputs: Vec<Input>,
-    free_outputs: Vec<OutputId>,
-    free_inputs: Vec<InputId>,
+    endpoints: Endpoints,
+    items: Vec<(Kind, Vec<Reference>)>,
     retired: Vec<OutputId>,
     dirty_outputs: Vec<OutputId>,
     dirty_inputs: Vec<InputId>,
@@ -155,10 +47,8 @@ pub struct Bindings {
 impl Default for Bindings {
     fn default() -> Self {
         Self {
-            outputs: Vec::new(),
-            inputs: Vec::new(),
-            free_outputs: Vec::new(),
-            free_inputs: Vec::new(),
+            endpoints: Endpoints::default(),
+            items: Vec::new(),
             retired: Vec::new(),
             dirty_outputs: Vec::new(),
             dirty_inputs: Vec::new(),
@@ -172,115 +62,67 @@ fn index(n: usize) -> u32 {
     u32::try_from(n).unwrap_or_else(|_| unreachable!("endpoint capacity exceeded"))
 }
 impl Bindings {
-    /// Output metadata. An unknown id is a caller error.
+    /// Output metadata, shared only.
     pub fn output(&self, id: OutputId) -> &Output {
-        &self.outputs[id.0 as usize]
+        self.endpoints.output(id)
     }
-    /// Input metadata. An unknown id is a caller error.
+    /// Input metadata, shared only.
     pub fn input(&self, id: InputId) -> &Input {
-        &self.inputs[id.0 as usize]
+        self.endpoints.input(id)
     }
-    /// Allocate or reuse a slot; the bool says whether a scalar column must grow.
+    /// Allocate an endpoint; scalar columns grow only for fresh slots.
     pub fn add_output(&mut self, owner: NodeId, kind: Kind, next_slot: u32) -> (OutputId, bool) {
-        let reused = self
-            .free_outputs
-            .iter()
-            .position(|&id| self.output(id).kind == kind);
-        let id = reused.map_or_else(
-            || OutputId(index(self.outputs.len())),
-            |n| self.free_outputs.swap_remove(n),
-        );
-        let (slot, generation) = if reused.is_some() {
-            let o = self.output(id);
-            (o.slot, o.generation)
-        } else {
-            (next_slot, 1)
-        };
-        let output = Output {
-            slot,
-            kind,
-            owner,
-            scope: self.scopes.current,
-            scope_position: 0,
-            modified_at: EngineTime::NEVER,
-            generation,
-            alive: true,
-            notified_at: EngineTime::NEVER,
-            parent: None,
-            parent_at: EngineTime::NEVER,
-            watchers: Vec::new(),
-            followers: Vec::new(),
-            reference: Reference::default(),
-            retired_at: EngineTime::NEVER,
-            retirement_queued: false,
-            members: Members::default(),
-        };
-        if reused.is_some() {
-            self.outputs[id.0 as usize] = output;
-        } else {
-            self.outputs.push(output);
-        }
-        self.scopes.reserve(self.scopes.current, owner);
-        self.outputs[id.0 as usize].scope_position = self.scopes.record_output(id);
-        (id, reused.is_none())
+        let result = self
+            .endpoints
+            .add_output(owner, kind, next_slot, self.scope());
+        self.scopes.reserve(self.scope(), owner);
+        self.endpoints.outputs[result.0.0 as usize].scope_position =
+            self.scopes.record_output(result.0);
+        result
     }
-    /// Allocate an unbound view.
+    /// Allocate an input and every fixed child in its graph scope.
     pub fn add_input(&mut self, owner: NodeId, kind: Kind, active: bool) -> InputId {
-        let id = self
-            .free_inputs
-            .pop()
-            .unwrap_or(InputId(index(self.inputs.len())));
-        let input = Input {
-            source: None,
-            slot: 0,
-            kind,
-            owner,
-            scope: self.scopes.current,
-            scope_position: 0,
-            active,
-            alive: true,
-            sampled_at: EngineTime::NEVER,
-            reference_source: None,
-            source_position: 0,
-            reference_position: 0,
-            parent: None,
-            parent_at: EngineTime::NEVER,
-            members: Members::default(),
-            withdrawal: EngineTime::NEVER,
-        };
-        if id.0 as usize == self.inputs.len() {
-            self.inputs.push(input);
-        } else {
-            self.inputs[id.0 as usize] = input;
+        let id = self.endpoints.add_input(owner, kind, active, self.scope());
+        self.scopes.reserve(self.scope(), owner);
+        self.endpoints.inputs[id.0 as usize].scope_position = self.scopes.record_input(id);
+        for position in 0..self.input(id).kind.len() {
+            let child = self.add_input(owner, self.input(id).kind.child(position).clone(), active);
+            self.endpoints.inputs[child.0 as usize].parent = Some((
+                id,
+                i64::try_from(position).unwrap_or_else(|_| unreachable!()),
+            ));
+            self.endpoints.inputs[id.0 as usize].fixed.push(child);
         }
-        self.scopes.reserve(self.scopes.current, owner);
-        self.inputs[id.0 as usize].scope_position = self.scopes.record_input(id);
         id
     }
     fn check_reference(&self, input: InputId, output: OutputId) -> Result<(), BindError> {
         self.check(input, output)?;
         let i = self.input(input);
         let o = self.output(output);
-        if !self.forward(o.scope, o.owner, i.scope, i.owner) {
+        if !self.scopes.forward(o.scope, o.owner, i.scope, i.owner) {
             return Err(BindError::BackwardReference);
         }
         Ok(())
     }
     fn check(&self, input: InputId, output: OutputId) -> Result<(), BindError> {
         let i = self
+            .endpoints
             .inputs
             .get(input.0 as usize)
             .filter(|i| i.alive)
             .ok_or(BindError::UnknownInput(input))?;
         let o = self
+            .endpoints
             .outputs
             .get(output.0 as usize)
             .filter(|o| o.alive)
             .ok_or(BindError::UnknownOutput(output))?;
-        if i.kind.scalar() != o.kind.scalar() {
+        if let (Kind::Scalar(a), Kind::Scalar(b)) = (&i.kind, &o.kind)
+            && a != b
+        {
             return Err(BindError::TypeMismatch {
-                input: i.kind.scalar(),
-                output: o.kind.scalar(),
+                input: *a,
+                output: *b,
             });
         }
         if i.kind != o.kind {
@@ -295,14 +137,16 @@ impl Bindings {
             return Err(BindError::AlreadyBound(input));
         }
         self.attach(input, output);
+        self.sync_fixed(input, self.reference(output), EngineTime::NEVER);
         self.sync_members(input, self.now);
+        self.refresh(input, self.now, false);
         Ok(())
     }
     fn attach(&mut self, input: InputId, output: OutputId) {
-        let o = &mut self.outputs[output.0 as usize];
+        let o = &mut self.endpoints.outputs[output.0 as usize];
         let position = o.watchers.len();
         o.watchers.push(input);
-        let i = &mut self.inputs[input.0 as usize];
+        let i = &mut self.endpoints.inputs[input.0 as usize];
         i.source_position = position;
         i.source = Some(output);
         i.slot = o.slot;
@@ -310,57 +154,104 @@ impl Bindings {
     /// Detach silently, including a reference subscription.
     pub fn unbind(&mut self, input: InputId) {
         self.detach(input);
+        for n in 0..self.input(input).fixed.len() {
+            self.unbind(self.input(input).fixed[n]);
+        }
         self.clear_projection(input);
-        if let Some(r) = self.inputs[input.0 as usize].reference_source.take() {
+        self.detach_reference(input);
+        self.refresh(input, self.now, false);
+        self.reset_observation(input);
+        self.endpoints.inputs[input.0 as usize].notified_at = EngineTime::NEVER;
+        self.endpoints.inputs[input.0 as usize].designation = Reference::default();
+        let mut parent = self.input(input).parent;
+        while let Some((p, _)) = parent {
+            self.refresh(p, self.now, false);
+            parent = self.input(p).parent;
+        }
+    }
+    fn detach_reference(&mut self, input: InputId) {
+        if let Some(r) = self.endpoints.inputs[input.0 as usize]
+            .reference_source
+            .take()
+        {
             let position = self.input(input).reference_position;
-            let followers = &mut self.outputs[r.0 as usize].followers;
+            let followers = &mut self.endpoints.outputs[r.0 as usize].followers;
             followers.swap_remove(position);
             if let Some(&moved) = followers.get(position) {
-                self.inputs[moved.0 as usize].reference_position = position;
+                self.endpoints.inputs[moved.0 as usize].reference_position = position;
             }
         }
-        self.inputs[input.0 as usize].sampled_at = EngineTime::NEVER;
     }
     fn clear_projection(&mut self, input: InputId) {
-        while let Some((_, child)) = self.inputs[input.0 as usize].members.live.pop_first() {
+        while let Some((_, child)) = self.endpoints.inputs[input.0 as usize]
+            .members
+            .live
+            .pop_first()
+        {
             self.release_input(child);
         }
-        while let Some((_, child)) = self.inputs[input.0 as usize].members.removed.pop_first() {
+        while let Some((_, child)) = self.endpoints.inputs[input.0 as usize]
+            .members
+            .removed
+            .pop_first()
+        {
             self.release_input(child);
         }
-        self.inputs[input.0 as usize].members.initial.clear();
-        self.inputs[input.0 as usize].members.changed.clear();
+        self.endpoints.inputs[input.0 as usize]
+            .members
+            .initial
+            .clear();
+        self.endpoints.inputs[input.0 as usize]
+            .members
+            .changed
+            .clear();
     }
     fn detach(&mut self, input: InputId) {
-        if let Some(o) = self.inputs[input.0 as usize].source.take() {
+        if let Some(o) = self.endpoints.inputs[input.0 as usize].source.take() {
             let position = self.input(input).source_position;
-            let watchers = &mut self.outputs[o.0 as usize].watchers;
+            let watchers = &mut self.endpoints.outputs[o.0 as usize].watchers;
             watchers.swap_remove(position);
             if let Some(&moved) = watchers.get(position) {
-                self.inputs[moved.0 as usize].source_position = position;
+                self.endpoints.inputs[moved.0 as usize].source_position = position;
             }
         }
     }
     /// Change notification admission, without changing observations.
     pub fn set_active(&mut self, input: InputId, active: bool) {
-        self.inputs[input.0 as usize].active = active;
-        let members = std::mem::take(&mut self.inputs[input.0 as usize].members);
+        self.endpoints.inputs[input.0 as usize].active = active;
+        for n in 0..self.input(input).fixed.len() {
+            self.set_active(self.input(input).fixed[n], active);
+        }
+        let members = std::mem::take(&mut self.endpoints.inputs[input.0 as usize].members);
         for &child in members.live.values().chain(members.removed.values()) {
             self.set_active(child, active);
         }
-        self.inputs[input.0 as usize].members = members;
+        self.endpoints.inputs[input.0 as usize].members = members;
     }
-    /// Sampled input time; invalid views always report NEVER.
+    /// Cached input time, including invalidation within a valid assembly.
     pub fn last_modified(&self, input: InputId) -> EngineTime {
         let i = self.input(input);
-        i.source.map_or(EngineTime::NEVER, |o| {
-            let t = self.output(o).modified_at;
-            if t == EngineTime::NEVER {
-                t
-            } else {
-                t.max(i.sampled_at)
-            }
-        })
+        if i.kind.fixed() || i.source.is_none() {
+            return i.observed_at;
+        }
+        let t = self
+            .output(i.source.unwrap_or_else(|| unreachable!()))
+            .modified_at;
+        if t == EngineTime::NEVER {
+            i.observed_at
+        } else {
+            t.max(i.sampled_at)
+        }
+    }
+    /// Value availability, independent of a retained invalidation time.
+    pub fn valid(&self, input: InputId) -> bool {
+        let i = self.input(input);
+        if i.kind.fixed() && i.source.is_none() {
+            i.valid_children > 0
+        } else {
+            i.source
+                .is_some_and(|o| self.output(o).modified_at != EngineTime::NEVER)
+        }
     }
     /// Includes dictionary withdrawal while invalid.
     pub fn modified(&self, input: InputId, now: EngineTime) -> bool {
@@ -373,6 +264,7 @@ impl Bindings {
             Reference {
                 output: Some(output),
                 generation: o.generation,
+                items: None,
             }
         } else {
             Reference::default()
@@ -381,7 +273,8 @@ impl Bindings {
     /// Resolve without retaining or reviving the endpoint.
     pub fn resolve(&self, r: Reference) -> Option<OutputId> {
         r.output.filter(|id| {
-            self.outputs
+            self.endpoints
+                .outputs
                 .get(id.0 as usize)
                 .is_some_and(|o| o.alive && o.generation == r.generation)
         })
@@ -389,7 +282,7 @@ impl Bindings {
     /// The logical reference value, empty once its target expires.
     pub fn reference_value(&self, output: OutputId) -> Reference {
         let r = self.output(output).reference;
-        if self.resolve(r).is_some() {
+        if r.items.is_some() || self.resolve(r).is_some() {
             r
         } else {
             Reference::default()
@@ -403,23 +296,9 @@ impl Bindings {
         now: EngineTime,
         wake: &mut W,
     ) -> Result<(), BindError> {
-        let source = self.resolve(r);
-        if let Some(o) = source {
-            self.check_reference(input, o)?;
-        }
-        if self.input(input).source == source {
-            return Ok(());
-        }
-        self.detach(input);
-        if let Some(o) = source {
-            self.attach(input, o);
-        }
-        self.inputs[input.0 as usize].sampled_at = now;
-        self.sync_members(input, now);
-        if source.is_some_and(|o| self.output(o).modified_at != EngineTime::NEVER)
-            || matches!(self.input(input).kind, Kind::Dictionary(_))
-        {
-            self.notify_input(input, now, wake);
+        self.check_designation(input, r)?;
+        if self.apply_sample(input, r, now) {
+            self.notify_input(input, now, false, wake);
         }
         Ok(())
     }
@@ -431,30 +310,29 @@ impl Bindings {
         now: EngineTime,
         wake: &mut W,
     ) -> Result<(), BindError> {
-        let target = match self.output(reference).kind {
-            Kind::Reference { scalar, dictionary } => {
-                if dictionary {
-                    Kind::Dictionary(scalar)
-                } else {
-                    Kind::Scalar(scalar)
-                }
-            }
-            Kind::Scalar(_) | Kind::Dictionary(_) => return Err(BindError::ShapeMismatch),
+        let Kind::Reference(target) = &self.output(reference).kind else {
+            return Err(BindError::ShapeMismatch);
         };
-        if self.input(input).kind != target {
+        if &self.input(input).kind != target.as_ref() {
             return Err(BindError::ShapeMismatch);
         }
-        let r = self.reference_value(reference);
-        if let Some(o) = self.resolve(r) {
-            self.check_reference(input, o)?;
+        let i = self.input(input);
+        let o = self.output(reference);
+        if !self.scopes.forward(o.scope, o.owner, i.scope, i.owner) {
+            return Err(BindError::BackwardReference);
         }
+        let r = self.reference_value(reference);
+        self.check_designation(input, r)?;
         if self.input(input).reference_source == Some(reference) {
             return Ok(());
         }
-        self.unbind(input);
-        self.inputs[input.0 as usize].reference_position = self.output(reference).followers.len();
-        self.outputs[reference.0 as usize].followers.push(input);
-        self.inputs[input.0 as usize].reference_source = Some(reference);
+        self.detach_reference(input);
+        self.endpoints.inputs[input.0 as usize].reference_position =
+            self.output(reference).followers.len();
+        self.endpoints.outputs[reference.0 as usize]
+            .followers
+            .push(input);
+        self.endpoints.inputs[input.0 as usize].reference_source = Some(reference);
         self.sample(input, r, now, wake)
     }
     /// Publish a designation, leaving target publication independent.
@@ -465,38 +343,29 @@ impl Bindings {
         now: EngineTime,
         wake: &mut W,
     ) -> Result<(), BindError> {
-        let expected = match self.output(output).kind {
-            Kind::Reference { scalar, dictionary } => {
-                if dictionary {
-                    Kind::Dictionary(scalar)
-                } else {
-                    Kind::Scalar(scalar)
-                }
-            }
-            Kind::Scalar(_) | Kind::Dictionary(_) => return Err(BindError::ShapeMismatch),
-        };
-        if self
-            .resolve(r)
-            .is_some_and(|o| self.output(o).kind != expected)
-        {
+        let Kind::Reference(expected) = &self.output(output).kind else {
             return Err(BindError::ShapeMismatch);
+        };
+        self.check_shape(expected, r)?;
+        for &input in &self.output(output).followers {
+            self.check_designation(input, r)?;
         }
-        if let Some(target) = self.resolve(r) {
-            for &input in &self.output(output).followers {
-                self.check_reference(input, target)?;
-            }
+        if self.output(output).modified_at != EngineTime::NEVER
+            && self.output(output).reference == r
+        {
+            return Ok(());
         }
         for n in 0..self.output(output).followers.len() {
             let i = self.output(output).followers[n];
             self.sample(i, r, now, wake)?;
         }
-        self.outputs[output.0 as usize].reference = r;
+        self.endpoints.outputs[output.0 as usize].reference = r;
         self.publish(output, now, wake);
         Ok(())
     }
     /// Stamp and notify once per cycle, including owning dictionaries.
     pub fn publish<W: Wake>(&mut self, output: OutputId, now: EngineTime, wake: &mut W) {
-        self.outputs[output.0 as usize].modified_at = now;
+        self.endpoints.outputs[output.0 as usize].modified_at = now;
         self.notify_output(output, now, wake);
     }
     /// Invalidate the child while recording its parent's change.
@@ -504,65 +373,132 @@ impl Bindings {
         if self.output(output).modified_at == EngineTime::NEVER {
             return;
         }
-        match self.output(output).kind {
+        match &self.output(output).kind {
             Kind::Dictionary(_) => {
-                let children = std::mem::take(&mut self.outputs[output.0 as usize].members.live);
+                let children =
+                    std::mem::take(&mut self.endpoints.outputs[output.0 as usize].members.live);
                 for &child in children.values() {
                     self.invalidate(child, now, wake);
                 }
-                self.outputs[output.0 as usize].members.live = children;
+                self.endpoints.outputs[output.0 as usize].members.live = children;
             }
-            Kind::Reference { .. } => {
+            Kind::Reference(_) => {
                 for n in 0..self.output(output).followers.len() {
                     let input = self.output(output).followers[n];
                     let result = self.sample(input, Reference::default(), now, wake);
                     debug_assert!(result.is_ok());
                 }
-                self.outputs[output.0 as usize].reference = Reference::default();
+                self.endpoints.outputs[output.0 as usize].reference = Reference::default();
+            }
+            Kind::List(..) | Kind::Bundle(_) => {
+                for n in 0..self.output(output).fixed.len() {
+                    self.invalidate(self.output(output).fixed[n], now, wake);
+                }
             }
             Kind::Scalar(_) => {}
         }
-        self.outputs[output.0 as usize].modified_at = EngineTime::NEVER;
+        self.endpoints.outputs[output.0 as usize].modified_at = EngineTime::NEVER;
         self.notify_output(output, now, wake);
     }
     fn notify_output<W: Wake>(&mut self, output: OutputId, now: EngineTime, wake: &mut W) {
+        let valid = self.output(output).modified_at != EngineTime::NEVER;
         if let Some((parent, key)) = self.output(output).parent {
-            if self.output(output).parent_at != now {
-                self.outputs[output.0 as usize].parent_at = now;
-                self.change_output(parent, key, now);
+            if self.output(parent).kind.fixed() {
+                let old = self.output(output).parent_valid;
+                self.endpoints.outputs[output.0 as usize].parent_valid = valid;
+                let p = &mut self.endpoints.outputs[parent.0 as usize];
+                p.valid_children = p.valid_children + usize::from(valid) - usize::from(old);
+                p.modified_at = if p.valid_children == 0 && p.modified_at == EngineTime::NEVER {
+                    EngineTime::NEVER
+                } else {
+                    now
+                };
+                self.notify_output(parent, now, wake);
+            } else {
+                if self.output(output).parent_at != now {
+                    self.endpoints.outputs[output.0 as usize].parent_at = now;
+                    self.change_output(parent, key, now);
+                }
+                self.publish(parent, now, wake);
             }
-            self.publish(parent, now, wake);
         }
-        let o = &mut self.outputs[output.0 as usize];
-        if o.notified_at == now {
+        let o = &mut self.endpoints.outputs[output.0 as usize];
+        if o.notified_at == now && o.notified_valid == valid {
             return;
         }
         o.notified_at = now;
+        o.notified_valid = valid;
         for n in 0..self.output(output).watchers.len() {
             let i = self.output(output).watchers[n];
-            self.notify_input(i, now, wake);
+            self.notify_input(i, now, true, wake);
         }
     }
-    fn notify_input<W: Wake>(&mut self, input: InputId, now: EngineTime, wake: &mut W) {
-        if let Some((p, key)) = self.input(input).parent
-            && self.input(input).parent_at != now
-        {
-            self.inputs[input.0 as usize].parent_at = now;
-            self.change_input(p, key, now);
-        }
-        let i = self.input(input);
-        if i.active {
-            let (scope, node) = (i.scope, i.owner);
-            self.scopes.wake(scope, node, wake);
+    fn notify_input<W: Wake>(
+        &mut self,
+        input: InputId,
+        now: EngineTime,
+        event: bool,
+        wake: &mut W,
+    ) {
+        self.refresh(input, now, event);
+        if let Some((p, key)) = self.input(input).parent {
+            if !self.input(p).kind.fixed() && self.input(input).parent_at != now {
+                self.endpoints.inputs[input.0 as usize].parent_at = now;
+                self.change_input(p, key, now);
+            }
+            self.notify_input(p, now, event, wake);
+        } else {
+            let i = &mut self.endpoints.inputs[input.0 as usize];
+            if i.active && i.notified_at != now {
+                i.notified_at = now;
+                self.scopes.wake(i.scope, i.owner, wake);
+            }
         }
     }
     /// Retain until the first later engine cycle, even with no later writes.
     pub(crate) fn retire(&mut self, output: OutputId, now: EngineTime) {
-        let o = &mut self.outputs[output.0 as usize];
+        let o = &mut self.endpoints.outputs[output.0 as usize];
         o.retired_at = now;
         if !o.retirement_queued {
             o.retirement_queued = true;
             self.retired.push(output);
+        }
+    }
+    fn expire(&mut self, id: OutputId) {
+        if !self.output(id).alive {
+            return;
+        }
+        for n in 0..self.output(id).fixed.len() {
+            self.expire(self.output(id).fixed[n]);
+        }
+        let children = std::mem::take(&mut self.endpoints.outputs[id.0 as usize].members);
+        for child in children
+            .live
+            .into_values()
+            .chain(children.removed.into_values())
+        {
+            self.expire(child);
+        }
+        while let Some(i) = self.endpoints.outputs[id.0 as usize].watchers.pop() {
+            self.endpoints.inputs[i.0 as usize].source = None;
+            self.endpoints.inputs[i.0 as usize].sampled_at = EngineTime::NEVER;
+            let reference = self.endpoints.inputs[i.0 as usize].reference_source.take();
+            self.unbind(i);
+            self.endpoints.inputs[i.0 as usize].reference_source = reference;
+        }
+        while let Some(i) = self.endpoints.outputs[id.0 as usize].followers.pop() {
+            self.endpoints.inputs[i.0 as usize].reference_source = None;
+            self.unbind(i);
+        }
+        self.forget_output(id);
+        let o = &mut self.endpoints.outputs[id.0 as usize];
+        o.alive = false;
+        o.retired_at = EngineTime::NEVER;
+        o.retirement_queued = false;
+        o.modified_at = EngineTime::NEVER;
+        if let Some(g) = o.generation.checked_add(1) {
+            o.generation = g;
+            self.endpoints.free_outputs.push(id);
         }
     }
     /// Start an independent root run without resetting any endpoint values.
@@ -588,7 +524,7 @@ impl Bindings {
             let id = self.retired[n];
             let t = self.output(id).retired_at;
             if t == EngineTime::NEVER {
-                self.outputs[id.0 as usize].retirement_queued = false;
+                self.endpoints.outputs[id.0 as usize].retirement_queued = false;
                 self.retired.swap_remove(n);
                 continue;
             }
@@ -596,27 +532,10 @@ impl Bindings {
                 n += 1;
                 continue;
             }
-            while let Some(i) = self.outputs[id.0 as usize].watchers.pop() {
-                self.inputs[i.0 as usize].source = None;
-                self.inputs[i.0 as usize].sampled_at = EngineTime::NEVER;
-                self.clear_projection(i);
-            }
-            while let Some(i) = self.outputs[id.0 as usize].followers.pop() {
-                self.inputs[i.0 as usize].reference_source = None;
-                self.unbind(i);
-            }
-            self.forget_output(id);
-            let o = &mut self.outputs[id.0 as usize];
-            o.alive = false;
-            o.retired_at = EngineTime::NEVER;
-            o.retirement_queued = false;
-            o.modified_at = EngineTime::NEVER;
-            if let Some(g) = o.generation.checked_add(1) {
-                o.generation = g;
-                self.free_outputs.push(id);
-            }
+            self.expire(id);
             self.retired.swap_remove(n);
         }
+        self.scopes.reclaim(now, fresh_run);
     }
 }
 
@@ -627,8 +546,8 @@ mod tests {
     fn exhausted_generation_is_never_reused() {
         let mut bindings = Bindings::default();
         let kind = Kind::Scalar(ScalarType::I64);
-        let (old, _) = bindings.add_output(NodeId(0), kind, 0);
-        bindings.outputs[old.0 as usize].generation = u32::MAX;
+        let (old, _) = bindings.add_output(NodeId(0), kind.clone(), 0);
+        bindings.endpoints.outputs[old.0 as usize].generation = u32::MAX;
         let saved = bindings.reference(old);
         bindings.retire(old, EngineTime::from_micros(1));
         bindings.begin_cycle(EngineTime::from_micros(2));

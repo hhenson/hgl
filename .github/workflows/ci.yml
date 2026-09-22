@@ -28,6 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
+      - run: python tools/fixed_fixtures.py --check
       - run: cargo xtask ci
 
   deny:
