@@ -29,7 +29,8 @@ reference observations remain missing. The [comparison report](runtime_spec/vali
 9,330 unanimous observations, 614 supported by one runtime, and 46 governed
 by existing explicit rulings. Initial expectations and missing evidence remain visible.
 
-The compiler route still needs a decision: decision 0001 requires a Rust
-front end, while exploration 0006 allows upstream front-end reuse. Do not infer
-language semantics from a new parser or from printed diagnostic IR. The first
-compiled example must retain source, generated description and tick evidence.
+The immediate deliverable is runtime and graph-description infrastructure,
+exercised by Rust written in the form a future compiler could emit. Once
+that target is sufficient, review the Rust compiler architecture and available
+Rust libraries and tools. Then implement compile, check and emit. Decision 0001
+stands: the compiler is rebuilt in Rust; the C++ compiler remains a reference.

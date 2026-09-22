@@ -14,7 +14,7 @@ spec.loader.exec_module(check)
 class Comparisons(unittest.TestCase):
     def result(self, python, cpp):
         return check.assess({'case':{'value':7}}, {'case':{
-            'python':{'observation':python}, 'cpp':{'observation':cpp}}})[0]
+            'python':{'status':'ok','exception':None,'observation':python}, 'cpp':{'status':'ok','exception':None,'observation':cpp}}})[0]
 
     def test_one_reference_plus_reasoning_is_sufficient(self):
         result=self.result({'value':7},None)
@@ -34,6 +34,17 @@ class Comparisons(unittest.TestCase):
         rows=list(check.assertions({'value':{'left':7},'children':{'left':{'valid':True}}}))
         self.assertIn(('/value',{'left':7},None),rows)
         self.assertIn(('/children',['left'],'keys'),rows)
+
+    def test_complete_failed_trace_is_rejected(self):
+        evidence=json.loads((ROOT/'observed.json').read_text())
+        record=evidence['cases']['owned']['python']
+        for status, exception in [('error',None), ('ok',{'type':'RuntimeError'})]:
+            record.update(status=status,exception=exception)
+            record['replay_digests']=[check.digest({k:record[k] for k in ('status','observation','exception')})]*3
+            with self.assertRaises(AssertionError):
+                check.verify(evidence)
+            with self.assertRaises(ValueError):
+                check.assess({'owned':{'events':['start','stop','start','stop']}},evidence['cases'])
 
     def test_evidence_is_untampered(self):
         evidence=json.loads((ROOT/'observed.json').read_text())

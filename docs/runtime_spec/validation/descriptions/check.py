@@ -43,6 +43,7 @@ def verify(evidence):
         recipe = json.loads((ROOT / 'recipes' / (case + '.json')).read_text())
         fingerprint = hashlib.sha256(json.dumps(recipe,sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()).hexdigest()
         for side in sides.values():
+            assert side['status'] == 'ok' and side['exception'] is None, 'Failed replay is not usable evidence'
             assert side['recipe_fingerprint'] == fingerprint
             expected = digest({k:side[k] for k in ('status','observation','exception')})
             assert side['stable'] and side['replay_digests'] == [expected]*3
@@ -54,6 +55,8 @@ def assess(reasoned, observed):
         for path, wanted, projection in assertions(expected):
             sides={}
             for side, record in observed[case].items():
+                if record.get('status') != 'ok' or record.get('exception', 'missing') is not None:
+                    raise ValueError('Failed replay is not usable evidence')
                 try:
                     value=at(record['observation'],path)
                     sides[side]=len(value) if projection=='length' else sorted(value) if projection=='keys' else value

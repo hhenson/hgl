@@ -11,7 +11,7 @@ the date rather than deleting it.
 
 - Picked up in [0005](explorations/0005-code-shape.md#positions-to-prove) and
   [0006](explorations/0006-build-sequence.md): scripted execution of runtime
-  bodies, port-or-rewrite for the front end, the endpoint-graph ownership
+  bodies, the endpoint-graph ownership
   model, line budgets, where the operator resolver lives, the `.hgspec` draft
   as a starting point, and the conformance corpus coming first.
 - Can hgraph record the candidate chosen by every operator resolution? The
@@ -29,3 +29,8 @@ the date rather than deleting it.
   end to end — [decision 0001](decisions/0001-rust-end-to-end.md), 2026-09-19.
 - *Does the root README still describe this repository?* No; it was rewritten
   on 2026-09-19 when the first code (the workspace and `xtask`) landed.
+
+- *When does compiler work begin?* Complete sufficient runtime and description
+  infrastructure, then review Rust compiler architecture and available Rust
+  tooling, then implement compile, check and emit. The Rust-only choice stands
+  (user clarification, 2026-09-22).
