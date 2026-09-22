@@ -103,3 +103,8 @@ with C++; the 44 accepted semantic traces remain the correctness oracle.
 [hgl-plan](hgl-plan.md) holds plain templates and structural checks;
 [hgl-describe](hgl-describe.md) resolves them into scoped runtime instances.
 This establishes the target for the later Rust compiler review.
+
+## Standard-library binding probe
+
+[hgl-native](hgl-native.md) owns borrowed view/value helpers;
+[hgl-stdlib](hgl-stdlib.md) tests the node authoring recipe before compiler emission.

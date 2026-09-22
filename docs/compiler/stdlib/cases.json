@@ -1,0 +1,6 @@
+[
+  {"name":"bit_and_waits_for_both", "node":"bit_and_i64", "inputs":{"lhs":[6,null,-1,null,7,7], "rhs":[null,3,null,7,null,null]}, "expected":[null,2,3,7,7,7], "reason":"Wait for both values; either input then activates. Equal ordinary results still tick."},
+  {"name":"sample_only_on_signal", "node":"sample_i64", "inputs":{"signal":[null,1,null,1,1], "ts":[1,2,3,4,null]}, "expected":[null,2,null,4,4], "reason":"Only signal is active; its payload is irrelevant. Read the latest valid ts, including a retained value."},
+  {"name":"sample_waits_for_value", "node":"sample_i64", "inputs":{"signal":[1,null,0,null,0], "ts":[null,7,null,8,null]}, "expected":[null,null,7,null,8], "reason":"An early trigger cannot sample an invalid value. A passive value becoming valid does not trigger. Zero is still a signal tick."},
+  {"name":"dedup_zero_and_idle", "node":"dedup_i64", "inputs":{"ts":[null,0,0,null,1,1,0]}, "expected":[null,0,null,null,1,null,0], "reason":"First valid zero emits. Suppress equal values, retain history over idle cycles, emit a return to zero."}
+]

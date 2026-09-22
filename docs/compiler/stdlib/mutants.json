@@ -1,0 +1,32 @@
+[
+  {
+    "mutation": "bitwise_or",
+    "test_filter": "nat3_bitwise_values",
+    "killed": true
+  },
+  {
+    "mutation": "all_valid_is_valid",
+    "test_filter": "nat6_fixed_views",
+    "killed": true
+  },
+  {
+    "mutation": "modified_is_valid",
+    "test_filter": "nat3_unbound",
+    "killed": true
+  },
+  {
+    "mutation": "dedup_initial_zero",
+    "test_filter": "nat4_reasoned",
+    "killed": true
+  },
+  {
+    "mutation": "sample_missing_validity",
+    "test_filter": "nat4_reasoned",
+    "killed": true
+  },
+  {
+    "mutation": "sample_active_value",
+    "test_filter": "nat4_sample_activation",
+    "killed": true
+  }
+]

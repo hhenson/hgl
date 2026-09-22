@@ -1,0 +1,19 @@
+[package]
+name = "hgl-native"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[package.metadata.hgl]
+line-budget = 130
+
+[dependencies]
+hgl-store = { path = "../hgl-store" }
+hgl-types = { path = "../hgl-types" }
+
+[dev-dependencies]
+hgl-alloc-count = { path = "../hgl-alloc-count" }
+
+[lints]
+workspace = true
