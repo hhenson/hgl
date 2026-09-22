@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "id": "description-owned-capture",
+  "description": "GRF-10: a live child follows rebinding of a captured parent input without restarting its state.",
+  "template": "description_contract_probe",
+  "inputs": {
+    "step": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ]
+  },
+  "parameters": {
+    "mode": "owned_capture"
+  },
+  "features": []
+}

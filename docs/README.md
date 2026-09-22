@@ -8,6 +8,7 @@
 - [Rust practices](guides/rust-practices.md) — the setup, reading Rust from
   C++, reviewing a diff
 - [Runtime implementation](runtime-implementation.md) — supported shapes and validation
+- [Recursive description contracts](recursive-description-contracts.md) — boundary validation before implementation
 - [Contract cards](cards/README.md) — the one page an agent is given to build
   one crate; the first slice's six are written and await review
 - [Runtime specification](runtime_spec/overview.md) — what an HGraph runtime

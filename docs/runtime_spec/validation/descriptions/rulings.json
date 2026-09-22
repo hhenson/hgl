@@ -1,0 +1,278 @@
+[
+  {
+    "case": "owned",
+    "path": "/ticks/5/retired/0/children/left/valid",
+    "rule": "TS-11",
+    "authority": "User removal-cycle ruling, 2026-09-21; cases_references.md REF-EXPIRES and representations.md retained row/leaf values and times."
+  },
+  {
+    "case": "owned",
+    "path": "/ticks/5/retired/0/children/left/last",
+    "rule": "TS-11",
+    "authority": "User removal-cycle ruling, 2026-09-21; cases_references.md REF-EXPIRES and representations.md retained row/leaf values and times."
+  },
+  {
+    "case": "owned",
+    "path": "/ticks/5/retired/0/children/left/value",
+    "rule": "TS-11",
+    "authority": "User removal-cycle ruling, 2026-09-21; cases_references.md REF-EXPIRES and representations.md retained row/leaf values and times."
+  },
+  {
+    "case": "owned",
+    "path": "/ticks/5/retired/0/children/left/children/0/valid",
+    "rule": "TS-11",
+    "authority": "User removal-cycle ruling, 2026-09-21; cases_references.md REF-EXPIRES and representations.md retained row/leaf values and times."
+  },
+  {
+    "case": "owned",
+    "path": "/ticks/5/retired/0/children/left/children/0/last",
+    "rule": "TS-11",
+    "authority": "User removal-cycle ruling, 2026-09-21; cases_references.md REF-EXPIRES and representations.md retained row/leaf values and times."
+  },
+  {
+    "case": "owned",
+    "path": "/ticks/5/retired/0/children/left/children/0/value",
+    "rule": "TS-11",
+    "authority": "User removal-cycle ruling, 2026-09-21; cases_references.md REF-EXPIRES and representations.md retained row/leaf values and times."
+  },
+  {
+    "case": "assembled",
+    "path": "/ticks/5/retired/0/children/left/valid",
+    "rule": "TS-11",
+    "authority": "User removal-cycle ruling, 2026-09-21; cases_references.md REF-EXPIRES and representations.md retained row/leaf values and times."
+  },
+  {
+    "case": "assembled",
+    "path": "/ticks/5/retired/0/children/left/last",
+    "rule": "TS-11",
+    "authority": "User removal-cycle ruling, 2026-09-21; cases_references.md REF-EXPIRES and representations.md retained row/leaf values and times."
+  },
+  {
+    "case": "assembled",
+    "path": "/ticks/5/retired/0/children/left/value",
+    "rule": "TS-11",
+    "authority": "User removal-cycle ruling, 2026-09-21; cases_references.md REF-EXPIRES and representations.md retained row/leaf values and times."
+  },
+  {
+    "case": "assembled",
+    "path": "/ticks/5/retired/0/children/left/children/0/valid",
+    "rule": "TS-11",
+    "authority": "User removal-cycle ruling, 2026-09-21; cases_references.md REF-EXPIRES and representations.md retained row/leaf values and times."
+  },
+  {
+    "case": "assembled",
+    "path": "/ticks/5/retired/0/children/left/children/0/last",
+    "rule": "TS-11",
+    "authority": "User removal-cycle ruling, 2026-09-21; cases_references.md REF-EXPIRES and representations.md retained row/leaf values and times."
+  },
+  {
+    "case": "assembled",
+    "path": "/ticks/5/retired/0/children/left/children/0/value",
+    "rule": "TS-11",
+    "authority": "User removal-cycle ruling, 2026-09-21; cases_references.md REF-EXPIRES and representations.md retained row/leaf values and times."
+  },
+  {
+    "case": "mixed",
+    "path": "/ticks/5/retired/0/children/left/valid",
+    "rule": "TS-11",
+    "authority": "User removal-cycle ruling, 2026-09-21; cases_references.md REF-EXPIRES and representations.md retained row/leaf values and times."
+  },
+  {
+    "case": "mixed",
+    "path": "/ticks/5/retired/0/children/left/last",
+    "rule": "TS-11",
+    "authority": "User removal-cycle ruling, 2026-09-21; cases_references.md REF-EXPIRES and representations.md retained row/leaf values and times."
+  },
+  {
+    "case": "mixed",
+    "path": "/ticks/5/retired/0/children/left/value",
+    "rule": "TS-11",
+    "authority": "User removal-cycle ruling, 2026-09-21; cases_references.md REF-EXPIRES and representations.md retained row/leaf values and times."
+  },
+  {
+    "case": "mixed",
+    "path": "/ticks/5/retired/0/children/left/children/0/valid",
+    "rule": "TS-11",
+    "authority": "User removal-cycle ruling, 2026-09-21; cases_references.md REF-EXPIRES and representations.md retained row/leaf values and times."
+  },
+  {
+    "case": "mixed",
+    "path": "/ticks/5/retired/0/children/left/children/0/last",
+    "rule": "TS-11",
+    "authority": "User removal-cycle ruling, 2026-09-21; cases_references.md REF-EXPIRES and representations.md retained row/leaf values and times."
+  },
+  {
+    "case": "mixed",
+    "path": "/ticks/5/retired/0/children/left/children/0/value",
+    "rule": "TS-11",
+    "authority": "User removal-cycle ruling, 2026-09-21; cases_references.md REF-EXPIRES and representations.md retained row/leaf values and times."
+  },
+  {
+    "case": "owned",
+    "path": "/child_ticks/2/input/delta",
+    "rule": "TS-14",
+    "authority": "User fixed-collection ruling, 2026-09-22: invalid sampled descendants are unmodified and contribute no delta."
+  },
+  {
+    "case": "owned",
+    "path": "/child_ticks/2/input/children/left/delta",
+    "rule": "TS-14",
+    "authority": "User fixed-collection ruling, 2026-09-22: invalid sampled descendants are unmodified and contribute no delta."
+  },
+  {
+    "case": "mixed",
+    "path": "/child_ticks/2/input/delta",
+    "rule": "TS-14",
+    "authority": "User fixed-collection ruling, 2026-09-22: invalid sampled descendants are unmodified and contribute no delta."
+  },
+  {
+    "case": "mixed",
+    "path": "/child_ticks/2/input/children/left/delta",
+    "rule": "TS-14",
+    "authority": "User fixed-collection ruling, 2026-09-22: invalid sampled descendants are unmodified and contribute no delta."
+  },
+  {
+    "case": "owned_capture",
+    "path": "/ticks/5/retired/0/children/left/valid",
+    "rule": "TS-11",
+    "authority": "User removal-cycle ruling, 2026-09-21; cases_references.md REF-EXPIRES and representations.md retained row/leaf values and times."
+  },
+  {
+    "case": "owned_capture",
+    "path": "/ticks/5/retired/0/children/left/last",
+    "rule": "TS-11",
+    "authority": "User removal-cycle ruling, 2026-09-21; cases_references.md REF-EXPIRES and representations.md retained row/leaf values and times."
+  },
+  {
+    "case": "owned_capture",
+    "path": "/ticks/5/retired/0/children/left/value",
+    "rule": "TS-11",
+    "authority": "User removal-cycle ruling, 2026-09-21; cases_references.md REF-EXPIRES and representations.md retained row/leaf values and times."
+  },
+  {
+    "case": "owned_capture",
+    "path": "/ticks/5/retired/0/children/left/children/0/valid",
+    "rule": "TS-11",
+    "authority": "User removal-cycle ruling, 2026-09-21; cases_references.md REF-EXPIRES and representations.md retained row/leaf values and times."
+  },
+  {
+    "case": "owned_capture",
+    "path": "/ticks/5/retired/0/children/left/children/0/last",
+    "rule": "TS-11",
+    "authority": "User removal-cycle ruling, 2026-09-21; cases_references.md REF-EXPIRES and representations.md retained row/leaf values and times."
+  },
+  {
+    "case": "owned_capture",
+    "path": "/ticks/5/retired/0/children/left/children/0/value",
+    "rule": "TS-11",
+    "authority": "User removal-cycle ruling, 2026-09-21; cases_references.md REF-EXPIRES and representations.md retained row/leaf values and times."
+  },
+  {
+    "case": "mixed_capture",
+    "path": "/ticks/5/retired/0/children/left/valid",
+    "rule": "TS-11",
+    "authority": "User removal-cycle ruling, 2026-09-21; cases_references.md REF-EXPIRES and representations.md retained row/leaf values and times."
+  },
+  {
+    "case": "mixed_capture",
+    "path": "/ticks/5/retired/0/children/left/last",
+    "rule": "TS-11",
+    "authority": "User removal-cycle ruling, 2026-09-21; cases_references.md REF-EXPIRES and representations.md retained row/leaf values and times."
+  },
+  {
+    "case": "mixed_capture",
+    "path": "/ticks/5/retired/0/children/left/value",
+    "rule": "TS-11",
+    "authority": "User removal-cycle ruling, 2026-09-21; cases_references.md REF-EXPIRES and representations.md retained row/leaf values and times."
+  },
+  {
+    "case": "mixed_capture",
+    "path": "/ticks/5/retired/0/children/left/children/0/valid",
+    "rule": "TS-11",
+    "authority": "User removal-cycle ruling, 2026-09-21; cases_references.md REF-EXPIRES and representations.md retained row/leaf values and times."
+  },
+  {
+    "case": "mixed_capture",
+    "path": "/ticks/5/retired/0/children/left/children/0/last",
+    "rule": "TS-11",
+    "authority": "User removal-cycle ruling, 2026-09-21; cases_references.md REF-EXPIRES and representations.md retained row/leaf values and times."
+  },
+  {
+    "case": "mixed_capture",
+    "path": "/ticks/5/retired/0/children/left/children/0/value",
+    "rule": "TS-11",
+    "authority": "User removal-cycle ruling, 2026-09-21; cases_references.md REF-EXPIRES and representations.md retained row/leaf values and times."
+  },
+  {
+    "case": "owned_capture",
+    "path": "/child_ticks/2/input/delta",
+    "rule": "TS-14",
+    "authority": "User fixed-collection ruling, 2026-09-22: invalid sampled descendants are unmodified and contribute no delta."
+  },
+  {
+    "case": "owned_capture",
+    "path": "/child_ticks/2/input/children/left/delta",
+    "rule": "TS-14",
+    "authority": "User fixed-collection ruling, 2026-09-22: invalid sampled descendants are unmodified and contribute no delta."
+  },
+  {
+    "case": "mixed_capture",
+    "path": "/child_ticks/2/input/delta",
+    "rule": "TS-14",
+    "authority": "User fixed-collection ruling, 2026-09-22: invalid sampled descendants are unmodified and contribute no delta."
+  },
+  {
+    "case": "mixed_capture",
+    "path": "/child_ticks/2/input/children/left/delta",
+    "rule": "TS-14",
+    "authority": "User fixed-collection ruling, 2026-09-22: invalid sampled descendants are unmodified and contribute no delta."
+  },
+  {
+    "case": "owned_capture",
+    "path": "/ticks/2/a/delta",
+    "rule": "TS-14",
+    "authority": "User fixed-collection ruling, 2026-09-22: invalid sampled descendants are unmodified and contribute no delta."
+  },
+  {
+    "case": "owned_capture",
+    "path": "/ticks/2/a/children/left/delta",
+    "rule": "TS-14",
+    "authority": "User fixed-collection ruling, 2026-09-22: invalid sampled descendants are unmodified and contribute no delta."
+  },
+  {
+    "case": "owned_capture",
+    "path": "/ticks/7/a/delta",
+    "rule": "TS-14",
+    "authority": "User fixed-collection ruling, 2026-09-22: invalid sampled descendants are unmodified and contribute no delta."
+  },
+  {
+    "case": "owned_capture",
+    "path": "/ticks/7/a/children/left/delta",
+    "rule": "TS-14",
+    "authority": "User fixed-collection ruling, 2026-09-22: invalid sampled descendants are unmodified and contribute no delta."
+  },
+  {
+    "case": "mixed_capture",
+    "path": "/ticks/2/a/delta",
+    "rule": "TS-14",
+    "authority": "User fixed-collection ruling, 2026-09-22: invalid sampled descendants are unmodified and contribute no delta."
+  },
+  {
+    "case": "mixed_capture",
+    "path": "/ticks/2/a/children/left/delta",
+    "rule": "TS-14",
+    "authority": "User fixed-collection ruling, 2026-09-22: invalid sampled descendants are unmodified and contribute no delta."
+  },
+  {
+    "case": "mixed_capture",
+    "path": "/ticks/7/a/delta",
+    "rule": "TS-14",
+    "authority": "User fixed-collection ruling, 2026-09-22: invalid sampled descendants are unmodified and contribute no delta."
+  },
+  {
+    "case": "mixed_capture",
+    "path": "/ticks/7/a/children/left/delta",
+    "rule": "TS-14",
+    "authority": "User fixed-collection ruling, 2026-09-22: invalid sampled descendants are unmodified and contribute no delta."
+  }
+]
