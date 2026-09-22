@@ -193,8 +193,25 @@ impl Ctx<'_> {
     }
     /// Remove membership now, preserving the removed child this cycle.
     pub fn remove<T: Scalar>(&mut self, dict: DictOut<T>, key: i64) {
-        self.writes(dict.id());
-        self.store.remove(dict, key, self.now, self.schedule);
+        self.remove_shaped(dict.id(), key);
+    }
+    /// Create or restore a compound dictionary member in this node's scope.
+    pub fn get_or_create_shaped(&mut self, dict: OutputId, key: i64) -> OutputId {
+        self.writes(dict);
+        self.store
+            .get_or_create_shaped(dict, key, self.now, self.schedule)
+    }
+    /// Attach a compound child graph output without copying it.
+    pub fn attach_shaped(&mut self, dict: OutputId, key: i64, child: Reference) -> NodeResult {
+        self.writes(dict);
+        self.store
+            .attach_shaped(dict, key, child, self.now, self.schedule)
+            .map_err(|e| NodeError::new(format!("{e:?}")))
+    }
+    /// Remove a compound member, retaining its subtree for this cycle.
+    pub fn remove_shaped(&mut self, dict: OutputId, key: i64) {
+        self.writes(dict);
+        self.store.remove_shaped(dict, key, self.now, self.schedule);
     }
     /// Build and start a fresh scoped graph; roll back failed construction.
     pub fn create_child<T>(

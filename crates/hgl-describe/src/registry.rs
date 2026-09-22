@@ -5,9 +5,9 @@ use std::collections::HashMap;
 
 use hgl_kernel::Node;
 use hgl_store::{In, InputId, Out, OutputId, Scalar, Store};
-use hgl_types::{NodeId, NodeType, ScalarType, TsType};
+use hgl_types::{NodeId, NodeType, TsType};
 
-use crate::{BuildError, NodeDescription};
+use crate::{BuildError, ChildDescription, NodeDescription};
 
 /// The second half of a node, after its [`Node`] impl: its node type, and
 /// how it is made from its ports.
@@ -43,6 +43,7 @@ use crate::{BuildError, NodeDescription};
 ///             valid_inputs: None,
 ///             uses_scheduler: false,
 ///             schedule_on_start: false,
+///             child_graphs: 0,
 ///         }
 ///     }
 ///     fn build(ports: &mut Ports<'_>) -> Result<Self, BuildError> {
@@ -69,6 +70,7 @@ pub trait Buildable: Node + Sized {
 #[derive(Debug)]
 pub struct Ports<'a> {
     pub(crate) store: &'a mut Store,
+    pub(crate) registry: &'a Registry,
     /// The node being built: the owner of every port made for it.
     pub(crate) node: NodeId,
     pub(crate) node_type: &'a NodeType,
@@ -90,8 +92,7 @@ impl Ports<'_> {
         let Some(position) = inputs.iter().position(|&(input, _)| input == name) else {
             return Err(BuildError::unknown_input(label, name));
         };
-        let TsType::Ts(declared) = inputs[position].1;
-        if declared != T::TYPE {
+        if inputs[position].1 != TsType::Ts(T::TYPE) {
             return Err(BuildError::wrong_type(label, name));
         }
         if self.inputs[position].is_some() {
@@ -122,6 +123,56 @@ impl Ports<'_> {
         Ok(output)
     }
 
+    /// Allocate a recursively shaped input declared by this implementation.
+    pub fn shaped_input(&mut self, name: &str) -> Result<InputId, BuildError> {
+        let label = &self.description.label;
+        let Some(n) = self
+            .node_type
+            .inputs
+            .iter()
+            .position(|(field, _)| *field == name)
+        else {
+            return Err(BuildError::unknown_input(label, name));
+        };
+        if self.inputs[n].is_some() {
+            return Err(BuildError::bound_twice(label, name));
+        }
+        let id = self.store.add_shaped_input(
+            self.node,
+            self.node_type.inputs[n].1.clone(),
+            active(self.node_type, n),
+        );
+        self.inputs[n] = Some(id);
+        Ok(id)
+    }
+    /// Allocate the recursively shaped output declared by this implementation.
+    pub fn shaped_output(&mut self) -> Result<OutputId, BuildError> {
+        let label = &self.description.label;
+        let kind = self
+            .node_type
+            .output
+            .as_ref()
+            .ok_or_else(|| BuildError::no_output(label))?;
+        if self.output.is_some() {
+            return Err(BuildError::no_output(label));
+        }
+        let id = self.store.add_shaped_output(self.node, kind.clone());
+        self.output = Some(id);
+        Ok(id)
+    }
+    /// Shared projection and typed-handle reads during construction.
+    pub fn store(&self) -> &Store {
+        self.store
+    }
+    /// Implementations available to retained child templates.
+    pub fn registry(&self) -> &Registry {
+        self.registry
+    }
+    /// Reusable child templates; constructing the owner does not start them.
+    pub fn children(&self) -> &[ChildDescription] {
+        &self.description.children
+    }
+
     /// The scalar called `name`, as the description gives it.
     ///
     /// Errors: the description gives no such scalar, or gives another type.
@@ -141,10 +192,15 @@ impl Ports<'_> {
         for (position, (_, declared)) in self.node_type.inputs.iter().enumerate() {
             let active = active(self.node_type, position);
             let made = self.inputs[position];
-            inputs.push(made.unwrap_or_else(|| add_input(self.store, declared, self.node, active)));
+            inputs.push(made.unwrap_or_else(|| {
+                self.store
+                    .add_shaped_input(self.node, declared.clone(), active)
+            }));
         }
         let output = match (self.output, &self.node_type.output) {
-            (None, Some(declared)) => Some(add_output(self.store, declared, self.node)),
+            (None, Some(declared)) => {
+                Some(self.store.add_shaped_output(self.node, declared.clone()))
+            }
             (made, _) => made,
         };
         (inputs, output)
@@ -160,26 +216,8 @@ fn active(node_type: &NodeType, position: usize) -> bool {
     }
 }
 
-/// An input the build did not ask for, made from its declared type.
-fn add_input(store: &mut Store, declared: &TsType, owner: NodeId, active: bool) -> InputId {
-    match declared {
-        TsType::Ts(ScalarType::Bool) => store.add_input::<bool>(owner, active).id(),
-        TsType::Ts(ScalarType::I64) => store.add_input::<i64>(owner, active).id(),
-        TsType::Ts(ScalarType::F64) => store.add_input::<f64>(owner, active).id(),
-    }
-}
-
-/// An output the build did not ask for, made from its declared type.
-fn add_output(store: &mut Store, declared: &TsType, owner: NodeId) -> OutputId {
-    match declared {
-        TsType::Ts(ScalarType::Bool) => store.add_output::<bool>(owner).id(),
-        TsType::Ts(ScalarType::I64) => store.add_output::<i64>(owner).id(),
-        TsType::Ts(ScalarType::F64) => store.add_output::<f64>(owner).id(),
-    }
-}
-
 /// What the registry keeps for one implementation.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct Implementation {
     pub(crate) node_type: NodeType,
     /// `N::build` for its `N`, boxed: one shape for every implementation.
@@ -188,7 +226,7 @@ pub(crate) struct Implementation {
 
 /// Every implementation a description may name, by the name it is
 /// registered under.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Registry {
     implementations: HashMap<&'static str, Implementation>,
 }
@@ -243,6 +281,12 @@ fn check_node_type(node_type: &NodeType) -> Result<(), BuildError> {
         node: node_type.name,
         what,
     };
+    for (_, kind) in &node_type.inputs {
+        hgl_plan::check_shape(kind)?;
+    }
+    if let Some(kind) = &node_type.output {
+        hgl_plan::check_shape(kind)?;
+    }
     let inputs = &node_type.inputs;
     for (position, &(input, _)) in inputs.iter().enumerate() {
         if inputs[..position]
@@ -263,4 +307,10 @@ fn check_node_type(node_type: &NodeType) -> Result<(), BuildError> {
         }
     }
     Ok(())
+}
+
+impl hgl_plan::Catalog for Registry {
+    fn node_type(&self, implementation: &str) -> Option<&NodeType> {
+        Registry::node_type(self, implementation)
+    }
 }

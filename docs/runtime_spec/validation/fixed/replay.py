@@ -10,7 +10,8 @@ import sys
 from evidence import atomic_write, render
 from harness_identity import verified_harness
 
-ROOT = Path(__file__).absolute().parent
+TOOLS = Path(__file__).absolute().parent
+ROOT = TOOLS
 
 
 def digest(value):
@@ -48,31 +49,34 @@ def run_json(interpreter, script):
 
 
 def candidate_identity(interpreter):
-    identity = run_json(interpreter, ROOT / 'native_identity.py')
-    identity['candidate_python_identity'] = run_json(interpreter, ROOT / 'reference_identity.py')
+    identity = run_json(interpreter, TOOLS / 'native_identity.py')
+    identity['candidate_python_identity'] = run_json(interpreter, TOOLS / 'reference_identity.py')
     return identity
 
 
 def verify_identities(args, reference, candidate):
     if candidate_identity(args.candidate_python) != candidate:
         raise RuntimeError('Candidate installation changed during replay')
-    if run_json(args.reference_python, ROOT / 'reference_identity.py') != reference:
+    if run_json(args.reference_python, TOOLS / 'reference_identity.py') != reference:
         raise RuntimeError('Reference installation changed during replay')
 
 
 def main():
+    global ROOT
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--corpus', type=trusted_directory, default=ROOT)
     parser.add_argument('--harness', type=trusted_directory, required=True)
     parser.add_argument('--reference-python', type=trusted_interpreter, required=True)
     parser.add_argument('--candidate-python', type=trusted_interpreter, required=True)
     parser.add_argument('--raw-results', type=Path, required=True)
     args = parser.parse_args()
+    ROOT = args.corpus
     with verified_harness(args.harness, ROOT / 'adapter.patch') as (harness, identity):
         replay(args, harness, identity)
 
 
 def replay(args, harness, identity):
-    reference = run_json(args.reference_python, ROOT / 'reference_identity.py')
+    reference = run_json(args.reference_python, TOOLS / 'reference_identity.py')
     candidate = candidate_identity(args.candidate_python)
     sys.path.insert(0, str(harness))
     from tools.parity.catalog import validate_recipe

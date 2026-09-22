@@ -1,6 +1,6 @@
 # 0006 — What we need to do, and in what order
 
-Status: sketch
+Status: sketch; compiler sequence clarified by the user, 2026-09-22
 
 The order of work for the shape in [0005](0005-code-shape.md). **The runtime
 comes first**: it is the target, and nothing can be emitted for, or ported to,
@@ -77,8 +77,8 @@ Begun once A4 is solid; it does not wait for A7.
 | # | Step | Done when |
 |---|---|---|
 | B0 | **Write by hand what the emitter should emit.** For a spread of corpus files (`midpoint`, `stateful-node`, `when-defaults`, `structural-types`, a conditional, a map) write the Rust a compiler *ought* to generate against the wiring API. This is the emitter's specification, and the first real test of whether the wiring API is pleasant to target | The hand-written versions pass the `.hgl` files' own `assert eval` expectations |
-| B1 | **Decide the compiler route**, with a real target in hand. Two questions. *What does the compiler emit?* Either code that performs the wiring when run (what hgraph does today; the runtime must then supply and specify the whole wiring interface, type and operator resolution included), or a **stored graph description** the runtime loads and instantiates directly (wiring then lives in the compiler and the runtime tracks only the description — see the [runtime specification](../runtime_spec/graph.md)). *Where does the compiler live?* (a) a new emitter inside the existing C++ compiler — its emitter is already a pure IR → text pass; (b) the C++ compiler writes its IR as JSON and the emitter lives here, in Rust; (c) a Rust front end. Cheapest first; (c) only if the method is to be tested on a compiler too | Recorded in `decisions/` |
-| B2 | **The emitter**, held to B0's output | Every `.hgl` corpus case gives the ticks the reference gives |
+| B1 | **Review the Rust compiler rebuild**, once the runtime and description target are sufficient. Survey existing Rust infrastructure for parsing, diagnostics, source tracking, incremental analysis, testing and emission. Compare it with the upstream HGL contracts and decide the architecture and dependencies before implementation. The C++ compiler is a reference, not the new front end | Reviewed design for Rust compile, check and emit; dependency choices recorded in `decisions/` |
+| B2 | **Build the compiler in Rust**, with compile, check and emit held to B0's target and the reviewed design | Supported `.hgl` corpus cases give the specified diagnostics and runtime ticks |
 | B3 | **Natives and the standard library**: the Rust projection of `native fn` (upstream first — ADR 0008 target mappings), then the stdlib `.hgl` sources compiling for this runtime | The upstream stdlib tests pass here |
 | B4 | **Scripted runs** (`hgl test`, `hgl run` without a build step): an interpreter over Graph IR, if still wanted | Parity with generated code on the corpus |
 | B5 | **The outside world**: PyO3, then one adaptor (Kafka or Arrow) to prove "leverage existing frameworks" | A Python function runs as a node; a live source drives a graph |

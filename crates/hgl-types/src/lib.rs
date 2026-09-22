@@ -108,12 +108,64 @@ impl ScalarValue {
     }
 }
 
-/// P1 has one kind. The enum is closed: a new kind makes every `match` fail
-/// to compile until it is handled.
+/// Recursive shape, independent of endpoint bindings.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TsType {
-    /// `TS[scalar]`: a time-series of one scalar value.
+    /// A scalar column.
     Ts(ScalarType),
+    /// An i64 keyed dictionary.
+    Dictionary(Box<TsType>),
+    /// A designation to this shape.
+    Reference(Box<TsType>),
+    /// Fixed element shape and length.
+    List(Box<TsType>, usize),
+    /// Ordered, named fields.
+    Bundle(Vec<(String, TsType)>),
+}
+impl TsType {
+    /// Scalar column type. Aggregates have no scalar column.
+    /// # Panics
+    /// Called on a non-scalar shape.
+    pub fn scalar(&self) -> ScalarType {
+        let Self::Ts(t) = self else {
+            unreachable!("not a scalar endpoint")
+        };
+        *t
+    }
+    /// Number of dense children.
+    pub fn len(&self) -> usize {
+        match self {
+            Self::List(_, n) => *n,
+            Self::Bundle(fields) => fields.len(),
+            Self::Ts(_) | Self::Dictionary(_) | Self::Reference(_) => 0,
+        }
+    }
+    /// Whether the shape has no dense children.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+    /// Fixed child shape at a wiring-time position.
+    pub fn child(&self, position: usize) -> &Self {
+        match self {
+            Self::List(child, n) if position < *n => child,
+            Self::Bundle(fields) => &fields[position].1,
+            Self::Ts(_) | Self::Dictionary(_) | Self::Reference(_) | Self::List(_, _) => {
+                unreachable!("not a fixed child")
+            }
+        }
+    }
+    /// Resolve a declared field while wiring.
+    pub fn field(&self, name: &str) -> Option<usize> {
+        if let Self::Bundle(fields) = self {
+            fields.iter().position(|(n, _)| n == name)
+        } else {
+            None
+        }
+    }
+    /// Whether this shape is a fixed collection.
+    pub fn fixed(&self) -> bool {
+        matches!(self, Self::List(..) | Self::Bundle(_))
+    }
 }
 
 /// What part a node plays in its graph.
@@ -141,6 +193,8 @@ pub enum NodeKind {
 pub struct NodeType {
     /// The name shared by every node of this type.
     pub name: &'static str,
+    /// Number of reusable child graph templates required by this implementation.
+    pub child_graphs: usize,
     /// The time-series inputs, by name.
     pub inputs: Vec<(&'static str, TsType)>,
     /// `None`: the node has no output.
@@ -163,9 +217,11 @@ pub struct NodeType {
 impl NodeType {
     /// From the signature: no inputs and an output is a pull source; inputs
     /// and an output, compute; inputs and no output, a sink; neither, compute
-    /// (as hgraph). P1 never yields `PushSource` or `Nested`: a stored kind
-    /// arrives with the slice that needs one.
+    /// (as hgraph). Owning child templates makes the node nested.
     pub fn kind(&self) -> NodeKind {
+        if self.child_graphs > 0 {
+            return NodeKind::Nested;
+        }
         let has_inputs = !self.inputs.is_empty();
         let has_output = self.output.is_some();
         match (has_inputs, has_output) {

@@ -235,3 +235,19 @@ fn release_scope<W: Wake>(&mut self, scope: ScopeId, now: EngineTime, wake: &mut
 fn take_wake(&mut self, scope: ScopeId) -> Option<NodeId>;
 fn take_child(&mut self, owner: NodeId) -> Option<ScopeId>;
 ```
+
+## Fixed collection slice
+
+`add_shaped_output(owner, Kind)` and `add_shaped_input(owner, Kind, active)`
+construct recursive endpoints. `scalar_output<T>(id)` / `scalar_input<T>(id)`
+validate leaf shapes once and return the existing typed handles. All steady
+scalar access retains its column path. `items_reference(kind, children)`
+constructs a reusable designation; `attach_shaped` and `get_or_create_shaped`
+allow compound TSD members. `remove_shaped` removes them by key. Observation
+uses `bindings()` and dense child positions, retaining invalid fields as nil;
+field names are resolved at construction, never per tick.
+
+`attach_shaped(dict: OutputId, key: i64, child: Reference, now, wake)` requires
+a generation-checked peer designation; empty, expired and assembled values
+return `InvalidReference`. `get_or_create_shaped` replaces a removed stopped
+writer with fresh storage rather than reviving its retired descendants.
