@@ -44,7 +44,28 @@ class Comparisons(unittest.TestCase):
             with self.assertRaises(AssertionError):
                 check.verify(evidence)
             with self.assertRaises(ValueError):
-                check.assess({'owned':{'events':['start','stop','start','stop']}},evidence['cases'])
+                check.assess({'owned':{'events':['start','stop','start','stop']}},{'owned':evidence['cases']['owned']})
+
+    def test_missing_or_extra_runtime_is_rejected(self):
+        original=json.loads((ROOT/'observed.json').read_text())
+        for side in ['python','cpp','extra']:
+            evidence=copy.deepcopy(original)
+            if side=='extra':
+                evidence['cases']['owned'][side]=evidence['cases']['owned']['python']
+            else:
+                del evidence['cases']['owned'][side]
+            with self.assertRaises(AssertionError):
+                check.verify(evidence)
+            with self.assertRaises(ValueError):
+                check.assess({'owned':{'value':7}},{'owned':evidence['cases']['owned']})
+
+    def test_missing_case_is_rejected(self):
+        evidence=json.loads((ROOT/'observed.json').read_text())
+        del evidence['cases']['owned']
+        with self.assertRaises(AssertionError):
+            check.verify(evidence)
+        with self.assertRaises(ValueError):
+            check.assess({'owned':{'value':7}},evidence['cases'])
 
     def test_evidence_is_untampered(self):
         evidence=json.loads((ROOT/'observed.json').read_text())

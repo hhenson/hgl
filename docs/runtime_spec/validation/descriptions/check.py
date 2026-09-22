@@ -39,7 +39,10 @@ def verify(evidence):
     for name in ['reference_identity','candidate_python_identity']:
         identity = p[name]
         assert digest({k:v for k,v in identity.items() if k != 'identity_sha256'}) == identity['identity_sha256']
+    expected_cases=json.loads((ROOT / 'reasoned.json').read_text())['cases']
+    assert set(evidence['cases']) == set(expected_cases), 'Every reasoned case needs replay evidence'
     for case, sides in evidence['cases'].items():
+        assert set(sides) == {'python','cpp'}, 'Both runtime records are required'
         recipe = json.loads((ROOT / 'recipes' / (case + '.json')).read_text())
         fingerprint = hashlib.sha256(json.dumps(recipe,sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()).hexdigest()
         for side in sides.values():
@@ -51,7 +54,11 @@ def verify(evidence):
 
 def assess(reasoned, observed):
     results=[]
+    if set(reasoned) != set(observed):
+        raise ValueError('Every reasoned case needs replay evidence')
     for case, expected in reasoned.items():
+        if set(observed[case]) != {'python','cpp'}:
+            raise ValueError('Both runtime records are required')
         for path, wanted, projection in assertions(expected):
             sides={}
             for side, record in observed[case].items():
