@@ -202,7 +202,7 @@ impl Ctx<'_> {
             .get_or_create_shaped(dict, key, self.now, self.schedule)
     }
     /// Attach a compound child graph output without copying it.
-    pub fn attach_shaped(&mut self, dict: OutputId, key: i64, child: OutputId) -> NodeResult {
+    pub fn attach_shaped(&mut self, dict: OutputId, key: i64, child: Reference) -> NodeResult {
         self.writes(dict);
         self.store
             .attach_shaped(dict, key, child, self.now, self.schedule)

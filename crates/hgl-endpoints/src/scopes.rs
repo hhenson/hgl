@@ -45,6 +45,8 @@ pub struct Scopes {
     pub entries: Vec<Scope>,
     /// Scope mailbox storage.
     pub free: Vec<usize>,
+    /// Stopped scopes whose output references retain ancestry until the next cycle.
+    pub retired: Vec<usize>,
     /// Scope mailbox storage.
     pub current: ScopeId,
 }
@@ -56,6 +58,7 @@ impl Default for Scopes {
                 ..Scope::default()
             }],
             free: Vec::new(),
+            retired: Vec::new(),
             current: ScopeId::default(),
         }
     }

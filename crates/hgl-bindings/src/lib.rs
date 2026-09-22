@@ -25,6 +25,8 @@ pub enum BindError {
     },
     /// Different endpoint shapes.
     ShapeMismatch,
+    /// Attachment requires a live generation-checked peer.
+    InvalidReference,
     /// A plain bind cannot replace an existing binding.
     AlreadyBound(InputId),
     /// A reference would route against graph rank.
@@ -533,6 +535,7 @@ impl Bindings {
             self.expire(id);
             self.retired.swap_remove(n);
         }
+        self.scopes.free.append(&mut self.scopes.retired);
     }
 }
 

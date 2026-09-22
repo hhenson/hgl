@@ -41,6 +41,11 @@ impl Bindings {
     pub fn removed_output(&self, id: OutputId, key: i64) -> Option<OutputId> {
         self.output(id).members.removed.get(&key).copied()
     }
+    /// A removed output whose writer is still alive and can retain ownership.
+    pub fn restorable_output(&self, id: OutputId, key: i64) -> Option<OutputId> {
+        self.removed_output(id, key)
+            .filter(|&id| self.output(id).alive && self.scopes.alive(self.output(id).scope))
+    }
     /// Retained removed input view.
     pub fn removed_input(&self, id: InputId, key: i64) -> Option<InputId> {
         self.input(id).members.removed.get(&key).copied()
@@ -85,6 +90,16 @@ impl Bindings {
         now: EngineTime,
         wake: &mut W,
     ) -> Result<(), BindError> {
+        for id in [dict, child] {
+            if self
+                .endpoints
+                .outputs
+                .get(id.0 as usize)
+                .is_none_or(|o| !o.alive || !self.scopes.alive(o.scope))
+            {
+                return Err(BindError::UnknownOutput(id));
+            }
+        }
         if !matches!(&self.output(dict).kind, Kind::Dictionary(child_kind) if child_kind.as_ref() == &self.output(child).kind)
         {
             return Err(BindError::ShapeMismatch);

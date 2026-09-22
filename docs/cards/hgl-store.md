@@ -246,3 +246,8 @@ constructs a reusable designation; `attach_shaped` and `get_or_create_shaped`
 allow compound TSD members. `remove_shaped` removes them by key. Observation
 uses `bindings()` and dense child positions, retaining invalid fields as nil;
 field names are resolved at construction, never per tick.
+
+`attach_shaped(dict: OutputId, key: i64, child: Reference, now, wake)` requires
+a generation-checked peer designation; empty, expired and assembled values
+return `InvalidReference`. `get_or_create_shaped` replaces a removed stopped
+writer with fresh storage rather than reviving its retired descendants.

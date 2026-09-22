@@ -67,13 +67,16 @@ impl Store {
         if let Some(id) = self.bindings.child_output(dict, key) {
             return id;
         }
-        let id = self.bindings.removed_output(dict, key).unwrap_or_else(|| {
-            let o = self.bindings.output(dict);
-            let Kind::Dictionary(child) = &o.kind else {
-                unreachable!("not a dictionary")
-            };
-            self.add_shaped_output(o.owner, *child.clone())
-        });
+        let id = self
+            .bindings
+            .restorable_output(dict, key)
+            .unwrap_or_else(|| {
+                let o = self.bindings.output(dict);
+                let Kind::Dictionary(child) = &o.kind else {
+                    unreachable!("not a dictionary")
+                };
+                self.add_shaped_output(o.owner, *child.clone())
+            });
         let result = self.bindings.insert(dict, key, id, now, wake);
         debug_assert!(result.is_ok());
         id
@@ -83,10 +86,14 @@ impl Store {
         &mut self,
         dict: OutputId,
         key: i64,
-        child: OutputId,
+        child: Reference,
         now: EngineTime,
         wake: &mut W,
     ) -> Result<(), BindError> {
+        let child = self
+            .bindings
+            .resolve(child)
+            .ok_or(BindError::InvalidReference)?;
         self.bindings.insert(dict, key, child, now, wake)
     }
     /// Remove a compound dictionary member for next-cycle retirement.

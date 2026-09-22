@@ -42,7 +42,7 @@ existing line budgets. Local Windows had no Cargo; hosted Windows CI is
 reported on the PR.
 
 `python3 tools/dynamic_mutants.py` tests a disposable checkout, then tests the
-restored baseline. Twenty-eight compiled mutations fail their intended tests:
+restored baseline. Thirty-one compiled mutations fail their intended tests:
 generation checking/wraparound, endpoint and child-view expiry, sample time, repeated following,
 subscription detachment, collection activity, ancestor wakes, released-child
 mailboxes, retained deadlines, duplicate child evaluation, failed-start stop,
@@ -77,10 +77,19 @@ wiring and reused when switching; their arena lasts for the Store.
 
 Tests also cover rejected shape/rank changes, compound subtree expiry,
 same-cycle restoration, bounded endpoint/subscription churn and 10,000 warmed
-nested ticks/REF switches with zero allocations. Eight fixed-slice mutations
+nested ticks/REF switches with zero allocations. Eleven fixed-slice mutations
 exercise duplicate REF ticks, unchanged-child resampling, reset, immediate
-all_valid, subtree expiry, descendant rank, ancestor timestamps and compound dictionary sample time.
+all_valid, subtree expiry, descendant rank, ancestor timestamps, compound dictionary sample time, stopped-writer
+restoration, dead-endpoint insertion and premature scope reuse.
 
 [Paired measurements](../bench/results/2026-09-22-fixed-collections.md) cover
 native owned/assembled TSL[TSB] graphs and alternating whole REF routes.
 They do not establish a performance bound for every dynamic nested graph.
+
+Removed outputs from a stopped child scope remain readable through the removal
+cycle but cannot be restored. Recreating the key allocates fresh storage owned
+by the parent. Compound attachment takes a generation-checked `Reference`,
+rejecting expired children even after their slots have been reused.
+
+Scope slots also wait for the next cycle before reuse, preserving retained
+references' original graph rank through the removal cycle.

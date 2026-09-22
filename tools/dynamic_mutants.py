@@ -109,6 +109,15 @@ cases = [('child_start_stop',
 
 # Accepted fixed timelines and lifecycle shields exercise these independent errors.
 cases.extend([
+ ('premature_scope_reuse', 'crates/hgl-bindings/src/scopes.rs',
+  'self.scopes.retired.push(scope.index);', 'self.scopes.free.push(scope.index);',
+  ['-p', 'hgl-store', '--test', 'fixed_lifetime', 'a_new_child_scope']),
+ ('stopped_writer_restoration', 'crates/hgl-store/src/fixed.rs',
+  '.restorable_output(dict, key)', '.removed_output(dict, key)',
+  ['-p', 'hgl-store', '--test', 'fixed_lifetime', 'stopped_writer']),
+ ('dead_endpoint_insertion', 'crates/hgl-bindings/src/collections.rs',
+  '!o.alive || !self.scopes.alive(o.scope)', 'false',
+  ['-p', 'hgl-bindings', '--test', 'admission', 'stopped_scope']),
  ('compound_sample_time', 'crates/hgl-bindings/src/collections.rs',
   'if sampled && self.output(output).modified_at != EngineTime::NEVER {', 'if false {',
   ['-p', 'hgl-store', '--test', 'fixed_edges', 'sampling_dictionary']),

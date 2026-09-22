@@ -258,17 +258,14 @@ impl Store {
         scalar: ScalarType,
         dictionary: bool,
     ) -> OutputId {
-        self.bindings
-            .add_output(
-                owner,
-                Kind::Reference(Box::new(if dictionary {
-                    Kind::Dictionary(Box::new(Kind::Scalar(scalar)))
-                } else {
-                    Kind::Scalar(scalar)
-                })),
-                0,
-            )
-            .0
+        self.add_shaped_output(
+            owner,
+            Kind::Reference(Box::new(if dictionary {
+                Kind::Dictionary(Box::new(Kind::Scalar(scalar)))
+            } else {
+                Kind::Scalar(scalar)
+            })),
+        )
     }
     /// Follow designation changes and target publications independently.
     pub fn follow<W: Wake>(

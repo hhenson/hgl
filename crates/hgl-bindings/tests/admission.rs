@@ -108,3 +108,38 @@ fn each_shape_notifies_only_when_it_becomes_invalid() -> Result<(), hgl_bindings
     }
     Ok(())
 }
+
+#[test]
+fn stopped_scope_outputs_remain_readable_but_cannot_be_inserted()
+-> Result<(), hgl_bindings::BindError> {
+    let mut bindings = Bindings::default();
+    let root = bindings.scope();
+    let scalar = Kind::Scalar(ScalarType::I64);
+    let (dict, _) = bindings.add_output(NodeId(0), Kind::Dictionary(Box::new(scalar.clone())), 0);
+    let scope = bindings.child_scope(NodeId(0));
+    bindings.enter_scope(scope);
+    let (child, _) = bindings.add_output(NodeId(0), scalar, 0);
+    let saved = bindings.reference(child);
+    bindings.enter_scope(root);
+    let now = EngineTime::MIN_START;
+    bindings.insert(dict, 0, child, now, &mut Wakes::default())?;
+    bindings.release_scope(scope, now, &mut Wakes::default());
+    assert_eq!(bindings.resolve(saved), Some(child));
+    assert_eq!(
+        bindings.insert(dict, 0, child, now, &mut Wakes::default()),
+        Err(hgl_bindings::BindError::UnknownOutput(child))
+    );
+    assert_eq!(bindings.child_output(dict, 0), None);
+    bindings.begin_cycle(EngineTime::from_micros(2));
+    assert_eq!(
+        bindings.insert(
+            dict,
+            0,
+            child,
+            EngineTime::from_micros(2),
+            &mut Wakes::default()
+        ),
+        Err(hgl_bindings::BindError::UnknownOutput(child))
+    );
+    Ok(())
+}

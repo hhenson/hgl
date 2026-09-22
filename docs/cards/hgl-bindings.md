@@ -81,7 +81,7 @@ enum Kind {
 enum BindError {
     UnknownInput(InputId), UnknownOutput(OutputId),
     TypeMismatch { input: ScalarType, output: ScalarType },
-    ShapeMismatch, AlreadyBound(InputId), BackwardReference,
+    ShapeMismatch, InvalidReference, AlreadyBound(InputId), BackwardReference,
 }
 trait Wake { fn wake(&mut self, node: NodeId); }
 struct Input { source: Option<OutputId>, slot: u32, kind: Kind, /* private */ }
@@ -124,6 +124,7 @@ fn begin_cycle(&mut self, now: EngineTime);
 fn child_output(&self, id: OutputId, key: i64) -> Option<OutputId>;
 fn child_input(&self, id: InputId, key: i64) -> Option<InputId>;
 fn removed_output(&self, id: OutputId, key: i64) -> Option<OutputId>;
+fn restorable_output(&self, id: OutputId, key: i64) -> Option<OutputId>;
 fn removed_input(&self, id: InputId, key: i64) -> Option<InputId>;
 fn keys(&self, id: InputId) -> impl Iterator<Item = i64> + '_;
 fn changed_keys(&self, id: InputId) -> &[i64];
@@ -147,3 +148,9 @@ fn take_wake(&mut self, scope: ScopeId) -> Option<NodeId>;
 fn take_child(&mut self, owner: NodeId) -> Option<ScopeId>;
 fn release_scope<W: Wake>(&mut self, scope: ScopeId, now: EngineTime, wake: &mut W);
 ```
+
+A retained removed output from a stopped scope remains readable for its removal
+cycle but cannot be reattached. `restorable_output` admits only a live writer;
+restoration otherwise allocates fresh parent-owned storage. Insertion rejects
+dead endpoints and stopped scopes before changing membership. Compound
+attachment uses a peer `Reference`, checking generation even after slot reuse.
