@@ -1,7 +1,7 @@
 # TSL and TSB runtime slice
 
-Status: design review; implementation waits for the unresolved
-[contract decisions](runtime_spec/validation/fixed/README.md).
+Status: design review; [contract rulings](runtime_spec/validation/fixed/README.md)
+recorded; implementation remains to be done.
 
 The current scalar-shaped endpoint model cannot represent this slice.
 `Dictionary(ScalarType)` and the REF `dictionary` flag must become recursive
@@ -11,9 +11,9 @@ leave nested fields, dictionary children and REF targets incompatible.
 | Area | Required change |
 |---|---|
 | Shape | Describe scalars, fixed list length, named bundle fields, dictionary child shape and REF target shape independently of bindings. Reject incompatible shapes before changing any binding. |
-| Storage | Keep scalar columns and generation-checked handles. Allocate fixed child slots when the graph instance is built; use dense positional access. Field-name lookup belongs to graph construction. |
-| Binding | A fixed input retains its children through whole-output, child-reference and empty bindings. Each child can itself be peered or assembled. REF designation identity includes its nested structure. |
-| Observation | Derive assembled validity and modification from children. Sampling affects input views, never producer time. Parent deltas preserve child deltas and fixed positions. |
+| Storage | Keep scalar columns and generation-checked handles. Allocate fixed child slots when the graph instance is built; use dense positional access. Field-name lookup belongs to graph construction. TSB values preserve all declared fields; invalid child values are nil. |
+| Binding | A fixed input retains its children through whole-output, child-reference and empty bindings. Each child can itself be peered or assembled. REF designation identity includes its nested structure; equal designations cause no additional tick. Rebinding preserves unchanged child targets. |
+| Observation | Maintain assembled state from child events; cache aggregate time and modification instead of requiring read-time scans. Retain child-change time while the structure is valid; reset it and descendant observations to `never` when invalid. Sampling affects input views, never producer time. Parent deltas preserve child deltas and fixed positions. |
 | Notification | Carry child notifications through every assembled ancestor, even when no child reads modified. Activity controls scheduling, not readability. |
 | Lifetime | Retire a removed TSD member's entire fixed subtree at the next cycle. Clear descendant bindings and expire saved references before reusing slots. |
 | Child graphs | Reuse the existing scope and timer machinery. Bind nested inputs before start; preserve their peering and sample state. Detach recursively on stop and removal. |
