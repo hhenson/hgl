@@ -535,7 +535,7 @@ impl Bindings {
             self.expire(id);
             self.retired.swap_remove(n);
         }
-        self.scopes.free.append(&mut self.scopes.retired);
+        self.scopes.reclaim(now, fresh_run);
     }
 }
 

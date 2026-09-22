@@ -77,6 +77,7 @@ fn a_new_child_scope_cannot_change_the_rank_of_a_retained_reference() -> Result<
     let saved = store.reference(output.id());
     store.enter_scope(root);
     store.release_scope(old_scope, at(1), &mut Quiet);
+    store.begin_cycle(at(1));
     let _new_scope = store.child_scope(NodeId(3));
     store.sample(input.id(), saved, at(1), &mut Quiet)?;
     assert_eq!(store.get(input), 7);

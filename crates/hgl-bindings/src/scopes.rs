@@ -126,7 +126,7 @@ impl Bindings {
         s.phase = Phase::Dead;
         if let Some(g) = s.generation.checked_add(1) {
             s.generation = g;
-            self.scopes.retired.push(scope.index);
+            self.scopes.retired.push((scope.index, now));
         }
     }
     pub(crate) fn forget_output(&mut self, output: OutputId) {

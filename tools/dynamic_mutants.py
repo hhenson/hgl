@@ -110,7 +110,7 @@ cases = [('child_start_stop',
 # Accepted fixed timelines and lifecycle shields exercise these independent errors.
 cases.extend([
  ('premature_scope_reuse', 'crates/hgl-bindings/src/scopes.rs',
-  'self.scopes.retired.push(scope.index);', 'self.scopes.free.push(scope.index);',
+  'self.scopes.retired.push((scope.index, now));', 'self.scopes.free.push(scope.index);',
   ['-p', 'hgl-store', '--test', 'fixed_lifetime', 'a_new_child_scope']),
  ('stopped_writer_restoration', 'crates/hgl-store/src/fixed.rs',
   '.restorable_output(dict, key)', '.removed_output(dict, key)',

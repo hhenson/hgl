@@ -47,6 +47,8 @@ fn add_output(&mut self, owner: NodeId, kind: Kind, next_slot: u32, scope: Scope
 fn add_input(&mut self, owner: NodeId, kind: Kind, active: bool, scope: ScopeId) -> InputId;
 ```
 
-Stopped scope slots enter `Scopes::retired` and become reusable only at the
+Stopped scope slots and their retirement time enter `Scopes::retired` and become reusable only at the
 next cycle boundary. Retained output references still need their original
 scope ancestry to validate forward bindings during the removal cycle.
+`Scopes::reclaim(EngineTime, bool)` shares the output expiry boundary, including
+independent root runs; entering the retirement cycle itself does not reclaim.
