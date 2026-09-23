@@ -1,0 +1,18 @@
+module spike.tools
+
+# Named structure containing fixed collections.
+struct Pair {
+    left: list<i64, 2>
+    right: list<i64, 2>
+}
+
+fn affine(
+    x: i64,
+    y: i64
+) -> i64 =>
+    x +
+    y * 2
+
+fn grouped(x: i64, y: i64) -> i64 => (x + y) * 2
+fn forward(value: ref<Pair>) -> ref<Pair> => value
+fn nested(value: list<ref<list<i64, 2>>, 2>) -> list<ref<list<i64, 2>>, 2> => value

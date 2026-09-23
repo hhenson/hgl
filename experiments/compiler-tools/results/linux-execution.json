@@ -1,0 +1,590 @@
+[
+  {
+    "case": "hand_lex",
+    "iterations": "2000",
+    "nanoseconds": "1214170",
+    "repetition": 0
+  },
+  {
+    "case": "logos_lex",
+    "iterations": "2000",
+    "nanoseconds": "2523143",
+    "repetition": 0
+  },
+  {
+    "case": "hand_parse",
+    "iterations": "2000",
+    "nanoseconds": "2765578",
+    "repetition": 0
+  },
+  {
+    "case": "chumsky_parse",
+    "iterations": "2000",
+    "nanoseconds": "6823493",
+    "repetition": 0
+  },
+  {
+    "case": "hand_pipeline",
+    "iterations": "2000",
+    "nanoseconds": "4596938",
+    "repetition": 0
+  },
+  {
+    "case": "candidate_pipeline",
+    "iterations": "2000",
+    "nanoseconds": "9611576",
+    "repetition": 0
+  },
+  {
+    "case": "hand_recovery",
+    "iterations": "2000",
+    "nanoseconds": "838233",
+    "repetition": 0
+  },
+  {
+    "case": "chumsky_recovery",
+    "iterations": "2000",
+    "nanoseconds": "4574203",
+    "repetition": 0
+  },
+  {
+    "case": "text_emit",
+    "iterations": "2000",
+    "nanoseconds": "3756321",
+    "repetition": 0
+  },
+  {
+    "case": "token_emit_formatted",
+    "iterations": "2000",
+    "nanoseconds": "114905105",
+    "repetition": 0
+  },
+  {
+    "case": "text_emit_formatted",
+    "iterations": "2000",
+    "nanoseconds": "106447298",
+    "repetition": 0
+  },
+  {
+    "case": "hand_parse_100_functions",
+    "iterations": "100",
+    "nanoseconds": "2901182",
+    "repetition": 0
+  },
+  {
+    "case": "chumsky_parse_100_functions",
+    "iterations": "100",
+    "nanoseconds": "7057917",
+    "repetition": 0
+  },
+  {
+    "case": "rowan_storage_roundtrip",
+    "iterations": "2000",
+    "nanoseconds": "10295737",
+    "repetition": 0
+  },
+  {
+    "case": "hand_lex",
+    "iterations": "2000",
+    "nanoseconds": "1020618",
+    "repetition": 1
+  },
+  {
+    "case": "logos_lex",
+    "iterations": "2000",
+    "nanoseconds": "2185234",
+    "repetition": 1
+  },
+  {
+    "case": "hand_parse",
+    "iterations": "2000",
+    "nanoseconds": "2476622",
+    "repetition": 1
+  },
+  {
+    "case": "chumsky_parse",
+    "iterations": "2000",
+    "nanoseconds": "5947313",
+    "repetition": 1
+  },
+  {
+    "case": "hand_pipeline",
+    "iterations": "2000",
+    "nanoseconds": "4068833",
+    "repetition": 1
+  },
+  {
+    "case": "candidate_pipeline",
+    "iterations": "2000",
+    "nanoseconds": "8584578",
+    "repetition": 1
+  },
+  {
+    "case": "hand_recovery",
+    "iterations": "2000",
+    "nanoseconds": "777121",
+    "repetition": 1
+  },
+  {
+    "case": "chumsky_recovery",
+    "iterations": "2000",
+    "nanoseconds": "4304067",
+    "repetition": 1
+  },
+  {
+    "case": "text_emit",
+    "iterations": "2000",
+    "nanoseconds": "3245251",
+    "repetition": 1
+  },
+  {
+    "case": "token_emit_formatted",
+    "iterations": "2000",
+    "nanoseconds": "113230451",
+    "repetition": 1
+  },
+  {
+    "case": "text_emit_formatted",
+    "iterations": "2000",
+    "nanoseconds": "105993013",
+    "repetition": 1
+  },
+  {
+    "case": "hand_parse_100_functions",
+    "iterations": "100",
+    "nanoseconds": "2913440",
+    "repetition": 1
+  },
+  {
+    "case": "chumsky_parse_100_functions",
+    "iterations": "100",
+    "nanoseconds": "7068493",
+    "repetition": 1
+  },
+  {
+    "case": "rowan_storage_roundtrip",
+    "iterations": "2000",
+    "nanoseconds": "10246623",
+    "repetition": 1
+  },
+  {
+    "case": "hand_lex",
+    "iterations": "2000",
+    "nanoseconds": "1380009",
+    "repetition": 2
+  },
+  {
+    "case": "logos_lex",
+    "iterations": "2000",
+    "nanoseconds": "2345965",
+    "repetition": 2
+  },
+  {
+    "case": "hand_parse",
+    "iterations": "2000",
+    "nanoseconds": "2553308",
+    "repetition": 2
+  },
+  {
+    "case": "chumsky_parse",
+    "iterations": "2000",
+    "nanoseconds": "6363941",
+    "repetition": 2
+  },
+  {
+    "case": "hand_pipeline",
+    "iterations": "2000",
+    "nanoseconds": "4306400",
+    "repetition": 2
+  },
+  {
+    "case": "candidate_pipeline",
+    "iterations": "2000",
+    "nanoseconds": "9237081",
+    "repetition": 2
+  },
+  {
+    "case": "hand_recovery",
+    "iterations": "2000",
+    "nanoseconds": "832544",
+    "repetition": 2
+  },
+  {
+    "case": "chumsky_recovery",
+    "iterations": "2000",
+    "nanoseconds": "4651410",
+    "repetition": 2
+  },
+  {
+    "case": "text_emit",
+    "iterations": "2000",
+    "nanoseconds": "3419864",
+    "repetition": 2
+  },
+  {
+    "case": "token_emit_formatted",
+    "iterations": "2000",
+    "nanoseconds": "121371721",
+    "repetition": 2
+  },
+  {
+    "case": "text_emit_formatted",
+    "iterations": "2000",
+    "nanoseconds": "114082225",
+    "repetition": 2
+  },
+  {
+    "case": "hand_parse_100_functions",
+    "iterations": "100",
+    "nanoseconds": "3082515",
+    "repetition": 2
+  },
+  {
+    "case": "chumsky_parse_100_functions",
+    "iterations": "100",
+    "nanoseconds": "7499243",
+    "repetition": 2
+  },
+  {
+    "case": "rowan_storage_roundtrip",
+    "iterations": "2000",
+    "nanoseconds": "11179399",
+    "repetition": 2
+  },
+  {
+    "case": "hand_lex",
+    "iterations": "2000",
+    "nanoseconds": "1417015",
+    "repetition": 3
+  },
+  {
+    "case": "logos_lex",
+    "iterations": "2000",
+    "nanoseconds": "2361809",
+    "repetition": 3
+  },
+  {
+    "case": "hand_parse",
+    "iterations": "2000",
+    "nanoseconds": "2577144",
+    "repetition": 3
+  },
+  {
+    "case": "chumsky_parse",
+    "iterations": "2000",
+    "nanoseconds": "6261397",
+    "repetition": 3
+  },
+  {
+    "case": "hand_pipeline",
+    "iterations": "2000",
+    "nanoseconds": "4344277",
+    "repetition": 3
+  },
+  {
+    "case": "candidate_pipeline",
+    "iterations": "2000",
+    "nanoseconds": "9186414",
+    "repetition": 3
+  },
+  {
+    "case": "hand_recovery",
+    "iterations": "2000",
+    "nanoseconds": "832675",
+    "repetition": 3
+  },
+  {
+    "case": "chumsky_recovery",
+    "iterations": "2000",
+    "nanoseconds": "4571009",
+    "repetition": 3
+  },
+  {
+    "case": "text_emit",
+    "iterations": "2000",
+    "nanoseconds": "3444240",
+    "repetition": 3
+  },
+  {
+    "case": "token_emit_formatted",
+    "iterations": "2000",
+    "nanoseconds": "122254251",
+    "repetition": 3
+  },
+  {
+    "case": "text_emit_formatted",
+    "iterations": "2000",
+    "nanoseconds": "112984761",
+    "repetition": 3
+  },
+  {
+    "case": "hand_parse_100_functions",
+    "iterations": "100",
+    "nanoseconds": "3054684",
+    "repetition": 3
+  },
+  {
+    "case": "chumsky_parse_100_functions",
+    "iterations": "100",
+    "nanoseconds": "7460013",
+    "repetition": 3
+  },
+  {
+    "case": "rowan_storage_roundtrip",
+    "iterations": "2000",
+    "nanoseconds": "10872346",
+    "repetition": 3
+  },
+  {
+    "case": "hand_lex",
+    "iterations": "2000",
+    "nanoseconds": "1247701",
+    "repetition": 4
+  },
+  {
+    "case": "logos_lex",
+    "iterations": "2000",
+    "nanoseconds": "2339245",
+    "repetition": 4
+  },
+  {
+    "case": "hand_parse",
+    "iterations": "2000",
+    "nanoseconds": "2579067",
+    "repetition": 4
+  },
+  {
+    "case": "chumsky_parse",
+    "iterations": "2000",
+    "nanoseconds": "6224501",
+    "repetition": 4
+  },
+  {
+    "case": "hand_pipeline",
+    "iterations": "2000",
+    "nanoseconds": "4366911",
+    "repetition": 4
+  },
+  {
+    "case": "candidate_pipeline",
+    "iterations": "2000",
+    "nanoseconds": "9153785",
+    "repetition": 4
+  },
+  {
+    "case": "hand_recovery",
+    "iterations": "2000",
+    "nanoseconds": "815449",
+    "repetition": 4
+  },
+  {
+    "case": "chumsky_recovery",
+    "iterations": "2000",
+    "nanoseconds": "4619292",
+    "repetition": 4
+  },
+  {
+    "case": "text_emit",
+    "iterations": "2000",
+    "nanoseconds": "3431401",
+    "repetition": 4
+  },
+  {
+    "case": "token_emit_formatted",
+    "iterations": "2000",
+    "nanoseconds": "122189453",
+    "repetition": 4
+  },
+  {
+    "case": "text_emit_formatted",
+    "iterations": "2000",
+    "nanoseconds": "113086334",
+    "repetition": 4
+  },
+  {
+    "case": "hand_parse_100_functions",
+    "iterations": "100",
+    "nanoseconds": "3060693",
+    "repetition": 4
+  },
+  {
+    "case": "chumsky_parse_100_functions",
+    "iterations": "100",
+    "nanoseconds": "7434114",
+    "repetition": 4
+  },
+  {
+    "case": "rowan_storage_roundtrip",
+    "iterations": "2000",
+    "nanoseconds": "10848139",
+    "repetition": 4
+  },
+  {
+    "case": "hand_lex",
+    "iterations": "2000",
+    "nanoseconds": "1253199",
+    "repetition": 5
+  },
+  {
+    "case": "logos_lex",
+    "iterations": "2000",
+    "nanoseconds": "2337432",
+    "repetition": 5
+  },
+  {
+    "case": "hand_parse",
+    "iterations": "2000",
+    "nanoseconds": "2521681",
+    "repetition": 5
+  },
+  {
+    "case": "chumsky_parse",
+    "iterations": "2000",
+    "nanoseconds": "6236459",
+    "repetition": 5
+  },
+  {
+    "case": "hand_pipeline",
+    "iterations": "2000",
+    "nanoseconds": "4259620",
+    "repetition": 5
+  },
+  {
+    "case": "candidate_pipeline",
+    "iterations": "2000",
+    "nanoseconds": "9194047",
+    "repetition": 5
+  },
+  {
+    "case": "hand_recovery",
+    "iterations": "2000",
+    "nanoseconds": "818383",
+    "repetition": 5
+  },
+  {
+    "case": "chumsky_recovery",
+    "iterations": "2000",
+    "nanoseconds": "4542906",
+    "repetition": 5
+  },
+  {
+    "case": "text_emit",
+    "iterations": "2000",
+    "nanoseconds": "3385492",
+    "repetition": 5
+  },
+  {
+    "case": "token_emit_formatted",
+    "iterations": "2000",
+    "nanoseconds": "122435234",
+    "repetition": 5
+  },
+  {
+    "case": "text_emit_formatted",
+    "iterations": "2000",
+    "nanoseconds": "112727643",
+    "repetition": 5
+  },
+  {
+    "case": "hand_parse_100_functions",
+    "iterations": "100",
+    "nanoseconds": "3028013",
+    "repetition": 5
+  },
+  {
+    "case": "chumsky_parse_100_functions",
+    "iterations": "100",
+    "nanoseconds": "7461986",
+    "repetition": 5
+  },
+  {
+    "case": "rowan_storage_roundtrip",
+    "iterations": "2000",
+    "nanoseconds": "10884624",
+    "repetition": 5
+  },
+  {
+    "case": "hand_lex",
+    "iterations": "2000",
+    "nanoseconds": "1410135",
+    "repetition": 6
+  },
+  {
+    "case": "logos_lex",
+    "iterations": "2000",
+    "nanoseconds": "2345695",
+    "repetition": 6
+  },
+  {
+    "case": "hand_parse",
+    "iterations": "2000",
+    "nanoseconds": "2558066",
+    "repetition": 6
+  },
+  {
+    "case": "chumsky_parse",
+    "iterations": "2000",
+    "nanoseconds": "6311051",
+    "repetition": 6
+  },
+  {
+    "case": "hand_pipeline",
+    "iterations": "2000",
+    "nanoseconds": "4287602",
+    "repetition": 6
+  },
+  {
+    "case": "candidate_pipeline",
+    "iterations": "2000",
+    "nanoseconds": "9220676",
+    "repetition": 6
+  },
+  {
+    "case": "hand_recovery",
+    "iterations": "2000",
+    "nanoseconds": "825705",
+    "repetition": 6
+  },
+  {
+    "case": "chumsky_recovery",
+    "iterations": "2000",
+    "nanoseconds": "4520833",
+    "repetition": 6
+  },
+  {
+    "case": "text_emit",
+    "iterations": "2000",
+    "nanoseconds": "3439083",
+    "repetition": 6
+  },
+  {
+    "case": "token_emit_formatted",
+    "iterations": "2000",
+    "nanoseconds": "118544901",
+    "repetition": 6
+  },
+  {
+    "case": "text_emit_formatted",
+    "iterations": "2000",
+    "nanoseconds": "106125253",
+    "repetition": 6
+  },
+  {
+    "case": "hand_parse_100_functions",
+    "iterations": "100",
+    "nanoseconds": "2894042",
+    "repetition": 6
+  },
+  {
+    "case": "chumsky_parse_100_functions",
+    "iterations": "100",
+    "nanoseconds": "7003976",
+    "repetition": 6
+  },
+  {
+    "case": "rowan_storage_roundtrip",
+    "iterations": "2000",
+    "nanoseconds": "10264570",
+    "repetition": 6
+  }
+]

@@ -1,6 +1,6 @@
 # 0005 — The shape of the code
 
-Status: sketch
+Status: sketch; compiler tooling compared in [0010](0010-rust-compiler-tooling.md)
 
 A description, not a design to build from yet: no crate below exists. Follows
 [decision 0001](../decisions/0001-rust-end-to-end.md); the order of work is in
@@ -9,9 +9,10 @@ A description, not a design to build from yet: no crate below exists. Follows
 **The right-hand half is built first.** The runtime — `value`, `ts`,
 `kernel`, `wiring`, `std` — needs nothing from the compiler: graphs are wired
 by hand-written Rust and checked against hgraph's `eval_node` tests. The
-compiler crates below are one possible left-hand half; whether they are
-written at all, or the existing C++ compiler simply gains a Rust emitter, is
-decided once there is a runtime to target (0006, step B1).
+compiler crates below are one possible left-hand half; how they are
+split internally is reviewed once there is a runtime to target (0006, step B1).
+The owner has selected a Rust Lexer -> Parser -> Checker -> Rust Emitter;
+the C++ compiler is a reference, not the new front end.
 
 ## The idea
 

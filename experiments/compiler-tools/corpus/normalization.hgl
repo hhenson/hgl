@@ -1,0 +1,2 @@
+module spike.normalization
+fn collapse(value: ref<ref<i64>>) -> ref<i64> => value

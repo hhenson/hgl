@@ -1,0 +1,51 @@
+{
+  "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
+  "platform": "Linux",
+  "architecture": "x86_64",
+  "emission_variants": [
+    "candidate-text",
+    "candidate-tokens",
+    "hand-text",
+    "hand-tokens"
+  ],
+  "experiment_sha256": {
+    "Cargo.lock": "21fad8975704d824686f508d8f67735d821a142aa5986685096748ed7fc7bc8d",
+    "Cargo.toml": "e5b67ea4994bff7d29e9a11c66e9d4a01a84ed5d2366b055e52c8a788bc91d72",
+    "run.py": "e444350a13f7de8a42b61274007653a2127e18bd7d08d6e49f324eae61459693",
+    "runtime-tests.rs.in": "3b51951a0e43064ce960d50c9e9bbaa1184008f56ed9f18bf786ec3e6760eb65",
+    "src/check.rs": "c13cc280645d4069f1cd38f64e07c36d869d050a6a858ce2a55d4f171e57c03e",
+    "src/combinator.rs": "40c3728819b1a725a274bc542e51c5e3b9de22cbdf46fff87d0a6214f616b662",
+    "src/emit.rs": "e83dbaf2c40464c330d5e59466bcc8fcbd7edd4f4e46fff568bcaeb0337fde7f",
+    "src/hand.rs": "2cf3cb8791f4a068495c316a6ecbff57ce0c6a60909e8f064f0121ece635b1b1",
+    "src/lex.rs": "204ca4958b4dfcc5e38c3b8d9fb48f6e0d73053ba592d24d63257634cc19b3b7",
+    "src/lib.rs": "8c0ede525a77febe5ba85be86040971ae032d54cae31e8308d3976116761a5d6",
+    "src/main.rs": "553e230d16b6b49e3733f223cdcc0d9818aef9d4bc504b434dbc751d50f4c9e9",
+    "src/model.rs": "88c08522e8762bad5526bf6868b672a2d9a4439111aed51d73e5306bd41ade0d",
+    "src/tests.rs": "94d067e7f19eb750d75ade833824af3e950ef187b84af6c696806a79e5876fa2",
+    "src/tooling.rs": "3aedc9f40da3c31a0b9454761d186bfe71561cbb554437acaf70411797786a91"
+  },
+  "corpus_sha256": {
+    "generic.hgl": "bd5dab421206b5afc503e73d6fd3c2fb6585afd57b7171d701f2222336789ed5",
+    "normalization.hgl": "6ff76d7397d46d47afc2ee0af1e66c3be4df4de332bf8d2287e2839a535a35a8",
+    "recovery.hgl": "a0d852ccbe9b83693330fa8c7e7c4e5e3fbc6712c3a15938c47819a023e7b2db",
+    "runtime.hgl": "5f79a8ad2a8209f61e43fed7f93b83416d3d293e2253052476925323ab5c8878",
+    "type_error.hgl": "343ecdd3330829d9988f05026d5cb2f4e9fdfc22dbadbf55f0c9949aae779849",
+    "valid.hgl": "0310822a87f984535af0ad0b245732935b5cb1111044786309477bf860fd5c72"
+  },
+  "median_ns": {
+    "candidate_pipeline": 4597.0235,
+    "chumsky_parse": 3130.6985,
+    "chumsky_parse_100_functions": 74341.14,
+    "chumsky_recovery": 2285.5045,
+    "hand_lex": 626.5995,
+    "hand_parse": 1279.033,
+    "hand_parse_100_functions": 30280.13,
+    "hand_pipeline": 2153.2,
+    "hand_recovery": 412.8525,
+    "logos_lex": 1172.8475,
+    "rowan_storage_roundtrip": 5424.0695,
+    "text_emit": 1715.7005,
+    "text_emit_formatted": 56363.8215,
+    "token_emit_formatted": 60685.8605
+  }
+}

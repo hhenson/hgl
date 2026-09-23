@@ -35,9 +35,15 @@ jobs:
       - run: python tools/stdlib_fixtures.py --check
       - run: python -m unittest discover -s docs/compiler/stdlib -p "test_*.py"
       - run: cargo xtask ci
+      - run: cargo fmt --manifest-path experiments/compiler-tools/Cargo.toml -- --check
+      - run: cargo clippy --manifest-path experiments/compiler-tools/Cargo.toml --all-targets -- -D warnings
+      - run: python experiments/compiler-tools/run.py --output "${{ runner.temp }}/compiler-tools-results"
 
   deny:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: EmbarkStudios/cargo-deny-action@v2
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          manifest-path: experiments/compiler-tools/Cargo.toml
