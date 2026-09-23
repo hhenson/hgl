@@ -1,0 +1,2 @@
+module spike.generic
+fn identity<T>(value: ref<T>) -> ref<T> => value

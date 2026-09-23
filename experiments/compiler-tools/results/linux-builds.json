@@ -1,0 +1,218 @@
+[
+  {
+    "variant": "hand",
+    "profile": "debug",
+    "repetition": 0,
+    "seconds": 0.36694593902211636
+  },
+  {
+    "variant": "hand",
+    "profile": "debug",
+    "repetition": 1,
+    "seconds": 0.33839848591014743
+  },
+  {
+    "variant": "hand",
+    "profile": "debug",
+    "repetition": 2,
+    "seconds": 0.34899410395883024
+  },
+  {
+    "variant": "hand",
+    "profile": "release",
+    "repetition": 0,
+    "seconds": 0.4866935630561784
+  },
+  {
+    "variant": "hand",
+    "profile": "release",
+    "repetition": 1,
+    "seconds": 0.4869858829770237
+  },
+  {
+    "variant": "hand",
+    "profile": "release",
+    "repetition": 2,
+    "seconds": 0.49357043695636094
+  },
+  {
+    "variant": "logos",
+    "profile": "debug",
+    "repetition": 0,
+    "seconds": 2.4941509610507637
+  },
+  {
+    "variant": "logos",
+    "profile": "debug",
+    "repetition": 1,
+    "seconds": 2.5150538029847667
+  },
+  {
+    "variant": "logos",
+    "profile": "debug",
+    "repetition": 2,
+    "seconds": 2.5048077310202643
+  },
+  {
+    "variant": "logos",
+    "profile": "release",
+    "repetition": 0,
+    "seconds": 2.6050211339024827
+  },
+  {
+    "variant": "logos",
+    "profile": "release",
+    "repetition": 1,
+    "seconds": 2.6086427631089464
+  },
+  {
+    "variant": "logos",
+    "profile": "release",
+    "repetition": 2,
+    "seconds": 2.612060543964617
+  },
+  {
+    "variant": "chumsky",
+    "profile": "debug",
+    "repetition": 0,
+    "seconds": 2.213935022940859
+  },
+  {
+    "variant": "chumsky",
+    "profile": "debug",
+    "repetition": 1,
+    "seconds": 2.2476449279347435
+  },
+  {
+    "variant": "chumsky",
+    "profile": "debug",
+    "repetition": 2,
+    "seconds": 2.2502871999749914
+  },
+  {
+    "variant": "chumsky",
+    "profile": "release",
+    "repetition": 0,
+    "seconds": 2.746926733991131
+  },
+  {
+    "variant": "chumsky",
+    "profile": "release",
+    "repetition": 1,
+    "seconds": 2.7924934269394726
+  },
+  {
+    "variant": "chumsky",
+    "profile": "release",
+    "repetition": 2,
+    "seconds": 2.772973196930252
+  },
+  {
+    "variant": "rowan",
+    "profile": "debug",
+    "repetition": 0,
+    "seconds": 0.705579848960042
+  },
+  {
+    "variant": "rowan",
+    "profile": "debug",
+    "repetition": 1,
+    "seconds": 0.7046361470129341
+  },
+  {
+    "variant": "rowan",
+    "profile": "debug",
+    "repetition": 2,
+    "seconds": 0.6957320170477033
+  },
+  {
+    "variant": "rowan",
+    "profile": "release",
+    "repetition": 0,
+    "seconds": 0.9213660639943555
+  },
+  {
+    "variant": "rowan",
+    "profile": "release",
+    "repetition": 1,
+    "seconds": 0.9466641809558496
+  },
+  {
+    "variant": "rowan",
+    "profile": "release",
+    "repetition": 2,
+    "seconds": 0.9334191599627957
+  },
+  {
+    "variant": "diagnostics",
+    "profile": "debug",
+    "repetition": 0,
+    "seconds": 0.5689601680496708
+  },
+  {
+    "variant": "diagnostics",
+    "profile": "debug",
+    "repetition": 1,
+    "seconds": 0.575577381066978
+  },
+  {
+    "variant": "diagnostics",
+    "profile": "debug",
+    "repetition": 2,
+    "seconds": 0.595743493991904
+  },
+  {
+    "variant": "diagnostics",
+    "profile": "release",
+    "repetition": 0,
+    "seconds": 0.7726132869720459
+  },
+  {
+    "variant": "diagnostics",
+    "profile": "release",
+    "repetition": 1,
+    "seconds": 0.7943781090434641
+  },
+  {
+    "variant": "diagnostics",
+    "profile": "release",
+    "repetition": 2,
+    "seconds": 0.790649828966707
+  },
+  {
+    "variant": "emitter",
+    "profile": "debug",
+    "repetition": 0,
+    "seconds": 1.6040600519627333
+  },
+  {
+    "variant": "emitter",
+    "profile": "debug",
+    "repetition": 1,
+    "seconds": 1.5981831250246614
+  },
+  {
+    "variant": "emitter",
+    "profile": "debug",
+    "repetition": 2,
+    "seconds": 1.631308106938377
+  },
+  {
+    "variant": "emitter",
+    "profile": "release",
+    "repetition": 0,
+    "seconds": 3.593126432970166
+  },
+  {
+    "variant": "emitter",
+    "profile": "release",
+    "repetition": 1,
+    "seconds": 3.6300695301033556
+  },
+  {
+    "variant": "emitter",
+    "profile": "release",
+    "repetition": 2,
+    "seconds": 3.5937839340185747
+  }
+]

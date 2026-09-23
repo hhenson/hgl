@@ -1,0 +1,33 @@
+[package]
+name = "hgl-compiler-tools-spike"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[workspace.dependencies]
+logos = "=0.16.1"
+chumsky = { version = "=0.13.0", default-features = false, features = ["std"] }
+rowan = "=0.17.0"
+codespan-reporting = "=0.13.1"
+quote = "=1.0.47"
+proc-macro2 = "=1.0.107"
+syn = { version = "=3.0.6", features = ["full"] }
+prettyplease = "=0.3.0"
+
+[features]
+default = ["logos", "chumsky", "rowan", "codespan-reporting", "quote", "proc-macro2", "syn", "prettyplease"]
+
+[dependencies]
+logos = { workspace = true, optional = true }
+chumsky = { workspace = true, optional = true }
+rowan = { workspace = true, optional = true }
+codespan-reporting = { workspace = true, optional = true }
+quote = { workspace = true, optional = true }
+proc-macro2 = { workspace = true, optional = true }
+syn = { workspace = true, optional = true }
+prettyplease = { workspace = true, optional = true }
+
+[lints.rust]
+unsafe_code = "forbid"

@@ -1,0 +1,2 @@
+module spike.types
+fn bad(x: i64) -> ref<i64> => x + missing
