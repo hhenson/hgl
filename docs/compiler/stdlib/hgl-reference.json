@@ -1,0 +1,15 @@
+{
+  "checked_source_sha256": {
+    "nodes.hgl": "016cf463f2ea5ac55650c70b733cb7c9e3f1d5c411de9738e4d27dfcbf496702",
+    "cases.hgl": "d0ca3f910d4bfad3bcbb83a0c5647cf6c8c4846d29e48006edf3f738026e521b"
+  },
+  "check_exit_code": 0,
+  "runtime_test_status": "blocked",
+  "runtime_test_exit_code": 134,
+  "failure": "SIGABRT: invalid free in NodeCheckpointIdentity destruction while wiring bit_and_i64",
+  "cause": "not established; generated module/runtime compatibility is a hypothesis",
+  "compiler_sha256": [
+    "bb6749882f2de3ede647b5c36623db2f3c2f72f6231a4680192863fa7f912325",
+    "f077573d092e732f55162c004e2659d987a57c0eccec0745ff5bde559e575203"
+  ]
+}

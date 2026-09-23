@@ -1,0 +1,52 @@
+{
+  "engine": "python",
+  "package_version": "0.5.41",
+  "package_init_sha256": "324bd661bcecdb2e46c8e07f7bb80c931bc3961ab9ef13440f822c73abe865a1",
+  "native_binary_sha256": null,
+  "corpus_sha256": "fe7402d0a7f73eec172a6855d42d20f08a5b28e4494ebcc3ae3ea3420e8398f0",
+  "observed": {
+    "bit_and_waits_for_both": {
+      "ticks": [
+        null,
+        2,
+        3,
+        7,
+        7,
+        7
+      ],
+      "matches": true
+    },
+    "sample_only_on_signal": {
+      "ticks": [
+        null,
+        2,
+        null,
+        4,
+        4
+      ],
+      "matches": true
+    },
+    "sample_waits_for_value": {
+      "ticks": [
+        null,
+        null,
+        7,
+        null,
+        8
+      ],
+      "matches": true
+    },
+    "dedup_zero_and_idle": {
+      "ticks": [
+        null,
+        0,
+        null,
+        null,
+        1,
+        null,
+        0
+      ],
+      "matches": true
+    }
+  }
+}

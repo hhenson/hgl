@@ -71,6 +71,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "hgl-native"
+version = "0.0.0"
+dependencies = [
+ "hgl-alloc-count",
+ "hgl-store",
+ "hgl-types",
+]
+
+[[package]]
 name = "hgl-nested"
 version = "0.0.0"
 dependencies = [
@@ -97,6 +106,19 @@ dependencies = [
  "hgl-describe",
  "hgl-kernel",
  "hgl-store",
+ "hgl-types",
+]
+
+[[package]]
+name = "hgl-stdlib"
+version = "0.0.0"
+dependencies = [
+ "hgl-alloc-count",
+ "hgl-describe",
+ "hgl-kernel",
+ "hgl-native",
+ "hgl-store",
+ "hgl-testkit",
  "hgl-types",
 ]
 

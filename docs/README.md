@@ -2,6 +2,7 @@
 
 ## Index
 
+- [Node authoring and Rust native bindings](compiler/node-authoring.md) — porting contract and first specimens
 - [Explorations](explorations/README.md) — ideas in progress, one file each
 - [Decisions](decisions/README.md) — what was settled, and why
 - [Open questions](open-questions.md) — unanswered, unowned

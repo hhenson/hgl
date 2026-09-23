@@ -106,3 +106,8 @@ This establishes the target for the later Rust compiler review.
 
 The [compiler tooling spike](compiler-tools-spike.md) is an isolated comparison,
 not a production compiler crate.
+
+## Standard-library binding probe
+
+[hgl-native](hgl-native.md) owns borrowed view/value helpers;
+[hgl-stdlib](hgl-stdlib.md) tests the node authoring recipe before compiler emission.

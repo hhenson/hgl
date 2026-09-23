@@ -1,0 +1,28 @@
+module probe.rust_nodes part nodes
+
+cpp include <hgraph/types/primitive_types.h>
+
+native fn native_bit_and(lhs: i64, rhs: i64) -> i64 {
+    cpp(const hgraph::Int &lhs, const hgraph::Int &rhs) {
+        return static_cast<hgraph::Int>(lhs & rhs);
+    }
+}
+
+fn bit_and_i64(lhs: i64, rhs: i64) -> i64 {
+    when { return native_bit_and(lhs, rhs) }
+}
+
+fn sample_i64(signal: i64, ts: i64) -> i64 {
+    when modified(signal) && valid(signal, ts) { return ts }
+}
+
+fn dedup_i64(ts: i64) -> i64 {
+    state have_last: bool = false
+    state last: i64 = 0
+    when {
+        let changed = !have_last || last != ts
+        last = ts
+        have_last = true
+        if changed { return ts }
+    }
+}

@@ -32,6 +32,8 @@ jobs:
       - run: python tools/description_fixtures.py --check
       - run: python docs/runtime_spec/validation/descriptions/check.py
       - run: python -m unittest discover -s docs/runtime_spec/validation/descriptions -p "test_*.py"
+      - run: python tools/stdlib_fixtures.py --check
+      - run: python -m unittest discover -s docs/compiler/stdlib -p "test_*.py"
       - run: cargo xtask ci
       - run: cargo fmt --manifest-path experiments/compiler-tools/Cargo.toml -- --check
       - run: cargo clippy --manifest-path experiments/compiler-tools/Cargo.toml --all-targets -- -D warnings
