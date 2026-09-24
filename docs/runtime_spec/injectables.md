@@ -62,7 +62,8 @@ also permits context services in value functions. Its requirements are visible
 to the checker, without adding caller-supplied arguments. Native targets may
 request different subsets of the declared capabilities; only those used need
 provisioning. Helpers borrow access for the call and acquire no node of their
-own. This language extension is not yet implemented.
+own. Calls silently upgrade the caller's injectable list. The C++ compiler
+supports value-helper logger/clock forwarding; target subsets remain pending.
 
 
 Relationships

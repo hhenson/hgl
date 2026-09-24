@@ -1,0 +1,40 @@
+{
+  "package_sha256": "324bd661bcecdb2e46c8e07f7bb80c931bc3961ab9ef13440f822c73abe865a1",
+  "native_sha256": null,
+  "clock_offsets": [
+    0,
+    null,
+    2,
+    3
+  ],
+  "expected_clock_offsets": [
+    0,
+    null,
+    2,
+    3
+  ],
+  "engine": "python",
+  "version": "0.5.41",
+  "ticks": [
+    2,
+    null,
+    2,
+    3
+  ],
+  "helper_calls": [
+    2,
+    2,
+    3
+  ],
+  "expected_ticks": [
+    2,
+    null,
+    2,
+    3
+  ],
+  "expected_helper_calls": [
+    2,
+    2,
+    3
+  ]
+}

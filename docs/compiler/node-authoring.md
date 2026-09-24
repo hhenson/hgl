@@ -46,10 +46,11 @@ two values; it cannot schedule, publish or retain an input view.
   input time or validity by inspecting only its peer. Preserve the accepted
   removal, invalidation, rebinding and child-scope rules.
 - **NAT-7:** Check capability requirements for HGL and native functions alike.
-  `inject out` refers to the declared temporal result. Value functions may use
+  Calls silently add the callee's requirements to the caller, transitively and
+  without duplicates. `inject out` refers to the declared temporal result. Value functions may use
   admitted context services without acquiring a node. Target bindings declare
   their used subset; they cannot add undeclared semantic capabilities. See the
-  agreed, not-yet-implemented [capability contract](native-interfaces.md#outputs-and-injectables).
+  [capability contract](native-interfaces.md#outputs-and-injectables).
 
 `ref<ref<T>>` in source is an error. Substituting `T = ref<U>` into `ref<T>`
 normalizes to `ref<U>` before target mapping. No nested REF runtime endpoint.

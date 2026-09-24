@@ -44,8 +44,9 @@ checks separate from runtime trace evidence.
 
 ## Outputs and injectables
 
-Agreed extension, not implemented. A native contract may declare capabilities
-using the same `inject` spelling as an HGL body:
+Value-helper injection and inference are implemented in the upstream compiler.
+C++ supports `logger` and `clock`; generated Rust traits support `logger`.
+Temporal native bindings below remain an agreed extension:
 
 ```hgl
 native fn accumulate(value: i64) -> i64 {
@@ -70,7 +71,8 @@ a runtime context and an admitted phase. Forwarding a caller's node capabilities
 needs an explicit ownership contract and remains unsettled.
 
 The portable contract records requirements, including through helper calls and
-imports. Each target binding records the subset its implementation uses, in
+imports. Calls silently upgrade the caller's injectable list, transitively and
+without duplicate requests. The caller need not repeat `inject logger`. Each target binding records the subset its implementation uses, in
 native source. C++ may request `out, logger` while Rust requests only `out`;
 the adapters may therefore have different parameter lists. Provision only the
 used facilities, but check calls against the portable contract on every target.
@@ -99,7 +101,6 @@ A node calls a value helper directly during evaluation:
 
 ```hgl
 fn describe_each(value: i64) -> str {
-    inject logger
     when { return describe(value) }
 }
 ```
@@ -113,9 +114,12 @@ explicit borrowed access; that spelling remains unsettled.
 
 The upstream [capability contract and acceptance cases](https://github.com/hhenson/hgraph/blob/codex/native-interface-bindings/language/docs/design/decisions/0014-native-implementation-interfaces.md#outputs-and-capabilities)
 cover function parity, output shape, missing context, target subsets, imports,
-phase and lifetime errors, logging effects and nested output deltas. Expectations
-are reasoned; executable validation is pending. Compare runtime cases with Python
-and C++ before binding implementation; report accepted variations separately.
+phase and lifetime errors, logging effects and nested output deltas. The
+[value-helper reference traces](capabilities/README.md) agree with reasoning in
+Python and C++. Compiler tests cover silent transitive inference, deduplication,
+imports, lifting and missing runtime context. Temporal provider output and
+target-specific subsets remain pending; current adapters pass all declared
+capabilities. Rust node-context lowering is not implemented by the trait test.
 
 ## Implemented slice
 
