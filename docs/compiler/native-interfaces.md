@@ -55,7 +55,11 @@ python tools/native_bindings.py --compiler <hgl> --check
 cargo xtask ci
 ```
 
-C++ supports concrete scalar value interfaces, overloads and `throws`; 31 core
+CI builds the upstream compiler at the revision pinned in `ci.yml` and checks
+both the vendored HGL part and generated Rust trait. Update the pin and
+regenerate together when changing the contract.
+
+C++ supports concrete scalar value interfaces, overloads and `throws`; 56 core
 scalar helpers now use the generated adapter. Rust trait emission currently
 supports concrete bool/i64/f64 declarations without overloads or `throws` and
 rejects unsupported contracts. Temporal native interfaces are recognized but
