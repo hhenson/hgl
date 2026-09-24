@@ -1,14 +1,43 @@
 //! Rust value and borrowed-view projections for the HGL native substrate.
 //!
 //! Helpers have no node context: activation, state and publication belong to
-//! the calling HGL node. Target catalogue selection is compiler work.
+//! the calling HGL node. The scalar contract is generated from shared HGL.
 use hgl_store::{InputId, Store};
 use hgl_types::EngineTime;
 
-/// `hgraph.native.bit_and(i64, i64) -> i64`, on current scalar values.
+mod scalar_interface;
+pub use scalar_interface::Native;
+
+/// Rust implementation of the shared scalar value contract.
+/// A provider must implement the declared result and argument types exactly:
+/// ```compile_fail
+/// use hgl_native::Native;
+/// struct WrongResult;
+/// impl Native for WrongResult {
+///     fn bit_and(lhs: i64, rhs: i64) -> f64 { (lhs & rhs) as f64 }
+/// }
+/// ```
+/// ```compile_fail
+/// use hgl_native::Native;
+/// struct WrongInput;
+/// impl Native for WrongInput {
+///     fn bit_and(lhs: i32, rhs: i64) -> i64 { i64::from(lhs) & rhs }
+/// }
+/// ```
+#[derive(Debug)]
+pub struct StandardNative;
+
+impl Native for StandardNative {
+    #[inline]
+    fn bit_and(lhs: i64, rhs: i64) -> i64 {
+        lhs & rhs
+    }
+}
+
+/// `native const fn hgraph.native.bit_and(i64, i64) -> i64`.
 #[inline]
 pub fn bit_and_i64(lhs: i64, rhs: i64) -> i64 {
-    lhs & rhs
+    StandardNative::bit_and(lhs, rhs)
 }
 
 /// A live input borrowed for a native call, including before first validity.

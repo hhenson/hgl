@@ -1,6 +1,6 @@
 # Card: hgl-native
 
-Status: bounded Rust binding probe; [contract](../compiler/node-authoring.md).
+Status: scalar provider migration; [contract](../compiler/node-authoring.md).
 
 Thin native helpers. May use `hgl-store`, `hgl-types`. Budget: 130 lines.
 Tests may use `hgl-alloc-count`. No registry, node lifecycle, mutation, scheduler
@@ -9,6 +9,9 @@ or third-party dependencies.
 Public surface:
 
 ```rust
+pub trait Native { fn bit_and(lhs: i64, rhs: i64) -> i64; }
+pub struct StandardNative;
+impl Native for StandardNative { /* value helper implementation */ }
 pub fn bit_and_i64(lhs: i64, rhs: i64) -> i64;
 pub struct InputView<'a> { /* immutable call-confined borrow */ }
 impl<'a> InputView<'a> {
@@ -26,7 +29,13 @@ an engine timestamp; HGL datetime payload storage is a separate missing mapping.
 
 NAT-3/6: queries preserve local assembled-input observations, recursive validity
 and accepted REF/removal lifetime. No per-tick allocation or native dispatch.
-NAT-1/2 catalogue validation is future compiler work, not provided by this crate.
+The upstream HGL compiler generates `Native` from `interfaces/scalar.hgl`.
+`StandardNative` implements it in Rust; `bit_and_i64` delegates through the
+trait. Regenerate with `tools/native_bindings.py --compiler <hgl>`; `--interface`
+refreshes the vendored upstream module part at the same time.
+The interface is a concrete i64 subset of `hgraph.native`; overload-family,
+collection-borrow and fallible Rust bindings remain separate migration work.
+NAT-1/2 general catalogue selection remains compiler work.
 
 Done: bitwise edge cases; scalar/recursive/unbound/assembled view observations;
 a compile-fail test for retaining the borrow; allocation checks on queries.
