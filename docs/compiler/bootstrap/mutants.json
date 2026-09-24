@@ -1,0 +1,25 @@
+{
+  "mutants": [
+    {
+      "mutant": "delayed-start",
+      "compiled_and_killed": true
+    },
+    {
+      "mutant": "bare-source-fires",
+      "compiled_and_killed": true
+    },
+    {
+      "mutant": "accept-temporal-config",
+      "compiled_and_killed": true
+    },
+    {
+      "mutant": "ignore-parameter-contract",
+      "compiled_and_killed": true
+    },
+    {
+      "mutant": "suppress-equal-print",
+      "compiled_and_killed": true
+    }
+  ],
+  "restored_baseline": "passed"
+}

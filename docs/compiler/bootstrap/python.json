@@ -1,0 +1,50 @@
+{
+  "engine": "python",
+  "package_version": "0.5.41",
+  "package_init_sha256": "324bd661bcecdb2e46c8e07f7bb80c931bc3961ab9ef13440f822c73abe865a1",
+  "native_binary_sha256": null,
+  "corpus_sha256": "f75b526eef441caa3b3207e642ea7c0441135ea824cfc501e5d409009d602ab2",
+  "observed": {
+    "constant-42": {
+      "ticks": [
+        42
+      ],
+      "printed": [
+        42
+      ],
+      "matches": true
+    },
+    "constant-negative": {
+      "ticks": [
+        -7
+      ],
+      "printed": [
+        -7
+      ],
+      "matches": true
+    },
+    "missing-and-equal": {
+      "ticks": [
+        null,
+        42,
+        null,
+        42,
+        -7
+      ],
+      "printed": [
+        42,
+        42,
+        -7
+      ],
+      "matches": true
+    },
+    "invalid-only": {
+      "ticks": [
+        null,
+        null
+      ],
+      "printed": [],
+      "matches": true
+    }
+  }
+}

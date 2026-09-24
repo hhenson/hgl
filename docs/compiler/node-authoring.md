@@ -95,6 +95,14 @@ normalization, validity analysis, candidate and target selection. The emitter
 receives resolved calls, handler guards, state layouts and concrete bindings;
 it must not recreate overload resolution or inspect C++ bodies.
 
+## Compiler bootstrap
+
+The [const/debug graph](../../examples/const-debug/README.md) is the first complete
+Rust compiler slice. Both nodes, their metadata and graph construction are
+generated from the upstream-tested HGL. Only integer printing is a handwritten
+native implementation. The earlier standard-library specimens below remain
+handwritten and do not imply compiler support for their bodies.
+
 ## First port
 
 `hgl-native` provides `bit_and_i64` and four borrowed endpoint queries.
