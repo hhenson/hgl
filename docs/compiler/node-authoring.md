@@ -1,6 +1,6 @@
 # Nodes and Rust bindings
 
-Status: implementation probe; compiler integration and portable mapping format proposed.
+Status: runtime specimens; [native interface migration](native-interfaces.md) in progress.
 
 Author library behaviour in HGL. Keep its guards, state, scheduling and writes
 there; port native value/view helpers to Rust. Existing HGL is the source of
@@ -22,14 +22,14 @@ two values; it cannot schedule, publish or retain an input view.
 ## Binding contract
 
 - **NAT-1:** Select by canonical module/declaration identity, full signature and
-  role. `hgraph.native.bit_and(i64,i64)->i64` is a value helper;
+  role. `native const fn hgraph.native.bit_and(i64,i64)->i64` is a value helper;
   `hgraph.operators.bit_and` is a temporal operator. Neither substitutes for
   the other. Resolve candidates in the checker, retain the selection in IR.
-- **NAT-2:** A target mapping supplies the Rust crate/version, item path,
-  argument/result projections, phases, effects, ownership and error policy.
-  Match it against the language contract before emission. Missing, ambiguous,
-  stale or incompatible mappings are compile errors. C++ symbols/fingerprints
-  do not describe Rust compatibility. Rust builds link statically initially.
+- **NAT-2:** Generate the implementation interface from the HGL contract. C++
+  uses a checked `bind<T>()` adapter; Rust implements a generated trait. Keep
+  implementations in native source and dependencies in its normal library build.
+  Select the provider once, without a separately authored function-symbol map.
+  Missing, ambiguous or incompatible providers are compile errors.
 - **NAT-3:** Value helpers receive admitted payloads. Input-view helpers borrow
   the current input, including its local binding state. The borrow ends with
   the call; no copying collections, retaining views or resolving output names
@@ -45,9 +45,19 @@ two values; it cannot schedule, publish or retain an input view.
   the input view for peered and assembled TSL/TSB, TSD and REF. Do not infer
   input time or validity by inspecting only its peer. Preserve the accepted
   removal, invalidation, rebinding and child-scope rules.
+- **NAT-7:** Check capability requirements for HGL and native functions alike.
+  Calls silently add the callee's requirements to the caller, transitively and
+  without duplicates. `inject out` refers to the declared temporal result. Value functions may use
+  admitted context services without acquiring a node. Target bindings declare
+  their used subset; they cannot add undeclared semantic capabilities. See the
+  [capability contract](native-interfaces.md#outputs-and-injectables).
 
 `ref<ref<T>>` in source is an error. Substituting `T = ref<U>` into `ref<T>`
 normalizes to `ref<U>` before target mapping. No nested REF runtime endpoint.
+
+`native fn` follows ordinary temporal typing. Only `native const fn` is a
+value helper; parameter-level `const` does not change execution role. Borrowed
+input access must be explicit in the shared contract.
 
 ## Concrete native projections
 
@@ -118,5 +128,5 @@ core identities: 26 implemented, 44 partial domains, 6 native providers and
 
 Upstream references: `language/stdlib/hgl/hgraph/{operators,stream,native}.hgl`,
 `language/stdlib/catalogue/README.md`, `language/docs/design/native-interface.md`
-and ADR 0008, “Language contracts and target mappings”. Target-map syntax is
-still open upstream; this probe introduces no portable descriptor format.
+and ADR 0008, “Language contracts and target mappings”. ADR 0014 settles shared native interfaces and source-owned implementations;
+collection-view spelling and the full migration remain tracked separately.

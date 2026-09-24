@@ -2,6 +2,7 @@
 
 ## Index
 
+- [Native implementation interfaces](compiler/native-interfaces.md) — shared contracts and source-owned providers
 - [Node authoring and Rust native bindings](compiler/node-authoring.md) — porting contract and first specimens
 - [Explorations](explorations/README.md) — ideas in progress, one file each
 - [Decisions](decisions/README.md) — what was settled, and why
