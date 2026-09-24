@@ -2,7 +2,8 @@
 
 A call silently adds the callee's injectable requirements to the caller.
 Propagation is transitive, independent of declaration order, and deduplicates
-explicit requests. Native descriptor imports retain these requirements.
+explicit requests. Selected native implementation parts supply requirements; descriptor imports
+retain the selection.
 Injection changes neither the source argument list nor the activation policy.
 Missing context and forbidden phases remain errors; omission of `inject` is not.
 
@@ -26,3 +27,7 @@ cpp-hgraph -I replay.py --engine cpp --output cpp.json
 ```
 
 No variation was found in the reference ticks or helper-call counts.
+
+Moving requirements from the shared signature to a selected part changes no
+tick expectation above. Target selection, duplicate providers and graph/node
+shape are compiler checks, not Python/C++ runtime variations.

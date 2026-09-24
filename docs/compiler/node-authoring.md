@@ -48,9 +48,9 @@ two values; it cannot schedule, publish or retain an input view.
 - **NAT-7:** Check capability requirements for HGL and native functions alike.
   Calls silently add the callee's requirements to the caller, transitively and
   without duplicates. `inject out` refers to the declared temporal result. Value functions may use
-  admitted context services without acquiring a node. Target bindings declare
-  their used subset; they cannot add undeclared semantic capabilities. See the
-  [capability contract](native-interfaces.md#outputs-and-injectables).
+  admitted context services without acquiring a node. Selected HGL implementation parts declare
+  target requests and lifecycle hooks; the shared declaration owns the signature. See the
+  [capability contract](native-interfaces.md#implementation-parts-and-injectables).
 
 `ref<ref<T>>` in source is an error. Substituting `T = ref<U>` into `ref<T>`
 normalizes to `ref<U>` before target mapping. No nested REF runtime endpoint.

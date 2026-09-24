@@ -42,60 +42,50 @@ Compile-fail cases cover wrong argument/result types, temporal-to-scalar
 binding, missing members and borrowed-view escape. Keep generated interface
 checks separate from runtime trace evidence.
 
-## Outputs and injectables
+## Implementation parts and injectables
 
-Value-helper injection and inference are implemented in the upstream compiler.
-C++ supports `logger` and `clock`; generated Rust traits support `logger`.
-Temporal native bindings below remain an agreed extension:
+Keep the callable signature in the shared interface:
 
 ```hgl
-native fn accumulate(value: i64) -> i64 {
+module std.native
+native fn filter(value: i64, const limit: i64) -> i64
+```
+
+Select a target part in the library build. Its body describes implementation
+requirements. `{}` means a native graph; `{ when; }` means a native node:
+
+```hgl
+module std.native part cpp_impl
+native fn filter(value: i64, const limit: i64) -> i64 {
     inject out, logger
+    start;
+    when;
+    stop;
 }
-
-native const fn describe(value: i64) -> str {
-    inject logger
-}
 ```
 
-`out` is `Output<T>` derived from the temporal result `-> T`; it is not an
-additional output. `logger`, `clock` and `scheduler` have capability types
-`Logger`, `EvaluationClock` and `Scheduler`. These are call-scoped access to
-services or endpoints, not payloads to temporalize. Public type spelling and
-target wrappers remain implementation work.
+The implementation completes exactly one matching declaration; it is not an
+overload. Match parameter names, types, constness, generics, result and exception
+policy. Reject duplicate declarations, selected implementations or hooks.
+`start;` and `stop;` require `when;`. Part names have no target-selection magic.
+An unnamed shared interface may accompany named parts.
 
-`const fn` is non-temporal, not pure. A logger may be supplied by its call
-context without creating a node. Missing context is a diagnostic. It cannot
-inject its own temporal output, scheduler or node state. Clock access requires
-a runtime context and an admitted phase. Forwarding a caller's node capabilities
-needs an explicit ownership contract and remains unsettled.
+`native const fn` remains a value helper. Its selected body may request logger
+or clock but cannot declare node lifecycle, output or scheduler ownership.
+C++ and Rust parts may request different services. After selection, requirements
+silently propagate through value-helper callers, transitively and without
+duplicates. Observable behaviour remains the shared function's obligation.
+Unavailable services are checking errors.
 
-The portable contract records requirements, including through helper calls and
-imports. Calls silently upgrade the caller's injectable list, transitively and
-without duplicate requests. The caller need not repeat `inject logger`. Each target binding records the subset its implementation uses, in
-native source. C++ may request `out, logger` while Rust requests only `out`;
-the adapters may therefore have different parameter lists. Provision only the
-used facilities, but check calls against the portable contract on every target.
-Observable effects promised by that contract remain obligations on all targets.
-Provider-private allocators and scratch storage need no HGL declaration. Extra
-semantic capabilities must be declared; unavailable capabilities are errors.
+`out` denotes the declared temporal result, not another output. Constructed
+nodes own their output, scheduler and lifecycle; graph-construction callers do
+not borrow those capabilities. Nested nodes follow engine activation/teardown.
+Native constructors/destructors and Rust `Drop` do not replace start/stop.
 
-Illustrative signatures when both capabilities are used, not current APIs:
-
-```cpp
-static void accumulate(const Input<Int>& value, Output<Int>& out, Logger& logger);
-static String describe(Int value, Logger& logger);
-```
-
-```rust
-fn accumulate(value: Input<'_, i64>, out: Output<'_, i64>, logger: Logger<'_>);
-fn describe(value: i64, logger: Logger<'_>) -> String;
-```
-
-Binding checks the selected target signature against the shared contract. A
-temporal implementation's native void/unit return does not erase its HGL
-output: this form publishes through `out`. Capability access cannot escape the
-call. Injection alone must not classify an HGL function as a runtime node.
+C++ value adapters support logger/clock; generated Rust traits support logger.
+The compiler preserves temporal graph/node shape and hooks. Their execution ABI
+and explicit borrowed-TS helper spelling remain pending; backends reject those
+contracts instead of emitting scalar calls.
 
 A node calls a value helper directly during evaluation:
 
@@ -112,26 +102,23 @@ Calling a temporal `fn`, native or HGL, instead belongs to graph construction
 and is rejected inside `when`. A helper mutating its caller's output requires
 explicit borrowed access; that spelling remains unsettled.
 
-The upstream [capability contract and acceptance cases](https://github.com/hhenson/hgraph/blob/codex/native-interface-bindings/language/docs/design/decisions/0014-native-implementation-interfaces.md#outputs-and-capabilities)
-cover function parity, output shape, missing context, target subsets, imports,
-phase and lifetime errors, logging effects and nested output deltas. The
-[value-helper reference traces](capabilities/README.md) agree with reasoning in
-Python and C++. Compiler tests cover silent transitive inference, deduplication,
-imports, lifting and missing runtime context. Temporal provider output and
-target-specific subsets remain pending; current adapters pass all declared
-capabilities. Rust node-context lowering is not implemented by the trait test.
+The upstream [implementation-part rules and acceptance cases](https://github.com/hhenson/hgraph/blob/codex/native-implementation-parts/language/docs/design/native-implementation-parts.md)
+cover matching, selection, ownership and lifecycle diagnostics. Existing
+[value-helper traces](capabilities/README.md) remain the reasoned/Python/C++
+oracle. Rust generated-trait tests prove binding shape and borrowing, not
+compiler-generated node-context execution.
 
 ## Implemented slice
 
 The upstream compiler's `emit-native-rust` command generates
-`crates/hgl-native/src/scalar_interface.rs` from
-`crates/hgl-native/interfaces/scalar.hgl`, a vendored copy of the upstream
-`native/scalar_values_i64.hgl` module part. `StandardNative` implements that
-trait; the existing node calls it through `bit_and_i64`. No symbol manifest or
+`crates/hgl-native/src/scalar_interface.rs` from the shared
+`crates/hgl-native/interfaces/scalar.hgl` declaration and selected
+`scalar-impl.hgl` requirements. Both track the upstream source parts.
+`StandardNative` implements that trait; the existing node calls it through `bit_and_i64`. No symbol manifest or
 third-party dependency is introduced.
 
 ```sh
-python tools/native_bindings.py --compiler <hgl> --interface <upstream-interface>
+python tools/native_bindings.py --compiler <hgl> --interface <upstream-interface> --implementation <upstream-implementation>
 python tools/native_bindings.py --compiler <hgl> --check
 cargo xtask ci
 ```
