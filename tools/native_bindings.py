@@ -7,7 +7,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--compiler', required=True, type=Path)
     parser.add_argument('--check', action='store_true')
@@ -15,7 +15,14 @@ def main():
     parser.add_argument('--capability-interface', type=Path, help='Authoritative upstream native-provider.hgl fixture')
     parser.add_argument('--implementation', type=Path, help='Authoritative scalar target implementation part')
     parser.add_argument('--capability-implementation', type=Path, help='Authoritative capability target implementation part')
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+    for interface, implementation in (
+        ('interface', 'implementation'),
+        ('capability_interface', 'capability_implementation'),
+    ):
+        if (getattr(args, interface) is None) != (getattr(args, implementation) is None):
+            parser.error(f"--{interface.replace('_', '-')} and "
+                         f"--{implementation.replace('_', '-')} must be supplied together")
     contracts = [
         ('crates/hgl-native/interfaces/scalar.hgl', 'crates/hgl-native/src/scalar_interface.rs', args.interface, 'crates/hgl-native/interfaces/scalar-impl.hgl', args.implementation),
         ('crates/hgl-native/interfaces/capabilities.hgl', 'crates/hgl-native/tests/support/capability_interface.rs',
