@@ -20,10 +20,11 @@ pub fn emit_rust(module: &CheckedModule) -> Result<String, Vec<Diagnostic>> {
         let reserved = |name: &str| matches!(name, "self" | "Self" | "super" | "crate");
         if public
             && (reserved(&function.name)
-                || function
-                    .parameters
-                    .iter()
-                    .any(|parameter| reserved(&parameter.name))
+                || function.parameters.iter().any(|parameter| {
+                    reserved(&parameter.name)
+                        || (!function.native
+                            && matches!(parameter.name.as_str(), "registry" | "builder"))
+                })
                 || (!function.native && function.name == "register"))
         {
             errors.push(Diagnostic {

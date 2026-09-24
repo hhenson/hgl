@@ -137,3 +137,24 @@ fn unrepresentable_public_rust_names_are_emission_errors() -> Result<(), String>
     }
     Ok(())
 }
+
+#[test]
+fn graph_wrapper_binding_collisions_are_emission_errors() -> Result<(), String> {
+    for name in ["registry", "builder"] {
+        let program = PROGRAM
+            .replace("fn main()", &format!("fn main(const {name}: i64)"))
+            .replace("const_(42)", &format!("const_({name})"));
+        let checked = check(&sources(&program, PART)).map_err(|errors| format!("{errors:?}"))?;
+        let errors = emit_rust(&checked).expect_err("wrapper binding collision must fail emission");
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.message.contains("Rust binding name"))
+        );
+        let program = PROGRAM.replace("value", name);
+        let part = PART.replace("value", name);
+        let checked = check(&sources(&program, &part)).map_err(|errors| format!("{errors:?}"))?;
+        emit_rust(&checked).map_err(|errors| format!("{errors:?}"))?;
+    }
+    Ok(())
+}
