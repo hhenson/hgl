@@ -26,12 +26,10 @@ def main():
             if not all(observed[key] == case[key] for key in ('ticks', 'printed')):
                 raise SystemExit(f'{engine} disagrees on {case["name"]}')
     if args.upstream:
-        for local, source in (
-            ('main.hgl', 'language/examples/const-debug.hgl'),
-            ('rust.hgl', 'language/examples/impl/const-debug-rust.hgl'),
-        ):
-            if (ROOT / 'examples/const-debug' / local).read_bytes() != (args.upstream / source).read_bytes():
-                raise SystemExit(f'Bootstrap source differs from upstream: {local}')
+        local = ROOT / 'examples/const-debug/main.hgl'
+        source = args.upstream / 'language/examples/const-debug.hgl'
+        if local.read_bytes() != source.read_bytes():
+            raise SystemExit('Bootstrap source differs from upstream: main.hgl')
     print('Bootstrap source/evidence checks passed')
 
 

@@ -10,7 +10,7 @@ print helper; `native.rs` implements it. `main.rs` is only an engine launcher:
 node bodies, their metadata, native interface and graph construction are emitted.
 
 The source is copied from hgraph's tested `language/examples/const-debug.hgl`;
-the target part comes from `language/examples/impl/const-debug-rust.hgl`.
+the Rust part and provider belong here. hgraph supplies its own C++ implementation.
 The bootstrap is i64-only and prints no timestamp or label.
 
 ```sh

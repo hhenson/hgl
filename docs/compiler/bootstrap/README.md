@@ -13,8 +13,9 @@ prefixes vary; only integer payloads are compared. There are no deviations.
 
 The shared HGL source is the upstream `language/examples/const-debug.hgl`.
 It uses `const_` because `const` is reserved. HGL owns both nodes and composition;
-only the print helper is native. This first i64 sink prints an integer plus a
-newline; labels, generic formatting and the complete debug_print API are later
+only the print helper is native. hgraph owns its C++ implementation; the Rust
+part and provider live in `examples/const-debug` here. This first i64 sink prints
+an integer plus a newline; labels, generic formatting and the complete debug_print API are later
 work. Native temporal providers and raw-TS helper access are not required.
 
 Acceptance: check and emit have no effects; compile emitted Rust, run the full
