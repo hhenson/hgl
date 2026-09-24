@@ -57,6 +57,13 @@ In HGL, `inject out, logger, clock, scheduler` asks for the output, the
 logger, the clock and the scheduler; `state` and `cache` declarations ask for
 recordable state and state.
 
+The agreed [language capability contract](../compiler/native-interfaces.md#outputs-and-injectables)
+also permits context services in value functions. Its requirements are visible
+to the checker, without adding caller-supplied arguments. Native targets may
+request different subsets of the declared capabilities; only those used need
+provisioning. Helpers borrow access for the call and acquire no node of their
+own. This language extension is not yet implemented.
+
 
 Relationships
 -------------

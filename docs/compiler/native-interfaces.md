@@ -13,6 +13,8 @@ second per-function symbol manifest.
 - `native const fn`: ordinary value-function typing and no independent ticks.
   A scalar helper cannot implement a temporal declaration merely because its
   payload types match.
+- Use the same checked function contract for HGL and native bodies. Binding
+  selects an implementation; it does not define another function kind.
 - Borrowed endpoint access must be explicit. Do not reinterpret ordinary
   collection values as live input views. Its source spelling remains pending.
 - Resolve overloads and normalize substituted REF types before binding checks.
@@ -39,6 +41,81 @@ Acceptance: preserve the reasoned/Python/C++/Rust bitwise traces in
 Compile-fail cases cover wrong argument/result types, temporal-to-scalar
 binding, missing members and borrowed-view escape. Keep generated interface
 checks separate from runtime trace evidence.
+
+## Outputs and injectables
+
+Agreed extension, not implemented. A native contract may declare capabilities
+using the same `inject` spelling as an HGL body:
+
+```hgl
+native fn accumulate(value: i64) -> i64 {
+    inject out, logger
+}
+
+native const fn describe(value: i64) -> str {
+    inject logger
+}
+```
+
+`out` is `Output<T>` derived from the temporal result `-> T`; it is not an
+additional output. `logger`, `clock` and `scheduler` have capability types
+`Logger`, `EvaluationClock` and `Scheduler`. These are call-scoped access to
+services or endpoints, not payloads to temporalize. Public type spelling and
+target wrappers remain implementation work.
+
+`const fn` is non-temporal, not pure. A logger may be supplied by its call
+context without creating a node. Missing context is a diagnostic. It cannot
+inject its own temporal output, scheduler or node state. Clock access requires
+a runtime context and an admitted phase. Forwarding a caller's node capabilities
+needs an explicit ownership contract and remains unsettled.
+
+The portable contract records requirements, including through helper calls and
+imports. Each target binding records the subset its implementation uses, in
+native source. C++ may request `out, logger` while Rust requests only `out`;
+the adapters may therefore have different parameter lists. Provision only the
+used facilities, but check calls against the portable contract on every target.
+Observable effects promised by that contract remain obligations on all targets.
+Provider-private allocators and scratch storage need no HGL declaration. Extra
+semantic capabilities must be declared; unavailable capabilities are errors.
+
+Illustrative signatures when both capabilities are used, not current APIs:
+
+```cpp
+static void accumulate(const Input<Int>& value, Output<Int>& out, Logger& logger);
+static String describe(Int value, Logger& logger);
+```
+
+```rust
+fn accumulate(value: Input<'_, i64>, out: Output<'_, i64>, logger: Logger<'_>);
+fn describe(value: i64, logger: Logger<'_>) -> String;
+```
+
+Binding checks the selected target signature against the shared contract. A
+temporal implementation's native void/unit return does not erase its HGL
+output: this form publishes through `out`. Capability access cannot escape the
+call. Injection alone must not classify an HGL function as a runtime node.
+
+A node calls a value helper directly during evaluation:
+
+```hgl
+fn describe_each(value: i64) -> str {
+    inject logger
+    when { return describe(value) }
+}
+```
+
+The helper receives the current scalar value and borrows the enclosing node's
+logger. Its string result is published by the enclosing `return`; the helper
+creates no node or output. Its requirements contribute to the node's contract.
+Calling a temporal `fn`, native or HGL, instead belongs to graph construction
+and is rejected inside `when`. A helper mutating its caller's output requires
+explicit borrowed access; that spelling remains unsettled.
+
+The upstream [capability contract and acceptance cases](https://github.com/hhenson/hgraph/blob/codex/native-interface-bindings/language/docs/design/decisions/0014-native-implementation-interfaces.md#outputs-and-capabilities)
+cover function parity, output shape, missing context, target subsets, imports,
+phase and lifetime errors, logging effects and nested output deltas. Expectations
+are reasoned; executable validation is pending. Compare runtime cases with Python
+and C++ before binding implementation; report accepted variations separately.
 
 ## Implemented slice
 
