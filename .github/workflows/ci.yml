@@ -52,7 +52,7 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       # Update deliberately with the upstream interface/compiler migration.
-      HGRAPH_REVISION: 29dd610b84fd29d87bb8e4e25975a985fab597e6
+      HGRAPH_REVISION: fc3d5e099d112e8aa79b31394521d6e3bd2406f0
       CC: gcc-14
       CXX: g++-14
     steps:
@@ -82,4 +82,6 @@ jobs:
           python tools/native_bindings.py --check
           --compiler "$RUNNER_TEMP/hgraph-build/language/hgl"
           --interface "$RUNNER_TEMP/hgraph/language/stdlib/hgl/hgraph/native/scalar_values_i64.hgl"
+          --implementation "$RUNNER_TEMP/hgraph/language/stdlib/hgl/hgraph/native/impl/rust_scalar_values_i64.hgl"
           --capability-interface "$RUNNER_TEMP/hgraph/language/tests/codegen/native-provider.hgl"
+          --capability-implementation "$RUNNER_TEMP/hgraph/language/tests/codegen/native-provider-rust-impl.hgl"
