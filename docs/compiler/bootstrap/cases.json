@@ -1,0 +1,6 @@
+[
+  {"name":"constant-42","kind":"constant","value":42,"ticks":[42],"printed":[42]},
+  {"name":"constant-negative","kind":"constant","value":-7,"ticks":[-7],"printed":[-7]},
+  {"name":"missing-and-equal","kind":"input","input":[null,42,null,42,-7],"ticks":[null,42,null,42,-7],"printed":[42,42,-7]},
+  {"name":"invalid-only","kind":"input","input":[null,null],"ticks":[null,null],"printed":[]}
+]

@@ -35,6 +35,7 @@ jobs:
       - run: python tools/stdlib_fixtures.py --check
       - run: python -m unittest discover -s docs/compiler/stdlib -p "test_*.py"
       - run: python -m unittest discover -s tools -p "test_*.py"
+      - run: python tools/bootstrap_reference.py
       - run: cargo xtask ci
       - run: cargo fmt --manifest-path experiments/compiler-tools/Cargo.toml -- --check
       - run: cargo clippy --manifest-path experiments/compiler-tools/Cargo.toml --all-targets -- -D warnings
@@ -53,7 +54,7 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       # Update deliberately with the upstream interface/compiler migration.
-      HGRAPH_REVISION: b5c644e330086b09dd27ac7bd421157e91e22dd7
+      HGRAPH_REVISION: 0e33040ba70f2fb361ae843275de24ff2b0075ed
       CC: gcc-14
       CXX: g++-14
     steps:
@@ -69,6 +70,8 @@ jobs:
           git -C "$RUNNER_TEMP/hgraph" fetch --depth 1 https://github.com/hhenson/hgraph.git "$HGRAPH_REVISION"
           git -C "$RUNNER_TEMP/hgraph" checkout --detach FETCH_HEAD
           test "$(git -C "$RUNNER_TEMP/hgraph" rev-parse HEAD)" = "$HGRAPH_REVISION"
+      - name: Verify the bootstrap uses upstream HGL
+        run: python tools/bootstrap_reference.py --upstream "$RUNNER_TEMP/hgraph"
       - name: Build the upstream compiler
         run: |
           cmake -S "$RUNNER_TEMP/hgraph" -B "$RUNNER_TEMP/hgraph-build" -G Ninja \
@@ -83,6 +86,6 @@ jobs:
           python tools/native_bindings.py --check
           --compiler "$RUNNER_TEMP/hgraph-build/language/hgl"
           --interface "$RUNNER_TEMP/hgraph/language/stdlib/hgl/hgraph/native/scalar_values_i64.hgl"
-          --implementation "$RUNNER_TEMP/hgraph/language/stdlib/hgl/hgraph/native/impl/rust_scalar_values_i64.hgl"
+          --implementation crates/hgl-native/interfaces/scalar-impl.hgl
           --capability-interface "$RUNNER_TEMP/hgraph/language/tests/codegen/native-provider.hgl"
-          --capability-implementation "$RUNNER_TEMP/hgraph/language/tests/codegen/native-provider-rust-impl.hgl"
+          --capability-implementation crates/hgl-native/interfaces/capabilities-impl.hgl

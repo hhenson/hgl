@@ -3,7 +3,9 @@
 Status: agreed model; scalar bindings implemented with upstream ADR 0014.
 
 The HGL declaration owns typing, temporal role, borrowing, effects and errors.
-C++ and Rust implementations live in ordinary native source. Generate a C++
+hgraph owns C++ implementation parts and providers; hgl owns Rust parts and
+providers. Share HGL contracts across repositories and select one implementation.
+Implementations live in ordinary native source. Generate a C++
 `bind<Implementation>()` adapter and a Rust implementation trait from that
 contract. Native-library builds own dependency configuration; do not author a
 second per-function symbol manifest.
@@ -113,19 +115,22 @@ compiler-generated node-context execution.
 The upstream compiler's `emit-native-rust` command generates
 `crates/hgl-native/src/scalar_interface.rs` from the shared
 `crates/hgl-native/interfaces/scalar.hgl` declaration and selected
-`scalar-impl.hgl` requirements. Both track the upstream source parts.
+`scalar-impl.hgl` requirements. Only the shared declaration tracks upstream;
+the Rust implementation part is maintained here.
 `StandardNative` implements that trait; the existing node calls it through `bit_and_i64`. No symbol manifest or
 third-party dependency is introduced.
 
 ```sh
-python tools/native_bindings.py --compiler <hgl> --interface <upstream-interface> --implementation <upstream-implementation>
+python tools/native_bindings.py --compiler <hgl> --interface <upstream-interface> --implementation crates/hgl-native/interfaces/scalar-impl.hgl
 python tools/native_bindings.py --compiler <hgl> --check
 cargo xtask ci
 ```
 
 CI builds the upstream compiler at the revision pinned in `ci.yml` and checks
-both the vendored HGL part and generated Rust trait. Update the pin and
-regenerate together when changing the contract.
+the vendored declaration against upstream and generates the Rust trait using
+the local implementation part. Supply interface and implementation paths together;
+they need not share a repository. Update the pin and regenerate together when
+changing the shared contract.
 
 C++ supports concrete scalar value interfaces, overloads and `throws`; 56 core
 scalar helpers now use the generated adapter. Rust trait emission currently

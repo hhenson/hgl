@@ -1,6 +1,6 @@
 # Runtime implementation
 
-Status: implemented through the Rust API; HGL lowering remains pending.
+Status: implemented through the Rust API; the first scalar HGL compiler slice runs.
 
 The prototype runs fixed TSL/TSB, TSD, REF and nested graphs together. Endpoint
 identity belongs to the shared store; node rank belongs to a graph scope.
@@ -8,7 +8,8 @@ A child owns its state and scheduler. Its owner runs it only when notified or
 due, and exposes its output without copying it.
 
 Shapes compose recursively: `TS[bool/i64/f64]`, fixed TSL, named TSB fields,
-`TSD[i64, child]` and REF. The description builder remains scalar-only.
+`TSD[i64, child]` and REF. The description builder supports recursive shapes and child templates; the
+compiler currently lowers the scalar const/debug bootstrap.
 Growing TSL, key-set output ports and captured child errors remain pending. Independent root graphs can run sequentially in one
 store; concurrent root clock domains are not implemented.
 

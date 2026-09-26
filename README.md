@@ -36,7 +36,9 @@ repository under `language/`, and this repository accepts it as it stands.
 
 The Rust runtime supports scalar values, fixed collections, dictionaries,
 references and nested graphs through its API; see [coverage and validation](docs/runtime-implementation.md).
-Compiler lowering and recursive description-builder integration remain pending.
+The first Rust compiler slice generates complete i64 const/debug nodes and their
+graph construction; [run the example](examples/const-debug/README.md). General
+language coverage and recursive compiler lowering remain pending.
 
 ## Building
 

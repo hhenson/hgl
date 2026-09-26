@@ -1,0 +1,50 @@
+{
+  "engine": "cpp",
+  "package_version": "0.0.0",
+  "package_init_sha256": "bbd4fbd8ca6d9adc15393d6855a6715501d4c7273bb0a0b8879ffec0dd9caf4f",
+  "native_binary_sha256": "9bb33a9a7294e3ebe07215ba2368339a1e7df0ffa21a9b1a2e815049312e9f64",
+  "corpus_sha256": "f75b526eef441caa3b3207e642ea7c0441135ea824cfc501e5d409009d602ab2",
+  "observed": {
+    "constant-42": {
+      "ticks": [
+        42
+      ],
+      "printed": [
+        42
+      ],
+      "matches": true
+    },
+    "constant-negative": {
+      "ticks": [
+        -7
+      ],
+      "printed": [
+        -7
+      ],
+      "matches": true
+    },
+    "missing-and-equal": {
+      "ticks": [
+        null,
+        42,
+        null,
+        42,
+        -7
+      ],
+      "printed": [
+        42,
+        42,
+        -7
+      ],
+      "matches": true
+    },
+    "invalid-only": {
+      "ticks": [
+        null,
+        null
+      ],
+      "printed": [],
+      "matches": true
+    }
+  }
+}
