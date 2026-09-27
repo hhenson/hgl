@@ -35,7 +35,6 @@ __pycache__/
 /docs/compiler/stdlib/nodes.hgl
 /docs/compiler/stdlib/python.json
 /docs/compiler/stdlib/replay.py
-/docs/compiler/stdlib/test_evidence.py
 /docs/runtime_spec/boundaries.md
 /docs/runtime_spec/cases_atomic.md
 /docs/runtime_spec/cases_collections.md

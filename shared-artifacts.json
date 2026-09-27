@@ -82,7 +82,7 @@
     },
     "docs/compiler/stdlib/nodes.hgl": {
       "path": "compiler/stdlib/nodes.hgl",
-      "repository": "hgraph_spec_audit"
+      "repository": "hgraph_spec"
     },
     "docs/compiler/stdlib/python.json": {
       "path": "compiler/stdlib/python.json",
@@ -90,10 +90,6 @@
     },
     "docs/compiler/stdlib/replay.py": {
       "path": "compiler/stdlib/replay.py",
-      "repository": "hgraph_spec_audit"
-    },
-    "docs/compiler/stdlib/test_evidence.py": {
-      "path": "compiler/stdlib/test_evidence.py",
       "repository": "hgraph_spec_audit"
     },
     "docs/runtime_spec/boundaries.md": {
