@@ -1,6 +1,6 @@
 # Card: hgl-stdlib
 
-Status: first fresh-run port; [contract](../compiler/node-authoring.md).
+Status: first fresh-run port; [contract](https://github.com/hhenson/hgraph_spec/blob/main/language/docs/design/node-authoring.md).
 
 Hand-written lowering specimens from upstream HGL. May use `hgl-native`,
 `hgl-describe`, `hgl-kernel`, `hgl-store`, `hgl-types`. Budget: 220 lines.

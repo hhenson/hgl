@@ -23,9 +23,9 @@ recreating it exercise binding and lifetime together. Observations include
 every input/output level, membership, removed values and lifecycle events.
 The expected output leaf is `2, 5, 15, idle, -15, remove, idle, 5, idle, -5, idle`.
 
-The [literal expectations](runtime_spec/validation/descriptions/reasoned.json)
+The [literal expectations](https://github.com/hhenson/hgraph_spec/blob/main/runtime/validation/descriptions/reasoned.json)
 precede reference execution. Existing rulings remain authoritative; missing
-reference observations remain missing. The [comparison report](runtime_spec/validation/descriptions/README.md) records
+reference observations remain missing. The [comparison report](https://github.com/hhenson/hgraph_spec_audit/blob/main/runtime/validation/descriptions/README.md) records
 9,330 unanimous observations, 614 supported by one runtime, and 46 governed
 by existing explicit rulings. Initial expectations and missing evidence remain visible.
 

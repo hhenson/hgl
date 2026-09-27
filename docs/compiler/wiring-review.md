@@ -62,9 +62,9 @@ The same requirements apply beneath TSD, TSL and REF and across child boundaries
 
 ## Evidence and acceptance order
 
-The local [Wiring](../runtime_spec/wiring.md),
-[cases](../runtime_spec/cases_wiring.md) and
-[validation directory](../runtime_spec/validation/wiring/README.md) are copied
+The local [Wiring](https://github.com/hhenson/hgraph_spec/blob/main/runtime/wiring.md),
+[cases](https://github.com/hhenson/hgraph_spec/blob/main/runtime/cases_wiring.md) and
+[validation directory](https://github.com/hhenson/hgraph_spec_audit/blob/main/runtime/validation/wiring/README.md) are copied
 unchanged from the revision above. The overview, conformance index and scalar
 text rules are synchronized too. The overview's superseded statement that a
 Wiring chapter is still owed is removed in favour of its settled point 2.
