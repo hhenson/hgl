@@ -23,17 +23,17 @@ recreating it exercise binding and lifetime together. Observations include
 every input/output level, membership, removed values and lifecycle events.
 The expected output leaf is `2, 5, 15, idle, -15, remove, idle, 5, idle, -5, idle`.
 
-The [literal expectations](runtime_spec/validation/descriptions/reasoned.json)
+The [literal expectations](https://github.com/hhenson/hgraph_spec/blob/main/runtime/validation/descriptions/reasoned.json)
 precede reference execution. Existing rulings remain authoritative; missing
-reference observations remain missing. The [comparison report](runtime_spec/validation/descriptions/README.md) records
+reference observations remain missing. The [comparison report](https://github.com/hhenson/hgraph_spec_audit/blob/main/runtime/validation/descriptions/README.md) records
 9,330 unanimous observations, 614 supported by one runtime, and 46 governed
 by existing explicit rulings. Initial expectations and missing evidence remain visible.
 
-The immediate deliverable is runtime and graph-description infrastructure,
-exercised by Rust written in the form a future compiler could emit. Once
-that target is sufficient, review the Rust compiler architecture and available
-Rust libraries and tools. Then implement compile, check and emit. Decision 0001
-stands: the compiler is rebuilt in Rust; the C++ compiler remains a reference.
+The runtime and description infrastructure now supports the first scalar
+compiler slice. The compiler emits Rust that constructs descriptions; the
+runtime owns wiring, type resolution and operator resolution (WIR-1, WIR-14).
+The [wiring review](compiler/wiring-review.md) records what remains before
+recursive and generic compiler lowering. The C++ compiler remains a reference.
 
 `hgl-plan` owns the reusable descriptions, hand builder and checks;
 `hgl-describe` constructs scoped instances. Their tests compare all 9,990
@@ -45,4 +45,5 @@ Boundary paths currently reject descent through a live REF capture. Pass the
 whole target and project inside the child; a one-time target copy would lose
 rebinding. Ordinary fixed paths and whole-target live captures are supported.
 The compiler review must account for this lowering constraint before widening
-that interface. Compiler parsing, checking and emission remain unimplemented.
+that interface. Parsing, checking and emission work for the scalar bootstrap;
+recursive source lowering remains unimplemented.

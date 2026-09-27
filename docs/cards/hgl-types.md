@@ -127,5 +127,9 @@ signature shape.
 `Dictionary(Box<TsType>)` (i64 keys), and `Reference(Box<TsType>)`. It exposes
 `scalar`, `len`, `is_empty`, `child`, `field`, `fixed`; these are the existing
 endpoint-shape operations. `hgl-endpoints::Kind` re-exports this type.
+`Bundle` names its fields, not the bundle: nominal bundle identity is absent.
+Derived equality describes the exact ordered shape; it is not WIR-15 matching.
+The [wiring review](../compiler/wiring-review.md) separates that relation from
+WIR-7 inference and from the binding plan needed to connect equivalent shapes.
 `NodeType::child_graphs: usize` declares the required template count; nonzero
 classifies the node as Nested. Existing budgets are unchanged.

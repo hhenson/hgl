@@ -4,7 +4,7 @@ Status: sketch
 
 An outline, not code. It says what a prototype of the runtime would consist
 of, in what order it would be built, and how it would be judged. It is built
-from the [runtime specification](../runtime_spec/overview.md), under the
+from the [runtime specification](https://github.com/hhenson/hgraph_spec/blob/main/runtime/overview.md), under the
 speed rules of [0009](0009-designing-for-speed.md), and it merges the spike
 and the first slice of [0006](0006-build-sequence.md).
 

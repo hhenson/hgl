@@ -1,9 +1,9 @@
 # 0007 — Where hgraph's own documents disagree
 
 Status: historical survey; current evidence is in the
-[runtime evidence ledger](../runtime_spec/evidence.md).
+[runtime evidence ledger](https://github.com/hhenson/hgraph_spec_audit/blob/main/runtime/evidence.md).
 
-Input to the [runtime specification](../runtime_spec/overview.md). Collected
+Input to the [runtime specification](https://github.com/hhenson/hgraph_spec/blob/main/runtime/overview.md). Collected
 2026-09-19 by reading hgraph's documents against each other and against the
 C++ sources; nothing here was checked by running code. Paths are in the
 hgraph repository. *SPEC* is `docs/source/specification/` (dated 2025-12-20,

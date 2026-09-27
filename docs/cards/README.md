@@ -4,7 +4,7 @@ Status: accepted for the first slice, 2026-09-19 — revised as each build finds
 
 A card is the one page an agent is given to build one crate. It is written by
 us, not generated. With it the agent gets the rules of the
-[runtime specification](../runtime_spec/overview.md) the card names, and the
+[runtime specification](https://github.com/hhenson/hgraph_spec/blob/main/runtime/overview.md) the card names, and the
 failing cases and benchmarks the card names — not the whole repository.
 
 This is the method under test
@@ -84,7 +84,7 @@ first are **hgl-kernel**, for the interface a node author sees, and
 
 ## Dynamic slice
 
-The [accepted traces](../runtime_spec/validation.md) drive one combined
+The [accepted traces](https://github.com/hhenson/hgraph_spec_audit/blob/main/archive/hgl/runtime/validation.md) drive one combined
 TSD/REF/nested-graph slice. Scalar storage stays in `hgl-store`;
 [hgl-bindings](hgl-bindings.md) owns endpoint identity and graph scopes,
 [hgl-nested](hgl-nested.md) owns child instances, and

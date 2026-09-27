@@ -7,6 +7,11 @@ identity belongs to the shared store; node rank belongs to a graph scope.
 A child owns its state and scheduler. Its owner runs it only when notified or
 due, and exposes its output without copying it.
 
+The [type and wiring review](compiler/wiring-review.md) records the current
+construction limits: exact ordered bundle shapes, limited REF compatibility,
+no nominal bundles, and no generic or operator resolver. These are incomplete
+parts of WIR-1–24, not alternative language rules.
+
 Shapes compose recursively: `TS[bool/i64/f64]`, fixed TSL, named TSB fields,
 `TSD[i64, child]` and REF. The description builder supports recursive shapes and child templates; the
 compiler currently lowers the scalar const/debug bootstrap.
@@ -15,7 +20,7 @@ store; concurrent root clock domains are not implemented.
 
 ## Contract coverage
 
-The [accepted observations](runtime_spec/validation.md) remain the oracle.
+The [accepted observations](https://github.com/hhenson/hgraph_spec_audit/blob/main/archive/hgl/runtime/validation.md) remain the oracle.
 These tests establish the following subset, not all 243 observations:
 
 | Tests | Contract exercised |
@@ -57,7 +62,7 @@ and the separate teardown when a REF expires while its target stays alive.
 [Paired scalar measurements](../bench/results/2026-09-21-dynamic-foundation.md)
 remain below the C++ ceiling but show the added metadata cost over P1. They
 do not establish dynamic-case performance parity. A paired dynamic benchmark,
-compiler/description integration remain required before calling this the
+recursive compiler lowering and the wiring resolver remain required before calling this the
 complete prototype.
 
 ## Fixed collection acceptance
@@ -66,7 +71,7 @@ All 44 accepted scenarios replay against Rust: 12,142 assertions, including
 four real switch/map child graphs with timers and fresh state. Fixtures are
 exported from the initial reasoning, recorded corrections and user rulings;
 Python/C++ observations remain unchanged. Run `python3 tools/fixed_fixtures.py --check` to detect fixture drift. Known reference deviations remain in the
-[comparison report](runtime_spec/validation/fixed/README.md).
+[comparison report](https://github.com/hhenson/hgraph_spec_audit/blob/main/runtime/validation/fixed/README.md).
 
 Fixed children keep their handles across whole, assembled and empty bindings.
 An assembled parent caches child validity and time; ordinary reads do not scan

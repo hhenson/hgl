@@ -2,8 +2,9 @@
 
 ## Index
 
-- [Native implementation interfaces](compiler/native-interfaces.md) — shared contracts and source-owned providers
-- [Node authoring and Rust native bindings](compiler/node-authoring.md) — porting contract and first specimens
+- [Type and wiring review](compiler/wiring-review.md) — upstream rules, evidence and Rust implementation gaps
+- [Native implementation interfaces](https://github.com/hhenson/hgraph_spec/blob/main/language/docs/design/native-interfaces.md) — shared contracts and source-owned providers
+- [Node authoring and Rust native bindings](https://github.com/hhenson/hgraph_spec/blob/main/language/docs/design/node-authoring.md) — porting contract and first specimens
 - [Explorations](explorations/README.md) — ideas in progress, one file each
 - [Decisions](decisions/README.md) — what was settled, and why
 - [Open questions](open-questions.md) — unanswered, unowned
@@ -13,7 +14,7 @@
 - [Recursive description contracts](recursive-description-contracts.md) — boundary validation before implementation
 - [Contract cards](cards/README.md) — the one page an agent is given to build
   one crate; the first slice's six are written and await review
-- [Runtime specification](runtime_spec/overview.md) — what an HGraph runtime
+- [Runtime specification](https://github.com/hhenson/hgraph_spec/blob/main/runtime/overview.md) — what an HGraph runtime
   is, concept by concept; includes extracted conformance cases and evidence
 
 Reading order: [decision 0001](decisions/0001-rust-end-to-end.md) (Rust, end
@@ -65,4 +66,4 @@ This repository never becomes the source of truth for anything that ships.
 
 The runtime model is backported to hgraph under `docs/source/runtime_spec/`.
 Keep this working copy synchronized with that upstream model; see the
-[consolidation record](runtime_spec/extraction.md).
+[consolidation record](https://github.com/hhenson/hgraph_spec/blob/main/runtime/extraction.md).
