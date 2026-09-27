@@ -35,7 +35,8 @@ jobs:
       - run: python docs/runtime_spec/validation/descriptions/check.py
       - run: python -m unittest discover -s docs/runtime_spec/validation/descriptions -p "test_*.py"
       - run: python tools/stdlib_fixtures.py --check
-      - run: python -m unittest discover -s docs/compiler/stdlib -p "test_*.py"
+      - run: python external/hgraph_spec_audit/tools/shared_artifacts.py --offline
+      - run: python -m unittest discover -s external/hgraph_spec_audit/compiler/stdlib -p "test_*.py"
       - run: python -m unittest discover -s tools -p "test_*.py"
       - run: python tools/bootstrap_reference.py
       - name: Verify recorded wiring assessment
