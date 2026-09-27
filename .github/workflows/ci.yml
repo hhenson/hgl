@@ -27,6 +27,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - name: Materialize pinned shared sources
+        run: python tools/shared_artifacts.py
       - uses: Swatinem/rust-cache@v2
       - run: python tools/fixed_fixtures.py --check
       - run: python tools/description_fixtures.py --check
@@ -39,7 +41,7 @@ jobs:
       - name: Verify recorded wiring assessment
         run: |
           python docs/runtime_spec/validation/wiring/check.py
-          git diff --exit-code -- docs/runtime_spec/validation/wiring/assessment.json
+          python -c "import json; from pathlib import Path; assert json.loads(Path('docs/runtime_spec/validation/wiring/assessment.json').read_text()) == json.loads(Path('external/hgraph_spec_audit/runtime/validation/wiring/assessment.json').read_text()), 'wiring assessment differs from pinned evidence'"
       - run: cargo xtask ci
       - run: cargo fmt --manifest-path experiments/compiler-tools/Cargo.toml -- --check
       - run: cargo clippy --manifest-path experiments/compiler-tools/Cargo.toml --all-targets -- -D warnings
@@ -49,6 +51,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Materialize pinned shared sources
+        run: python tools/shared_artifacts.py
       - uses: EmbarkStudios/cargo-deny-action@v2
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:
@@ -63,6 +67,8 @@ jobs:
       CXX: g++-14
     steps:
       - uses: actions/checkout@v4
+      - name: Materialize pinned shared sources
+        run: python tools/shared_artifacts.py
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"

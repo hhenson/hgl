@@ -10,17 +10,15 @@ commitment, a specification, or a release. Do not share.
 
 ## Relationship to hgraph
 
-The language is specified in the [`hgraph`](https://github.com/hhenson/hgraph)
-repository under `language/`, and this repository accepts it as it stands.
+The language and runtime contracts live in
+[hgraph_spec](https://github.com/hhenson/hgraph_spec), with portable HGL in
+[hgraph_std](https://github.com/hhenson/hgraph_std). This repository implements
+them in Rust; hgraph implements the compiler and runtime in C++.
 
-- **The specification is upstream.** HGL's syntax and semantics are whatever
-  `hgraph/language/docs` says. Implementation choices — how programs are
-  built and executed — are free to differ here.
-- **Extensions land upstream first.** A needed language extension is proposed
-  in hgraph, made to work there, and only then used here.
-- **The hgraph runtime is the reference.** It mostly does what is needed; its
-  behaviour is the oracle the new runtime is checked against, tick for tick.
-  The emitter and the native bindings here are new.
+Language changes belong in the shared specification first. The
+[audit project](https://github.com/hhenson/hgraph_spec_audit) compares independently
+reasoned expectations with Python 0.5.x and C++ 0.8.x, retaining accepted
+variations and owner rulings. Native implementations stay with their runtime.
 
 ## What is here
 
@@ -45,19 +43,14 @@ contract to the Rust implementation and its next acceptance cases.
 ## Building
 
 ```sh
+python3 tools/shared_artifacts.py
 cargo xtask ci    # format, clippy, tests, docs, dependency policy
 ```
 
 That command is the definition of done. CI runs it on Linux and Windows;
 macOS is run locally.
 
-## Baseline
+## Shared language sources
 
-When a doc here says "today", it means the language as implemented in
-`hgraph/language/` at the time of writing. The places to check that claim:
-
-- `language/docs/design/` — language model, control flow, iteration, operators,
-  modules, native interface, roadmap, and the numbered decision records
-- `language/docs/developer-guide/syntax-and-semantics.md` — the closest thing to
-  a reference, including the EBNF grammar
-- `language/examples/` and `language/stdlib/` — what actually parses and runs
+Run `python3 tools/shared_artifacts.py` before compiler, documentation or
+contract-test work. See [shared source setup](docs/shared-sources.md).

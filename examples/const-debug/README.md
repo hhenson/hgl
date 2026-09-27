@@ -20,5 +20,5 @@ cargo run -p hgl-compiler --bin hglc -- emit-rust examples/const-debug/main.hgl 
 
 Checking a bare native declaration is allowed. Emission requires its selected
 implementation. Unsupported syntax or types fail before output is written.
-See [expected traces](../../docs/compiler/bootstrap/README.md) and the
+See [expected traces](https://github.com/hhenson/hgraph_spec_audit/blob/main/compiler/bootstrap/README.md) and the
 [compiler contract](../../docs/cards/hgl-compiler.md) for the exact subset.

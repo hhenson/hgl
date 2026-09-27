@@ -20,7 +20,7 @@ store; concurrent root clock domains are not implemented.
 
 ## Contract coverage
 
-The [accepted observations](runtime_spec/validation.md) remain the oracle.
+The [accepted observations](https://github.com/hhenson/hgraph_spec_audit/blob/main/archive/hgl/runtime/validation.md) remain the oracle.
 These tests establish the following subset, not all 243 observations:
 
 | Tests | Contract exercised |
@@ -71,7 +71,7 @@ All 44 accepted scenarios replay against Rust: 12,142 assertions, including
 four real switch/map child graphs with timers and fresh state. Fixtures are
 exported from the initial reasoning, recorded corrections and user rulings;
 Python/C++ observations remain unchanged. Run `python3 tools/fixed_fixtures.py --check` to detect fixture drift. Known reference deviations remain in the
-[comparison report](runtime_spec/validation/fixed/README.md).
+[comparison report](https://github.com/hhenson/hgraph_spec_audit/blob/main/runtime/validation/fixed/README.md).
 
 Fixed children keep their handles across whole, assembled and empty bindings.
 An assembled parent caches child validity and time; ordinary reads do not scan

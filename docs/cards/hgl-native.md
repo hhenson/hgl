@@ -1,6 +1,6 @@
 # Card: hgl-native
 
-Status: scalar provider migration; [contract](../compiler/node-authoring.md).
+Status: scalar provider migration; [contract](https://github.com/hhenson/hgraph_spec/blob/main/language/docs/design/node-authoring.md).
 
 Thin native helpers. May use `hgl-store`, `hgl-types`. Budget: 130 lines.
 Tests may use `hgl-alloc-count`. No registry, node lifecycle, mutation, scheduler

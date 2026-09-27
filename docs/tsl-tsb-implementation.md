@@ -1,7 +1,7 @@
 # TSL and TSB runtime slice
 
 Status: implemented through the Rust API; [validation](runtime-implementation.md).
-The [contract rulings](runtime_spec/validation/fixed/README.md) remain the oracle.
+The [contract rulings](https://github.com/hhenson/hgraph_spec_audit/blob/main/runtime/validation/fixed/README.md) remain the oracle.
 
 Recursive `Kind` descriptions replace the scalar-only dictionary and REF
 shapes. `hgl-endpoints` owns storage records and scope mailboxes;
