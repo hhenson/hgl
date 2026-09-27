@@ -6,8 +6,11 @@ Own endpoint metadata, lifetime and binding independently of scalar storage.
 May use `hgl-types` and `hgl-endpoints`; `hgl-store` owns the typed columns and delegates metadata
 here. This is the same store, not a second runtime. Budget: 1,100 source lines.
 
-Shapes are recursive: scalar TS, fixed TSL, named TSB, TSD with i64 keys,
-and REF. HGL compiler lowering and growing TSL remain separate slices.
+Shapes are recursive: scalar TS, fixed TSL, TSB with named fields, TSD with i64 keys,
+and REF. Bundles have no nominal identity yet. Fixed binding pairs children
+by position and requires equal ordered shapes; WIR-15 field-name matching
+needs a construction-time mapping, including REF rebinds and child boundaries.
+HGL collection lowering and growing TSL remain separate slices.
 
 Fixed children occupy stable dense slots. `fixed_input`/`fixed_output` address
 positions; `items_reference` builds a reusable child designation. `valid`,

@@ -30,7 +30,10 @@ Types are recursive and fully resolved. Edge paths contain only fixed fields
 and indices. Reject invalid paths, incompatible types, overlapping whole/child
 bindings, unresolved implementations and malformed child boundaries before
 instantiation. Distinct sibling bindings are valid. A REF source may feed its
-exact target type; all other connections require equal shapes.
+exact target type; all other connections currently require equal ordered shapes.
+This is an implementation limit, not WIR-6/WIR-15 compatibility. Reordered
+bundles and recursive REF alternatives need a checked binding plan before
+acceptance can widen; see the [wiring review](../compiler/wiring-review.md).
 
 Required rejection cases: wrong field/index/kind, nested shape mismatch,
 whole/descendant overlap in either order, duplicate child fields, out-of-range

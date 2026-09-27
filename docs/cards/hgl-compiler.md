@@ -49,3 +49,12 @@ multiple calls so the compiler cannot merely recognise the example text.
 
 Mutants on a copy: delay start scheduling; make bare no-input when true; suppress
 equal sink values; confuse scalar and temporal arguments; omit signature matching.
+
+## Wiring contract
+
+Emitted Rust constructs a description through the runtime wiring interface
+(WIR-1–3, WIR-20). Generic inference and operator selection must follow
+WIR-6–24; they are not part of this i64 slice. Do not use exact `TsType`
+equality as the future matcher. Keep shared native implementation matching
+exact: an operator candidate's permitted extra parameters do not extend a
+native declaration. See the [review and acceptance order](../compiler/wiring-review.md).

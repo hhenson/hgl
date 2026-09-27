@@ -1,6 +1,6 @@
 # Card: hgl-describe
 
-Status: recursive-description infrastructure; compiler implementation is later.
+Status: recursive-description infrastructure; used by the scalar compiler.
 
 Build and instantiate the plain descriptions from [hgl-plan](hgl-plan.md).
 Uses `hgl-types`, `hgl-store`, `hgl-kernel`, `hgl-plan`. Budget remains 500 lines.

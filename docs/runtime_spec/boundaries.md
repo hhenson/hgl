@@ -3,7 +3,7 @@
 Status: requirements retained from the earlier specifications; incomplete.
 
 HGL, C++ and Python can describe the same computation. Their syntax differs;
-the runtime behaviour must agree. These contracts sit beside the six chapters.
+the runtime behaviour must agree. These contracts sit beside the runtime chapters.
 
 ## Types and wiring
 
@@ -19,11 +19,12 @@ and operation contracts. [Scalar types](scalar_types.md) owns the type rules;
 formation must also cover aliases, recursion, variance, constraints and nulls.
 
 An operator **contract** gives its identity, signature, domain and behaviour.
-A **candidate** implements it. Resolution must define arguments, defaults,
-roles, substitution, constraints, rejection, ranking and ambiguity. The old
-examples require a more-specific candidate to win regardless of declaration
-order, and distinct equally best candidates to be ambiguous. The ranking
-algorithm and duplicate-candidate policy remain to be specified.
+A **candidate** implements it. [Wiring](wiring.md) now defines reference-aware
+type resolution, bundle matching, candidate selection and minimum operator
+contracts (WIR-1–24).
+Its Deferred section retains defaults, conditions, packs, type arguments and
+conditional wiring. Duplicate-candidate registration policy remains separate
+from ambiguity when selecting a call.
 
 HGL temporalization, `atomic<T>`, lifting, ordered `when` handlers, opaque
 references and input-only SIGNAL map to runtime rules. Source syntax stays
@@ -67,7 +68,7 @@ algebraic laws need explicit scalar/operator rules.
 | OPEN-04 | Engine, graph, node; stepping and phase hooks |
 | OPEN-05 | Time-series; compatibility, structural observation, expired references |
 | OPEN-06 | Collections and windows; delta adapters and eviction boundaries |
-| OPEN-07 | Wiring; complete resolution algorithm |
+| OPEN-07 | [Wiring](wiring.md); remaining resolution details in Deferred |
 | OPEN-08 | Lifecycle; nested capture and effects after failure |
 | OPEN-09 | Recovery |
 | OPEN-10 | Special-node library contracts |

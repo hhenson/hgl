@@ -36,6 +36,10 @@ jobs:
       - run: python -m unittest discover -s docs/compiler/stdlib -p "test_*.py"
       - run: python -m unittest discover -s tools -p "test_*.py"
       - run: python tools/bootstrap_reference.py
+      - name: Verify recorded wiring assessment
+        run: |
+          python docs/runtime_spec/validation/wiring/check.py
+          git diff --exit-code -- docs/runtime_spec/validation/wiring/assessment.json
       - run: cargo xtask ci
       - run: cargo fmt --manifest-path experiments/compiler-tools/Cargo.toml -- --check
       - run: cargo clippy --manifest-path experiments/compiler-tools/Cargo.toml --all-targets -- -D warnings

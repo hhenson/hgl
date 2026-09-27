@@ -7,6 +7,11 @@ identity belongs to the shared store; node rank belongs to a graph scope.
 A child owns its state and scheduler. Its owner runs it only when notified or
 due, and exposes its output without copying it.
 
+The [type and wiring review](compiler/wiring-review.md) records the current
+construction limits: exact ordered bundle shapes, limited REF compatibility,
+no nominal bundles, and no generic or operator resolver. These are incomplete
+parts of WIR-1–24, not alternative language rules.
+
 Shapes compose recursively: `TS[bool/i64/f64]`, fixed TSL, named TSB fields,
 `TSD[i64, child]` and REF. The description builder supports recursive shapes and child templates; the
 compiler currently lowers the scalar const/debug bootstrap.
@@ -57,7 +62,7 @@ and the separate teardown when a REF expires while its target stays alive.
 [Paired scalar measurements](../bench/results/2026-09-21-dynamic-foundation.md)
 remain below the C++ ceiling but show the added metadata cost over P1. They
 do not establish dynamic-case performance parity. A paired dynamic benchmark,
-compiler/description integration remain required before calling this the
+recursive compiler lowering and the wiring resolver remain required before calling this the
 complete prototype.
 
 ## Fixed collection acceptance
