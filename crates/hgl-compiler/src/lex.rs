@@ -27,6 +27,14 @@ pub(crate) fn lex(source: &Source) -> Result<Vec<Token>, Diagnostic> {
                 let Some(end) = source.text[offset + 1..].find("*/") else {
                     return Err(error(source, start..bytes.len(), "unterminated comment"));
                 };
+                if bytes.get(start + 2) == Some(&b'*') && end > 0 {
+                    offset += end + 3;
+                    tokens.push(Token {
+                        text: source.text[start..offset].into(),
+                        span: start..offset,
+                    });
+                    continue;
+                }
                 // Preserve line boundaries even when a comment spans them.
                 for (index, byte) in bytes[offset..offset + 1 + end].iter().enumerate() {
                     if *byte == b'\n' {

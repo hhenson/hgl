@@ -59,7 +59,10 @@ fn prepare(
     root: &std::path::Path,
     directory: &std::path::Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let main = fs::read_to_string(root.join("examples/const-debug/main.hgl"))?;
+    let main = fs::read_to_string(root.join("examples/const-debug/main.hgl"))?.replace(
+        "export fn main",
+        "/**\nRun the graph α.\n\nNotes:\n    .. math::\n\n        y = x\n*/\nexport fn main",
+    );
     let part = fs::read_to_string(root.join("examples/const-debug/rust.hgl"))?;
     let cases = [
         ("generated", main.clone()),

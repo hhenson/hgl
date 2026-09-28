@@ -1,5 +1,5 @@
 //! Command-line checking and Rust emission; no graph execution during compilation.
-use hgl_compiler::{Source, check, emit_rust};
+use hgl_compiler::{Source, check, emit_documentation, emit_rust};
 use std::path::PathBuf;
 
 #[expect(clippy::print_stderr, reason = "the compiler CLI renders diagnostics")]
@@ -14,9 +14,9 @@ fn main() -> std::process::ExitCode {
 }
 fn run() -> Result<(), String> {
     let mut args = std::env::args().skip(1);
-    let usage = "usage: hglc check FILE [--part FILE] | emit-rust FILE [--part FILE] --out FILE";
+    let usage = "usage: hglc check FILE [--part FILE] | emit-rust FILE [--part FILE] --out FILE | doc FILE [--part FILE] --out FILE";
     let command = args.next().ok_or(usage)?;
-    if !matches!(command.as_str(), "check" | "emit-rust") {
+    if !matches!(command.as_str(), "check" | "emit-rust" | "doc") {
         return Err(usage.into());
     }
     let mut files = vec![PathBuf::from(args.next().ok_or(usage)?)];
@@ -28,7 +28,7 @@ fn run() -> Result<(), String> {
             _ => return Err(usage.into()),
         }
     }
-    if (command == "emit-rust") != output.is_some() {
+    if (command != "check") != output.is_some() {
         return Err(usage.into());
     }
     let sources = files
@@ -64,13 +64,17 @@ fn run() -> Result<(), String> {
     if let Some(path) = output {
         std::fs::write(
             &path,
-            emit_rust(&checked).map_err(|errors| {
-                errors
-                    .iter()
-                    .map(|error| format!("{}: {}", error.source, error.message))
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            })?,
+            if command == "doc" {
+                emit_documentation(&checked)
+            } else {
+                emit_rust(&checked).map_err(|errors| {
+                    errors
+                        .iter()
+                        .map(|error| format!("{}: {}", error.source, error.message))
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                })?
+            },
         )
         .map_err(|e| format!("{}: {e}", path.display()))?;
     }

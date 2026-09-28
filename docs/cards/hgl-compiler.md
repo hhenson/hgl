@@ -1,7 +1,7 @@
 # Card: hgl-compiler
 
 First production slice: compile the upstream const/debug example, not a fixed
-string template. No external dependencies. Budget: 1400 source lines, including
+string template. No third-party dependencies; hgl-documentation owns markup preservation. Budget: 1400 source lines, including
 the CLI. Lexer → Parser → Checker → Rust Emitter remain separate modules.
 
 Public surface:
@@ -58,3 +58,9 @@ WIR-6–24; they are not part of this i64 slice. Do not use exact `TsType`
 equality as the future matcher. Keep shared native implementation matching
 exact: an operator candidate's permitted extra parameters do not extend a
 native declaration. See the [review and acceptance order](../compiler/wiring-review.md).
+
+Documentation: `CheckedModule::documentation()` exposes attached owned records.
+`Documentation` is re-exported from hgl-documentation. `emit_documentation` and
+`hglc doc FILE [--part FILE] --out FILE` emit reST from checked declarations.
+Generated Rust retains documentation in ordinary comments; rustdoc is not a reST
+renderer. Public and selected native implementation documents remain separate.

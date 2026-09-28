@@ -3,6 +3,7 @@ use crate::model::{Body, Expression, ExpressionKind, Function, Guard, Parameter,
 use crate::{Diagnostic, Source};
 
 pub(crate) struct Parsed {
+    pub documentation: Vec<crate::Documentation>,
     pub module: String,
     pub part: Option<String>,
     pub functions: Vec<Function>,
@@ -14,6 +15,7 @@ pub(crate) fn parse(source: &Source, id: usize) -> Result<Parsed, Diagnostic> {
         id,
         tokens: lex(source)?,
         cursor: 0,
+        documentation: Vec::new(),
     }
     .module()
 }
@@ -22,6 +24,7 @@ struct Parser<'a> {
     id: usize,
     tokens: Vec<Token>,
     cursor: usize,
+    documentation: Vec<crate::Documentation>,
 }
 impl Parser<'_> {
     fn token(&self) -> &Token {
@@ -87,6 +90,8 @@ impl Parser<'_> {
     }
     fn module(mut self) -> Result<Parsed, Diagnostic> {
         self.lines();
+        let doc = self.doc()?;
+        let start = self.token().span.start;
         self.need("module")?;
         let mut module = self.name()?;
         while self.take(".") {
@@ -98,19 +103,77 @@ impl Parser<'_> {
         } else {
             None
         };
+        self.save_doc(doc, start, &module, &[])?;
         self.end()?;
         let mut functions = Vec::new();
         while !self.at("") {
             functions.push(self.function()?);
             self.end()?;
         }
+        for doc in &mut self.documentation {
+            doc.part = part.clone().unwrap_or_default();
+            if !doc.declaration.starts_with("module ") {
+                doc.name = format!("{module}.{}", doc.name);
+            }
+        }
         Ok(Parsed {
+            documentation: self.documentation,
             module,
             part,
             functions,
         })
     }
+    fn doc(&mut self) -> Result<Option<Token>, Diagnostic> {
+        if !self.token().text.starts_with("/**") {
+            return Ok(None);
+        }
+        let doc = Token {
+            text: self.token().text.clone(),
+            span: self.token().span.clone(),
+        };
+        self.cursor += 1;
+        self.lines();
+        if !self.source.text[doc.span.end..self.token().span.start]
+            .trim()
+            .is_empty()
+        {
+            return Err(self.fail("documentation must immediately precede a declaration"));
+        }
+        Ok(Some(doc))
+    }
+    fn save_doc(
+        &mut self,
+        doc: Option<Token>,
+        start: usize,
+        name: &str,
+        parameters: &[Parameter],
+    ) -> Result<(), Diagnostic> {
+        if let Some(doc) = doc {
+            let text = crate::documentation::normalize(&doc.text);
+            crate::documentation::validate(
+                &text,
+                &parameters
+                    .iter()
+                    .map(|p| p.name.as_str())
+                    .collect::<Vec<_>>(),
+            )
+            .map_err(|message| error(self.source, doc.span.clone(), &message))?;
+            self.documentation.push(crate::Documentation {
+                name: name.into(),
+                declaration: self.source.text[start..self.token().span.start]
+                    .trim()
+                    .into(),
+                text,
+                part: String::new(),
+                source: self.source.name.clone(),
+                start: doc.span.start,
+                end: doc.span.end,
+            });
+        }
+        Ok(())
+    }
     fn function(&mut self) -> Result<Function, Diagnostic> {
+        let doc = self.doc()?;
         let start = self.token().span.start;
         let exported = self.take("export");
         let native = self.take("native");
@@ -141,6 +204,7 @@ impl Parser<'_> {
         } else {
             false
         };
+        self.save_doc(doc, start, &name, &parameters)?;
         let body = if self.take("{") {
             let body = self.body(native)?;
             self.need("}")?;

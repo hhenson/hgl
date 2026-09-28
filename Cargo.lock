@@ -29,6 +29,9 @@ dependencies = [
 [[package]]
 name = "hgl-compiler"
 version = "0.0.0"
+dependencies = [
+ "hgl-documentation",
+]
 
 [[package]]
 name = "hgl-deadlines"
@@ -47,6 +50,10 @@ dependencies = [
  "hgl-store",
  "hgl-types",
 ]
+
+[[package]]
+name = "hgl-documentation"
+version = "0.0.0"
 
 [[package]]
 name = "hgl-endpoints"
