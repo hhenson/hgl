@@ -23,6 +23,7 @@ fn checked(sources: &[Source]) -> Result<CheckedModule, Diagnostic> {
         module,
         functions,
         names,
+        documentation,
     } = declarations(sources)?;
     let mut bodies = Vec::new();
     let mut calls = Vec::new();
@@ -75,6 +76,7 @@ fn checked(sources: &[Source]) -> Result<CheckedModule, Diagnostic> {
         }
     }
     Ok(CheckedModule {
+        documentation,
         name: module,
         sources: sources.iter().map(|source| source.name.clone()).collect(),
         functions,
@@ -82,17 +84,20 @@ fn checked(sources: &[Source]) -> Result<CheckedModule, Diagnostic> {
     })
 }
 struct Declarations {
+    documentation: Vec<crate::Documentation>,
     module: String,
     functions: Vec<Function>,
     names: BTreeMap<String, usize>,
 }
 fn declarations(sources: &[Source]) -> Result<Declarations, Diagnostic> {
+    let mut documentation = Vec::new();
     let mut module = String::new();
     let mut functions: Vec<Function> = Vec::new();
     let mut implementations = Vec::new();
     let mut parts = BTreeSet::new();
     for (id, source) in sources.iter().enumerate() {
         let parsed = parse::parse(source, id)?;
+        documentation.extend(parsed.documentation);
         if id == 0 {
             module.clone_from(&parsed.module);
         }
@@ -158,6 +163,7 @@ fn declarations(sources: &[Source]) -> Result<Declarations, Diagnostic> {
         functions[index].body = implementation.body;
     }
     Ok(Declarations {
+        documentation,
         module,
         functions,
         names,

@@ -1,11 +1,13 @@
 //! The first complete HGL source-to-Rust compiler slice.
 mod check;
+mod documentation;
 mod emit;
 mod lex;
 mod model;
 mod parse;
 
 pub use check::check;
+pub use documentation::{Documentation, emit_documentation};
 pub use emit::emit_rust;
 
 /// One shared source or explicitly selected implementation part.
@@ -33,6 +35,7 @@ pub struct Diagnostic {
 /// Resolved functions and calls, independent of runtime storage.
 #[derive(Debug)]
 pub struct CheckedModule {
+    documentation: Vec<Documentation>,
     name: String,
     sources: Vec<String>,
     functions: Vec<model::Function>,

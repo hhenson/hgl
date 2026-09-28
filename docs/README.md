@@ -3,6 +3,7 @@
 ## Index
 
 - [Type and wiring review](compiler/wiring-review.md) — upstream rules, evidence and Rust implementation gaps
+- [Source documentation](https://github.com/hhenson/hgraph_spec/blob/main/language/docs/design/documentation.md) — agreed Google-style/reST contract
 - [Native implementation interfaces](https://github.com/hhenson/hgraph_spec/blob/main/language/docs/design/native-interfaces.md) — shared contracts and source-owned providers
 - [Node authoring and Rust native bindings](https://github.com/hhenson/hgraph_spec/blob/main/language/docs/design/node-authoring.md) — porting contract and first specimens
 - [Explorations](explorations/README.md) — ideas in progress, one file each
