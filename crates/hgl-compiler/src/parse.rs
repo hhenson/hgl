@@ -162,7 +162,8 @@ impl Parser<'_> {
                 name: name.into(),
                 declaration: self.source.text[start..self.token().span.start]
                     .trim()
-                    .into(),
+                    .replace("\r\n", "\n")
+                    .replace('\r', "\n"),
                 text,
                 part: String::new(),
                 source: self.source.name.clone(),

@@ -5,7 +5,7 @@
 pub struct Documentation {
     /// Qualified HGL declaration name, not a generated Rust name.
     pub name: String,
-    /// Original declaration signature, without an executable body.
+    /// Original declaration signature, without an executable body and with LF line endings.
     pub declaration: String,
     /// Normalized reST content with Google-style sections.
     pub text: String,

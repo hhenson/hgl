@@ -95,10 +95,15 @@ fn a_function_can_share_its_modules_name() -> Result<(), Vec<hgl_compiler::Diagn
 #[test]
 fn all_lexer_line_endings_preserve_sections_and_validate_keys()
 -> Result<(), Vec<hgl_compiler::Diagnostic>> {
-    let text = "module docs\n/**\nPreserve sections.\n\nArgs:\n    value: Input.\n\nNotes:\n    .. math::\n\n        y = x\n*/\nfn f(value: i64) -> i64 { return value }\n";
+    let text = "module docs\n/**\nPreserve sections.\n\nArgs:\n    value: Input.\n\nNotes:\n    .. math::\n\n        y = x\n*/\nfn f(\nvalue: i64\n) -> i64 { return value }\n";
     let expected = check(&[source(text)])?;
+    assert!(emit_documentation(&expected).contains("    fn f(\n    value: i64\n    ) -> i64\n"));
     for ending in ["\n", "\r\n", "\r"] {
         let checked = check(&[source(&text.replace('\n', ending))])?;
+        assert_eq!(
+            checked.documentation()[0].declaration,
+            expected.documentation()[0].declaration
+        );
         assert_eq!(
             checked.documentation()[0].text,
             expected.documentation()[0].text
