@@ -21,7 +21,10 @@ pub struct Documentation {
 /// Remove delimiters and common indentation, preserving relative reST layout.
 /// The caller supplies a complete documentation comment of at least five bytes.
 pub fn normalize(raw: &str) -> String {
-    let mut lines: Vec<_> = raw[3..raw.len() - 2].lines().map(str::to_owned).collect();
+    let body = raw[3..raw.len() - 2]
+        .replace("\r\n", "\n")
+        .replace('\r', "\n");
+    let mut lines: Vec<_> = body.lines().map(str::to_owned).collect();
     if let Some(first) = lines.first_mut() {
         *first = first.trim_matches([' ', '\t']).into();
     }

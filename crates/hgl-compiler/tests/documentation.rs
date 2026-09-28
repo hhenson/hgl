@@ -93,6 +93,32 @@ fn a_function_can_share_its_modules_name() -> Result<(), Vec<hgl_compiler::Diagn
 }
 
 #[test]
+fn all_lexer_line_endings_preserve_sections_and_validate_keys()
+-> Result<(), Vec<hgl_compiler::Diagnostic>> {
+    let text = "module docs\n/**\nPreserve sections.\n\nArgs:\n    value: Input.\n\nNotes:\n    .. math::\n\n        y = x\n*/\nfn f(value: i64) -> i64 { return value }\n";
+    let expected = check(&[source(text)])?;
+    for ending in ["\n", "\r\n", "\r"] {
+        let checked = check(&[source(&text.replace('\n', ending))])?;
+        assert_eq!(
+            checked.documentation()[0].text,
+            expected.documentation()[0].text
+        );
+        assert_eq!(emit_documentation(&checked), emit_documentation(&expected));
+        assert_eq!(emit_rust(&checked)?, emit_rust(&expected)?);
+        let invalid = text
+            .replace("value: Input.", "missing: Input.")
+            .replace('\n', ending);
+        let diagnostics = check(&[source(&invalid)]).unwrap_err();
+        assert!(
+            diagnostics
+                .iter()
+                .any(|d| d.message.contains("unknown key 'missing'"))
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn multibyte_leading_text_is_not_sliced_at_a_byte_offset()
 -> Result<(), Vec<hgl_compiler::Diagnostic>> {
     let checked = check(&[source("module docs\n/**\n a\n　b\n*/\nfn f() {}")])?;
