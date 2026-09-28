@@ -130,3 +130,20 @@ fn multibyte_leading_text_is_not_sliced_at_a_byte_offset()
     assert_eq!(checked.documentation()[0].text, " a\n　b");
     Ok(())
 }
+
+#[test]
+fn rust_comments_escape_bidi_controls_without_changing_documentation()
+-> Result<(), Vec<hgl_compiler::Diagnostic>> {
+    let controls = "\u{202a}\u{202b}\u{202c}\u{202d}\u{202e}\u{2066}\u{2067}\u{2068}\u{2069}";
+    let text = format!("Preserve α and العربية: {controls}");
+    let checked = check(&[source(&format!("module docs\n/** {text} */\nfn f() {{}}"))])?;
+    assert_eq!(checked.documentation()[0].text, text);
+    assert!(emit_documentation(&checked).contains(&text));
+    let generated = emit_rust(&checked)?;
+    assert!(generated.contains("Preserve α and العربية:"));
+    for control in controls.chars() {
+        assert!(!generated.contains(control));
+        assert!(generated.contains(&control.escape_unicode().to_string()));
+    }
+    Ok(())
+}

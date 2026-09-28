@@ -42,7 +42,7 @@ pub fn emit_rust(module: &CheckedModule) -> Result<String, Vec<Diagnostic>> {
     for doc in &module.documentation {
         out.push(format!("// HGL documentation: {}\n", doc.name));
         for line in doc.declaration.lines().chain(doc.text.lines()) {
-            out.push(format!("// {line}\n"));
+            out.push(format!("// {}\n", escape_comment(line)));
         }
     }
     out.push(
@@ -76,6 +76,20 @@ pub fn emit_rust(module: &CheckedModule) -> Result<String, Vec<Diagnostic>> {
     }
     Ok(out.concat())
 }
+
+// Rust denies these directional controls in comments; retain other Unicode text.
+fn escape_comment(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for character in text.chars() {
+        if matches!(character, '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}') {
+            out.extend(character.escape_unicode());
+        } else {
+            out.push(character);
+        }
+    }
+    out
+}
+
 fn node(function: &Function) -> bool {
     function.body.as_ref().is_some_and(|b| b.guard.is_some())
 }
