@@ -23,22 +23,28 @@ pub struct Documentation {
 pub fn normalize(raw: &str) -> String {
     let mut lines: Vec<_> = raw[3..raw.len() - 2].lines().map(str::to_owned).collect();
     if let Some(first) = lines.first_mut() {
-        *first = first.trim().into();
+        *first = first.trim_matches([' ', '\t']).into();
     }
     let indent = lines
         .iter()
         .skip(1)
-        .filter(|line| !line.trim().is_empty())
-        .map(|line| line.len() - line.trim_start().len())
+        .filter(|line| !line.trim_matches([' ', '\t']).is_empty())
+        .map(|line| line.len() - line.trim_start_matches([' ', '\t']).len())
         .min()
         .unwrap_or(0);
     for line in lines.iter_mut().skip(1) {
         *line = line.get(indent..).unwrap_or("").into();
     }
-    while lines.first().is_some_and(|line| line.trim().is_empty()) {
+    while lines
+        .first()
+        .is_some_and(|line| line.trim_matches([' ', '\t']).is_empty())
+    {
         lines.remove(0);
     }
-    while lines.last().is_some_and(|line| line.trim().is_empty()) {
+    while lines
+        .last()
+        .is_some_and(|line| line.trim_matches([' ', '\t']).is_empty())
+    {
         lines.pop();
     }
     lines.join("\n")
@@ -75,7 +81,7 @@ pub fn validate(text: &str, parameters: &[&str]) -> Result<(), String> {
         let Some((key, _)) = content.split_once(':') else {
             continue;
         };
-        let key = key.trim();
+        let key = key.trim_matches([' ', '\t']);
         let valid = match section {
             "Args:" => parameters.contains(&key),
             "Type Args:" | "Properties:" | "Requires:" => false,
@@ -123,7 +129,10 @@ pub fn render(documents: &[Documentation]) -> String {
                     && !line.starts_with(' ')
                     && let Some((name, description)) = line.split_once(':')
                 {
-                    out.push(format!("``{name}``\n    {}\n", description.trim()));
+                    out.push(format!(
+                        "``{name}``\n    {}\n",
+                        description.trim_matches([' ', '\t'])
+                    ));
                     continue;
                 }
                 if matches!(section, "Properties:" | "Requires:") && line.ends_with(':') {

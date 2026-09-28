@@ -91,3 +91,11 @@ fn a_function_can_share_its_modules_name() -> Result<(), Vec<hgl_compiler::Diagn
     assert_eq!(checked.documentation()[1].name, "docs.docs");
     Ok(())
 }
+
+#[test]
+fn multibyte_leading_text_is_not_sliced_at_a_byte_offset()
+-> Result<(), Vec<hgl_compiler::Diagnostic>> {
+    let checked = check(&[source("module docs\n/**\n a\n　b\n*/\nfn f() {}")])?;
+    assert_eq!(checked.documentation()[0].text, " a\n　b");
+    Ok(())
+}
