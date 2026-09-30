@@ -578,3 +578,57 @@ fn numeric_literal(text: &str, negative: bool) -> Result<Option<Literal>, String
         .map_err(|e| format!("invalid i64: {e}"))?;
     Ok(Some(Literal::Int(value)))
 }
+
+impl Expr {
+    /// Expand contextual selectors and supply missing top-level handler defaults.
+    #[must_use]
+    pub fn handler_guard(self, inputs: &[String]) -> Self {
+        if inputs.is_empty() {
+            return self;
+        }
+        let args = inputs
+            .iter()
+            .map(|n| (None, Self::Name(n.clone())))
+            .collect::<Vec<_>>();
+        let (mut expr, selectors) = expand_selectors(self, &args);
+        for (name, flag) in [("modified", 1), ("valid", 2)] {
+            if selectors & flag == 0 {
+                expr = Self::Binary(
+                    "&&".into(),
+                    Box::new(Self::Call(name.into(), args.clone())),
+                    Box::new(expr),
+                );
+            }
+        }
+        expr
+    }
+}
+fn expand_selectors(expr: Expr, inputs: &[(Option<String>, Expr)]) -> (Expr, u8) {
+    match expr {
+        Expr::Binary(op, a, b) if op == "&&" => {
+            let (a, left) = expand_selectors(*a, inputs);
+            let (b, right) = expand_selectors(*b, inputs);
+            (Expr::Binary(op, Box::new(a), Box::new(b)), left | right)
+        }
+        Expr::Call(name, args) if matches!(name.as_str(), "valid" | "modified") => {
+            let flag = if name == "modified" { 1 } else { 2 };
+            (
+                Expr::Call(
+                    name,
+                    if args.is_empty() {
+                        inputs.to_vec()
+                    } else {
+                        args
+                    },
+                ),
+                flag,
+            )
+        }
+        other @ (Expr::Literal(_)
+        | Expr::Name(_)
+        | Expr::Sequence(_)
+        | Expr::Unary(..)
+        | Expr::Call(..)
+        | Expr::Binary(..)) => (other, 0),
+    }
+}

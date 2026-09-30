@@ -5,7 +5,7 @@ Lexer and body syntax shared by library indexing and graph checking. Uses only
 
 Surface: `Token { text, span }`, `lex(&str) -> Result<Vec<Token>, String>`;
 `Ty` and `Ty::{parse,name}`; `Literal` and `Literal::ty`; `Expr` and
-`Expr::fixed`; `Stmt`; `Cursor { tokens, pos }` with `new`, `peek`, `at`,
+`Expr::{fixed,handler_guard}`; `Stmt`; `Cursor { tokens, pos }` with `new`, `peek`, `at`,
 `take`, `need`, `consume`, `lines`, `name`, `type_name`, `expr`, `block`.
 The enums describe literals, names, calls, unary/binary expressions, dense
 sequences, lets, returns, assignments, calls, conditionals and element loops.
@@ -17,3 +17,10 @@ the compiler, not this parser. `_` is admitted only as a dense sequence cell.
 
 Acceptance: shared library parsing and the compiler's negative/type tests;
 calendar boundary tests exercise literal conversion separately.
+
+`Expr::handler_guard(self, inputs: &[String]) -> Expr` normalizes a temporal
+handler predicate: contextual empty valid/modified selectors expand to the
+supplied input names; missing top-level conjunction selectors are prepended.
+Selectors under disjunction/negation/residual calls do not suppress defaults.
+This pure AST transform is independent of types and runtime representation;
+backends choose their admitted handler profile before applying it.

@@ -5,7 +5,7 @@ python3 tools/shared_artifacts.py
 python3 tools/test_hgl.py --stdlib
 ```
 
-Runs the pinned, unchanged hgraph_std: **45 named tests, 84 evaluations**,
+Runs the pinned, unchanged hgraph_std: **82 named tests, 128 evaluations**,
 including tests embedded beside native interfaces. `cargo xtask ci` also
 compiles and runs the complete suite in its debug and release test gates.
 
@@ -22,17 +22,35 @@ checked test executable. The Python runner packages it with the selected Rust
 provider and builds/runs it. `--build-dir DIR` retains that crate for inspection.
 A mismatch names the test and first differing cycle, then exits unsuccessfully.
 
-The compiler resolves the actual operator declarations and HGL implementations.
-It adds replay and recorder nodes around each graph and runs the ordinary Rust
-simulation engine. Each evaluation starts fresh; `_` means no tick, including
-trailing silent cells. Expected values never control the run's horizon.
+The compiler wires the standard library's `replay` sources, the target, and its
+`record` sink, resolving and compiling their ordinary HGL bodies. Replay's HGL
+body controls its cursor, scheduling and publication; record's HGL body begins
+the recording and captures each admitted delta. Native capabilities provide
+typed buffer access and owned storage. Each evaluation starts fresh; `_` means
+no tick, including trailing silent cells. Expected values never control the
+run's horizon.
+
+The shared pass-through is one generic runtime compute:
+
+```hgl
+fn pass_through<T>(value: T) -> T {
+    when { return delta_value(value) }
+}
+```
+
+`delta_value(value)` extracts the current delta. `delta<T>(...)` is a distinct
+constructor form; `delta(value)` is not an accessor alias. This compiler admits
+delta extraction for bool, i64, f64, str, date, time, datetime and duration when
+the particular endpoint is proven valid and modified. The 37 new HGL tests
+exercise 44 evaluations covering those types, silence, equal ticks, independent
+inputs, fresh recordings and outputless runs.
 
 The [compiler card](../cards/hgl-program.md) lists supported forms and remaining
 limits. Direct scalar eval assertions work; timed sequences, structural delta
 literals, general test expressions and harness locals do not yet. The runtime's
 recursive collection APIs are broader than compiler lowering in this slice.
 
-Shared expectations and Python/C++ comparison evidence belong to
-[hgraph_spec_audit](https://github.com/hhenson/hgraph_spec_audit/tree/codex/stdlib-eval/compiler/stdlib_eval).
-The C++ comparison uses its native-provider branch because current main does
-not yet implement the diagnostic native interfaces required by this library.
+Shared expectations and Python/C++ comparison evidence belong to the
+[delta-evaluation audit](https://github.com/hhenson/hgraph_spec_audit/tree/codex/delta-eval-foundation/runtime/validation/delta_eval).
+The specification defines HGL concepts and rules; implementation observations
+and differences are recorded separately in that audit.

@@ -8,7 +8,17 @@ use std::{
 };
 
 fn source(body: &str) -> Vec<(String, String)> {
-    vec![("eval.hgl".into(), format!("module example\n{body}"))]
+    vec![
+        ("eval.hgl".into(), format!("module example\n{body}")),
+        (
+            "replay_record.hgl".into(),
+            include_str!("../../../external/hgraph_std/hgl/hgraph/replay_record.hgl").into(),
+        ),
+        (
+            "replay_record_impl.hgl".into(),
+            include_str!("../../../external/hgraph_std/hgl/hgraph/impl/replay_record.hgl").into(),
+        ),
+    ]
 }
 
 #[test]
@@ -56,6 +66,175 @@ fn eval_reports_type_and_phase_errors_before_emission() {
 }
 
 #[test]
+fn capabilities_and_delta_metadata_are_checked_at_their_call_sites() {
+    for (definition, diagnostic) in [
+        (
+            "fn f(x:i64)->i64 { when { return delta(x) } }",
+            "example::delta: expected one matching declaration",
+        ),
+        (
+            "fn f(replay_input:i64)->i64 { when { return replay_input.length() } }",
+            "missing inject replay_input",
+        ),
+        (
+            "fn f(capture:i64) { when { capture.begin() } }",
+            "missing inject capture",
+        ),
+        (
+            "fn f(clock:i64)->datetime { when { return clock.evaluation_time() } }",
+            "missing inject clock",
+        ),
+        (
+            "fn f(x:i64) { inject capture\nwhen { let local=capture\nlocal.begin() } }",
+            "cannot escape",
+        ),
+        (
+            "fn f(x: i64) -> i64 { when { return replay_input.delta_at(0) } }",
+            "missing inject replay_input",
+        ),
+        (
+            "fn f(x: i64) -> i64 { inject replay_input\nwhen { return x } }",
+            "unsupported node shape",
+        ),
+        (
+            "fn f(x: i64) -> i64 { inject capture\nwhen { return x } }",
+            "unsupported node shape",
+        ),
+        (
+            "fn f(x: i64) { inject capture, clock\nstart { capture.append(clock.evaluation_time(), 1) }\nwhen {} }",
+            "forbidden hook phase",
+        ),
+        (
+            "fn f(x: i64) { inject capture\nwhen { capture.begin() } }",
+            "forbidden hook phase",
+        ),
+        (
+            "fn f(x: i64) { inject capture\nstart { capture.begin() }\nwhen { capture.append(last_modified(x), true) } }",
+            "wrong-type argument",
+        ),
+        (
+            "fn f(x: i64) { inject capture\nwhen { let escaped = capture } }",
+            "cannot escape",
+        ),
+        (
+            "fn f(x: i64) { inject capture\nwhen { capture.missing() } }",
+            "unknown method",
+        ),
+        (
+            "fn f(x: i64) { inject capture\nstart { let y = x }\nwhen {} }",
+            "start cannot access",
+        ),
+    ] {
+        assert_bad_definition(definition, diagnostic);
+    }
+}
+
+fn assert_bad_definition(definition: &str, diagnostic: &str) {
+    let result = compile_tests(&source(&format!(
+        "{definition}\ntest bad {{ eval(f, [1]) }}"
+    )));
+    assert!(
+        matches!(&result, Err(error) if error.contains(diagnostic)),
+        "{definition}: {result:?}"
+    );
+}
+
+#[test]
+fn delta_metadata_preserves_endpoint_identity_and_presence_proof() {
+    for (definition, diagnostic) in [
+        (
+            "fn f(x: i64) -> i64 { when { return delta_value(1) } }",
+            "temporal input endpoint",
+        ),
+        (
+            "fn f(x: i64) -> i64 { when { let copy = x\nreturn delta_value(copy) } }",
+            "temporal input endpoint",
+        ),
+        (
+            "fn f(x: i64) -> i64 { start { let y = delta_value(x) }\nwhen { return x } }",
+            "in evaluation",
+        ),
+        (
+            "const fn f(x: i64) -> i64 { if valid(x) && modified(x) { return delta_value(x) } }",
+            "in evaluation",
+        ),
+        (
+            "fn f(x: i64) -> i64 { when { return delta_value(x,x) } }",
+            "one runtime input",
+        ),
+    ] {
+        assert_bad_definition(definition, diagnostic);
+    }
+    for (body, diagnostic) in [
+        ("return delta_value(a)", "valid and modified"),
+        (
+            "if valid(b) && modified(b) { return delta_value(a) }",
+            "valid and modified",
+        ),
+        (
+            "if valid(a) || modified(a) { return delta_value(a) }",
+            "valid and modified",
+        ),
+    ] {
+        let input = format!(
+            "fn f(a:i64,b:i64)->i64 {{ when {{ {body} }} }}\ntest bad {{ eval(f,[1],[2]) }}"
+        );
+        let error = compile_tests(&source(&input)).unwrap_err();
+        assert!(error.contains(diagnostic), "{input}: {error}");
+    }
+}
+
+#[test]
+fn scalar_producers_do_not_erase_formal_signal_admission() {
+    for (ty, samples) in [
+        ("bool", "[false,true]"),
+        ("i64", "[1,2]"),
+        ("f64", "[1.0,2.0]"),
+        ("str", "[\"a\",\"b\"]"),
+        ("date", "[@2026-01-01,@2026-01-02]"),
+        ("time", "[@00:00:01,@00:00:02]"),
+        ("datetime", "[@2026-01-01T00:00:01Z,@2026-01-01T00:00:02Z]"),
+        ("duration", "[1us,2us]"),
+    ] {
+        for guard in ["", "valid(value) && modified(value)"] {
+            let input = source(&format!(
+                "fn f(value:signal)->{ty} {{ when {guard} {{ return delta_value(value) }} }}\ntest bad {{ eval(f,{samples}) }}"
+            ));
+            let error = compile_tests(&input).unwrap_err();
+            assert!(
+                error.contains("signal is not admitted"),
+                "{ty}, {guard}: {error}"
+            );
+        }
+        let input = source(&format!(
+            "fn f(value:signal) {{ inject capture\nstart {{ capture.begin() }}\nwhen {{}} }}\ntest bad {{ eval(f,{samples}) }}"
+        ));
+        let error = compile_tests(&input).unwrap_err();
+        assert!(
+            error.contains("capture: unsupported node shape or scalar type"),
+            "{ty}: {error}"
+        );
+    }
+    let error = compile_tests(&source("fn f(trigger:signal,value:i64)->i64 { when modified(trigger) { return delta_value(trigger) } }\ntest bad { eval(f,[1],[2]) }")).unwrap_err();
+    assert!(error.contains("signal is not admitted"), "{error}");
+}
+
+#[test]
+fn type_domains_and_library_provisioning_are_explicit() {
+    let input = "module example\nfn id(x:i64)->i64 { when { return x } }\ntest t { eval(id,[1]) }";
+    let error = compile_tests(&[("example.hgl".into(), input.into())]).unwrap_err();
+    assert!(
+        error.contains("hgraph.std::replay: expected one matching declaration"),
+        "{error}"
+    );
+    let error = compile_tests(&source(
+        "fn f<T>(x:T)->T requires T in {bool,str} { when { return x } }\ntest t { eval(f,[1]) }",
+    ))
+    .unwrap_err();
+    assert!(error.contains("requires T in {bool, str}"), "{error}");
+}
+
+#[test]
 fn production_cannot_see_test_helpers() {
     let input = source(
         "test { fn helper(x: i64) -> i64 { when { return x } } }\nexport fn main() { helper(1) }",
@@ -89,6 +268,8 @@ fn actual_stdlib_and_harness_regressions_run_on_rust() -> Result<(), Box<dyn std
         &emit_tests(&compile_tests(&source(REGRESSIONS))?),
     )?;
     failure_images(&dir)?;
+    capability_failure_images(&dir)?;
+    source_operator_image(&dir)?;
     manifest(&root, &dir)?;
     fs::write(
         dir.join("src/main.rs"),
@@ -96,8 +277,12 @@ fn actual_stdlib_and_harness_regressions_run_on_rust() -> Result<(), Box<dyn std
 struct Provider;
 mod native { pub use hgl_std_native::*; }
 mod integer_zero; mod float_zero; mod late_output; mod modulo_zero;
+mod bounds; mod absent_slot; mod repeated_begin; mod append_unbegun; mod duplicate_time; mod wrong_time;
+mod source_operators; mod missing_binding; mod start_failure;
 mod standard; mod regression; mod wrong; mod long; mod short; mod throwing;
 fn main() { match std::env::args().nth(1).as_deref() {
+Some("bounds") => bounds::main(), Some("absent_slot") => absent_slot::main(), Some("repeated_begin") => repeated_begin::main(), Some("append_unbegun") => append_unbegun::main(), Some("duplicate_time") => duplicate_time::main(), Some("wrong_time") => wrong_time::main(),
+Some("source_operators") => source_operators::main(), Some("missing_binding") => missing_binding::main(), Some("start_failure") => start_failure::main(),
 Some("modulo_zero") => modulo_zero::main(), Some("integer_zero") => integer_zero::main(), Some("float_zero") => float_zero::main(), Some("late_output") => late_output::main(),
 Some("throwing") => throwing::main(), Some("standard") => standard::main(), Some("regression") => regression::main(),
 Some("wrong") => wrong::main(), Some("long") => long::main(), Some("short") => short::main(),
@@ -105,8 +290,34 @@ _ => panic!("unknown test image") } }
 "#,
     )?;
     let binary = build_binary(&dir)?;
+    check_images(&binary)?;
+    fs::remove_dir_all(dir)?;
+    Ok(())
+}
+fn check_images(binary: &Path) -> Result<(), Box<dyn std::error::Error>> {
     for (name, success, message) in [
-        ("standard", true, "45 tests, 84 evaluations, 0 failures"),
+        ("standard", true, "82 tests, 128 evaluations, 0 failures"),
+        ("source_operators", true, "0 failures"),
+        ("bounds", false, "replay_input: index out of range"),
+        ("absent_slot", false, "replay_input: slot has no tick"),
+        ("repeated_begin", false, "capture: already begun"),
+        ("append_unbegun", false, "capture: not begun"),
+        (
+            "duplicate_time",
+            false,
+            "capture: timestamp did not advance",
+        ),
+        (
+            "wrong_time",
+            false,
+            "capture: timestamp is not evaluation time",
+        ),
+        (
+            "missing_binding",
+            false,
+            "capture: missing configured binding",
+        ),
+        ("start_failure", false, "deliberate start failure"),
         ("regression", true, "0 failures"),
         ("wrong", false, "cycle 0"),
         ("long", false, "cycle 1"),
@@ -121,7 +332,7 @@ _ => panic!("unknown test image") } }
             "cycle 2: expected length 2, observed length 86400000001",
         ),
     ] {
-        let output = Command::new(&binary).arg(name).output()?;
+        let output = Command::new(binary).arg(name).output()?;
         let text = format!(
             "{}{}",
             String::from_utf8_lossy(&output.stdout),
@@ -130,9 +341,29 @@ _ => panic!("unknown test image") } }
         assert_eq!(output.status.success(), success, "{name}: {text}");
         assert!(text.contains(message), "{name}: {text}");
     }
-    fs::remove_dir_all(dir)?;
     Ok(())
 }
+
+fn source_operator_image(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let mut operators = source(
+        "fn id(x:i64)->i64 { when { return delta_value(x) } }\ntest source_handlers { assert eval(id,[1,_,1]) == [111,_,111] }",
+    );
+    operators[2].1 = operators[2]
+        .1
+        .replace(
+            "return replay_input.delta_at(current)",
+            "return replay_input.delta_at(current) + 100",
+        )
+        .replace("delta_value(ts))", "delta_value(ts) + 10)");
+    let generated = emit_tests(&compile_tests(&operators)?);
+    assert!(generated.contains("hgraph.std::replay"));
+    assert!(generated.contains("self.replay_input.delta_at"));
+    assert!(generated.contains("self.capture.append"));
+    assert!(!generated.contains("match self.next"));
+    module(dir, "source_operators", &generated)?;
+    Ok(())
+}
+
 fn build_binary(dir: &Path) -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
     let mut command = Command::new(env!("CARGO"));
     command
@@ -194,6 +425,65 @@ fn failure_images(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
         "native const fn raise_error(message: str) throws\nnative const fn raise_error(message: str) throws {}\nfn fail(ts: i64) -> i64 { when { raise_error(\"deliberate node failure\")\nreturn ts } }\ntest fails { eval(fail, [1]) }",
     );
     module(dir, "throwing", &emit_tests(&compile_tests(&throwing)?))?;
+    let missing = source(
+        "native const fn raise_error(message:str) throws\nnative const fn raise_error(message:str) throws {}\nfn sink(x:i64) { inject capture\nstart { raise_error(\"start must not run\") }\nwhen {} }\ntest fails { eval(sink,[1]) }",
+    );
+    module(
+        dir,
+        "missing_binding",
+        &emit_tests(&compile_tests(&missing)?),
+    )?;
+    let start = source(
+        "native const fn raise_error(message:str) throws\nnative const fn raise_error(message:str) throws {}\nfn sink(x:i64) { start { if true { raise_error(\"deliberate start failure\") } }\nwhen {} }\ntest fails { eval(sink,[]) }",
+    );
+    module(dir, "start_failure", &emit_tests(&compile_tests(&start)?))?;
+    Ok(())
+}
+
+fn capability_failure_images(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let append = "capture.append(last_modified(ts), delta_value(ts))";
+    for (name, from, to, input) in [
+        (
+            "bounds",
+            "replay_input.delta_at(current)",
+            "replay_input.delta_at(-1)",
+            "[1]",
+        ),
+        (
+            "absent_slot",
+            "if replay_input.has_tick(current)",
+            "if true",
+            "[_,1]",
+        ),
+        (
+            "repeated_begin",
+            "capture.begin()",
+            "capture.begin()\n capture.begin()",
+            "[]",
+        ),
+        ("append_unbegun", "capture.begin()", "let unused = 0", "[1]"),
+        (
+            "duplicate_time",
+            append,
+            "capture.append(last_modified(ts), delta_value(ts))\ncapture.append(last_modified(ts), delta_value(ts))",
+            "[1]",
+        ),
+        (
+            "wrong_time",
+            "last_modified(ts)",
+            "clock.next_cycle_evaluation_time()",
+            "[1]",
+        ),
+    ] {
+        let mut sources = source(&format!(
+            "fn id(x:i64)->i64 {{ when {{ return delta_value(x) }} }}\ntest fails {{ eval(id,{input}) }}"
+        ));
+        sources[2].1 = sources[2]
+            .1
+            .replace(from, to)
+            .replace("inject capture", "inject capture, clock");
+        module(dir, name, &emit_tests(&compile_tests(&sources)?))?;
+    }
     Ok(())
 }
 
@@ -224,6 +514,23 @@ fn manifest(root: &Path, dir: &Path) -> std::io::Result<()> {
     fs::write(dir.join("Cargo.toml"), lines.join("\n"))
 }
 const REGRESSIONS: &str = r#"
+fn explicit_delta(a:i64,b:i64)->i64 {
+    when valid(a) && modified(a) { return delta_value(a) }
+    when valid(b) && modified(b) { return delta_value(b) }
+}
+fn guarded_delta(a:i64)->i64 { when valid(a) { return delta_value(a) } }
+fn modified_delta(a:i64,b:i64)->i64 { when modified(a) { return delta_value(a) } }
+fn empty_selectors(a:i64)->i64 { when valid() && modified() { return delta_value(a) } }
+fn nested_delta(a:i64,b:i64)->i64 {
+    when { if valid(a) && modified(a) && delta_value(a) > 0 { return delta_value(a) } }
+}
+test endpoint_delta_admission {
+    assert eval(guarded_delta,[1,_,2]) == [1,_,2]
+    assert eval(modified_delta,[1,_,3],[_,2,_]) == [_,_,3]
+    assert eval(empty_selectors,[1,_,2]) == [1,_,2]
+    assert eval(explicit_delta,[1,_,3],[_,2,_]) == [1,2,3]
+    assert eval(nested_delta,[1,_,3],[1,2,_]) == [1,_,3]
+}
 fn plus(a: i64, b: i64) -> i64 { when { return a + b } }
 fn minus(a: i64, b: i64) -> i64 { when { return a - b } }
 fn times(a: i64, b: i64) -> i64 { when { return a * b } }
@@ -252,6 +559,16 @@ fn ref_passthrough(ts: ref<i64>) -> ref<i64> { when { return ts } }
 fn follow_twice(ts: i64) -> i64 => consume(ref_passthrough(capture(ts)))
 fn choose_reference(lhs: ref<i64>, rhs: ref<i64>, choice: bool) -> ref<i64> {
     when { if choice { return lhs } else { return rhs } }
+}
+fn signal_metadata(ts: signal) -> i64 {
+    state count: i64 = 0
+    when valid(ts) && modified(ts) { count += 1
+        return count }
+}
+test signal_selector_unchanged {
+    assert eval(signal_metadata, [1, _, 2]) == [1, _, 2]
+    assert eval(signal_metadata, [false, _, true]) == [1, _, 2]
+    assert eval(signal_metadata, ["a", _, "b"]) == [1, _, 2]
 }
 fn signal_count(ts: signal) -> i64 {
     state count: i64 = 0

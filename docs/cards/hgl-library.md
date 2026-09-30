@@ -9,7 +9,10 @@ Surface: `load(&[(String,String)]) -> Result<Library,String>`;
 `Role::{Function,Implementation,Operator,Native,Test}`;
 `Parameter { name, ty, constant, default }`;
 `Signature { generics, parameters, result, body, value_function, throws,
-requirement }`. Requirements retain the native name, argument types and result.
+requirement, type_domain }`. Native requirements retain the native name,
+argument types and result. `type_domain: Option<(String, Vec<String>)>` retains
+`requires T in {...}` as the generic name and distinct supported type names;
+resolution checks the inferred type against this finite domain.
 
 Parts are unique. An unnamed test context permits private functions and named
 tests, joining the module's test scope. Imports, exports, native/type/operator

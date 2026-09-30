@@ -12,3 +12,4 @@ workspace=true
 hgl-calendar={path="../hgl-calendar"}
 hgl-kernel={path="../hgl-kernel"}
 hgl-types={path="../hgl-types"}
+hgl-store={path="../hgl-store"}

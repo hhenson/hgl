@@ -164,6 +164,7 @@ version = "0.0.0"
 dependencies = [
  "hgl-calendar",
  "hgl-kernel",
+ "hgl-store",
  "hgl-types",
 ]
 
