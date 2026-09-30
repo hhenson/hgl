@@ -38,6 +38,8 @@ jobs:
       - run: python external/hgraph_spec_audit/tools/shared_artifacts.py --offline
       - run: python -m unittest discover -s external/hgraph_spec_audit/compiler/stdlib -p "test_*.py"
       - run: python -m unittest discover -s tools -p "test_*.py"
+      - name: Verify audited native interface fingerprints
+        run: python external/hgraph_spec_audit/compiler/native_interfaces/check.py --hgl .
       - run: python tools/bootstrap_reference.py
       - name: Verify recorded wiring assessment
         run: |
@@ -58,45 +60,3 @@ jobs:
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:
           manifest-path: experiments/compiler-tools/Cargo.toml
-
-  native-interface:
-    runs-on: ubuntu-24.04
-    env:
-      # Update deliberately with the upstream interface/compiler migration.
-      HGRAPH_REVISION: 0e33040ba70f2fb361ae843275de24ff2b0075ed
-      CC: gcc-14
-      CXX: g++-14
-    steps:
-      - uses: actions/checkout@v4
-      - name: Materialize pinned shared sources
-        run: python tools/shared_artifacts.py
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Install compiler build dependencies
-        run: python -m pip install "cmake==4.4.2" "ninja==1.13.0" "pyarrow==25.0.0"
-      - name: Fetch the pinned upstream compiler
-        run: |
-          git init "$RUNNER_TEMP/hgraph"
-          git -C "$RUNNER_TEMP/hgraph" fetch --depth 1 https://github.com/hhenson/hgraph.git "$HGRAPH_REVISION"
-          git -C "$RUNNER_TEMP/hgraph" checkout --detach FETCH_HEAD
-          test "$(git -C "$RUNNER_TEMP/hgraph" rev-parse HEAD)" = "$HGRAPH_REVISION"
-      - name: Verify the bootstrap uses upstream HGL
-        run: python tools/bootstrap_reference.py --upstream "$RUNNER_TEMP/hgraph"
-      - name: Build the upstream compiler
-        run: |
-          cmake -S "$RUNNER_TEMP/hgraph" -B "$RUNNER_TEMP/hgraph-build" -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF \
-            -DHGRAPH_BUILD_LANGUAGE=ON -DHGRAPH_BUILD_PYTHON_BINDINGS=OFF \
-            -DHGRAPH_ENABLE_PYTHON_USER_NODES=OFF -DHGRAPH_ENABLE_IDE_PYTHON_HEADER_HINTS=OFF \
-            -DHGRAPH_USE_PYARROW_ARROW=ON -DHGRAPH_ENABLE_COMPILER_CACHE=OFF \
-            -DPython_EXECUTABLE="$(command -v python)"
-          cmake --build "$RUNNER_TEMP/hgraph-build" --target hgl --parallel 2
-      - name: Check the shared interface and generated Rust trait
-        run: >-
-          python tools/native_bindings.py --check
-          --compiler "$RUNNER_TEMP/hgraph-build/language/hgl"
-          --interface "$RUNNER_TEMP/hgraph/language/stdlib/hgl/hgraph/native/scalar_values_i64.hgl"
-          --implementation crates/hgl-native/interfaces/scalar-impl.hgl
-          --capability-interface "$RUNNER_TEMP/hgraph/language/tests/codegen/native-provider.hgl"
-          --capability-implementation crates/hgl-native/interfaces/capabilities-impl.hgl

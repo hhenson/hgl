@@ -35,6 +35,10 @@ trait. Regenerate with `tools/native_bindings.py --compiler <hgl>`; `--interface
 and `--implementation` must be supplied together to refresh the vendored upstream
 contract. The same pairing applies to `--capability-interface` and
 `--capability-implementation`.
+Cross-compiler generation is checked in `hgraph_spec_audit/compiler/native_interfaces`.
+HGL CI verifies local interfaces against the pinned audit fingerprints; it does
+not build the C++ compiler. Refresh the audit fingerprints when these contracts
+change. The audit uses public upstream inputs and does not fetch private HGL code.
 The interface is a concrete i64 subset of `hgraph.native`; overload-family,
 collection-borrow and fallible Rust bindings remain separate migration work.
 NAT-1/2 general catalogue selection remains compiler work.
