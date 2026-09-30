@@ -51,8 +51,8 @@ fn library_graph_runs_sources_sinks_and_fresh_instances() -> Result<(), Box<dyn 
         if name == "changed" {
             for (_, source) in &mut input {
                 *source = source.replace(
-                    "start { alarm.schedule(delay) }\n    when { return value }",
-                    "start { alarm.schedule(delay) }\n    when { return 99 }",
+                    "start { schedule(alarm, delay) }\n    when { return value }",
+                    "start { schedule(alarm, delay) }\n    when { return 99 }",
                 );
             }
         }

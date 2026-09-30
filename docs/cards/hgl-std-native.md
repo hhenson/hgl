@@ -1,7 +1,7 @@
 # Card: hgl-std-native
 
 Rust implementations of the selected shared native scalar interfaces. Uses
-`hgl-types`, `hgl-calendar`, `hgl-kernel`; budget 700 lines. No third-party
+`hgl-types`, `hgl-calendar`, `hgl-kernel`, `hgl-store`; budget 700 lines. No third-party
 crates. Selection stays beside Rust binding code in `native/stdlib/rust.hgl`;
 portable interfaces and operator bodies remain in hgraph_std.
 
@@ -23,3 +23,48 @@ makes no new performance-parity claim.
 
 Acceptance: embedded shared native tests plus overflow/error paths, signed
 floor/modulo, Unicode slicing, exponent spelling and negative durations.
+
+## Dense scalar eval storage
+
+`eval_buffers` provides the storage operations of specification ADR 0016.
+Replay and record are ordinary HGL source/sink operators; these Rust types
+never schedule, publish, select ticks, advance cursors or pad dense results.
+The fresh graph owns typed buffers through stop and owned-result extraction.
+
+Public surface:
+
+- `BufferScalar: hgl_store::Scalar`, with fallible `copy_delta(&self)` returning
+  `Result<Self, Box<NodeError>>`; implementations for bool, i64, f64, String,
+  Date, Time, EngineTime and EngineDelta. String copies reserve fallibly.
+- `ReplayInput<T>::new(Vec<Option<T>>, EngineTime)` validates i64 length and
+  legal run start/final dense time strictly before the latest exclusive end;
+  `length() -> i64`, `get(i64) -> Result<Option<T>, Box<NodeError>>`.
+  Indexed reads return independent owned present payloads or successful
+  in-range absence; negative or past-end indices fail. These native methods
+  lower HGL `len(replay_input)` and `replay_input[index]`, respectively.
+- `Capture<T>::new()`/`Default`, `begin() -> NodeResult`,
+  `append(time: EngineTime, delta: &T, evaluation_time: EngineTime) -> NodeResult`,
+  `take_ticks(&mut self) -> Result<Vec<(EngineTime, T)>, Box<NodeError>>`.
+  Begin is separate from binding. Append validates begun/current/increasing
+  time in order, copies before mutation, and keeps previous ticks on failure.
+  Extraction transfers ownership; an unbegun capture is an error.
+- `BufferRole::{ReplayInput,Capture}`;
+  `BufferRequirement { node: u32, role: BufferRole, scalar: ScalarType }`;
+  opaque `BufferBinding` with typed `replay::<T>(run, node, buffer)` and
+  `capture::<T>(run, node, buffer)` constructors.
+- `validate_bindings(run: u64, &[BufferRequirement], &[BufferBinding]) -> NodeResult`
+  checks missing/duplicate bindings, exact run/node/role/type, duplicate
+  requirements and single capture writer before any graph start.
+
+Binding IDs exist only in the construction-local manifest. Generated nodes
+own their static typed fields; no global registry or per-tick type/name lookup
+is involved. The compiler checks method phases, supported node shape and
+capability escape. Provider methods preserve ADR 0016's ordered error prefixes.
+This dense eval profile runs to the fixed latest exclusive end; an eventual
+custom run end would require a corresponding provider configuration contract.
+Capture buffers and owned text can allocate as test instrumentation; no new
+allocation-free or performance-parity claim is made.
+
+Acceptance: all eight scalar payloads; nullable reads and bounds errors; empty/unbegun
+capture; repeated begin; timestamp validation and retained captures; independent
+owned strings and runs; invalid binding manifests and duplicate writers.

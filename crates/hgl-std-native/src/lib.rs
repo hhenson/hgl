@@ -1,4 +1,5 @@
 //! Rust implementations of the standard library's native scalar interfaces.
+pub mod eval_buffers;
 use hgl_kernel::NodeError;
 use hgl_types::{Date, EngineDelta, EngineTime, Time};
 type Result<T> = std::result::Result<T, Box<NodeError>>;

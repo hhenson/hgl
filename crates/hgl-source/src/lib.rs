@@ -133,6 +133,8 @@ pub enum Ty {
     Ref(Box<Self>),
     /// Set membership.
     Set(Box<Self>),
+    /// Contextual nullable expression; not an admitted source annotation.
+    Nullable(Box<Self>),
     /// No result.
     Void,
 }
@@ -150,6 +152,7 @@ impl Ty {
             Self::DateTime => "datetime",
             Self::Ref(_) => "ref",
             Self::Set(_) => "set",
+            Self::Nullable(_) => "contextual nullable",
             Self::Void => "void",
         }
     }
@@ -213,6 +216,12 @@ impl Literal {
 #[derive(Debug, Clone)]
 /// An expression before name and type resolution.
 pub enum Expr {
+    /// Contextual absence, checked at its use site.
+    Null,
+    /// Read a selected property or field of an expression.
+    Property(Box<Self>, String),
+    /// Indexed expression and index.
+    Index(Box<Self>, Box<Self>),
     /// Fixed scalar.
     Literal(Literal),
     /// Unresolved identifier.
@@ -231,14 +240,18 @@ pub enum Expr {
 pub enum Stmt {
     /// Local binding.
     Let(String, Expr),
+    /// Mutable local binding.
+    Var(String, Expr),
+    /// End runtime evaluation without publication.
+    Exit,
     /// Result publication.
     Return(Expr),
     /// Callable name and positional or named arguments.
     Call(Expr),
     /// Increment a state or cache slot.
-    Add(String, Expr),
+    Add(Expr, Expr),
     /// Assignment to state, cache or out.
-    Assign(String, Expr),
+    Assign(Expr, Expr),
     /// Collection iteration.
     For(String, Expr, Vec<Self>),
     /// Conditional branches.
@@ -349,6 +362,27 @@ impl<'a> Cursor<'a> {
         Ok(left)
     }
     fn atom(&mut self) -> Result<Expr, String> {
+        let mut value = self.primary()?;
+        loop {
+            if self.take("[") {
+                let index = self.expr()?;
+                self.need("]")?;
+                value = Expr::Index(Box::new(value), Box::new(index));
+            } else if self.take(".") {
+                value = Expr::Property(Box::new(value), self.name()?);
+                if self.at("(") {
+                    return Err(
+                        "properties cannot be invoked; capability method calls are not admitted"
+                            .into(),
+                    );
+                }
+            } else {
+                break;
+            }
+        }
+        Ok(value)
+    }
+    fn primary(&mut self) -> Result<Expr, String> {
         if self.take("[") {
             let mut values = Vec::new();
             self.lines();
@@ -386,6 +420,9 @@ impl<'a> Cursor<'a> {
             self.pos -= 1;
             return Ok(Expr::Unary("-".into(), Box::new(self.atom()?)));
         }
+        if text == "null" {
+            return Ok(Expr::Null);
+        }
         if text == "true" || text == "false" {
             return Ok(Expr::Literal(Literal::Bool(text == "true")));
         }
@@ -393,7 +430,7 @@ impl<'a> Cursor<'a> {
             return string_literal(&text);
         }
         let mut name = text;
-        if self.at("::") || self.at(".") {
+        if self.at("::") {
             name.push_str(&self.consume()?);
             name.push_str(&self.name()?);
         }
@@ -448,12 +485,21 @@ impl<'a> Cursor<'a> {
                 out.push(Stmt::For(name, collection, body));
                 self.lines();
                 continue;
-            } else if self.take("let") || self.take("var") {
+            } else if self.at("let") || self.at("var") {
+                let mutable = self.consume()? == "var";
                 let name = self.name()?;
                 self.need("=")?;
-                Stmt::Let(name, self.expr()?)
+                if mutable {
+                    Stmt::Var(name, self.expr()?)
+                } else {
+                    Stmt::Let(name, self.expr()?)
+                }
             } else if self.take("return") {
-                Stmt::Return(self.expr()?)
+                if self.at("}") || self.at("\n") {
+                    Stmt::Exit
+                } else {
+                    Stmt::Return(self.expr()?)
+                }
             } else if self.take("if") {
                 let condition = self.expr()?;
                 let yes = self.block()?;
@@ -466,20 +512,15 @@ impl<'a> Cursor<'a> {
                 out.push(Stmt::If(condition, yes, no));
                 self.lines();
                 continue;
-            } else if self.tokens.get(self.pos + 1).is_some_and(|t| t.text == "=") {
-                let name = self.name()?;
-                self.need("=")?;
-                Stmt::Assign(name, self.expr()?)
-            } else if self
-                .tokens
-                .get(self.pos + 1)
-                .is_some_and(|t| t.text == "+=")
-            {
-                let name = self.name()?;
-                self.need("+=")?;
-                Stmt::Add(name, self.expr()?)
             } else {
-                Stmt::Call(self.expr()?)
+                let target = self.expr()?;
+                if self.take("=") {
+                    Stmt::Assign(target, self.expr()?)
+                } else if self.take("+=") {
+                    Stmt::Add(target, self.expr()?)
+                } else {
+                    Stmt::Call(target)
+                }
             };
             out.push(statement);
             if !self.at("}") && !self.at("\n") {
@@ -533,7 +574,12 @@ impl Expr {
                 ("!", Literal::Bool(b)) => Some(Literal::Bool(!b)),
                 _ => None,
             },
-            Self::Name(_) | Self::Call(..) | Self::Sequence(_) => None,
+            Self::Null
+            | Self::Property(..)
+            | Self::Index(..)
+            | Self::Name(_)
+            | Self::Call(..)
+            | Self::Sequence(_) => None,
         }
     }
 }
@@ -577,4 +623,61 @@ fn numeric_literal(text: &str, negative: bool) -> Result<Option<Literal>, String
         .parse::<i64>()
         .map_err(|e| format!("invalid i64: {e}"))?;
     Ok(Some(Literal::Int(value)))
+}
+
+impl Expr {
+    /// Expand contextual selectors and supply missing top-level handler defaults.
+    #[must_use]
+    pub fn handler_guard(self, inputs: &[String]) -> Self {
+        if inputs.is_empty() {
+            return self;
+        }
+        let args = inputs
+            .iter()
+            .map(|n| (None, Self::Name(n.clone())))
+            .collect::<Vec<_>>();
+        let (mut expr, selectors) = expand_selectors(self, &args);
+        for (name, flag) in [("modified", 1), ("valid", 2)] {
+            if selectors & flag == 0 {
+                expr = Self::Binary(
+                    "&&".into(),
+                    Box::new(Self::Call(name.into(), args.clone())),
+                    Box::new(expr),
+                );
+            }
+        }
+        expr
+    }
+}
+fn expand_selectors(expr: Expr, inputs: &[(Option<String>, Expr)]) -> (Expr, u8) {
+    match expr {
+        Expr::Binary(op, a, b) if op == "&&" => {
+            let (a, left) = expand_selectors(*a, inputs);
+            let (b, right) = expand_selectors(*b, inputs);
+            (Expr::Binary(op, Box::new(a), Box::new(b)), left | right)
+        }
+        Expr::Call(name, args) if matches!(name.as_str(), "valid" | "modified") => {
+            let flag = if name == "modified" { 1 } else { 2 };
+            (
+                Expr::Call(
+                    name,
+                    if args.is_empty() {
+                        inputs.to_vec()
+                    } else {
+                        args
+                    },
+                ),
+                flag,
+            )
+        }
+        other @ (Expr::Null
+        | Expr::Property(..)
+        | Expr::Index(..)
+        | Expr::Literal(_)
+        | Expr::Name(_)
+        | Expr::Sequence(_)
+        | Expr::Unary(..)
+        | Expr::Call(..)
+        | Expr::Binary(..)) => (other, 0),
+    }
 }

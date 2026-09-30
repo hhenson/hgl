@@ -125,7 +125,7 @@
       "repository": "hgraph_spec"
     },
     "docs/runtime_spec/cases_wiring.md": {
-      "path": "runtime/cases_wiring.md",
+      "path": "wiring/cases_wiring.md",
       "repository": "hgraph_spec"
     },
     "docs/runtime_spec/conformance.md": {
@@ -693,7 +693,7 @@
       "repository": "hgraph_spec"
     },
     "docs/runtime_spec/wiring.md": {
-      "path": "runtime/wiring.md",
+      "path": "wiring/wiring.md",
       "repository": "hgraph_spec"
     },
     "examples/const-debug/main.hgl": {

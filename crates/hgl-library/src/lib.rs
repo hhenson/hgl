@@ -63,6 +63,8 @@ pub struct Signature {
     pub value_function: bool,
     /// Declared native error channel.
     pub throws: bool,
+    /// Finite type-domain constraint, checked after generic inference.
+    pub type_domain: Option<(String, Vec<String>)>,
     /// Native scalar requirement: name, arguments and result.
     pub requirement: Option<(String, Vec<String>, String)>,
 }
@@ -323,22 +325,13 @@ impl Decl {
         };
         let throws = c.take("throws");
         c.lines();
-        let requirement = if c.take("requires") {
-            let Expr::Call(name, args) = c.expr()? else {
-                return Err("expected native requirement".into());
-            };
-            let args = args
-                .into_iter()
-                .map(|(_, e)| {
-                    if let Expr::Name(n) = e {
-                        Ok(n)
-                    } else {
-                        Err("requirement takes types".to_owned())
-                    }
-                })
-                .collect::<Result<Vec<_>, _>>()?;
-            c.need("->")?;
-            Some((name, args, c.name()?))
+        let mut type_domain = None;
+        let requires = c.take("requires");
+        let requirement = if requires && c.tokens.get(c.pos + 1).is_some_and(|t| t.text == "in") {
+            type_domain = Some(parse_domain(&mut c, &generics)?);
+            None
+        } else if requires {
+            Some(parse_native_requirement(&mut c)?)
         } else {
             None
         };
@@ -348,6 +341,7 @@ impl Decl {
             value_function,
             throws,
             requirement,
+            type_domain,
             parameters,
             result,
             body: c.tokens[c.pos..].to_vec(),
@@ -403,4 +397,46 @@ fn instantiate(library: &mut Library, module: &str, d: &mut Cursor<'_>) -> Resul
     }
 
     Ok(())
+}
+
+fn parse_domain(c: &mut Cursor<'_>, generics: &[String]) -> Result<(String, Vec<String>), String> {
+    let parameter = c.name()?;
+    if !generics.contains(&parameter) {
+        return Err("type domain requires a generic parameter".into());
+    }
+    c.need("in")?;
+    c.need("{")?;
+    let mut types = Vec::new();
+    loop {
+        c.lines();
+        let ty = c.type_name()?;
+        if hgl_source::Ty::parse(&ty).is_none() || types.contains(&ty) {
+            return Err("type domain requires distinct supported types".into());
+        }
+        types.push(ty);
+        c.lines();
+        if !c.take(",") {
+            c.need("}")?;
+            break;
+        }
+    }
+    Ok((parameter, types))
+}
+
+fn parse_native_requirement(c: &mut Cursor<'_>) -> Result<(String, Vec<String>, String), String> {
+    let Expr::Call(name, args) = c.expr()? else {
+        return Err("expected native requirement".into());
+    };
+    let args = args
+        .into_iter()
+        .map(|(_, e)| {
+            if let Expr::Name(n) = e {
+                Ok(n)
+            } else {
+                Err("requirement takes types".to_owned())
+            }
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    c.need("->")?;
+    Ok((name, args, c.name()?))
 }

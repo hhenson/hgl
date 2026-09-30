@@ -246,10 +246,10 @@ impl Parser<'_> {
         if self.take("start") {
             self.need("{")?;
             self.lines();
-            self.need("scheduler")?;
-            self.need(".")?;
             self.need("schedule")?;
             self.need("(")?;
+            self.need("scheduler")?;
+            self.need(",")?;
             self.need("0s")?;
             self.need(")")?;
             self.end()?;

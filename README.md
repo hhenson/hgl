@@ -73,6 +73,6 @@ commands, native bindings and current supported scope.
 python3 tools/test_hgl.py --stdlib
 ```
 
-Compiles and runs the unchanged library's 45 tests and 84 eval assertions on
+Compiles and runs the pinned library's 83 tests and 132 eval assertions on
 Rust. These also run in `cargo xtask ci`. See [eval execution](docs/compiler/eval.md)
 for custom modules, native bindings and the supported compiler slice.

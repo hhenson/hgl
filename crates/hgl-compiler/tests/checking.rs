@@ -42,6 +42,11 @@ fn malformed_and_unsupported_programs_fail_before_emission() {
         ("print_i64(value)", "const_(value)", "node handlers"),
         ("return value", "return missing", "unknown value"),
         ("inject scheduler", "", "scheduler access"),
+        (
+            "schedule(scheduler, 0s)",
+            "scheduler.schedule(0s)",
+            "schedule",
+        ),
         ("42", "9223372036854775808", "invalid i64"),
         ("42", "true", "non-reserved"),
         ("42", "1 + 2", "unsupported token"),

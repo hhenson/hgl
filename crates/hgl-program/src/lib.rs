@@ -1,5 +1,5 @@
 //! Source linking and Rust emission for closed scalar HGL graphs.
-mod emit;
+use hgl_rust as emit;
 mod files;
 use hgl_library as index;
 mod resolve;
@@ -8,7 +8,7 @@ use hgl_source as syntax;
 
 /// A fully resolved graph, with scalar configuration fixed during wiring.
 #[derive(Debug)]
-pub struct Program(resolve::Plan);
+pub struct Program(hgl_rust::Plan);
 
 /// Resolve an entry against explicitly supplied modules and implementation parts.
 /// Only reachable implementation bodies are admitted by this compiler slice.
