@@ -187,3 +187,5 @@ __pycache__/
 /docs/runtime_spec/validation/wiring/reasoned.json
 /docs/runtime_spec/wiring.md
 /examples/const-debug/main.hgl
+
+/examples/stdlib-const-debug/main.hgl

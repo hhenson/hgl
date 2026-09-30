@@ -64,3 +64,12 @@ Documentation: `CheckedModule::documentation()` exposes attached owned records.
 `hglc doc FILE [--part FILE] --out FILE` emit reST from checked declarations.
 Generated Rust retains documentation in ordinary comments; rustdoc is not a reST
 renderer. Public and selected native implementation documents remain separate.
+
+## Imported source libraries
+
+`--library DIR [--entry NAME]` selects closed-graph compilation through
+[hgl-program](hgl-program.md). That crate owns source-library indexing, selected
+body parsing, operator resolution and typed Rust emission. The original
+single-module API remains the bootstrap regression path. Library mode captures
+selected documentation in emitted comments; library reST export is not yet
+admitted.

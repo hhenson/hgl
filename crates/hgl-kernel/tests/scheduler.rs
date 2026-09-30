@@ -432,3 +432,66 @@ fn eng4_a_cycle_that_skips_a_scheduled_time_asserts_in_debug() {
 
     let _panics = graph.evaluate(&mut store, at(9));
 }
+
+struct Alarm {
+    delays: Vec<i64>,
+    evaluations: usize,
+}
+impl Node for Alarm {
+    fn start(&mut self, ctx: &mut Ctx<'_>) -> NodeResult {
+        for delay in &self.delays {
+            ctx.alarm_in(EngineDelta::from_micros(*delay))?;
+        }
+        Ok(())
+    }
+    fn eval(&mut self, ctx: &mut Ctx<'_>) -> NodeResult {
+        self.evaluations += 1;
+        if self.evaluations == 1 {
+            ctx.alarm_in(EngineDelta::from_micros(7))?;
+            ctx.alarm_in(EngineDelta::from_micros(2))?;
+            ctx.alarm_in(EngineDelta::from_micros(5))?;
+        }
+        Ok(())
+    }
+}
+
+#[test]
+fn source_alarm_retains_the_earliest_request_in_start_and_eval() {
+    for delays in [vec![5, 0, 8], vec![0, 5, 8], vec![8, 5, 0]] {
+        let mut wiring = Wiring::default();
+        wiring.add(
+            Alarm {
+                delays,
+                evaluations: 0,
+            },
+            node_type("alarm", true, false),
+            vec![],
+        );
+        let (mut graph, mut store) = wiring.started();
+        assert_eq!(run(&mut graph, &mut store), vec![at(1), at(3)]);
+        assert_eq!(graph.next_scheduled_time(), EngineTime::FOREVER);
+    }
+}
+
+#[test]
+fn source_alarm_requires_capability_and_rejects_temporal_parameters() {
+    for with_input in [false, true] {
+        let mut ty = node_type("alarm", with_input, false);
+        if with_input {
+            ty.inputs
+                .push(("ts", hgl_types::TsType::Ts(hgl_types::ScalarType::I64)));
+        }
+        let slot = NodeSlot {
+            node: Box::new(Alarm {
+                delays: vec![0],
+                evaluations: 0,
+            }),
+            label: "alarm".into(),
+            node_type: ty,
+            required: vec![],
+        };
+        let mut graph = Graph::new("alarm".into(), vec![slot]);
+        let mut store = Store::new();
+        assert!(graph.start(&mut store, START).is_err());
+    }
+}

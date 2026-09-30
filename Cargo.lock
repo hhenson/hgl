@@ -31,6 +31,7 @@ name = "hgl-compiler"
 version = "0.0.0"
 dependencies = [
  "hgl-documentation",
+ "hgl-program",
 ]
 
 [[package]]
@@ -107,6 +108,13 @@ version = "0.0.0"
 dependencies = [
  "hgl-store",
  "hgl-types",
+]
+
+[[package]]
+name = "hgl-program"
+version = "0.0.0"
+dependencies = [
+ "hgl-documentation",
 ]
 
 [[package]]

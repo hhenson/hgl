@@ -114,6 +114,24 @@ impl Ctx<'_> {
     /// NOD-14); the time is after `FOREVER`.
     #[inline]
     pub fn schedule_in(&mut self, delay: EngineDelta) -> NodeResult {
+        let time = self.schedule_time(delay)?;
+        self.schedule.set_request(self.node, time, false);
+        Ok(())
+    }
+
+    /// Arm a source alarm, retaining the earliest pending request (ADR 0015).
+    /// Requires scheduler capability and no temporal inputs. This carries no
+    /// recoverable scheduler state; a new run rearms alarms in `start`.
+    pub fn alarm_in(&mut self, delay: EngineDelta) -> NodeResult {
+        if !self.node_type.inputs.is_empty() {
+            return Err(NodeError::new("alarm is admitted only on sources"));
+        }
+        let time = self.schedule_time(delay)?;
+        self.schedule.set_request(self.node, time, true);
+        Ok(())
+    }
+
+    fn schedule_time(&self, delay: EngineDelta) -> Result<EngineTime, Box<NodeError>> {
         if !self.node_type.uses_scheduler {
             return Err(NodeError::new(
                 "INJ-2: the node type does not use a scheduler",
@@ -128,13 +146,9 @@ impl Ctx<'_> {
                 "GRF-12, NOD-14: the time asked for is not in the future",
             ));
         }
-        let Some(time) = self.now.checked_add(delay) else {
-            return Err(NodeError::new(
-                "ENG-16: the time asked for is after forever",
-            ));
-        };
-        self.schedule.set_request(self.node, time);
-        Ok(())
+        self.now
+            .checked_add(delay)
+            .ok_or_else(|| NodeError::new("ENG-16: the time asked for is after forever"))
     }
 
     /// Whether the node's own request is why it is being evaluated now.
