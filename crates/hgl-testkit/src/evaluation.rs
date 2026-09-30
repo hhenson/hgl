@@ -1,4 +1,4 @@
-//! Dense HGL evaluation through ordinary recorder nodes and the simulation engine.
+//! HGL evaluation with sparse recording and dense sequence comparison.
 use hgl_describe::{
     BuildError, Buildable, Edge, GraphDescription, InputPort, NodeDescription, OutputPort, Ports,
     Registry, instantiate_complete,
@@ -37,14 +37,21 @@ impl<T: Scalar> Buildable for Recorder<T> {
     }
 }
 
-/// Execute a graph and record its selected output as a dense sequence.
+/// Sparse storage of a dense result, including its trailing silent cells.
+#[derive(Debug)]
+pub struct Observation<T> {
+    length: usize,
+    ticks: Vec<(usize, T)>,
+}
+
+/// Execute a graph and record only its selected output ticks.
 /// The horizon comes from the inputs and actual output ticks, never expectations.
 pub fn evaluate<T: Scalar>(
     mut description: GraphDescription,
     registry: &mut Registry,
     output: u32,
     input_length: usize,
-) -> Result<Vec<Option<T>>, String> {
+) -> Result<Observation<T>, String> {
     registry
         .register::<Recorder<T>>()
         .map_err(|e| format!("{e:?}"))?;
@@ -82,27 +89,40 @@ pub fn evaluate<T: Scalar>(
         .graph
         .node::<Recorder<T>>(NodeId(record))
         .ok_or("missing eval recorder")?;
-    let length = input_length.max(recorder.ticks.last().map_or(0, |(i, _)| i + 1));
-    let mut observed = vec![None; length];
-    for (i, value) in &recorder.ticks {
-        observed[*i] = Some(value.clone());
-    }
-    Ok(observed)
+    let last = recorder.ticks.last().map_or(Ok(0), |(i, _)| {
+        i.checked_add(1).ok_or("eval horizon overflow")
+    })?;
+    Ok(Observation {
+        length: input_length.max(last),
+        ticks: recorder.ticks.clone(),
+    })
 }
 
 /// Compare equal-length dense sequences, reporting the first differing cycle.
 pub fn compare<T: PartialEq + std::fmt::Debug>(
     expected: &[Option<T>],
-    observed: &[Option<T>],
+    observed: &Observation<T>,
 ) -> Result<(), String> {
-    for cycle in 0..expected.len().max(observed.len()) {
-        if expected.get(cycle) != observed.get(cycle) {
+    let mut ticks = observed.ticks.iter().peekable();
+    for (cycle, wanted) in expected.iter().take(observed.length).enumerate() {
+        let actual = if ticks.peek().is_some_and(|(i, _)| *i == cycle) {
+            ticks.next().map(|(_, value)| value)
+        } else {
+            None
+        };
+        if wanted.as_ref() != actual {
             return Err(format!(
-                "cycle {cycle}: expected {:?}, observed {:?}",
-                expected.get(cycle),
-                observed.get(cycle)
+                "cycle {cycle}: expected {wanted:?}, observed {actual:?}"
             ));
         }
+    }
+    if expected.len() != observed.length {
+        return Err(format!(
+            "cycle {}: expected length {}, observed length {}",
+            expected.len().min(observed.length),
+            expected.len(),
+            observed.length
+        ));
     }
     Ok(())
 }

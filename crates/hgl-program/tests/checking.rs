@@ -106,3 +106,24 @@ fn source_alarm_rules_are_checked() {
             .contains("alarm is admitted only on sources")
     );
 }
+
+#[test]
+fn unsupported_set_shapes_fail_before_emission() {
+    for ty in [
+        "set<ref<i64>>",
+        "set<set<i64>>",
+        "set<void>",
+        "set<str>",
+        "set<f64>",
+        "ref<set<ref<i64>>>",
+    ] {
+        let text = format!(
+            "module example\nfn invalid() -> {ty} {{ when {{}} }}\nexport fn main() {{ invalid() }}"
+        );
+        let error = compile(&[("invalid.hgl".into(), text)], "main").unwrap_err();
+        assert!(
+            error.contains("set elements currently require bool or i64"),
+            "{ty}: {error}"
+        );
+    }
+}

@@ -79,7 +79,11 @@ fn value(plan: &Plan, v: &Value) -> String {
             } else {
                 value(plan, b)
             };
-            if op == "+" && v.ty == Ty::Str {
+            if op == "/" {
+                format!(
+                    "{{ let lhs = ({a}) as f64; let rhs = ({b}) as f64; if rhs == 0.0 {{ return Err(hgl_kernel::NodeError::new(\"division by zero\")); }} lhs / rhs }}"
+                )
+            } else if op == "+" && v.ty == Ty::Str {
                 format!("format!(\"{{}}{{}}\", {a}, {b})")
             } else {
                 format!("({a} {op} {b})")

@@ -30,6 +30,10 @@ fn eval_reports_type_and_phase_errors_before_emission() {
             "fn sink(x: i64) { when {} }\ntest bad { assert eval(sink, [1]) == [1] }",
             "outputless",
         ),
+        (
+            "fn bad(x: i64) -> i64 { when { return x / 2 } }\ntest bad_div { eval(bad, [3]) }",
+            "return type",
+        ),
         ("test { export fn helper() {} }", "test context"),
         ("test { use other }", "test context"),
         (
@@ -84,24 +88,17 @@ fn actual_stdlib_and_harness_regressions_run_on_rust() -> Result<(), Box<dyn std
         "regression",
         &emit_tests(&compile_tests(&source(REGRESSIONS))?),
     )?;
-    for (name, expected) in [("wrong", "[2]"), ("long", "[1, _]"), ("short", "[]")] {
-        let input = source(&format!(
-            "fn id(x: i64) -> i64 {{ when {{ return x }} }}\ntest mismatch {{ assert eval(id, [1]) == {expected} }}"
-        ));
-        module(&dir, name, &emit_tests(&compile_tests(&input)?))?;
-    }
-    let throwing = source(
-        "native const fn raise_error(message: str) throws\nnative const fn raise_error(message: str) throws {}\nfn fail(ts: i64) -> i64 { when { raise_error(\"deliberate node failure\")\nreturn ts } }\ntest fails { eval(fail, [1]) }",
-    );
-    module(&dir, "throwing", &emit_tests(&compile_tests(&throwing)?))?;
+    failure_images(&dir)?;
     manifest(&root, &dir)?;
     fs::write(
         dir.join("src/main.rs"),
         r#"
 struct Provider;
 mod native { pub use hgl_std_native::*; }
+mod integer_zero; mod float_zero; mod late_output;
 mod standard; mod regression; mod wrong; mod long; mod short; mod throwing;
 fn main() { match std::env::args().nth(1).as_deref() {
+Some("integer_zero") => integer_zero::main(), Some("float_zero") => float_zero::main(), Some("late_output") => late_output::main(),
 Some("throwing") => throwing::main(), Some("standard") => standard::main(), Some("regression") => regression::main(),
 Some("wrong") => wrong::main(), Some("long") => long::main(), Some("short") => short::main(),
 _ => panic!("unknown test image") } }
@@ -126,6 +123,13 @@ _ => panic!("unknown test image") } }
         ("long", false, "cycle 1"),
         ("short", false, "cycle 0"),
         ("throwing", false, "deliberate node failure"),
+        ("integer_zero", false, "division by zero"),
+        ("float_zero", false, "division by zero"),
+        (
+            "late_output",
+            false,
+            "cycle 2: expected length 2, observed length 86400000001",
+        ),
     ] {
         let output = Command::new(&binary).arg(name).output()?;
         let text = format!(
@@ -139,6 +143,42 @@ _ => panic!("unknown test image") } }
     fs::remove_dir_all(dir)?;
     Ok(())
 }
+fn failure_images(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    for (name, expected) in [("wrong", "[2]"), ("long", "[1, _]"), ("short", "[]")] {
+        let input = source(&format!(
+            "fn id(x: i64) -> i64 {{ when {{ return x }} }}\ntest mismatch {{ assert eval(id, [1]) == {expected} }}"
+        ));
+        module(dir, name, &emit_tests(&compile_tests(&input)?))?;
+    }
+    for (name, definition, expected) in [
+        (
+            "integer_zero",
+            "fn divide(x: i64) -> f64 { when { return 3 / x } }",
+            "[0]",
+        ),
+        (
+            "float_zero",
+            "fn divide(x: f64) -> f64 { when { return 3.0 / x } }",
+            "[0.0]",
+        ),
+        (
+            "late_output",
+            "fn divide(const delay: duration) -> i64 { inject alarm\nstart { alarm.schedule(delay) }\nwhen { return 7 } }",
+            "1d",
+        ),
+    ] {
+        let input = source(&format!(
+            "{definition}\ntest mismatch {{ assert eval(divide, {expected}) == [_, _] }}"
+        ));
+        module(dir, name, &emit_tests(&compile_tests(&input)?))?;
+    }
+    let throwing = source(
+        "native const fn raise_error(message: str) throws\nnative const fn raise_error(message: str) throws {}\nfn fail(ts: i64) -> i64 { when { raise_error(\"deliberate node failure\")\nreturn ts } }\ntest fails { eval(fail, [1]) }",
+    );
+    module(dir, "throwing", &emit_tests(&compile_tests(&throwing)?))?;
+    Ok(())
+}
+
 fn module(dir: &Path, name: &str, code: &str) -> std::io::Result<()> {
     fs::write(
         dir.join(format!("src/{name}.rs")),
@@ -166,6 +206,14 @@ fn manifest(root: &Path, dir: &Path) -> std::io::Result<()> {
     fs::write(dir.join("Cargo.toml"), lines.join("\n"))
 }
 const REGRESSIONS: &str = r#"
+fn divide(a: i64, b: i64) -> f64 { when { return a / b } }
+fn divide_mixed(a: i64, b: f64) -> f64 { when { return a / b } }
+fn divide_float(a: f64, b: f64) -> f64 { when { return a / b } }
+test true_division {
+    assert eval(divide, [3, -3, 3, -9223372036854775808], [2, 2, -2, -1]) == [1.5, -1.5, -1.5, 9.223372036854776e18]
+    assert eval(divide_mixed, [3, -3], [2.0, 2.0]) == [1.5, -1.5]
+    assert eval(divide_float, [3.0, -3.0], [2.0, 2.0]) == [1.5, -1.5]
+}
 fn id(x: i64) -> i64 { when { return x } }
 fn floating(x: f64) -> f64 { when { return x } }
 fn counter(x: i64) -> i64 {

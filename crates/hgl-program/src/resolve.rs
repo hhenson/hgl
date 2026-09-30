@@ -913,7 +913,8 @@ impl Checker {
         }
         let ty = match op {
             "+" if matches!(a.ty, Ty::Str | Ty::I64 | Ty::F64) => a.ty.clone(),
-            "-" | "*" | "%" | "/" if matches!(a.ty, Ty::I64 | Ty::F64) => a.ty.clone(),
+            "/" if matches!(a.ty, Ty::I64 | Ty::F64) => Ty::F64,
+            "-" | "*" | "%" if matches!(a.ty, Ty::I64 | Ty::F64) => a.ty.clone(),
             ">" | "<" | ">=" | "<="
                 if matches!(
                     a.ty,
@@ -1000,7 +1001,31 @@ fn bind(
         types.insert(signature.result.clone(), hint.clone());
     }
     let result = resolve_type(&signature.result, &types).ok_or("unresolved result type")?;
+    supported_type(&result)?;
+    for value in &values {
+        supported_type(&value.ty)?;
+    }
     Ok((values, types, result))
+}
+
+fn supported_type(ty: &Ty) -> Result<(), String> {
+    match ty {
+        Ty::Set(child) if !matches!(**child, Ty::Bool | Ty::I64) => {
+            Err("Rust set elements currently require bool or i64".into())
+        }
+        Ty::Ref(child) if **child == Ty::Void => Err("reference requires a temporal type".into()),
+        Ty::Ref(child) => supported_type(child),
+        Ty::I64
+        | Ty::F64
+        | Ty::Bool
+        | Ty::Str
+        | Ty::Duration
+        | Ty::Date
+        | Ty::Time
+        | Ty::DateTime
+        | Ty::Set(_)
+        | Ty::Void => Ok(()),
+    }
 }
 
 fn bind_type(
