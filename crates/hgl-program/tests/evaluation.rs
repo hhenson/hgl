@@ -206,6 +206,30 @@ fn manifest(root: &Path, dir: &Path) -> std::io::Result<()> {
     fs::write(dir.join("Cargo.toml"), lines.join("\n"))
 }
 const REGRESSIONS: &str = r#"
+fn capture(ts: ref<i64>) -> ref<i64> { when { return ts } }
+fn consume(ts: i64) -> i64 { when { return ts } }
+fn generic_consume<T>(ts: T) -> T { when { return ts } }
+fn follow_direct(ts: i64) -> i64 => consume(capture(ts))
+fn follow_generic(ts: i64) -> i64 => generic_consume(capture(ts))
+fn ref_passthrough(ts: ref<i64>) -> ref<i64> { when { return ts } }
+fn follow_twice(ts: i64) -> i64 => consume(ref_passthrough(capture(ts)))
+fn choose_reference(lhs: ref<i64>, rhs: ref<i64>, choice: bool) -> ref<i64> {
+    when { if choice { return lhs } else { return rhs } }
+}
+fn signal_count(ts: signal) -> i64 {
+    state count: i64 = 0
+    when { count += 1
+        return count }
+}
+fn reference_signal(ts: i64) -> i64 => signal_count(capture(ts))
+fn follow_rebind(lhs: i64, rhs: i64, choice: bool) -> i64 => consume(choose_reference(lhs, rhs, choice))
+test reference_arguments_follow_the_target {
+    assert eval(reference_signal, [_, 1, _, 2]) == [1, _, _, _]
+    assert eval(follow_direct, [_, 1, _, 2, 2]) == [_, 1, _, 2, 2]
+    assert eval(follow_generic, [_, 1, _, 2]) == [_, 1, _, 2]
+    assert eval(follow_twice, [_, 1, _, 2]) == [_, 1, _, 2]
+    assert eval(follow_rebind, [1, 2, _, _, 3], [10, _, 20, 30, _], [true, _, false, _, true]) == [1, 2, 20, 30, 3]
+}
 fn divide(a: i64, b: i64) -> f64 { when { return a / b } }
 fn divide_mixed(a: i64, b: f64) -> f64 { when { return a / b } }
 fn divide_float(a: f64, b: f64) -> f64 { when { return a / b } }

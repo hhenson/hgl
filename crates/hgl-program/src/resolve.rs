@@ -716,15 +716,15 @@ impl Checker {
             Stmt::Add(name, expr) => {
                 let Some(Value {
                     kind: Kind::Cache(id),
-                    ..
+                    ty,
                 }) = env.get(name)
                 else {
                     return Err("assignment requires a cache variable".into());
                 };
                 let id = *id;
                 let v = self.expression(module, expr, env, true)?;
-                if v.ty != Ty::I64 {
-                    return Err("cache increment requires i64".into());
+                if *ty != Ty::I64 || v.ty != Ty::I64 {
+                    return Err("cache increment requires i64 target and value".into());
                 }
                 Statement::Add(id, v)
             }
@@ -923,7 +923,7 @@ impl Checker {
             {
                 Ty::Bool
             }
-            "==" | "!=" if a.ty != Ty::Void => Ty::Bool,
+            "==" | "!=" if !matches!(a.ty, Ty::Void | Ty::Set(_)) => Ty::Bool,
             "&&" | "||" if a.ty == Ty::Bool => Ty::Bool,
             _ => return Err(format!("unsupported binary operation {op}")),
         };
@@ -1034,6 +1034,14 @@ fn bind_type(
     mut value: Value,
     types: &mut BTreeMap<String, Ty>,
 ) -> Result<Value, String> {
+    if !p.constant
+        && p.ty != "signal"
+        && !p.ty.starts_with("ref<")
+        && matches!(value.kind, Kind::Wire(_))
+        && let Ty::Ref(child) = &value.ty
+    {
+        value.ty = *child.clone();
+    }
     let formal =
         p.ty.strip_prefix("ref<")
             .or_else(|| p.ty.strip_prefix("set<"))

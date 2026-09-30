@@ -127,3 +127,54 @@ fn unsupported_set_shapes_fail_before_emission() {
         );
     }
 }
+
+#[test]
+fn set_equality_is_rejected_before_scalar_lowering() {
+    for ty in ["i64", "bool"] {
+        for op in ["==", "!="] {
+            let text = format!(
+                "module example\nfn source() -> set<{ty}> {{ when {{}} }}\nfn compare(lhs: set<{ty}>, rhs: set<{ty}>) -> bool {{ when {{ return lhs {op} rhs }} }}\nexport fn main() {{ compare(source(), source()) }}"
+            );
+            let error = compile(&[("set.hgl".into(), text)], "main").unwrap_err();
+            assert!(
+                error.contains("unsupported binary operation"),
+                "{ty}: {error}"
+            );
+        }
+    }
+}
+
+#[test]
+fn increment_checks_both_state_and_operand_types() {
+    for kind in ["state", "cache"] {
+        for (ty, initial, operand) in [
+            ("str", "\"x\"", "1"),
+            ("f64", "1.0", "1"),
+            ("bool", "true", "1"),
+            ("duration", "1us", "1"),
+            ("date", "@2026-01-01", "1"),
+            ("time", "@12:00", "1"),
+            ("datetime", "@2026-01-01T12:00Z", "1"),
+            ("i64", "0", "1.0"),
+        ] {
+            let text = format!(
+                "module example\nfn bad() {{ {kind} saved: {ty} = {initial}\nwhen {{ saved += {operand} }} }}\nexport fn main() {{ bad() }}"
+            );
+            let error = compile(&[("state.hgl".into(), text)], "main").unwrap_err();
+            assert!(
+                error.contains("cache increment requires i64 target and value"),
+                "{kind}/{ty}: {error}"
+            );
+        }
+    }
+}
+
+#[test]
+fn reference_target_must_match_consumer() {
+    let text = "module example\nfn source() -> ref<i64> { when {} }\nfn consume(ts: f64) { when {} }\nexport fn main() { consume(source()) }";
+    assert!(
+        compile(&[("reference.hgl".into(), text.into())], "main")
+            .unwrap_err()
+            .contains("type mismatch")
+    );
+}
