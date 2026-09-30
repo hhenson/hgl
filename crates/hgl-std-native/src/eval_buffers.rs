@@ -86,22 +86,13 @@ impl<T: BufferScalar> ReplayInput<T> {
     pub fn length(&self) -> i64 {
         self.length
     }
-    /// Test slot presence independently of its payload.
-    pub fn has_tick(&self, index: i64) -> Result<bool> {
-        Ok(self.slot(index)?.is_some())
-    }
-    /// Return an independently owned scalar delta at a present position.
-    pub fn delta_at(&self, index: i64) -> Result<T> {
-        self.slot(index)?
-            .as_ref()
-            .ok_or_else(|| NodeError::new("replay_input: slot has no tick"))?
-            .copy_delta()
-    }
-    fn slot(&self, index: i64) -> Result<&Option<T>> {
-        usize::try_from(index)
+    /// Read an owned scalar delta, or absence, without consuming the slot.
+    pub fn get(&self, index: i64) -> Result<Option<T>> {
+        let slot = usize::try_from(index)
             .ok()
             .and_then(|i| self.slots.get(i))
-            .ok_or_else(|| NodeError::new("replay_input: index out of range"))
+            .ok_or_else(|| NodeError::new("replay_input: index out of range"))?;
+        slot.as_ref().map(BufferScalar::copy_delta).transpose()
     }
 }
 

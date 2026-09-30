@@ -38,8 +38,10 @@ Public surface:
   Date, Time, EngineTime and EngineDelta. String copies reserve fallibly.
 - `ReplayInput<T>::new(Vec<Option<T>>, EngineTime)` validates i64 length and
   legal run start/final dense time strictly before the latest exclusive end;
-  `length() -> i64`, `has_tick(i64) -> Result<bool, _>`,
-  `delta_at(i64) -> Result<T, _>`. Absent slots remain distinct from values.
+  `length() -> i64`, `get(i64) -> Result<Option<T>, Box<NodeError>>`.
+  Indexed reads return independent owned present payloads or successful
+  in-range absence; negative or past-end indices fail. These native methods
+  lower HGL `len(replay_input)` and `replay_input[index]`, respectively.
 - `Capture<T>::new()`/`Default`, `begin() -> NodeResult`,
   `append(time: EngineTime, delta: &T, evaluation_time: EngineTime) -> NodeResult`,
   `take_ticks(&mut self) -> Result<Vec<(EngineTime, T)>, Box<NodeError>>`.
@@ -63,6 +65,6 @@ custom run end would require a corresponding provider configuration contract.
 Capture buffers and owned text can allocate as test instrumentation; no new
 allocation-free or performance-parity claim is made.
 
-Acceptance: all eight scalar payloads; absent/bounds errors; empty/unbegun
+Acceptance: all eight scalar payloads; nullable reads and bounds errors; empty/unbegun
 capture; repeated begin; timestamp validation and retained captures; independent
 owned strings and runs; invalid binding manifests and duplicate writers.

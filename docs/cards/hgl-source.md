@@ -24,3 +24,10 @@ supplied input names; missing top-level conjunction selectors are prepended.
 Selectors under disjunction/negation/residual calls do not suppress defaults.
 This pure AST transform is independent of types and runtime representation;
 backends choose their admitted handler profile before applying it.
+
+`Expr::{Null,Index}` represents contextual absence and postfix indexing;
+`Stmt::{Var,Exit}` distinguishes mutable locals and a bare runtime return from
+immutable `Let` and value-return statements. `Ty::Nullable` is an internal
+inferred expression type, never a source annotation accepted by `Ty::parse`.
+These forms add no general optional type or null harness-cell alias. Source
+checking determines which indexed receivers and nullable uses are admitted.

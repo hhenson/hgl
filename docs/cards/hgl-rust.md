@@ -37,3 +37,10 @@ Acceptance: byte-identical emitted Rust across the extraction for const/debug,
 compiler eval regressions and the pinned standard suite; existing program tests
 compile and execute emitted Rust in debug/release. No HGL behavior changes or
 structural delta admission are part of this phase extraction.
+
+`Kind::{ReplaySlot,IsPresent,Present}` represents a checked nullable replay
+read, its presence test and an extraction justified by frontend flow facts.
+`Statement::Exit` ends an evaluation without publication. Nullable values are
+owned Rust options; indexing uses the fallible provider read, keeping bounds
+errors distinct from absent slots. Capability operations use receiver-first
+source spelling; internal runtime method calls do not create source aliases.

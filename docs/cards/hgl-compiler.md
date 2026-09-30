@@ -20,7 +20,8 @@ Public surface:
 Grammar: module/part headers, exported temporal fn, native const fn declarations
 and empty selected implementations, i64/void results, ordinary and const i64
 parameters, integer/name/call expressions, graph let bindings, start scheduling
-with literal 0s, inject scheduler, bare/scheduled when, return and call statements.
+with `schedule(scheduler, 0s)`, inject scheduler, bare/scheduled when, return
+and call statements. Capability receiver methods are not accepted.
 Preserve newlines/comments and spans. Unsupported forms are diagnostics, never
 ignored. Public names that cannot be represented by this Rust binding are
 emission errors. Names, function order and integer constants must not be hardcoded.
@@ -39,8 +40,9 @@ scalar configuration separate from input handles. No per-tick lookup or graph
 construction. Each source/graph call creates an independent instance. The native
 print helper may allocate/perform I/O; no new runtime performance claim.
 
-Done: upstream HGL parses, emits and executes on hgraph before Rust implementation;
-reasoned/Python/C++ const/sink cases agree. Generated Rust compiles independently
+Acceptance: the current HGL source parses and emits; preserved reasoned/Python/C++
+const/sink cases agree on behavior. The audit retains the original source
+spelling for its historical compiler measurements. Generated Rust compiles independently
 and executes the same cases, including source timestamps, sink output, idle
 cycles and fresh runs. CLI rejects malformed/unsupported input without output.
 No checkpoint, generic/collection lowering, arbitrary expressions or full native

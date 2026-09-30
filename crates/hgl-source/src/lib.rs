@@ -133,6 +133,8 @@ pub enum Ty {
     Ref(Box<Self>),
     /// Set membership.
     Set(Box<Self>),
+    /// Contextual nullable expression; not an admitted source annotation.
+    Nullable(Box<Self>),
     /// No result.
     Void,
 }
@@ -150,6 +152,7 @@ impl Ty {
             Self::DateTime => "datetime",
             Self::Ref(_) => "ref",
             Self::Set(_) => "set",
+            Self::Nullable(_) => "contextual nullable",
             Self::Void => "void",
         }
     }
@@ -213,6 +216,10 @@ impl Literal {
 #[derive(Debug, Clone)]
 /// An expression before name and type resolution.
 pub enum Expr {
+    /// Contextual absence, checked at its use site.
+    Null,
+    /// Indexed expression and index.
+    Index(Box<Self>, Box<Self>),
     /// Fixed scalar.
     Literal(Literal),
     /// Unresolved identifier.
@@ -231,6 +238,10 @@ pub enum Expr {
 pub enum Stmt {
     /// Local binding.
     Let(String, Expr),
+    /// Mutable local binding.
+    Var(String, Expr),
+    /// End runtime evaluation without publication.
+    Exit,
     /// Result publication.
     Return(Expr),
     /// Callable name and positional or named arguments.
@@ -349,6 +360,15 @@ impl<'a> Cursor<'a> {
         Ok(left)
     }
     fn atom(&mut self) -> Result<Expr, String> {
+        let mut value = self.primary()?;
+        while self.take("[") {
+            let index = self.expr()?;
+            self.need("]")?;
+            value = Expr::Index(Box::new(value), Box::new(index));
+        }
+        Ok(value)
+    }
+    fn primary(&mut self) -> Result<Expr, String> {
         if self.take("[") {
             let mut values = Vec::new();
             self.lines();
@@ -385,6 +405,9 @@ impl<'a> Cursor<'a> {
         if negative {
             self.pos -= 1;
             return Ok(Expr::Unary("-".into(), Box::new(self.atom()?)));
+        }
+        if text == "null" {
+            return Ok(Expr::Null);
         }
         if text == "true" || text == "false" {
             return Ok(Expr::Literal(Literal::Bool(text == "true")));
@@ -448,12 +471,21 @@ impl<'a> Cursor<'a> {
                 out.push(Stmt::For(name, collection, body));
                 self.lines();
                 continue;
-            } else if self.take("let") || self.take("var") {
+            } else if self.at("let") || self.at("var") {
+                let mutable = self.consume()? == "var";
                 let name = self.name()?;
                 self.need("=")?;
-                Stmt::Let(name, self.expr()?)
+                if mutable {
+                    Stmt::Var(name, self.expr()?)
+                } else {
+                    Stmt::Let(name, self.expr()?)
+                }
             } else if self.take("return") {
-                Stmt::Return(self.expr()?)
+                if self.at("}") || self.at("\n") {
+                    Stmt::Exit
+                } else {
+                    Stmt::Return(self.expr()?)
+                }
             } else if self.take("if") {
                 let condition = self.expr()?;
                 let yes = self.block()?;
@@ -533,7 +565,9 @@ impl Expr {
                 ("!", Literal::Bool(b)) => Some(Literal::Bool(!b)),
                 _ => None,
             },
-            Self::Name(_) | Self::Call(..) | Self::Sequence(_) => None,
+            Self::Null | Self::Index(..) | Self::Name(_) | Self::Call(..) | Self::Sequence(_) => {
+                None
+            }
         }
     }
 }
@@ -624,7 +658,9 @@ fn expand_selectors(expr: Expr, inputs: &[(Option<String>, Expr)]) -> (Expr, u8)
                 flag,
             )
         }
-        other @ (Expr::Literal(_)
+        other @ (Expr::Null
+        | Expr::Index(..)
+        | Expr::Literal(_)
         | Expr::Name(_)
         | Expr::Sequence(_)
         | Expr::Unary(..)

@@ -12,6 +12,7 @@ fn rust_type(ty: &Ty) -> &'static str {
         Ty::F64 => "f64",
         Ty::Str => "String",
         Ty::Void => "()",
+        Ty::Nullable(_) => unreachable!("nullable locals use inferred Rust types"),
         Ty::Ref(_) => "hgl_store::Reference",
         Ty::Set(_) => "hgl_store::InputId",
     }
@@ -26,7 +27,9 @@ fn scalar_type(ty: &Ty) -> &'static str {
         Ty::Date => "Date",
         Ty::Time => "Time",
         Ty::DateTime => "DateTime",
-        Ty::Ref(_) | Ty::Set(_) | Ty::Void => unreachable!("checked endpoint type"),
+        Ty::Ref(_) | Ty::Set(_) | Ty::Nullable(_) | Ty::Void => {
+            unreachable!("checked endpoint type")
+        }
     }
 }
 fn literal(value: &Literal) -> String {
@@ -43,6 +46,12 @@ fn literal(value: &Literal) -> String {
 }
 fn value(plan: &Plan, v: &Value) -> String {
     match &v.kind {
+        Kind::ReplaySlot(index) => format!("self.replay_input.get({})?", value(plan, index)),
+        Kind::IsPresent(v) => presence(plan, v),
+        Kind::Present(v) => format!(
+            "({}).expect(\"checked present replay slot\")",
+            value(plan, v)
+        ),
         Kind::Literal(l) => literal(l),
         Kind::Input(i, _) => {
             if matches!(v.ty, Ty::Ref(_)) {
@@ -115,6 +124,14 @@ fn value(plan: &Plan, v: &Value) -> String {
         Kind::Wire(_) | Kind::Void | Kind::Capability => unreachable!("checked runtime value"),
     }
 }
+fn presence(plan: &Plan, value: &Value) -> String {
+    let option = if let Kind::Local(id) = value.kind {
+        format!("local{id}")
+    } else {
+        self::value(plan, value)
+    };
+    format!("({option}).is_some()")
+}
 fn integer_binary(op: &str, a: &str, b: &str) -> String {
     match op {
         "+" => format!("(({a}).wrapping_add({b}))"),
@@ -130,6 +147,7 @@ fn integer_binary(op: &str, a: &str, b: &str) -> String {
 fn statements(plan: &Plan, body: &[Statement], out: &mut Vec<String>) {
     for statement in body {
         out.push(match statement {
+            Statement::Exit => "return Ok(());\n".into(),
             Statement::Let(i, v) => format!("let local{i} = {};\n", condition_code(plan, v)),
             Statement::Return(v) => if matches!(v.ty,Ty::Ref(_)) {format!("_ctx.set_reference(self._output,{})?;\nreturn Ok(());\n",condition_code(plan,v))} else {format!("_ctx.set(self._output, {});\nreturn Ok(());\n",condition_code(plan,v))},
             Statement::Call(v) => format!("{};\n", condition_code(plan, v)),
@@ -326,7 +344,12 @@ pub fn emit(plan: &Plan) -> String {
 
 fn condition_code(plan: &Plan, condition: &Value) -> String {
     let code = value(plan, condition);
-    if code.starts_with('(') && code.ends_with(')') {
+    if matches!(
+        condition.kind,
+        Kind::Binary(..) | Kind::Unary(..) | Kind::Query(..)
+    ) && code.starts_with('(')
+        && code.ends_with(')')
+    {
         code[1..code.len() - 1].into()
     } else {
         code
@@ -523,7 +546,10 @@ fn native_argument(plan: &Plan, v: &Value) -> String {
         Kind::Output => {
             "_ctx.store().output_ref(self._output).expect(\"valid output\").as_str()".into()
         }
-        Kind::Literal(_)
+        Kind::ReplaySlot(_)
+        | Kind::IsPresent(_)
+        | Kind::Present(_)
+        | Kind::Literal(_)
         | Kind::Wire(_)
         | Kind::Native(..)
         | Kind::Binary(..)
@@ -547,8 +573,7 @@ fn sequence(slots: &[Option<Literal>]) -> String {
 fn capability_call(plan: &Plan, op: &str, args: &[Value]) -> String {
     let args = args.iter().map(|v| value(plan, v)).collect::<Vec<_>>();
     match op {
-        "replay_input.length" => "self.replay_input.length()".into(),
-        "replay_input.has_tick" | "replay_input.delta_at" => format!("self.{}({})?", op, args[0]),
+        "replay_input.len" => "self.replay_input.length()".into(),
         "capture.begin" => "self.capture.begin()?".into(),
         "capture.append" => format!(
             "self.capture.append({}, &({}), _ctx.evaluation_time())?",

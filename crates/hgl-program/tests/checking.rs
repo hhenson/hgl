@@ -81,8 +81,8 @@ fn source_alarm_rules_are_checked() {
     for (body, message) in [
         ("inject alarm\nwhen scheduled() { return 1 }", "expected {"),
         (
-            "start { alarm.schedule(0s) }\nwhen { return 1 }",
-            "inject alarm",
+            "start { schedule(alarm, 0s) }\nwhen { return 1 }",
+            "unknown value alarm",
         ),
         ("inject alarm\nwhen { return true }", "return type"),
     ] {

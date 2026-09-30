@@ -122,7 +122,10 @@ fn check_expected(
     if let Some((_, ty)) = &plan.output {
         if matches!(
             ty,
-            crate::syntax::Ty::Set(_) | crate::syntax::Ty::Ref(_) | crate::syntax::Ty::Void
+            crate::syntax::Ty::Set(_)
+                | crate::syntax::Ty::Ref(_)
+                | crate::syntax::Ty::Nullable(_)
+                | crate::syntax::Ty::Void
         ) {
             return Err("eval currently records scalar outputs".into());
         }

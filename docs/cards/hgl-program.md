@@ -43,7 +43,7 @@ HGL owns guards, scheduling, state and formatting composition. Rust implements
 only the selected native scalar signatures. Selected source docs remain in
 emitted comments. No operator name lookup occurs on ticks.
 
-Acceptance: the unchanged pinned standard library's 82 tests/128 evaluations,
+Acceptance: the pinned standard library's 83 tests/132 evaluations,
 plus empty/silent/equal ticks, delayed output, fresh state, helper isolation,
 wrong values/lengths and propagated node errors. `cargo xtask ci` runs these in
 debug and release. The original const/debug graph regressions remain.
@@ -51,7 +51,7 @@ debug and release. The original const/debug graph regressions remain.
 Node-scoped `replay_input` and `capture` are non-value capabilities. The first
 requires a scalar source; the second an outputless sink with one scalar input.
 They cannot escape or appear in value/composition bodies. The checker enforces
-ADR0016's exact method names, positional/named arguments, result types and
+ADR0016's exact operation names, positional/named arguments, result types and
 start/evaluation phases. Start hooks use ordinary checked statements, native
 calls, conditions and scalar cache access. Clock reads and source alarm calls
 are lowered through the existing context; temporal input/output access and
@@ -79,7 +79,7 @@ Handler and local short-circuit/conditional facts establish those guarantees.
 
 Acceptance also includes mutated source operator bodies proving execution of the
 selected HGL handlers, missing-binding construction failure before start, native
-start failure, capability method/phase/type/escape errors, translated buffer
+start failure, capability operation/phase/type/escape errors, translated buffer
 errors through generated nodes, generic delta forwarding and endpoint-specific
 proof checks. No runtime control flow is selected by replay/record operator name.
 
@@ -88,3 +88,15 @@ Existing structural guard emission is retained: applying scalar normalization to
 reference startup handlers exposes an unresolved mismatch between reference
 binding modification time and startup activation. Structural delta metadata and
 that normalization/runtime integration remain outside this completed profile.
+
+Capability operations use receiver-first prelude calls with a direct injected
+name as the first positional argument; remaining arguments use ordinary
+positional/named binding. Dotted capability methods are not aliases. Replay
+uses `len(replay_input)` and evaluation-only `replay_input[index]`. Its contextual
+nullable result can enter immutable inferred locals but cannot escape into
+mutable locals, state/cache, ordinary calls or output without presence proof.
+Null comparisons refine the particular local on both branches, through negation
+and short-circuit evaluation. Continuing paths intersect their guarantees;
+a terminating branch contributes no continuing path. Unrefined copies require
+their own guard. Bare runtime return terminates without publishing; `return null`
+is not a no-output operation. Scalar endpoint `delta_value` proofs remain separate.

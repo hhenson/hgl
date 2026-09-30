@@ -350,7 +350,7 @@ impl Checker {
         let mut output = Value::new(Ty::Void, Kind::Void);
         for (position, statement) in statements.iter().enumerate() {
             match statement {
-                Stmt::Let(name, expr) => {
+                Stmt::Let(name, expr) | Stmt::Var(name, expr) => {
                     let value = self.expression(module, expr, env, false)?;
                     if env.insert(name.clone(), value).is_some() {
                         return Err(format!("duplicate local {name}"));
@@ -365,7 +365,11 @@ impl Checker {
                     }
                     output = self.expression(module, expr, env, false)?;
                 }
-                Stmt::Add(_, _) | Stmt::Assign(_, _) | Stmt::For(..) | Stmt::If(_, _, _) => {
+                Stmt::Exit
+                | Stmt::Add(_, _)
+                | Stmt::Assign(_, _)
+                | Stmt::For(..)
+                | Stmt::If(_, _, _) => {
                     return Err("runtime statement in graph".into());
                 }
             }
@@ -446,32 +450,7 @@ impl Checker {
             self.starting = false;
             c.lines();
         }
-        while c.take("when") {
-            self.facts.clear();
-            if c.at("scheduled") {
-                return Err(
-                    "expected { or a supported endpoint guard; scheduled() is not an alarm guard"
-                        .into(),
-                );
-            }
-            let guard = if c.at("{") {
-                None
-            } else {
-                let expr = node_guard(&node, c.expr()?);
-                let condition = self.expression(&decl.module, &expr, env, true)?;
-                if condition.ty != Ty::Bool {
-                    return Err("handler guard requires bool".into());
-                }
-                Some(condition)
-            };
-            self.facts = handler_facts(guard.as_ref(), node.inputs.len());
-            let body = c.block()?;
-            node.handlers.push((
-                guard,
-                self.statements(&decl.module, &body, env, result, &mut next_local)?,
-            ));
-            c.lines();
-        }
+        self.handlers(decl, c, env, &mut node, &mut next_local)?;
         if node.handlers.is_empty() {
             return Err("expected when handler".into());
         }
@@ -484,6 +463,48 @@ impl Checker {
         }
         Ok(node)
     }
+    fn handlers(
+        &mut self,
+        decl: &Decl,
+        c: &mut Cursor<'_>,
+        env: &Env,
+        node: &mut Node,
+        next_local: &mut usize,
+    ) -> Result<(), String> {
+        while c.take("when") {
+            self.facts.clear();
+            if c.at("scheduled") {
+                return Err(
+                    "expected { or a supported endpoint guard; scheduled() is not an alarm guard"
+                        .into(),
+                );
+            }
+            let guard = if c.at("{") {
+                None
+            } else {
+                let expr = node_guard(node, c.expr()?);
+                let condition = self.expression(&decl.module, &expr, env, true)?;
+                if condition.ty != Ty::Bool {
+                    return Err("handler guard requires bool".into());
+                }
+                Some(condition)
+            };
+            self.facts = handler_facts(guard.as_ref(), node.inputs.len());
+            let body = c.block()?;
+            node.handlers.push((
+                guard,
+                self.statements(
+                    &decl.module,
+                    &body,
+                    &mut env.clone(),
+                    &node.result,
+                    next_local,
+                )?,
+            ));
+            c.lines();
+        }
+        Ok(())
+    }
     fn injectables(
         &mut self,
         decl: &Decl,
@@ -495,11 +516,8 @@ impl Checker {
         while c.take("inject") {
             loop {
                 match c.name()?.as_str() {
-                    name @ ("alarm" | "clock" | "replay_input" | "capture") => {
+                    name @ ("alarm" | "clock" | "logger" | "replay_input" | "capture") => {
                         inject_capability(name, node, env)?;
-                    }
-                    "logger" => {
-                        env.insert("logger".into(), Value::new(Ty::Void, Kind::Void));
                     }
                     "out" => {
                         env.insert("out".into(), Value::new(result.clone(), Kind::Output));
@@ -560,10 +578,17 @@ impl Checker {
         result: &Ty,
         next_local: &mut usize,
     ) -> Result<Vec<Statement>, String> {
-        statements
-            .iter()
-            .map(|statement| self.statement(module, statement, env, result, next_local))
-            .collect()
+        let mut bindings = BTreeSet::new();
+        let mut checked = Vec::new();
+        for statement in statements {
+            if let Stmt::Let(name, _) | Stmt::Var(name, _) = statement
+                && !bindings.insert(name)
+            {
+                return Err(format!("duplicate local {name}"));
+            }
+            checked.push(self.statement(module, statement, env, result, next_local)?);
+        }
+        Ok(checked)
     }
     fn statement(
         &mut self,
@@ -574,10 +599,19 @@ impl Checker {
         next_local: &mut usize,
     ) -> Result<Statement, String> {
         Ok(match statement {
-            Stmt::Let(name, expr) => {
+            Stmt::Let(name, expr) | Stmt::Var(name, expr) => {
                 let value = self.expression(module, expr, env, true)?;
-                let id = local(env, name, value.ty.clone(), next_local)?;
+                if matches!(statement, Stmt::Var(..)) {
+                    require_payload(&value)?;
+                }
+                let id = local(env, name, value.ty.clone(), next_local);
                 Statement::Let(id, value)
+            }
+            Stmt::Exit => {
+                if self.starting || !self.runtime_node {
+                    return Err("bare return requires runtime evaluation".into());
+                }
+                Statement::Exit
             }
             Stmt::Return(expr) => {
                 let v = self.expression(module, expr, env, true)?;
@@ -586,7 +620,11 @@ impl Checker {
                 }
                 Statement::Return(v)
             }
-            Stmt::Call(expr) => Statement::Call(self.expression(module, expr, env, true)?),
+            Stmt::Call(expr) => {
+                let value = self.expression(module, expr, env, true)?;
+                require_payload(&value)?;
+                Statement::Call(value)
+            }
             Stmt::For(name, collection, body) => {
                 if !matches!(collection, Expr::Call(name, _) if name == "elements") {
                     return Err("for currently requires elements(input, added)".into());
@@ -599,11 +637,10 @@ impl Checker {
                 *next_local += 1;
                 let mut scope = env.clone();
                 scope.insert(name.clone(), Value::new(*element.clone(), Kind::Local(id)));
-                Statement::For(
-                    id,
-                    collection,
-                    self.statements(module, body, &mut scope, result, next_local)?,
-                )
+                let previous = self.facts.clone();
+                let body = self.statements(module, body, &mut scope, result, next_local)?;
+                self.facts = previous;
+                Statement::For(id, collection, body)
             }
             Stmt::Assign(name, expr) => {
                 let target = env.get(name).ok_or("unknown assignment target")?.clone();
@@ -634,21 +671,35 @@ impl Checker {
                 Statement::Add(id, v)
             }
             Stmt::If(expr, yes, no) => {
-                let condition = self.expression(module, expr, env, true)?;
-                if condition.ty != Ty::Bool {
-                    return Err("condition requires bool".into());
-                }
-                let previous = self.facts.clone();
-                self.facts.extend(facts(&condition));
-                let yes = self.statements(module, yes, &mut env.clone(), result, next_local)?;
-                self.facts = previous;
-                Statement::If(
-                    condition,
-                    yes,
-                    self.statements(module, no, &mut env.clone(), result, next_local)?,
-                )
+                self.conditional(module, (expr, yes, no), env, result, next_local)?
             }
         })
+    }
+    fn conditional(
+        &mut self,
+        module: &str,
+        (expr, yes, no): (&Expr, &[Stmt], &[Stmt]),
+        env: &Env,
+        result: &Ty,
+        next_local: &mut usize,
+    ) -> Result<Statement, String> {
+        let condition = self.expression(module, expr, env, true)?;
+        if condition.ty != Ty::Bool {
+            return Err("condition requires bool".into());
+        }
+        let previous = self.facts.clone();
+        self.facts = facts(&condition, true, &self.facts);
+        let yes = self.statements(module, yes, &mut env.clone(), result, next_local)?;
+        let yes_facts = self.facts.clone();
+        self.facts = previous;
+        self.facts = facts(&condition, false, &self.facts);
+        let no = self.statements(module, no, &mut env.clone(), result, next_local)?;
+        self.facts = match (terminates(&yes), terminates(&no)) {
+            (true, _) => self.facts.clone(),
+            (false, true) => yes_facts,
+            (false, false) => merge_facts(&yes_facts, &self.facts),
+        };
+        Ok(Statement::If(condition, yes, no))
     }
     fn expression(
         &mut self,
@@ -658,6 +709,27 @@ impl Checker {
         runtime: bool,
     ) -> Result<Value, String> {
         match expr {
+            Expr::Null => Err("null requires a contextual nullable comparison".into()),
+            Expr::Index(receiver, index) => {
+                if !matches!(receiver.as_ref(), Expr::Name(name) if name == "replay_input")
+                    || !runtime
+                    || !self.runtime_node
+                    || self.starting
+                {
+                    return Err(
+                        "replay_input: indexing requires the injected source in evaluation".into(),
+                    );
+                }
+                let payload = capability_payload("replay_input", env)?;
+                let index = self.expression(module, index, env, runtime)?;
+                if index.ty != Ty::I64 {
+                    return Err("replay_input: index requires i64".into());
+                }
+                Ok(Value::new(
+                    Ty::Nullable(Box::new(payload)),
+                    Kind::ReplaySlot(Box::new(index)),
+                ))
+            }
             Expr::Sequence(_) => Err("harness sequences are only valid in eval".into()),
             Expr::Literal(l) => Ok(Value::new(l.ty(), Kind::Literal(l.clone()))),
             Expr::Name(name) => {
@@ -670,6 +742,11 @@ impl Checker {
                 }
                 if self.starting && matches!(value.kind, Kind::Input(..) | Kind::Output) {
                     return Err("start cannot access temporal endpoints".into());
+                }
+                if let (Ty::Nullable(payload), Kind::Local(id)) = (&value.ty, &value.kind)
+                    && self.facts.contains(&("present".into(), *id))
+                {
+                    return Ok(Value::new(*payload.clone(), Kind::Present(Box::new(value))));
                 }
                 Ok(value)
             }
@@ -697,6 +774,29 @@ impl Checker {
         env: &Env,
         runtime: bool,
     ) -> Result<Value, String> {
+        if let Some((label, Expr::Name(receiver))) = args.first()
+            && env
+                .get(receiver)
+                .is_some_and(|v| matches!(v.kind, Kind::Capability))
+        {
+            if label.is_some() || !runtime {
+                return Err(format!(
+                    "{receiver}: capability requires a first positional runtime operand"
+                ));
+            }
+            let values = args[1..]
+                .iter()
+                .map(|(n, e)| {
+                    let value = self.expression(module, e, env, runtime)?;
+                    require_payload(&value)?;
+                    Ok((n.clone(), value))
+                })
+                .collect::<Result<Vec<_>, String>>()?;
+            if receiver == "logger" && name == "info" {
+                return self.log_info(&values);
+            }
+            return capability_function(receiver, name, &values, env, self.starting);
+        }
         if name == "delta_value" {
             if !runtime
                 || !self.runtime_node
@@ -740,23 +840,21 @@ impl Checker {
         }
         let args = args
             .iter()
-            .map(|(n, v)| Ok((n.clone(), self.expression(module, v, env, runtime)?)))
+            .map(|(n, v)| {
+                let value = self.expression(module, v, env, runtime)?;
+                require_payload(&value)?;
+                Ok((n.clone(), value))
+            })
             .collect::<Result<Vec<_>, String>>()?;
-        self.value_call(module, name, args, env, runtime)
+        self.value_call(module, name, args, runtime)
     }
     fn value_call(
         &mut self,
         module: &str,
         name: &str,
         args: Vec<(Option<String>, Value)>,
-        env: &Env,
         runtime: bool,
     ) -> Result<Value, String> {
-        if let Some((receiver, method)) = name.split_once('.')
-            && matches!(receiver, "replay_input" | "capture" | "clock" | "alarm")
-        {
-            return capability_method(receiver, method, &args, env, runtime, self.starting);
-        }
         let (owner, item) = self.identity(module, name);
         if matches!(name, "upsert" | "discard")
             || (name == "contains"
@@ -771,30 +869,6 @@ impl Checker {
         {
             return set_call(name, &owner, &item, args);
         }
-        if name == "logger.info" {
-            if !env.contains_key("logger") || args.len() != 1 || args[0].1.ty != Ty::Str {
-                return Err("logger.info requires inject logger and text".into());
-            }
-            let id = self
-                .plan
-                .natives
-                .iter()
-                .position(|n| n.method == "log_info_str")
-                .unwrap_or(self.plan.natives.len());
-            if id == self.plan.natives.len() {
-                self.plan.natives.push(Native {
-                    name: "logger.info".into(),
-                    method: "log_info_str".into(),
-                    args: vec![Ty::Str],
-                    result: Ty::Void,
-                    throws: false,
-                });
-            }
-            return Ok(Value::new(
-                Ty::Void,
-                Kind::Native(id, args.into_iter().map(|(_, v)| v).collect()),
-            ));
-        }
         if matches!(
             name,
             "valid" | "modified" | "last_modified" | "passivate" | "activate"
@@ -802,6 +876,25 @@ impl Checker {
             return endpoint_call(name, args, runtime);
         }
         self.call(module, name, &args, runtime)
+    }
+    fn log_info(&mut self, args: &Arguments) -> Result<Value, String> {
+        let values = method_arguments("info(logger)", &[("value", Ty::Str)], args)?;
+        let id = self
+            .plan
+            .natives
+            .iter()
+            .position(|n| n.method == "log_info_str")
+            .unwrap_or(self.plan.natives.len());
+        if id == self.plan.natives.len() {
+            self.plan.natives.push(Native {
+                name: "info(logger)".into(),
+                method: "log_info_str".into(),
+                args: vec![Ty::Str],
+                result: Ty::Void,
+                throws: false,
+            });
+        }
+        Ok(Value::new(Ty::Void, Kind::Native(id, values)))
     }
     fn binary(
         &mut self,
@@ -811,13 +904,41 @@ impl Checker {
         env: &Env,
         runtime: bool,
     ) -> Result<Value, String> {
+        if matches!(operands.0, Expr::Null) || matches!(operands.1, Expr::Null) {
+            if !matches!(op, "==" | "!=") {
+                return Err("null only supports nullable presence comparisons".into());
+            }
+            let expr = if matches!(operands.0, Expr::Null) {
+                operands.1
+            } else {
+                operands.0
+            };
+            let value = if let Expr::Name(name) = expr {
+                env.get(name)
+                    .cloned()
+                    .ok_or_else(|| format!("unknown value {name}"))?
+            } else {
+                self.expression(module, expr, env, runtime)?
+            };
+            if !matches!(value.ty, Ty::Nullable(_)) {
+                return Err("null comparison requires a nullable replay result".into());
+            }
+            let present = Value::new(Ty::Bool, Kind::IsPresent(Box::new(value)));
+            return Ok(if op == "!=" {
+                present
+            } else {
+                Value::new(Ty::Bool, Kind::Unary("!".into(), Box::new(present)))
+            });
+        }
         let mut a = self.expression(module, operands.0, env, runtime)?;
         let previous = self.facts.clone();
-        if op == "&&" {
-            self.facts.extend(facts(&a));
+        if matches!(op, "&&" | "||") {
+            self.facts = facts(&a, op == "&&", &self.facts);
         }
         let mut b = self.expression(module, operands.1, env, runtime)?;
         self.facts = previous;
+        require_payload(&a)?;
+        require_payload(&b)?;
         if a.ty == Ty::I64 && b.ty == Ty::F64 {
             a = Value::new(Ty::F64, Kind::Unary("float".into(), Box::new(a)));
         }
@@ -1121,16 +1242,11 @@ fn node_inputs(signature: &Signature, env: &mut Env, node: &mut Node) -> Result<
     Ok(())
 }
 
-fn local(env: &mut Env, name: &str, ty: Ty, next: &mut usize) -> Result<usize, String> {
+fn local(env: &mut Env, name: &str, ty: Ty, next: &mut usize) -> usize {
     let id = *next;
     *next += 1;
-    if env
-        .insert(name.into(), Value::new(ty, Kind::Local(id)))
-        .is_some()
-    {
-        return Err(format!("duplicate local {name}"));
-    }
-    Ok(id)
+    env.insert(name.into(), Value::new(ty, Kind::Local(id)));
+    id
 }
 
 fn eval_arguments(
@@ -1210,7 +1326,7 @@ fn coerce_literal(value: &mut Literal, ty: &Ty) -> Result<(), String> {
 }
 
 fn scalar(ty: &Ty) -> bool {
-    !matches!(ty, Ty::Void | Ty::Ref(_) | Ty::Set(_))
+    !matches!(ty, Ty::Void | Ty::Ref(_) | Ty::Set(_) | Ty::Nullable(_))
 }
 fn method_arguments(
     name: &str,
@@ -1250,28 +1366,30 @@ fn order_arguments(
     Ok(supplied)
 }
 
-fn capability_method(
+fn require_payload(value: &Value) -> Result<(), String> {
+    if matches!(value.ty, Ty::Nullable(_)) {
+        return Err("nullable replay result requires presence proof before payload use".into());
+    }
+    Ok(())
+}
+fn capability_payload(receiver: &str, env: &Env) -> Result<Ty, String> {
+    env.get(receiver)
+        .filter(|v| matches!(v.kind, Kind::Capability))
+        .map(|v| v.ty.clone())
+        .ok_or_else(|| format!("{receiver}: missing inject {receiver}"))
+}
+
+fn capability_function(
     receiver: &str,
     method: &str,
     args: &Arguments,
     env: &Env,
-    runtime: bool,
     starting: bool,
 ) -> Result<Value, String> {
-    let name = format!("{receiver}.{method}");
-    if !runtime {
-        return Err(format!("{receiver}: requires a runtime node hook"));
-    }
-    let payload = env
-        .get(receiver)
-        .filter(|v| matches!(v.kind, Kind::Capability))
-        .ok_or_else(|| format!("{receiver}: missing inject {receiver}"))?
-        .ty
-        .clone();
+    let name = format!("{method}({receiver})");
+    let payload = capability_payload(receiver, env)?;
     let (parameters, result) = match (receiver, method) {
-        ("replay_input", "length") => (vec![], Ty::I64),
-        ("replay_input", "has_tick") => (vec![("index", Ty::I64)], Ty::Bool),
-        ("replay_input", "delta_at") if !starting => (vec![("index", Ty::I64)], payload),
+        ("replay_input", "len") => (vec![], Ty::I64),
         ("capture", "begin") if starting => (vec![], Ty::Void),
         ("capture", "append") if !starting => {
             (vec![("time", Ty::DateTime), ("delta", payload)], Ty::Void)
@@ -1279,15 +1397,23 @@ fn capability_method(
         ("clock", "evaluation_time" | "next_cycle_evaluation_time") => (vec![], Ty::DateTime),
         ("alarm", "schedule") => (vec![("delay", Ty::Duration)], Ty::Void),
         ("alarm", "schedule_at") => (vec![("time", Ty::DateTime)], Ty::Void),
-        _ => return Err(format!("{name}: unknown method or forbidden hook phase")),
+        _ => {
+            return Err(format!(
+                "{name}: unknown capability operation or forbidden hook phase"
+            ));
+        }
     };
     let values = method_arguments(&name, &parameters, args)?;
-    if name == "alarm.schedule"
+    if receiver == "alarm"
+        && method == "schedule"
         && matches!(values[0].kind, Kind::Literal(Literal::Duration(delay)) if delay < 0)
     {
         return Err("negative alarm delay".into());
     }
-    Ok(Value::new(result, Kind::Query(name, values)))
+    Ok(Value::new(
+        result,
+        Kind::Query(format!("{receiver}.{method}"), values),
+    ))
 }
 
 fn inject_capability(name: &str, node: &mut Node, env: &mut Env) -> Result<(), String> {
@@ -1301,7 +1427,7 @@ fn inject_capability(name: &str, node: &mut Node, env: &mut Env) -> Result<(), S
         {
             node.inputs[0].2.clone()
         }
-        "alarm" | "clock" => Ty::Void,
+        "alarm" | "clock" | "logger" => Ty::Void,
         _ => return Err(format!("{name}: unsupported node shape or scalar type")),
     };
     if matches!(name, "replay_input" | "capture")
@@ -1356,32 +1482,79 @@ fn endpoint_call(name: &str, args: Arguments, runtime: bool) -> Result<Value, St
     ))
 }
 
-fn facts(value: &Value) -> BTreeSet<(String, usize)> {
-    if let Kind::Query(op, args) = &value.kind
-        && (op == "valid" || (op == "modified" && args.len() == 1))
+fn terminates(body: &[Statement]) -> bool {
+    body.iter().any(|statement| match statement {
+        Statement::Return(_) | Statement::Exit => true,
+        Statement::If(_, yes, no) => terminates(yes) && terminates(no),
+        Statement::Let(..)
+        | Statement::Call(_)
+        | Statement::Add(..)
+        | Statement::Assign(..)
+        | Statement::For(..) => false,
+    })
+}
+fn facts(
+    value: &Value,
+    truth: bool,
+    incoming: &BTreeSet<(String, usize)>,
+) -> BTreeSet<(String, usize)> {
+    if let Kind::Unary(op, value) = &value.kind
+        && op == "!"
     {
-        return args
-            .iter()
-            .filter_map(|v| {
-                if let Kind::Input(id, _) = v.kind {
-                    Some((op.clone(), id))
-                } else {
-                    None
-                }
-            })
-            .collect();
+        return facts(value, !truth, incoming);
     }
     if let Kind::Binary(op, a, b) = &value.kind
-        && op == "&&"
+        && matches!(op.as_str(), "&&" | "||")
     {
-        return facts(a).union(&facts(b)).cloned().collect();
+        let short = op == "||";
+        let continuing = facts(b, truth, &facts(a, !short, incoming));
+        return if truth == short {
+            merge_facts(&facts(a, truth, incoming), &continuing)
+        } else {
+            continuing
+        };
     }
-    BTreeSet::new()
+    let mut result = incoming.clone();
+    if let Kind::IsPresent(value) = &value.kind
+        && let Kind::Local(id) = value.kind
+    {
+        result.insert((if truth { "present" } else { "absent" }.into(), id));
+    }
+    if let Kind::Query(op, args) = &value.kind
+        && truth
+        && (op == "valid" || (op == "modified" && args.len() == 1))
+    {
+        result.extend(args.iter().filter_map(|v| {
+            if let Kind::Input(id, _) = v.kind {
+                Some((op.clone(), id))
+            } else {
+                None
+            }
+        }));
+    }
+    result
+}
+fn merge_facts(
+    a: &BTreeSet<(String, usize)>,
+    b: &BTreeSet<(String, usize)>,
+) -> BTreeSet<(String, usize)> {
+    let reachable = |facts: &BTreeSet<(String, usize)>| {
+        !facts
+            .iter()
+            .any(|(kind, id)| kind == "present" && facts.contains(&("absent".into(), *id)))
+    };
+    if !reachable(a) {
+        return b.clone();
+    }
+    if !reachable(b) {
+        return a.clone();
+    }
+    a.intersection(b).cloned().collect()
 }
 
 fn handler_facts(guard: Option<&Value>, inputs: usize) -> BTreeSet<(String, usize)> {
     if let Some(guard) = guard {
-        return facts(guard);
+        return facts(guard, true, &BTreeSet::new());
     }
     let mut facts = (0..inputs)
         .map(|i| ("valid".into(), i))

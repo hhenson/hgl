@@ -17,6 +17,12 @@ impl Value {
 /// Checked expressions and frontend-only binding markers.
 #[derive(Debug, Clone)]
 pub enum Kind {
+    /// Owned nullable replay payload at the checked i64 index.
+    ReplaySlot(Box<Value>),
+    /// Nullable presence test.
+    IsPresent(Box<Value>),
+    /// Payload extraction justified by frontend presence facts.
+    Present(Box<Value>),
     /// A compile-time scalar literal.
     Literal(Literal),
     /// Graph wiring marker containing the producing node index.
@@ -45,6 +51,8 @@ pub enum Kind {
 /// Checked statements in a node lifecycle hook or handler.
 #[derive(Debug)]
 pub enum Statement {
+    /// End evaluation without publishing a value.
+    Exit,
     /// Local binding index and initializer.
     Let(usize, Value),
     /// Publish a checked return value.

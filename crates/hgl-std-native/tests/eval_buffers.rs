@@ -22,11 +22,17 @@ fn scalar_round_trip<T: BufferScalar>(value: T) -> Result<()> {
     )?;
     let mut capture = Capture::new();
     assert_eq!(input.length(), 3);
-    assert!(input.has_tick(0)?);
-    assert!(!input.has_tick(1)?);
+    assert_eq!(input.get(0)?, Some(value.copy_delta()?));
+    assert_eq!(input.get(1)?, None);
     capture.begin()?;
-    capture.append(time(1), &input.delta_at(0)?, time(1))?;
-    capture.append(time(3), &input.delta_at(2)?, time(3))?;
+    let first = input
+        .get(0)?
+        .ok_or_else(|| NodeError::new("expected present first slot"))?;
+    let last = input
+        .get(2)?
+        .ok_or_else(|| NodeError::new("expected present last slot"))?;
+    capture.append(time(1), &first, time(1))?;
+    capture.append(time(3), &last, time(3))?;
     assert_eq!(
         capture.take_ticks()?,
         vec![(time(1), value.copy_delta()?), (time(3), value)]
@@ -51,16 +57,13 @@ fn input_bounds_and_absence_never_create_default_values() -> Result<()> {
     let input = ReplayInput::new(vec![Some(0_i64), None], time(1))?;
     for index in [-1, 2, i64::MAX] {
         assert_eq!(
-            message(input.has_tick(index)),
-            "replay_input: index out of range"
-        );
-        assert_eq!(
-            message(input.delta_at(index)),
+            message(input.get(index)),
             "replay_input: index out of range"
         );
     }
-    assert_eq!(message(input.delta_at(1)), "replay_input: slot has no tick");
-    assert_eq!(input.delta_at(0)?, 0);
+    assert_eq!(input.get(1)?, None);
+    assert_eq!(input.get(1)?, None);
+    assert_eq!(input.get(0)?, Some(0));
     assert_eq!(input.length(), 2);
     Ok(())
 }
@@ -71,8 +74,9 @@ fn empty_slots_and_unbegun_capture_are_distinct() -> Result<()> {
     let silent = ReplayInput::<i64>::new(vec![None, None], time(1))?;
     assert_eq!(empty.length(), 0);
     assert_eq!(silent.length(), 2);
-    assert!(!silent.has_tick(0)?);
-    assert!(!silent.has_tick(1)?);
+    assert_eq!(message(empty.get(0)), "replay_input: index out of range");
+    assert_eq!(silent.get(0)?, None);
+    assert_eq!(silent.get(1)?, None);
     let mut capture = Capture::<i64>::new();
     assert_eq!(message(capture.take_ticks()), "capture: not begun");
     capture.begin()?;
@@ -111,16 +115,19 @@ fn append_validates_in_order_and_preserves_earlier_captures() -> Result<()> {
 #[test]
 fn text_copies_survive_input_changes_drop_and_another_run() -> Result<()> {
     let input = ReplayInput::new(vec![Some("first".to_owned())], time(1))?;
-    let mut value = input.delta_at(0)?;
+    let mut value = input.get(0)?.expect("present text slot");
+    let repeated = input.get(0)?.expect("repeated present text slot");
     let mut capture = Capture::new();
     capture.begin()?;
     capture.append(time(1), &value, time(1))?;
     value.clear();
     value.push_str("second");
     capture.append(time(2), &value, time(2))?;
-    assert_eq!(input.delta_at(0)?, "first");
+    assert_eq!(input.get(0)?, Some("first".to_owned()));
+    assert_eq!(repeated, "first");
     drop(input);
     drop(value);
+    assert_eq!(repeated, "first");
     let ticks = capture.take_ticks()?;
     drop(capture);
     let mut fresh = Capture::<String>::new();
