@@ -40,9 +40,12 @@ if item != null { return item }
 ```
 
 Zero, `false` and empty text are present values. `len(replay_input)` counts
-absent slots too. Capability operations use receiver-first function calls,
+absent slots too. Capability actions use receiver-first function calls,
 including `schedule(alarm, delay)`, `begin(capture)` and
-`append(capture, last_modified(ts), delta_value(ts))`.
+`append(capture, last_modified(ts), delta_value(ts))`. Clock observations use
+read-only property access: `clock.evaluation_time` and
+`clock.next_cycle_evaluation_time`. The specified `clock.now` observation is
+not yet implemented by this compiler slice.
 
 The shared pass-through is one generic runtime compute:
 

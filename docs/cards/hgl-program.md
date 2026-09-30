@@ -89,8 +89,8 @@ reference startup handlers exposes an unresolved mismatch between reference
 binding modification time and startup activation. Structural delta metadata and
 that normalization/runtime integration remain outside this completed profile.
 
-Capability operations use receiver-first prelude calls with a direct injected
-name as the first positional argument; remaining arguments use ordinary
+Capability actions and non-clock queries use receiver-first prelude calls
+with a direct injected name as the first positional argument; remaining arguments use ordinary
 positional/named binding. Dotted capability methods are not aliases. Replay
 uses `len(replay_input)` and evaluation-only `replay_input[index]`. Its contextual
 nullable result can enter immutable inferred locals but cannot escape into
@@ -100,3 +100,11 @@ and short-circuit evaluation. Continuing paths intersect their guarantees;
 a terminating branch contributes no continuing path. Unrefined copies require
 their own guard. Bare runtime return terminates without publishing; `return null`
 is not a no-output operation. Scalar endpoint `delta_value` proofs remain separate.
+
+Clock observations use read-only properties of the direct injected clock:
+`clock.evaluation_time` and `clock.next_cycle_evaluation_time` produce owned
+`datetime` values in supported start/evaluation hooks. A local snapshots the
+read value. Property invocation, free-function clock aliases, property writes,
+unknown properties and non-capability receivers are rejected. `clock.now`
+requires wall-clock support absent from this backend and is diagnosed explicitly;
+this change does not add scheduler, stop-hook or value-helper capability support.

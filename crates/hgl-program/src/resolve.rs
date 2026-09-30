@@ -642,7 +642,8 @@ impl Checker {
                 self.facts = previous;
                 Statement::For(id, collection, body)
             }
-            Stmt::Assign(name, expr) => {
+            Stmt::Assign(target, expr) => {
+                let name = assignment_name(target)?;
                 let target = env.get(name).ok_or("unknown assignment target")?.clone();
                 if (self.starting && matches!(target.kind, Kind::Output))
                     || !matches!(target.kind, Kind::Output | Kind::Cache(_))
@@ -655,7 +656,8 @@ impl Checker {
                 }
                 Statement::Assign(target, value)
             }
-            Stmt::Add(name, expr) => {
+            Stmt::Add(target, expr) => {
+                let name = assignment_name(target)?;
                 let Some(Value {
                     kind: Kind::Cache(id),
                     ty,
@@ -710,6 +712,7 @@ impl Checker {
     ) -> Result<Value, String> {
         match expr {
             Expr::Null => Err("null requires a contextual nullable comparison".into()),
+            Expr::Property(receiver, name) => clock_property(receiver, name, env, runtime),
             Expr::Index(receiver, index) => {
                 if !matches!(receiver.as_ref(), Expr::Name(name) if name == "replay_input")
                     || !runtime
@@ -1366,6 +1369,36 @@ fn order_arguments(
     Ok(supplied)
 }
 
+fn assignment_name(target: &Expr) -> Result<&str, String> {
+    match target {
+        Expr::Name(name) => Ok(name),
+        Expr::Property(..) => {
+            Err("property assignment is not admitted; clock properties are read-only".into())
+        }
+        Expr::Null
+        | Expr::Index(..)
+        | Expr::Sequence(_)
+        | Expr::Literal(_)
+        | Expr::Unary(..)
+        | Expr::Call(..)
+        | Expr::Binary(..) => Err("assignment requires a named variable".into()),
+    }
+}
+fn clock_property(receiver: &Expr, name: &str, env: &Env, runtime: bool) -> Result<Value, String> {
+    if !matches!(receiver, Expr::Name(receiver) if receiver == "clock") || !runtime {
+        return Err("clock property requires the direct injected clock in a runtime hook".into());
+    }
+    capability_payload("clock", env)?;
+    match name {
+        "evaluation_time" | "next_cycle_evaluation_time" => Ok(Value::new(
+            Ty::DateTime,
+            Kind::Query(format!("clock.{name}"), Vec::new()),
+        )),
+        "now" => Err("clock.now: wall-clock observations are not supported by this backend".into()),
+        _ => Err(format!("clock: unknown property {name}")),
+    }
+}
+
 fn require_payload(value: &Value) -> Result<(), String> {
     if matches!(value.ty, Ty::Nullable(_)) {
         return Err("nullable replay result requires presence proof before payload use".into());
@@ -1394,7 +1427,6 @@ fn capability_function(
         ("capture", "append") if !starting => {
             (vec![("time", Ty::DateTime), ("delta", payload)], Ty::Void)
         }
-        ("clock", "evaluation_time" | "next_cycle_evaluation_time") => (vec![], Ty::DateTime),
         ("alarm", "schedule") => (vec![("delay", Ty::Duration)], Ty::Void),
         ("alarm", "schedule_at") => (vec![("time", Ty::DateTime)], Ty::Void),
         _ => {

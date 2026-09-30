@@ -31,3 +31,9 @@ immutable `Let` and value-return statements. `Ty::Nullable` is an internal
 inferred expression type, never a source annotation accepted by `Ty::parse`.
 These forms add no general optional type or null harness-cell alias. Source
 checking determines which indexed receivers and nullable uses are admitted.
+
+`Expr::Property(Box<Expr>, String)` represents ordinary postfix property/field
+selection, separately from `::` qualified names. It is not a method call.
+`Stmt::{Assign,Add}` retain an expression target for checking: the parser does
+not treat a dotted target as an ordinary variable name. The checker determines
+whether the selected field is writable; no new writable field domain is admitted.

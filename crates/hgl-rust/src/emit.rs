@@ -586,6 +586,6 @@ fn capability_call(plan: &Plan, op: &str, args: &[Value]) -> String {
             "{{ let time={}; let delay=time.micros().checked_sub(_ctx.evaluation_time().micros()).ok_or_else(||hgl_kernel::NodeError::new(\"alarm: time difference overflow\"))?; _ctx.alarm_in(hgl_types::EngineDelta::from_micros(delay))?; }}",
             args[0]
         ),
-        _ => unreachable!("checked capability method"),
+        _ => unreachable!("checked capability operation or property"),
     }
 }

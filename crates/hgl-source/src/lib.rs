@@ -218,6 +218,8 @@ impl Literal {
 pub enum Expr {
     /// Contextual absence, checked at its use site.
     Null,
+    /// Read a selected property or field of an expression.
+    Property(Box<Self>, String),
     /// Indexed expression and index.
     Index(Box<Self>, Box<Self>),
     /// Fixed scalar.
@@ -247,9 +249,9 @@ pub enum Stmt {
     /// Callable name and positional or named arguments.
     Call(Expr),
     /// Increment a state or cache slot.
-    Add(String, Expr),
+    Add(Expr, Expr),
     /// Assignment to state, cache or out.
-    Assign(String, Expr),
+    Assign(Expr, Expr),
     /// Collection iteration.
     For(String, Expr, Vec<Self>),
     /// Conditional branches.
@@ -361,10 +363,22 @@ impl<'a> Cursor<'a> {
     }
     fn atom(&mut self) -> Result<Expr, String> {
         let mut value = self.primary()?;
-        while self.take("[") {
-            let index = self.expr()?;
-            self.need("]")?;
-            value = Expr::Index(Box::new(value), Box::new(index));
+        loop {
+            if self.take("[") {
+                let index = self.expr()?;
+                self.need("]")?;
+                value = Expr::Index(Box::new(value), Box::new(index));
+            } else if self.take(".") {
+                value = Expr::Property(Box::new(value), self.name()?);
+                if self.at("(") {
+                    return Err(
+                        "properties cannot be invoked; capability method calls are not admitted"
+                            .into(),
+                    );
+                }
+            } else {
+                break;
+            }
         }
         Ok(value)
     }
@@ -416,7 +430,7 @@ impl<'a> Cursor<'a> {
             return string_literal(&text);
         }
         let mut name = text;
-        if self.at("::") || self.at(".") {
+        if self.at("::") {
             name.push_str(&self.consume()?);
             name.push_str(&self.name()?);
         }
@@ -498,20 +512,15 @@ impl<'a> Cursor<'a> {
                 out.push(Stmt::If(condition, yes, no));
                 self.lines();
                 continue;
-            } else if self.tokens.get(self.pos + 1).is_some_and(|t| t.text == "=") {
-                let name = self.name()?;
-                self.need("=")?;
-                Stmt::Assign(name, self.expr()?)
-            } else if self
-                .tokens
-                .get(self.pos + 1)
-                .is_some_and(|t| t.text == "+=")
-            {
-                let name = self.name()?;
-                self.need("+=")?;
-                Stmt::Add(name, self.expr()?)
             } else {
-                Stmt::Call(self.expr()?)
+                let target = self.expr()?;
+                if self.take("=") {
+                    Stmt::Assign(target, self.expr()?)
+                } else if self.take("+=") {
+                    Stmt::Add(target, self.expr()?)
+                } else {
+                    Stmt::Call(target)
+                }
             };
             out.push(statement);
             if !self.at("}") && !self.at("\n") {
@@ -565,9 +574,12 @@ impl Expr {
                 ("!", Literal::Bool(b)) => Some(Literal::Bool(!b)),
                 _ => None,
             },
-            Self::Null | Self::Index(..) | Self::Name(_) | Self::Call(..) | Self::Sequence(_) => {
-                None
-            }
+            Self::Null
+            | Self::Property(..)
+            | Self::Index(..)
+            | Self::Name(_)
+            | Self::Call(..)
+            | Self::Sequence(_) => None,
         }
     }
 }
@@ -659,6 +671,7 @@ fn expand_selectors(expr: Expr, inputs: &[(Option<String>, Expr)]) -> (Expr, u8)
             )
         }
         other @ (Expr::Null
+        | Expr::Property(..)
         | Expr::Index(..)
         | Expr::Literal(_)
         | Expr::Name(_)

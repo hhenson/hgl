@@ -82,8 +82,8 @@ fn capabilities_and_delta_metadata_are_checked_at_their_call_sites() {
             "expected one matching declaration",
         ),
         (
-            "fn f(clock:i64)->datetime { when { return evaluation_time(clock) } }",
-            "expected one matching declaration",
+            "fn f(clock:i64)->datetime { when { return clock.evaluation_time } }",
+            "missing inject clock",
         ),
         (
             "fn f(x:i64) { inject capture\nwhen { let local=capture\nbegin(local) } }",
@@ -102,7 +102,7 @@ fn capabilities_and_delta_metadata_are_checked_at_their_call_sites() {
             "unsupported node shape",
         ),
         (
-            "fn f(x: i64) { inject capture, clock\nstart { append(capture, evaluation_time(clock), 1) }\nwhen {} }",
+            "fn f(x: i64) { inject capture, clock\nstart { append(capture, clock.evaluation_time, 1) }\nwhen {} }",
             "forbidden hook phase",
         ),
         (
@@ -503,7 +503,7 @@ fn capability_failure_images(dir: &Path) -> Result<(), Box<dyn std::error::Error
         (
             "wrong_time",
             "last_modified(ts)",
-            "next_cycle_evaluation_time(clock)",
+            "clock.next_cycle_evaluation_time",
             "[1]",
         ),
     ] {
@@ -546,6 +546,36 @@ fn manifest(root: &Path, dir: &Path) -> std::io::Result<()> {
     fs::write(dir.join("Cargo.toml"), lines.join("\n"))
 }
 const REGRESSIONS: &str = r#"
+fn clock_current(value:i64)->datetime {
+    inject clock
+    when { let snapshot = clock.evaluation_time
+        if snapshot == clock.evaluation_time { return snapshot } }
+}
+fn clock_next(value:i64)->datetime {
+    inject clock
+    when { let next = clock.next_cycle_evaluation_time
+        if next > clock.evaluation_time && next == clock.next_cycle_evaluation_time { return next } }
+}
+fn clock_start_snapshot(value:i64)->datetime {
+    inject clock
+    cache started:datetime = @1970-01-01T00:00:00Z
+    start { started = clock.evaluation_time }
+    when { let saved = started
+        if clock.evaluation_time >= saved { return saved } }
+}
+fn clock_start_next(value:i64)->datetime {
+    inject clock
+    cache next:datetime = @1970-01-01T00:00:00Z
+    start { next = clock.next_cycle_evaluation_time }
+    when { return next }
+}
+test clock_property_timestamps {
+    assert eval(clock_current,[1,_,1]) == [@1970-01-01T00:00:00.000001Z,_,@1970-01-01T00:00:00.000003Z]
+    assert eval(clock_next,[1,_,1]) == [@1970-01-01T00:00:00.000002Z,_,@1970-01-01T00:00:00.000004Z]
+    assert eval(clock_start_snapshot,[1,1,1]) == [@1970-01-01T00:00:00.000001Z,@1970-01-01T00:00:00.000001Z,@1970-01-01T00:00:00.000001Z]
+    assert eval(clock_start_next,[1,1,1]) == [@1970-01-01T00:00:00.000002Z,@1970-01-01T00:00:00.000002Z,@1970-01-01T00:00:00.000002Z]
+}
+
 fn explicit_delta(a:i64,b:i64)->i64 {
     when valid(a) && modified(a) { return delta_value(a) }
     when valid(b) && modified(b) { return delta_value(b) }
