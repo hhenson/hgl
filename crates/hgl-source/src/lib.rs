@@ -559,6 +559,9 @@ fn numeric_literal(text: &str, negative: bool) -> Result<Option<Literal>, String
         let value = text
             .parse::<f64>()
             .map_err(|e| format!("invalid float: {e}"))?;
+        if !value.is_finite() {
+            return Err("float literal is outside the finite f64 range".into());
+        }
         return Ok(Some(Literal::Float(if negative { -value } else { value })));
     }
     let digits = text.bytes().take_while(u8::is_ascii_digit).count();

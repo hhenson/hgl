@@ -95,27 +95,16 @@ fn actual_stdlib_and_harness_regressions_run_on_rust() -> Result<(), Box<dyn std
         r#"
 struct Provider;
 mod native { pub use hgl_std_native::*; }
-mod integer_zero; mod float_zero; mod late_output;
+mod integer_zero; mod float_zero; mod late_output; mod modulo_zero;
 mod standard; mod regression; mod wrong; mod long; mod short; mod throwing;
 fn main() { match std::env::args().nth(1).as_deref() {
-Some("integer_zero") => integer_zero::main(), Some("float_zero") => float_zero::main(), Some("late_output") => late_output::main(),
+Some("modulo_zero") => modulo_zero::main(), Some("integer_zero") => integer_zero::main(), Some("float_zero") => float_zero::main(), Some("late_output") => late_output::main(),
 Some("throwing") => throwing::main(), Some("standard") => standard::main(), Some("regression") => regression::main(),
 Some("wrong") => wrong::main(), Some("long") => long::main(), Some("short") => short::main(),
 _ => panic!("unknown test image") } }
 "#,
     )?;
-    let build = Command::new(env!("CARGO"))
-        .args(["build", "--offline", "--quiet"])
-        .current_dir(&dir)
-        .output()?;
-    assert!(
-        build.status.success(),
-        "{}",
-        String::from_utf8_lossy(&build.stderr)
-    );
-    let binary = dir
-        .join("target/debug")
-        .join(format!("eval-regressions{}", std::env::consts::EXE_SUFFIX));
+    let binary = build_binary(&dir)?;
     for (name, success, message) in [
         ("standard", true, "45 tests, 84 evaluations, 0 failures"),
         ("regression", true, "0 failures"),
@@ -123,6 +112,7 @@ _ => panic!("unknown test image") } }
         ("long", false, "cycle 1"),
         ("short", false, "cycle 0"),
         ("throwing", false, "deliberate node failure"),
+        ("modulo_zero", false, "modulo by zero"),
         ("integer_zero", false, "division by zero"),
         ("float_zero", false, "division by zero"),
         (
@@ -143,6 +133,29 @@ _ => panic!("unknown test image") } }
     fs::remove_dir_all(dir)?;
     Ok(())
 }
+fn build_binary(dir: &Path) -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
+    let mut command = Command::new(env!("CARGO"));
+    command
+        .args(["build", "--offline", "--quiet"])
+        .current_dir(dir);
+    if !cfg!(debug_assertions) {
+        command.arg("--release");
+    }
+    let build = command.output()?;
+    assert!(
+        build.status.success(),
+        "{}",
+        String::from_utf8_lossy(&build.stderr)
+    );
+    Ok(dir
+        .join(if cfg!(debug_assertions) {
+            "target/debug"
+        } else {
+            "target/release"
+        })
+        .join(format!("eval-regressions{}", std::env::consts::EXE_SUFFIX)))
+}
+
 fn failure_images(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     for (name, expected) in [("wrong", "[2]"), ("long", "[1, _]"), ("short", "[]")] {
         let input = source(&format!(
@@ -151,6 +164,11 @@ fn failure_images(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
         module(dir, name, &emit_tests(&compile_tests(&input)?))?;
     }
     for (name, definition, expected) in [
+        (
+            "modulo_zero",
+            "fn divide(x: i64) -> i64 { when { return 7 % x } }",
+            "[0]",
+        ),
         (
             "integer_zero",
             "fn divide(x: i64) -> f64 { when { return 3 / x } }",
@@ -206,6 +224,25 @@ fn manifest(root: &Path, dir: &Path) -> std::io::Result<()> {
     fs::write(dir.join("Cargo.toml"), lines.join("\n"))
 }
 const REGRESSIONS: &str = r#"
+fn plus(a: i64, b: i64) -> i64 { when { return a + b } }
+fn minus(a: i64, b: i64) -> i64 { when { return a - b } }
+fn times(a: i64, b: i64) -> i64 { when { return a * b } }
+fn modulo(a: i64, b: i64) -> i64 { when { return a % b } }
+fn negate(a: i64) -> i64 { when { return -a } }
+fn wrap_state(ts: i64) -> i64 {
+    state total: i64 = 9223372036854775807
+    when { total += ts
+        return total }
+}
+test integer_boundaries {
+    assert eval(plus, [9223372036854775807, -9223372036854775808], [1, -1]) == [-9223372036854775808, 9223372036854775807]
+    assert eval(minus, [-9223372036854775808, 9223372036854775807], [1, -1]) == [9223372036854775807, -9223372036854775808]
+    assert eval(times, [9223372036854775807, -9223372036854775808], [2, -1]) == [-2, -9223372036854775808]
+    assert eval(modulo, [-7, 7, -7, -9223372036854775808], [2, -2, -2, -1]) == [1, -1, -1, 0]
+    assert eval(negate, [-9223372036854775808]) == [-9223372036854775808]
+    assert eval(wrap_state, [1, -1]) == [-9223372036854775808, 9223372036854775807]
+}
+
 fn capture(ts: ref<i64>) -> ref<i64> { when { return ts } }
 fn consume(ts: i64) -> i64 { when { return ts } }
 fn generic_consume<T>(ts: T) -> T { when { return ts } }

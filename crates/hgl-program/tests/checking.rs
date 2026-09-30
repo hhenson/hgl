@@ -178,3 +178,30 @@ fn reference_target_must_match_consumer() {
             .contains("type mismatch")
     );
 }
+
+#[test]
+fn nonfinite_literals_fail_before_emission() {
+    for literal in ["1e999", "-1e999"] {
+        let node = format!(
+            "module example\nfn bad() -> f64 {{ when {{ return {literal} }} }}\nexport fn main() {{ bad() }}"
+        );
+        assert!(
+            compile(&[("literal.hgl".into(), node)], "main")
+                .unwrap_err()
+                .contains("finite f64 range")
+        );
+        for assertion in [
+            format!("assert eval(id, [1.0]) == [{literal}]"),
+            format!("assert eval(id, [{literal}]) == [1.0]"),
+        ] {
+            let input = format!(
+                "module example\nfn id(x: f64) -> f64 {{ when {{ return x }} }}\ntest bad {{ {assertion} }}"
+            );
+            assert!(
+                hgl_program::compile_tests(&[("literal.hgl".into(), input)])
+                    .unwrap_err()
+                    .contains("finite f64 range")
+            );
+        }
+    }
+}

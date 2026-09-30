@@ -79,7 +79,9 @@ fn value(plan: &Plan, v: &Value) -> String {
             } else {
                 value(plan, b)
             };
-            if op == "/" {
+            if v.ty == Ty::I64 && matches!(op.as_str(), "+" | "-" | "*" | "%") {
+                integer_binary(op, &a, &b)
+            } else if op == "/" {
                 format!(
                     "{{ let lhs = ({a}) as f64; let rhs = ({b}) as f64; if rhs == 0.0 {{ return Err(hgl_kernel::NodeError::new(\"division by zero\")); }} lhs / rhs }}"
                 )
@@ -88,6 +90,9 @@ fn value(plan: &Plan, v: &Value) -> String {
             } else {
                 format!("({a} {op} {b})")
             }
+        }
+        Kind::Unary(op, v) if op == "-" && v.ty == Ty::I64 => {
+            format!("(({}).wrapping_neg())", value(plan, v))
         }
         Kind::Unary(op, v) => {
             let v = value(plan, v);
@@ -108,6 +113,18 @@ fn value(plan: &Plan, v: &Value) -> String {
         Kind::Wire(_) | Kind::Void => unreachable!("checked runtime value"),
     }
 }
+fn integer_binary(op: &str, a: &str, b: &str) -> String {
+    match op {
+        "+" => format!("(({a}).wrapping_add({b}))"),
+        "-" => format!("(({a}).wrapping_sub({b}))"),
+        "*" => format!("(({a}).wrapping_mul({b}))"),
+        "%" => format!(
+            "{{ let lhs = {a}; let rhs = {b}; if rhs == -1 {{ 0_i64 }} else {{ let rem = lhs.checked_rem(rhs).ok_or_else(|| hgl_kernel::NodeError::new(\"modulo by zero\"))?; if rem != 0 && (rem < 0) != (rhs < 0) {{ rem + rhs }} else {{ rem }} }} }}"
+        ),
+        _ => unreachable!("checked integer operation"),
+    }
+}
+
 fn statements(plan: &Plan, body: &[Statement], out: &mut Vec<String>) {
     for statement in body {
         out.push(match statement {
@@ -121,7 +138,7 @@ fn statements(plan: &Plan, body: &[Statement], out: &mut Vec<String>) {
                 statements(plan,body,&mut code);code.push("}\n}\n".into());code.concat()
             }
             Statement::Assign(target,v)=> if matches!(target.kind,Kind::Output) { format!("_ctx.set(self._output, {});\n",condition_code(plan,v)) } else {let Kind::Cache(i)=target.kind else {unreachable!("checked assignment")}; format!("self.cache{i} = {};\n",condition_code(plan,v))},
-            Statement::Add(i, v) => format!("self.cache{i} += {};\n", condition_code(plan, v)),
+            Statement::Add(i, v) => format!("self.cache{i} = self.cache{i}.wrapping_add({});\n", condition_code(plan, v)),
             Statement::If(condition, yes, no) => {
                 let mut code = vec![format!("if {} {{\n", condition_code(plan, condition))];
                 statements(plan, yes, &mut code);
