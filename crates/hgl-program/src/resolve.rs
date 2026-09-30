@@ -1,71 +1,8 @@
 use crate::index::{Decl, Library, Role, Signature};
 use crate::syntax::{Cursor, Expr, Literal, Stmt, Ty};
+use hgl_rust::{Kind, Native, Node, Plan, Statement, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
-#[derive(Debug, Clone)]
-pub(crate) struct Value {
-    pub ty: Ty,
-    pub kind: Kind,
-}
-impl Value {
-    pub(crate) fn new(ty: Ty, kind: Kind) -> Self {
-        Self { ty, kind }
-    }
-}
-#[derive(Debug, Clone)]
-pub(crate) enum Kind {
-    Literal(Literal),
-    Wire(usize),
-    /// Port index and whether its declared parameter is signal.
-    Input(usize, bool),
-    Cache(usize),
-    Local(usize),
-    Native(usize, Vec<Value>),
-    Binary(String, Box<Value>, Box<Value>),
-    Unary(String, Box<Value>),
-    Query(String, Vec<Value>),
-    Output,
-    Capability,
-    Void,
-}
-#[derive(Debug)]
-pub(crate) enum Statement {
-    Let(usize, Value),
-    Return(Value),
-    Call(Value),
-    Add(usize, Value),
-    Assign(Value, Value),
-    For(usize, Value, Vec<Self>),
-    If(Value, Vec<Self>, Vec<Self>),
-}
-#[derive(Debug)]
-pub(crate) struct Node {
-    pub name: String,
-    pub inputs: Vec<(String, usize, Ty)>,
-    pub result: Ty,
-    pub alarm: bool,
-    pub start: Vec<Statement>,
-    pub capability: Option<(String, Ty)>,
-    pub caches: Vec<Literal>,
-    pub handlers: Vec<(Option<Value>, Vec<Statement>)>,
-}
-#[derive(Debug)]
-pub(crate) struct Native {
-    pub name: String,
-    pub method: String,
-    pub throws: bool,
-    pub args: Vec<Ty>,
-    pub result: Ty,
-}
-#[derive(Debug, Default)]
-pub(crate) struct Plan {
-    pub nodes: Vec<Node>,
-    pub natives: Vec<Native>,
-    pub docs: Vec<String>,
-    pub output: Option<(usize, Ty)>,
-    pub input_length: usize,
-    pub replay_inputs: Vec<(usize, Vec<Option<Literal>>)>,
-}
 #[derive(Default)]
 struct Checker {
     library: Library,
@@ -520,7 +457,7 @@ impl Checker {
             let guard = if c.at("{") {
                 None
             } else {
-                let expr = node.guard(c.expr()?);
+                let expr = node_guard(&node, c.expr()?);
                 let condition = self.expression(&decl.module, &expr, env, true)?;
                 if condition.ty != Ty::Bool {
                     return Err("handler guard requires bool".into());
@@ -1455,18 +1392,16 @@ fn handler_facts(guard: Option<&Value>, inputs: usize) -> BTreeSet<(String, usiz
     facts
 }
 
-impl Node {
-    fn guard(&self, expr: Expr) -> Expr {
-        if self.inputs.iter().all(|(_, _, ty)| scalar(ty)) {
-            expr.handler_guard(
-                &self
-                    .inputs
-                    .iter()
-                    .map(|(n, _, _)| n.clone())
-                    .collect::<Vec<_>>(),
-            )
-        } else {
-            expr
-        }
+fn node_guard(node: &Node, expr: Expr) -> Expr {
+    if node.inputs.iter().all(|(_, _, ty)| scalar(ty)) {
+        expr.handler_guard(
+            &node
+                .inputs
+                .iter()
+                .map(|(n, _, _)| n.clone())
+                .collect::<Vec<_>>(),
+        )
+    } else {
+        expr
     }
 }

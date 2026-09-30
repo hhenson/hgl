@@ -7,7 +7,7 @@ pub struct Suite(Vec<Case>);
 #[derive(Debug)]
 struct Case {
     name: String,
-    plan: resolve::Plan,
+    plan: hgl_rust::Plan,
     expected: Option<Vec<Option<Literal>>>,
 }
 
@@ -90,7 +90,7 @@ pub fn emit_tests(suite: &Suite) -> String {
     let mut out = Vec::<String>::new();
     for (i, case) in suite.0.iter().enumerate() {
         out.push(format!("mod case{i} {{\n{}\n", emit::emit(&case.plan)));
-        out.push(emit::test_body(&case.plan, case.expected.as_deref()));
+        out.push(emit::emit_test_body(&case.plan, case.expected.as_deref()));
         out.push("}\n".into());
     }
     out.push("fn main() {\nlet mut failed=0;\n".into());
@@ -113,7 +113,7 @@ pub fn emit_tests(suite: &Suite) -> String {
 
 fn check_expected(
     name: &str,
-    plan: &resolve::Plan,
+    plan: &hgl_rust::Plan,
     expected: &mut Option<Vec<Option<Literal>>>,
 ) -> Result<(), String> {
     if expected.is_some() && plan.output.is_none() {

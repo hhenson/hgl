@@ -137,6 +137,7 @@ version = "0.0.0"
 dependencies = [
  "hgl-documentation",
  "hgl-library",
+ "hgl-rust",
  "hgl-source",
 ]
 
@@ -149,6 +150,13 @@ dependencies = [
  "hgl-kernel",
  "hgl-store",
  "hgl-types",
+]
+
+[[package]]
+name = "hgl-rust"
+version = "0.0.0"
+dependencies = [
+ "hgl-source",
 ]
 
 [[package]]

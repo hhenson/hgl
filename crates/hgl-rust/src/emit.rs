@@ -1,5 +1,5 @@
-use crate::resolve::{Kind, Node, Plan, Statement, Value};
-use crate::syntax::{Literal, Ty};
+use crate::ir::{Kind, Node, Plan, Statement, Value};
+use hgl_source::{Literal, Ty};
 
 fn rust_type(ty: &Ty) -> &'static str {
     match ty {
@@ -272,7 +272,8 @@ fn comment(text: &str) -> String {
     }
     out
 }
-pub(crate) fn emit(plan: &Plan) -> String {
+/// Emit runtime nodes, selected native signatures and graph construction.
+pub fn emit(plan: &Plan) -> String {
     let mut out = vec![String::from("// Generated from checked HGL source.\n")];
     for doc in &plan.docs {
         for line in doc.lines() {
@@ -332,7 +333,9 @@ fn condition_code(plan: &Plan, condition: &Value) -> String {
     }
 }
 
-pub(crate) fn test_body(plan: &Plan, expected: Option<&[Option<Literal>]>) -> String {
+/// Emit execution and observation of one checked eval plan.
+/// The expected sequence, when present, must already match the output type.
+pub fn emit_test_body(plan: &Plan, expected: Option<&[Option<Literal>]>) -> String {
     let mut out = Vec::<String>::new();
     if !plan.natives.is_empty() {
         out.push("impl Native for crate::Provider {\n".into());
@@ -427,7 +430,7 @@ fn query(op: &str, args: &[Value]) -> String {
     }
 }
 
-fn native_result(native: &crate::resolve::Native) -> String {
+fn native_result(native: &crate::ir::Native) -> String {
     if native.throws {
         format!(
             "Result<{},Box<hgl_kernel::NodeError>>",

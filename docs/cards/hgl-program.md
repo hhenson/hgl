@@ -1,8 +1,10 @@
 # Card: hgl-program
 
-Check closed HGL graphs and tests against source libraries; emit Rust for the
-existing engine. Uses `hgl-source`, `hgl-library`, `hgl-documentation`. Budget:
-2200 source lines. No third-party dependencies.
+Check closed HGL graphs and tests against source libraries; delegate checked
+plans to `hgl-rust` for Rust emission. Uses `hgl-source`, `hgl-library`,
+`hgl-documentation`, `hgl-rust`. Budget: 2200 source lines. No third-party
+dependencies. Source linking, type/phase/proof checks and eval wiring stay here;
+checked backend IR and Rust generation belong to `hgl-rust`.
 
 Public surface: `compile`, `compile_files`, opaque `Program`, `emit_rust`;
 `compile_tests`, `compile_tests_files`, opaque `Suite`, `emit_tests`. File loaders
@@ -67,7 +69,7 @@ passes the ticks to testkit observation/comparison. It adds no runtime recorder.
 
 `delta_value(input)` checks the concrete instance of the endpoint-derived delta
 relationship. The admitted eight scalars have delta type equal to scalar type;
-structural instances are diagnosed until a contextual delta contract is admitted.
+structural delta lowering is not yet implemented and those instances are diagnosed.
 Formal `signal` parameters retain their signal identity even when the producer
 has a scalar payload; they are excluded from both delta access and capture binding.
 Only runtime evaluation can read delta metadata. Endpoint identity and proof of
