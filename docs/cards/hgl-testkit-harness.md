@@ -82,3 +82,13 @@ twins' timed section contains nothing but `run_simulation`.
 - On the validation host, `cargo xtask bench` puts `tick`, `chain` and
   `wide_chain` within 5% of `bench/results/2026-09-19-cpp-baselines.md`, or
   the report says by how much they miss and where the time goes.
+
+## Dense source-language eval
+
+`evaluation::evaluate<T: Scalar>(GraphDescription, &mut Registry, output: u32,
+input_length: usize) -> Result<Vec<Option<T>>, String>` appends a typed recorder
+and runs a fresh simulation. The dense length is the later of the last input
+cell and last output tick. `evaluation::compare(expected, observed)` requires
+identical lengths and values, reporting the first differing cycle. Recorder
+buffers and dense result construction allocate; they are test instrumentation,
+not benchmark timing code. General timed/structural test results remain pending.

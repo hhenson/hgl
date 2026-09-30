@@ -15,9 +15,12 @@ fn main() -> std::process::ExitCode {
 }
 fn run() -> Result<(), String> {
     let mut args = std::env::args().skip(1);
-    let usage = "usage: hglc check|emit-rust|doc FILE [--part FILE] [--library DIR] [--entry NAME] [--out FILE]";
+    let usage = "usage: hglc check|emit-rust|emit-tests|doc FILE [--part FILE] [--library DIR] [--entry NAME] [--out FILE]";
     let command = args.next().ok_or(usage)?;
-    if !matches!(command.as_str(), "check" | "emit-rust" | "doc") {
+    if !matches!(
+        command.as_str(),
+        "check" | "emit-rust" | "doc" | "emit-tests"
+    ) {
         return Err(usage.into());
     }
     let mut files = vec![PathBuf::from(args.next().ok_or(usage)?)];
@@ -36,7 +39,7 @@ fn run() -> Result<(), String> {
     if (command != "check") != output.is_some() {
         return Err(usage.into());
     }
-    if !libraries.is_empty() {
+    if !libraries.is_empty() || command == "emit-tests" {
         return library::run(&files, &libraries, &entry, &command, output.as_deref());
     }
     let sources = files

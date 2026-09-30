@@ -190,7 +190,17 @@ pub(crate) fn snapshot(
                 fields.values().cloned().collect::<Vec<_>>().join(",")
             ),
             Kind::Bundle(_) | Kind::Dictionary(_) => object(&fields),
-            Kind::Reference(_) => unreachable!("REF observed separately"),
+            Kind::Reference(_)
+            | Kind::Set(_)
+            | Kind::Ts(
+                ScalarType::Text
+                | ScalarType::Date
+                | ScalarType::Time
+                | ScalarType::DateTime
+                | ScalarType::Duration,
+            ) => {
+                unreachable!("membership and REF observed separately")
+            }
         }
     } else {
         "null".into()

@@ -25,7 +25,7 @@ pub fn project<'a>(kind: &'a TsType, path: &[Step], keyed: bool) -> Result<&'a T
 /// Reject ambiguous field names anywhere in a recursive shape.
 pub fn check_shape(kind: &TsType) -> Result<(), BuildError> {
     match kind {
-        TsType::Ts(_) => Ok(()),
+        TsType::Ts(_) | TsType::Set(_) => Ok(()),
         TsType::Dictionary(child) | TsType::Reference(child) | TsType::List(child, _) => {
             check_shape(child)
         }
@@ -66,7 +66,8 @@ pub fn check_edge(
     let out = project(out, &edge.source.path, false)?;
     let input = project(input, &edge.target.path, false)?;
     let follows = matches!(out, TsType::Reference(child) if child.as_ref() == input);
-    if input != out && !follows {
+    let captures = matches!(input,TsType::Reference(child) if child.as_ref()==out);
+    if input != out && !follows && !captures {
         return Err(BuildError::wrong_type(&nodes[target].label, name));
     }
     for previous in bound.iter() {

@@ -61,7 +61,7 @@ impl<'r> Builder<'r> {
             label: implementation.to_owned(),
             scalars: scalars
                 .iter()
-                .map(|&(name, value)| (name.to_owned(), value))
+                .map(|(name, value)| ((*name).to_owned(), value.clone()))
                 .collect(),
         };
         check_scalars(node_type, &node)?;

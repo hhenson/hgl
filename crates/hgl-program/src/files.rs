@@ -7,6 +7,16 @@ pub fn compile_files(
     libraries: &[PathBuf],
     entry: &str,
 ) -> Result<crate::Program, String> {
+    crate::compile(&load_files(files, libraries)?, entry)
+}
+/// Load and check all named tests from explicit files and their source library.
+pub fn compile_tests_files(
+    files: &[PathBuf],
+    libraries: &[PathBuf],
+) -> Result<crate::Suite, String> {
+    crate::compile_tests(&load_files(files, libraries)?)
+}
+fn load_files(files: &[PathBuf], libraries: &[PathBuf]) -> Result<Vec<(String, String)>, String> {
     let mut paths = files.to_vec();
     for root in libraries {
         collect(root, &mut paths)?;
@@ -19,8 +29,7 @@ pub fn compile_files(
                 .map_err(|e| format!("{}: {e}", p.display()))
         })
         .collect::<Result<Vec<_>, _>>()?;
-    let program = crate::compile(&sources, entry)?;
-    Ok(program)
+    Ok(sources)
 }
 fn collect(path: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
     let mut entries = std::fs::read_dir(path)

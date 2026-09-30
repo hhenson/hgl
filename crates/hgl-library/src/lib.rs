@@ -1,41 +1,81 @@
-use crate::syntax::{Cursor, Expr, Token, lex};
+//! Module parts, imports, declarations and test-scope indexing for HGL.
+use hgl_source::{Cursor, Expr, Token, lex};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum Role {
+/// The declaration role before overload selection.
+pub enum Role {
+    /// Ordinary or const function.
     Function,
+    /// Operator implementation.
     Implementation,
+    /// Operator contract.
     Operator,
+    /// Native interface or selected target part.
     Native,
+    /// Named test case.
+    Test,
 }
 #[derive(Debug, Clone)]
-pub(crate) struct Decl {
+/// A declaration with its owning module and source tokens.
+pub struct Decl {
+    /// Owning module name.
     pub module: String,
+    /// Source identifier.
+    /// Source identifier.
     pub name: String,
+    /// Declaration category.
     pub role: Role,
+    /// Retained source tokens.
     pub tokens: Vec<Token>,
+    /// Diagnostic source name.
     pub source: String,
+    /// Source documentation.
     pub doc: String,
+    /// Visible only during this module's test construction.
+    pub test_only: bool,
 }
 #[derive(Debug, Clone)]
-pub(crate) struct Parameter {
+/// One parameter in an uninstantiated signature.
+pub struct Parameter {
+    /// Source identifier.
+    /// Source identifier.
     pub name: String,
+    /// Source type expression.
     pub ty: String,
+    /// Wiring-time parameter.
     pub constant: bool,
+    /// Optional fixed default expression.
     pub default: Option<Expr>,
 }
 #[derive(Debug, Clone)]
-pub(crate) struct Signature {
+/// A callable signature and its retained body.
+pub struct Signature {
+    /// Generic parameter identifiers.
     pub generics: Vec<String>,
+    /// Ordered source parameters.
     pub parameters: Vec<Parameter>,
+    /// Source result type expression.
     pub result: String,
+    /// Body tokens, empty for an interface.
     pub body: Vec<Token>,
+    /// Const function, eligible for temporal lifting.
+    pub value_function: bool,
+    /// Declared native error channel.
+    pub throws: bool,
+    /// Native scalar requirement: name, arguments and result.
+    pub requirement: Option<(String, Vec<String>, String)>,
 }
-#[derive(Debug, Default)]
-pub(crate) struct Library {
+#[derive(Debug, Default, Clone)]
+/// Indexed source declarations, imports and explicit instances.
+pub struct Library {
+    /// All indexed declarations.
     pub declarations: Vec<Decl>,
+    /// First source's module.
     pub root: String,
+    /// Module and alias to qualified target.
     pub imports: BTreeMap<(String, String), String>,
+    /// Explicit generic operator instances.
     pub instances: BTreeSet<(String, String, Vec<String>)>,
 }
 
@@ -56,11 +96,12 @@ fn boundary(s: &str) -> bool {
     ) || s.starts_with("/**")
 }
 
-pub(crate) fn load(sources: &[(String, String)]) -> Result<Library, String> {
+/// Index sources and validate module-part and test-context boundaries.
+pub fn load(sources: &[(String, String)]) -> Result<Library, String> {
     let mut library = Library::default();
     let mut parts = BTreeSet::new();
     for (source, text) in sources {
-        load_source(&mut library, &mut parts, source, text)
+        load_source(&mut library, &mut parts, source, text, false)
             .map_err(|e| format!("{source}: {e}"))?;
     }
     Ok(library)
@@ -70,13 +111,14 @@ fn load_source(
     parts: &mut BTreeSet<(String, String)>,
     source: &str,
     text: &str,
+    test_context: bool,
 ) -> Result<(), String> {
     let tokens = lex(text).map_err(|e| format!("{source}: {e}"))?;
     let mut c = Cursor::new(&tokens);
     c.lines();
     let mut doc = String::new();
     if c.peek().starts_with("/**") {
-        doc = c.next()?;
+        doc = c.consume()?;
         c.lines();
     }
     c.need("module")?;
@@ -104,14 +146,14 @@ fn load_source(
     doc.clear();
     while !c.at("") {
         if c.peek().starts_with("/**") {
-            doc = c.next()?;
+            doc = c.consume()?;
             c.lines();
             continue;
         }
         let start = c.pos;
         let mut depth = 0_i32;
         while !c.at("") {
-            let t = c.next()?;
+            let t = c.consume()?;
             if matches!(t.as_str(), "(" | "{" | "[") {
                 depth += 1;
             }
@@ -136,13 +178,38 @@ fn load_source(
         }
         let chunk = &tokens[start..c.pos];
         let mut d = Cursor::new(chunk);
+        if test_context
+            && (!matches!(d.peek(), "fn" | "const" | "test")
+                || (d.at("test") && chunk.get(1).is_some_and(|t| t.text == "{")))
+        {
+            return Err(
+                "test context admits only private fn/const fn helpers and named tests".into(),
+            );
+        }
+        if d.take("test") && d.take("{") {
+            let end = chunk
+                .iter()
+                .rposition(|t| t.text == "}")
+                .ok_or("unclosed test context")?;
+            let body = &text[chunk[2].span.start..chunk[end].span.start];
+            let nested = format!("module {module} part __test_{}\n{body}", parts.len());
+            let first = library.declarations.len();
+            load_source(library, parts, source, &nested, true)?;
+            for decl in &mut library.declarations[first..] {
+                decl.test_only = true;
+            }
+            continue;
+        }
+        d.pos = 0;
         if d.take("use") {
             imports(library, &module, &mut d)?;
         } else if d.take("instantiate") {
             instantiate(library, &module, &mut d)?;
         } else {
             d.take("export");
-            let role = if d.take("operator") {
+            let role = if d.take("test") {
+                Role::Test
+            } else if d.take("operator") {
                 Role::Operator
             } else if d.take("impl") {
                 d.need("fn")?;
@@ -151,6 +218,9 @@ fn load_source(
                 d.take("const");
                 d.need("fn")?;
                 Role::Native
+            } else if d.take("const") {
+                d.need("fn")?;
+                Role::Function
             } else if d.take("fn") {
                 Role::Function
             } else {
@@ -165,6 +235,7 @@ fn load_source(
                 tokens: chunk.to_vec(),
                 source: source.to_owned(),
                 doc: std::mem::take(&mut doc),
+                test_only: false,
             });
         }
         doc.clear();
@@ -189,7 +260,8 @@ fn add_import(
     Ok(())
 }
 impl Decl {
-    pub(crate) fn signature(&self) -> Result<Signature, String> {
+    /// Parse this declaration as a callable signature.
+    pub fn signature(&self) -> Result<Signature, String> {
         self.parse_signature().map_err(|e| {
             format!(
                 "{}:{}: {}::{}: {e}",
@@ -207,6 +279,7 @@ impl Decl {
         if c.take("native") {
             c.need("const")?;
         }
+        let value_function = c.take("const");
         if !c.take("fn") {
             c.need("operator")?;
         }
@@ -228,7 +301,7 @@ impl Decl {
             let constant = c.take("const");
             let name = c.name()?;
             c.need(":")?;
-            let ty = c.name()?;
+            let ty = c.type_name()?;
             let default = if c.take("=") { Some(c.expr()?) } else { None };
             parameters.push(Parameter {
                 name,
@@ -244,13 +317,37 @@ impl Decl {
             c.lines();
         }
         let result = if c.take("->") {
-            c.name()?
+            c.type_name()?
         } else {
             "void".into()
+        };
+        let throws = c.take("throws");
+        c.lines();
+        let requirement = if c.take("requires") {
+            let Expr::Call(name, args) = c.expr()? else {
+                return Err("expected native requirement".into());
+            };
+            let args = args
+                .into_iter()
+                .map(|(_, e)| {
+                    if let Expr::Name(n) = e {
+                        Ok(n)
+                    } else {
+                        Err("requirement takes types".to_owned())
+                    }
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            c.need("->")?;
+            Some((name, args, c.name()?))
+        } else {
+            None
         };
         c.lines();
         Ok(Signature {
             generics,
+            value_function,
+            throws,
+            requirement,
             parameters,
             result,
             body: c.tokens[c.pos..].to_vec(),
@@ -293,7 +390,7 @@ fn instantiate(library: &mut Library, module: &str, d: &mut Cursor<'_>) -> Resul
         d.need("<")?;
         let mut types = Vec::new();
         while !d.take(">") {
-            types.push(d.next()?);
+            types.push(d.consume()?);
             if !d.take(",") {
                 d.need(">")?;
                 break;

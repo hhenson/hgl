@@ -454,7 +454,7 @@ fn written(
                 label: implementation.to_owned(),
                 scalars: scalars
                     .iter()
-                    .map(|&(name, value)| (name.to_owned(), value))
+                    .map(|(name, value)| ((*name).to_owned(), value.clone()))
                     .collect(),
             })
             .collect(),

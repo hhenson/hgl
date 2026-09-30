@@ -60,7 +60,7 @@ fn library_graph_runs_sources_sinks_and_fresh_instances() -> Result<(), Box<dyn 
         fs::write(dir.join(format!("src/{name}.rs")), emit_rust(&program))?;
         write!(
             runner,
-            "mod {name};\nimpl {name}::Native for Provider {{ fn as_str_i64(value:i64)->String {{value.to_string()}} fn print_line_str(text:String) {{println!(\"{{text}}\");}} }}\n"
+            "mod {name};\nimpl {name}::Native for Provider {{ fn as_str_i64(value:i64)->String {{value.to_string()}} fn print_line_str(text:&str) {{println!(\"{{text}}\");}} }}\n"
         )?;
         write!(
             calls,

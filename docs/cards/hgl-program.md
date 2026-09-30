@@ -1,31 +1,42 @@
 # Card: hgl-program
 
-Link a closed HGL graph against source modules and selected native parts, then
-emit Rust for the existing engine. No third-party dependencies. Budget: 2200
-source lines. Lexer, declaration indexing/parser, checker/wiring and emitter
-remain separate modules.
+Check closed HGL graphs and tests against source libraries; emit Rust for the
+existing engine. Uses `hgl-source`, `hgl-library`, `hgl-documentation`. Budget:
+2200 source lines. No third-party dependencies.
 
-Public surface: `compile` accepts named sources and an entry name in the first module;
-`compile_files` loads explicit files and library roots;
-`Program` is an opaque checked graph; `emit_rust` emits it. Sources include
-unchanged standard-library files. Index all declarations; check selected bodies
-on demand. Unused unsupported library bodies are not advertised as implemented.
-A selected unsupported construct, ambiguous candidate or unmatched native part
-is an error, never a native fallback.
+Public surface: `compile`, `compile_files`, opaque `Program`, `emit_rust`;
+`compile_tests`, `compile_tests_files`, opaque `Suite`, `emit_tests`. File loaders
+include explicit parts and recursively load libraries, excluding test/example
+directories. Embedded tests are indexed; production emission excludes them.
 
-This slice admits scalar i64/bool temporal endpoints, fixed i64/bool/str/duration
-values, generic scalar operator matching with explicit instantiations, imports,
-module parts, defaults/named arguments, graph composition, source-only `start { alarm.schedule(fixed_duration) }`, cache,
-conditionals and the scalar expressions needed by diagnostic sinks. Fixed graph
-arguments are evaluated during wiring and captured in generated node code.
-Strings are native formatting temporaries; this does not add TS<str> storage.
+The supported slice includes scalar streams (bool, i64, f64, str, date, time,
+datetime, duration), imports, generic operator selection with native scalar
+requirements, defaults, contextual result inference, graph composition, const
+lifts, ordered guarded handlers, state/cache, scalar input activity, source
+alarms, reference capture/following, and bool/i64 set membership. Set bodies
+mutate `out`; `elements(input, added)` supplies typed elements. State resets
+for each fresh graph; checkpoint recovery is outside this slice.
 
-HGL owns scheduling, node admission, the cache counter and formatting composition.
-Rust providers implement only selected native value signatures. The emitted
-module contains generated node implementations and graph construction, without
-runtime name lookup on ticks. Preserve selected source documentation.
+`eval` compiles replay nodes, the selected HGL bodies and a recorder. Dense
+sequences use one microsecond per cell. Silent/empty sequences take their type
+from concrete parameters; integer literals in f64 slots are converted before
+emission. Expected values are checked against the result type. Each evaluation
+gets a fresh graph. Length comes from input cells and actual output ticks,
+never the expected sequence. A mismatch or node error fails the executable.
 
-Acceptance: use the pinned library's actual const and debug_print bodies; source
-42 ticks at start and prints `answer: 42` once. Delay 2us shifts that tick by two
-cycles. Negative values and independent fresh runs work. Sample 2 suppresses a
-single tick. Input tests cover absent and equal ticks and sample counters.
+Test helpers have a module-wide scope; production calls cannot see them.
+The current test body accepts direct `assert eval(...) == [...]` and outputless
+`eval(...)` statements. General bool assertions, harness locals, timed input,
+structural delta literals and empty generic sequences remain unsupported.
+Unused library bodies are not advertised as implemented: reachable unsupported
+forms produce diagnostics. This is not the full language checker.
+
+Native strings cross the Rust value interface as `&str`; returned text is owned.
+HGL owns guards, scheduling, state and formatting composition. Rust implements
+only the selected native scalar signatures. Selected source docs remain in
+emitted comments. No operator name lookup occurs on ticks.
+
+Acceptance: the unchanged pinned standard library's 45 tests/84 evaluations,
+plus empty/silent/equal ticks, delayed output, fresh state, helper isolation,
+wrong values/lengths and propagated node errors. `cargo xtask ci` runs these in
+debug and release. The original const/debug graph regressions remain.

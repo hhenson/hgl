@@ -1,10 +1,10 @@
 //! Source linking and Rust emission for closed scalar HGL graphs.
 mod emit;
 mod files;
-mod index;
+use hgl_library as index;
 mod resolve;
-mod syntax;
-pub use files::compile_files;
+pub use files::{compile_files, compile_tests_files};
+use hgl_source as syntax;
 
 /// A fully resolved graph, with scalar configuration fixed during wiring.
 #[derive(Debug)]
@@ -22,3 +22,6 @@ pub fn compile(sources: &[(String, String)], entry: &str) -> Result<Program, Str
 pub fn emit_rust(program: &Program) -> String {
     emit::emit(&program.0)
 }
+
+mod tests;
+pub use tests::{Suite, compile_tests, emit_tests};

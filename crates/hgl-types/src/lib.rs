@@ -5,11 +5,11 @@
 //! graph is.
 
 /// An instant on the UTC timeline, in microseconds. C++: hgraph's `DateTime`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct EngineTime(i64);
 
 /// A length of time, in microseconds. C++: hgraph's `TimeDelta`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct EngineDelta(i64);
 
 impl EngineTime {
@@ -74,6 +74,13 @@ impl EngineDelta {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NodeId(pub u32);
 
+/// A calendar date, as days since the Unix epoch.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Date(pub i64);
+/// A time of day, in microseconds after midnight.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Time(pub i64);
+
 /// The type of one scalar value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ScalarType {
@@ -83,11 +90,21 @@ pub enum ScalarType {
     I64,
     /// A 64-bit float: `f64`.
     F64,
+    /// An immutable store-owned string.
+    Text,
+    /// A calendar date.
+    Date,
+    /// A time of day.
+    Time,
+    /// A UTC instant.
+    DateTime,
+    /// A time interval.
+    Duration,
 }
 
 /// A scalar whose type is known only at run time: a node's scalars, a case
 /// table, a description. Never on the per-tick path.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ScalarValue {
     /// A value of type [`ScalarType::Bool`].
     Bool(bool),
@@ -95,15 +112,30 @@ pub enum ScalarValue {
     I64(i64),
     /// A value of type [`ScalarType::F64`].
     F64(f64),
+    /// An owned string payload.
+    Text(String),
+    /// A calendar date.
+    Date(Date),
+    /// A time of day.
+    Time(Time),
+    /// A UTC instant.
+    DateTime(EngineTime),
+    /// A time interval.
+    Duration(EngineDelta),
 }
 
 impl ScalarValue {
     /// The type this value is of.
-    pub fn scalar_type(self) -> ScalarType {
+    pub fn scalar_type(&self) -> ScalarType {
         match self {
             Self::Bool(_) => ScalarType::Bool,
             Self::I64(_) => ScalarType::I64,
             Self::F64(_) => ScalarType::F64,
+            Self::Text(_) => ScalarType::Text,
+            Self::Date(_) => ScalarType::Date,
+            Self::Time(_) => ScalarType::Time,
+            Self::DateTime(_) => ScalarType::DateTime,
+            Self::Duration(_) => ScalarType::Duration,
         }
     }
 }
@@ -115,6 +147,8 @@ pub enum TsType {
     Ts(ScalarType),
     /// An i64 keyed dictionary.
     Dictionary(Box<TsType>),
+    /// A set of scalar values; bool and i64 membership is currently implemented.
+    Set(ScalarType),
     /// A designation to this shape.
     Reference(Box<TsType>),
     /// Fixed element shape and length.
@@ -132,12 +166,20 @@ impl TsType {
         };
         *t
     }
+    /// Stored member shape: dictionary values or set occupancy markers.
+    pub fn member(&self) -> Option<&Self> {
+        match self {
+            Self::Dictionary(child) => Some(child),
+            Self::Set(_) => Some(&Self::Ts(ScalarType::Bool)),
+            Self::Ts(_) | Self::Reference(_) | Self::List(..) | Self::Bundle(_) => None,
+        }
+    }
     /// Number of dense children.
     pub fn len(&self) -> usize {
         match self {
             Self::List(_, n) => *n,
             Self::Bundle(fields) => fields.len(),
-            Self::Ts(_) | Self::Dictionary(_) | Self::Reference(_) => 0,
+            Self::Ts(_) | Self::Dictionary(_) | Self::Set(_) | Self::Reference(_) => 0,
         }
     }
     /// Whether the shape has no dense children.
@@ -149,7 +191,11 @@ impl TsType {
         match self {
             Self::List(child, n) if position < *n => child,
             Self::Bundle(fields) => &fields[position].1,
-            Self::Ts(_) | Self::Dictionary(_) | Self::Reference(_) | Self::List(_, _) => {
+            Self::Ts(_)
+            | Self::Dictionary(_)
+            | Self::Set(_)
+            | Self::Reference(_)
+            | Self::List(_, _) => {
                 unreachable!("not a fixed child")
             }
         }

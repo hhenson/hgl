@@ -169,3 +169,10 @@ REF outputs and enclosing assemblies retain records; copying a handle does not.
 Scope claims end at the next cycle after teardown. Retaining a record never
 retains its target endpoints. Rebinding, unbinding and output expiry release
 old claims. Interning uses a hash index rather than a scan of historical records.
+
+`bind_designation(InputId, OutputId) -> Result<(), BindError>` captures a
+rank-valid source for a REF parameter without a value subscription. A live
+identity is valid before its payload; retired generations read empty.
+`input_reference` reads a REF input's designation, or an ordinary input's peer.
+Set membership reuses dictionary removal/delta bookkeeping with occupancy
+children. No set element equality checks are added to scalar publication.

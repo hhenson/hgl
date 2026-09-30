@@ -1,0 +1,46 @@
+module hgraph.native part rust_impl
+
+native const fn add(lhs: i64, rhs: i64) -> i64 {}
+native const fn add(lhs: i64, rhs: f64) -> f64 {}
+native const fn add(lhs: f64, rhs: i64) -> f64 {}
+native const fn add(lhs: f64, rhs: f64) -> f64 {}
+native const fn div(lhs: i64, rhs: i64) -> f64 throws {}
+native const fn floordiv(lhs: i64, rhs: i64) -> i64 throws {}
+native const fn mod(lhs: i64, rhs: i64) -> i64 throws {}
+native const fn add(lhs: str, rhs: str) -> str throws {}
+native const fn len(value: str) -> i64 {}
+native const fn is_empty(value: str) -> bool {}
+native const fn contains(value: str, needle: str) -> bool {}
+native const fn starts_with(value: str, prefix: str) -> bool {}
+native const fn ends_with(value: str, suffix: str) -> bool {}
+native const fn truthy(value: f64) -> bool {}
+native const fn truthy(value: str) -> bool {}
+native const fn round_decimal(value: f64, digits: i64) -> f64 throws {}
+native const fn power(lhs: i64, rhs: i64) -> i64 throws {}
+native const fn power(lhs: f64, rhs: f64) -> f64 throws {}
+native const fn shift_left(lhs: i64, rhs: i64) -> i64 throws {}
+native const fn shift_right(lhs: i64, rhs: i64) -> i64 throws {}
+native const fn slice(value: str, begin: i64, end: i64) -> str {}
+native const fn as_int(value: f64) -> i64 {}
+native const fn as_float(value: i64) -> f64 {}
+native const fn as_str(value: bool) -> str {}
+native const fn as_str(value: i64) -> str {}
+native const fn as_str(value: f64) -> str {}
+native const fn as_str(value: str) -> str {}
+native const fn as_str(value: date) -> str {}
+native const fn as_str(value: time) -> str {}
+native const fn as_str(value: datetime) -> str {}
+native const fn as_str(value: duration) -> str {}
+native const fn print_line(text: str) {}
+native const fn raise_error(message: str) throws {}
+native const fn bit_and(lhs: i64, rhs: i64) -> i64 {}
+native const fn year(value: date) -> i64 {}
+native const fn month(value: date) -> i64 {}
+native const fn day(value: date) -> i64 {}
+native const fn year(value: datetime) -> i64 {}
+native const fn hour(value: datetime) -> i64 {}
+native const fn hour(value: time) -> i64 {}
+native const fn days(value: duration) -> i64 {}
+native const fn seconds(value: duration) -> i64 {}
+native const fn microseconds(value: duration) -> i64 {}
+native const fn timestamp(value: datetime) -> f64 {}

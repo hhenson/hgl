@@ -8,7 +8,7 @@ nodes beyond an id to wake.
 
 ## May use
 
-`hgl-types`, `hgl-bindings`.
+`hgl-types`, `hgl-bindings`, `hgl-columns`.
 
 ## The layout
 
@@ -25,12 +25,12 @@ Both crates are safe Rust; no stored reference is a borrowed pointer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)] pub struct OutputId(pub u32);
 #[derive(Debug, Clone, Copy, PartialEq, Eq)] pub struct InputId(pub u32);
 
-/// A scalar the store has a column for. Sealed: implemented for bool, i64, f64.
+/// A scalar the store has a column for. Sealed: implementations live in hgl-columns.
 /// The seal is a supertrait in a private module (`+ columns::Column`), which
 /// another crate cannot implement. Its methods can still be reached through a
 /// `T: Scalar` bound, but only on a `Columns` of the caller's own making,
 /// never a store's.
-pub trait Scalar: Copy + PartialEq + std::fmt::Debug + 'static {
+pub trait Scalar: Clone + PartialEq + std::fmt::Debug + 'static {
     const TYPE: ScalarType;
     fn into_value(self) -> ScalarValue;
     fn from_value(value: ScalarValue) -> Option<Self>;
@@ -251,3 +251,13 @@ field names are resolved at construction, never per tick.
 a generation-checked peer designation; empty, expired and assembled values
 return `InvalidReference`. `get_or_create_shaped` replaces a removed stopped
 writer with fresh storage rather than reviving its retired descendants.
+
+## Owned scalar payloads and reference capture
+
+`Store::get_ref<T: Scalar>(In<T>) -> &T` borrows a valid payload;
+`output_ref<T: Scalar>(Out<T>) -> Option<&T>` also checks output generation. `get` clones
+owned values when a caller needs ownership; numeric reads remain copies.
+`bind_designation(InputId, OutputId)` captures a compatible reference input's
+source identity without subscribing to value ticks. Generation checks prevent
+retired members from reappearing after slot reuse. `get_or_create_shaped`
+also admits sets, using boolean occupancy children.

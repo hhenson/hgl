@@ -60,12 +60,20 @@ impl Replay {
 
 impl Node for Replay {
     fn eval(&mut self, ctx: &mut Ctx<'_>) -> NodeResult {
-        let tick = self.ticks.get(self.next).copied().flatten();
+        let tick = self.ticks.get(self.next).cloned().flatten();
         self.next += 1;
         match tick {
             None => {}
             Some(ScalarValue::I64(value)) => ctx.set(self.out, value),
-            Some(ScalarValue::Bool(_) | ScalarValue::F64(_)) => {
+            Some(
+                ScalarValue::Bool(_)
+                | ScalarValue::F64(_)
+                | ScalarValue::Text(_)
+                | ScalarValue::Date(_)
+                | ScalarValue::Time(_)
+                | ScalarValue::DateTime(_)
+                | ScalarValue::Duration(_),
+            ) => {
                 return Err(NodeError::new("testkit.replay emits TS[int] only"));
             }
         }

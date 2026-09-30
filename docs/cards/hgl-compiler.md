@@ -73,3 +73,7 @@ body parsing, operator resolution and typed Rust emission. The original
 single-module API remains the bootstrap regression path. Library mode captures
 selected documentation in emitted comments; library reST export is not yet
 admitted.
+
+`hglc emit-tests FILE [--part FILE] [--library DIR] --out FILE` checks source
+unit tests through hgl-program and emits their Rust executable. Execution and
+native-provider packaging are currently supplied by `tools/test_hgl.py`.

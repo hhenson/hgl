@@ -12,4 +12,6 @@ line-budget = 2200
 workspace = true
 
 [dependencies]
+hgl-source = { path = "../hgl-source" }
 hgl-documentation = { path = "../hgl-documentation" }
+hgl-library = { path = "../hgl-library" }

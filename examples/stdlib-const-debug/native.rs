@@ -5,7 +5,7 @@ impl generated::Native for Provider {
         value.to_string()
     }
 
-    fn print_line_str(text: String) {
+    fn print_line_str(text: &str) {
         println!("{text}");
     }
 }

@@ -128,7 +128,15 @@ pub(crate) fn snapshot(
                 fields.values().cloned().collect::<Vec<_>>().join(",")
             ),
             Kind::Bundle(_) | Kind::Dictionary(_) => object(&fields),
-            Kind::Reference(_) => unreachable!("REF observed separately"),
+            Kind::Reference(_)
+            | Kind::Set(_)
+            | Kind::Ts(
+                ScalarType::Text
+                | ScalarType::Date
+                | ScalarType::Time
+                | ScalarType::DateTime
+                | ScalarType::Duration,
+            ) => unreachable!("observed separately"),
         }
     } else {
         "null".into()
@@ -205,6 +213,11 @@ pub(crate) fn output(store: &Store, id: OutputId, t: i64, path: &str, rows: &mut
             ScalarValue::I64(v) => v.to_string(),
             ScalarValue::Bool(v) => v.to_string(),
             ScalarValue::F64(v) => v.to_string(),
+            ScalarValue::Text(v) => v,
+            ScalarValue::Date(v) => v.0.to_string(),
+            ScalarValue::Time(v) => v.0.to_string(),
+            ScalarValue::DateTime(v) => v.micros().to_string(),
+            ScalarValue::Duration(v) => v.micros().to_string(),
         }
     };
     let delta = if !valid || !modified {
