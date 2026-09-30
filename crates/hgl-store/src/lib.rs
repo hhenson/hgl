@@ -7,29 +7,28 @@
 //! `hgl-bindings`. Indices survive vector growth. References and scalar write
 //! handles carry generations so reused child slots cannot revive old endpoints.
 //!
-//! Instantiation and binding may allocate. A tick never does: everything it
-//! needs was settled by then (`docs/explorations/0009-designing-for-speed.md`).
+//! Fixed scalar propagation borrows typed columns without allocation. Creating
+//! text payloads or dynamic collection members may allocate; reading text need
+//! not copy it (`Store::get_ref`).
 //!
 //! An id or a handle from anywhere but this store is a bug in the caller, and
 //! is not looked for: one out of range panics, any other names the wrong
 //! entry. Only [`Store::bind`] reports an unknown id, because the builder
 //! calls it with ids read from a description.
 
-mod columns;
-
 use std::marker::PhantomData;
 
 use hgl_types::{EngineTime, NodeId, ScalarType, ScalarValue};
 
-use columns::Columns;
-pub use columns::Scalar;
 use hgl_bindings::Bindings;
 pub use hgl_bindings::Kind;
 pub use hgl_bindings::{BindError, InputId, OutputId, Reference, ScopeId, Wake};
+use hgl_columns::Columns;
+pub use hgl_columns::Scalar;
 mod fixed;
 
 /// A node's handle to its own `TS<T>` output. Eight bytes.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Out<T: Scalar> {
     id: OutputId,
     /// Keeps a retained writing handle from addressing a reused child slot.
@@ -40,7 +39,7 @@ pub struct Out<T: Scalar> {
 }
 
 /// A node's handle to one of its `TS<T>` inputs. Four bytes.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct In<T: Scalar> {
     id: InputId,
     /// Zero-sized, as in [`Out`].
@@ -71,13 +70,13 @@ pub struct Store {
 }
 
 /// A dictionary with i64 keys and scalar children.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct DictOut<T: Scalar> {
     id: OutputId,
     value_type: PhantomData<T>,
 }
 /// An input view of a dictionary, including its membership delta.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct DictIn<T: Scalar> {
     id: InputId,
     value_type: PhantomData<T>,
@@ -128,6 +127,10 @@ impl Store {
     pub fn bind(&mut self, input: InputId, output: OutputId) -> Result<(), BindError> {
         self.bindings.bind(input, output)
     }
+    /// Capture a source's identity for a reference parameter, independent of value validity.
+    pub fn bind_designation(&mut self, input: InputId, output: OutputId) -> Result<(), BindError> {
+        self.bindings.bind_designation(input, output)
+    }
     /// Silent teardown; also detaches any designation subscription.
     pub fn unbind(&mut self, input: InputId) {
         self.bindings.unbind(input);
@@ -145,7 +148,12 @@ impl Store {
     pub fn get<T: Scalar>(&self, input: In<T>) -> T {
         debug_assert_eq!(self.input_type(input.id), T::TYPE, "foreign handle");
         debug_assert!(self.valid(input), "TS-2: not valid, so no value");
-        T::column(&self.columns)[self.bindings.input(input.id).slot as usize]
+        self.get_ref(input).clone()
+    }
+    /// Borrow the current scalar payload without copying it.
+    pub fn get_ref<T: Scalar>(&self, input: In<T>) -> &T {
+        debug_assert!(self.valid(input), "TS-2: invalid input");
+        &T::column(&self.columns)[self.bindings.input(input.id).slot as usize]
     }
     /// Whether the input has a value.
     #[inline]
@@ -203,10 +211,14 @@ impl Store {
     /// Read an output without mistaking its uninitialized slot for a value.
     #[inline]
     pub fn output_value<T: Scalar>(&self, output: Out<T>) -> Option<T> {
+        self.output_ref(output).cloned()
+    }
+    /// Borrow a live, valid output payload, checking its handle generation.
+    pub fn output_ref<T: Scalar>(&self, output: Out<T>) -> Option<&T> {
         let o = self.bindings.output(output.id);
         debug_assert_eq!(o.kind, Kind::Ts(T::TYPE), "foreign handle");
         (o.alive && o.generation == output.generation && o.modified_at != EngineTime::NEVER)
-            .then(|| T::column(&self.columns)[o.slot as usize])
+            .then(|| &T::column(&self.columns)[o.slot as usize])
     }
     /// Erased scalar observation; aggregate and REF endpoints have no scalar value.
     pub fn output_value_erased(&self, output: OutputId) -> Option<ScalarValue> {
@@ -386,3 +398,11 @@ impl Store {
         self.bindings.take_child(owner)
     }
 }
+
+impl<T: Scalar> Copy for Out<T> {}
+
+impl<T: Scalar> Copy for In<T> {}
+
+impl<T: Scalar> Copy for DictOut<T> {}
+
+impl<T: Scalar> Copy for DictIn<T> {}

@@ -179,10 +179,10 @@ impl Ports<'_> {
     pub fn scalar<T: Scalar>(&self, name: &str) -> Result<T, BuildError> {
         let scalars = &self.description.scalars;
         let label = &self.description.label;
-        let Some(&(_, value)) = scalars.iter().find(|(scalar, _)| scalar == name) else {
+        let Some((_, value)) = scalars.iter().find(|(scalar, _)| scalar == name) else {
             return Err(BuildError::unknown_scalar(label, name));
         };
-        T::from_value(value).ok_or_else(|| BuildError::wrong_type(label, name))
+        T::from_value(value.clone()).ok_or_else(|| BuildError::wrong_type(label, name))
     }
 
     /// Every port the node type declares, in its order, making each one the

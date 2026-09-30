@@ -1,0 +1,4 @@
+module hgraph.native part rust_impl
+
+native const fn as_str(value: i64) -> str {}
+native const fn print_line(text: str) {}

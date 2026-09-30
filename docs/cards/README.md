@@ -111,3 +111,12 @@ not a production compiler crate.
 
 [hgl-native](hgl-native.md) owns borrowed view/value helpers;
 [hgl-stdlib](hgl-stdlib.md) tests the node authoring recipe before compiler emission.
+
+## Compiled standard-library evaluation
+
+[hgl-source](hgl-source.md) parses bodies; [hgl-library](hgl-library.md) indexes
+modules; [hgl-program](hgl-program.md) checks and emits graphs and tests.
+[hgl-columns](hgl-columns.md) owns typed scalar storage;
+[hgl-calendar](hgl-calendar.md) parses/projects calendar values;
+[hgl-std-native](hgl-std-native.md) supplies the selected Rust value functions.
+The dense recorder remains in [hgl-testkit](hgl-testkit-harness.md).

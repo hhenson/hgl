@@ -1,5 +1,6 @@
 //! Command-line checking and Rust emission; no graph execution during compilation.
 use hgl_compiler::{Source, check, emit_documentation, emit_rust};
+mod library;
 use std::path::PathBuf;
 
 #[expect(clippy::print_stderr, reason = "the compiler CLI renders diagnostics")]
@@ -14,15 +15,22 @@ fn main() -> std::process::ExitCode {
 }
 fn run() -> Result<(), String> {
     let mut args = std::env::args().skip(1);
-    let usage = "usage: hglc check FILE [--part FILE] | emit-rust FILE [--part FILE] --out FILE | doc FILE [--part FILE] --out FILE";
+    let usage = "usage: hglc check|emit-rust|emit-tests|doc FILE [--part FILE] [--library DIR] [--entry NAME] [--out FILE]";
     let command = args.next().ok_or(usage)?;
-    if !matches!(command.as_str(), "check" | "emit-rust" | "doc") {
+    if !matches!(
+        command.as_str(),
+        "check" | "emit-rust" | "doc" | "emit-tests"
+    ) {
         return Err(usage.into());
     }
     let mut files = vec![PathBuf::from(args.next().ok_or(usage)?)];
     let mut output = None;
+    let mut libraries = Vec::new();
+    let mut entry = String::from("main");
     while let Some(argument) = args.next() {
         match argument.as_str() {
+            "--library" => libraries.push(PathBuf::from(args.next().ok_or(usage)?)),
+            "--entry" => entry = args.next().ok_or(usage)?,
             "--part" => files.push(PathBuf::from(args.next().ok_or(usage)?)),
             "--out" if output.is_none() => output = Some(PathBuf::from(args.next().ok_or(usage)?)),
             _ => return Err(usage.into()),
@@ -30,6 +38,9 @@ fn run() -> Result<(), String> {
     }
     if (command != "check") != output.is_some() {
         return Err(usage.into());
+    }
+    if !libraries.is_empty() || command == "emit-tests" {
+        return library::run(&files, &libraries, &entry, &command, output.as_deref());
     }
     let sources = files
         .iter()

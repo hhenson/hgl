@@ -33,7 +33,7 @@ pub enum BindError {
     BackwardReference,
 }
 /// Endpoint tables and the notifications between graph scopes.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Bindings {
     endpoints: Endpoints,
     items: Assemblies,
@@ -43,20 +43,6 @@ pub struct Bindings {
     scopes: Scopes,
     now: EngineTime,
     fresh_run: bool,
-}
-impl Default for Bindings {
-    fn default() -> Self {
-        Self {
-            endpoints: Endpoints::default(),
-            items: Assemblies::default(),
-            retired: Vec::new(),
-            dirty_outputs: Vec::new(),
-            dirty_inputs: Vec::new(),
-            scopes: Scopes::default(),
-            now: EngineTime::NEVER,
-            fresh_run: false,
-        }
-    }
 }
 fn index(n: usize) -> u32 {
     u32::try_from(n).unwrap_or_else(|_| unreachable!("endpoint capacity exceeded"))
@@ -104,7 +90,11 @@ impl Bindings {
         }
         Ok(())
     }
-    fn check(&self, input: InputId, output: OutputId) -> Result<(), BindError> {
+    fn checked_endpoints(
+        &self,
+        input: InputId,
+        output: OutputId,
+    ) -> Result<(&Input, &Output), BindError> {
         let i = self
             .endpoints
             .inputs
@@ -117,6 +107,10 @@ impl Bindings {
             .get(output.0 as usize)
             .filter(|o| o.alive)
             .ok_or(BindError::UnknownOutput(output))?;
+        Ok((i, o))
+    }
+    fn check(&self, input: InputId, output: OutputId) -> Result<(), BindError> {
+        let (i, o) = self.checked_endpoints(input, output)?;
         if let (Kind::Ts(a), Kind::Ts(b)) = (&i.kind, &o.kind)
             && a != b
         {
@@ -128,6 +122,22 @@ impl Bindings {
         if i.kind != o.kind {
             return Err(BindError::ShapeMismatch);
         }
+        Ok(())
+    }
+    /// Capture a stable endpoint designation without subscribing to its values.
+    pub fn bind_designation(&mut self, input: InputId, output: OutputId) -> Result<(), BindError> {
+        let (i, o) = self.checked_endpoints(input, output)?;
+        if !matches!(&i.kind,Kind::Reference(child) if child.as_ref()==&o.kind) {
+            return Err(BindError::ShapeMismatch);
+        }
+        if i.source.is_some() || i.designation.output.is_some() {
+            return Err(BindError::AlreadyBound(input));
+        }
+        if !self.scopes.forward(o.scope, o.owner, i.scope, i.owner) {
+            return Err(BindError::BackwardReference);
+        }
+        let r = self.reference(output);
+        self.endpoints.inputs[input.0 as usize].designation = r;
         Ok(())
     }
     /// Plain wiring-time bind, without sampling or notification.
@@ -247,7 +257,9 @@ impl Bindings {
     /// Value availability, independent of a retained invalidation time.
     pub fn valid(&self, input: InputId) -> bool {
         let i = self.input(input);
-        if i.kind.fixed() && i.source.is_none() {
+        if matches!(i.kind, Kind::Reference(_)) && i.source.is_none() {
+            self.resolve(i.designation).is_some()
+        } else if i.kind.fixed() && i.source.is_none() {
             i.valid_children > 0
         } else {
             i.source
@@ -376,7 +388,7 @@ impl Bindings {
             return;
         }
         match &self.output(output).kind {
-            Kind::Dictionary(_) => {
+            Kind::Dictionary(_) | Kind::Set(_) => {
                 let children =
                     std::mem::take(&mut self.endpoints.outputs[output.0 as usize].members.live);
                 for &child in children.values() {

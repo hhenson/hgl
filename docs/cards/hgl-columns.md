@@ -1,0 +1,18 @@
+# Card: hgl-columns
+
+Typed value columns separated from endpoint/binding policy. Uses `hgl-types`;
+budget 350 lines. `hgl-store` owns its private `Columns` instance.
+
+Surface: `Columns: Default + Debug`,
+`Columns::value(ScalarType, usize) -> ScalarValue`; sealed
+`Scalar: Clone + PartialEq + Debug + Default` with `TYPE`, `into_value`,
+`from_value` and inherited column accessors. Implementations: bool, i64, f64,
+String, Date, Time, EngineTime, EngineDelta. The private `Column` trait seals
+these implementations; external crates cannot add storage types.
+
+Monomorphized reads use one typed vector. Erased reads are for tooling. Owned
+strings move into slots; borrowed reads allocate nothing. Scalar handles stay
+Copy even when their payload is not. Equal publications still tick (TS-6).
+
+Acceptance: existing allocation tests, scalar round trips, borrowed string
+address stability and the compile-fail sealing test.

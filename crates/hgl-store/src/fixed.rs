@@ -10,6 +10,11 @@ impl Store {
                 ScalarType::Bool => self.add_output::<bool>(owner).id(),
                 ScalarType::I64 => self.add_output::<i64>(owner).id(),
                 ScalarType::F64 => self.add_output::<f64>(owner).id(),
+                ScalarType::Date => self.add_output::<hgl_types::Date>(owner).id(),
+                ScalarType::Time => self.add_output::<hgl_types::Time>(owner).id(),
+                ScalarType::DateTime => self.add_output::<EngineTime>(owner).id(),
+                ScalarType::Duration => self.add_output::<hgl_types::EngineDelta>(owner).id(),
+                ScalarType::Text => self.add_output::<String>(owner).id(),
             };
         }
         let id = self.bindings.add_output(owner, kind, 0).0;
@@ -72,10 +77,12 @@ impl Store {
             .restorable_output(dict, key)
             .unwrap_or_else(|| {
                 let o = self.bindings.output(dict);
-                let Kind::Dictionary(child) = &o.kind else {
-                    unreachable!("not a dictionary")
-                };
-                self.add_shaped_output(o.owner, *child.clone())
+                let child = o
+                    .kind
+                    .member()
+                    .unwrap_or_else(|| unreachable!("membership output"))
+                    .clone();
+                self.add_shaped_output(o.owner, child)
             });
         let result = self.bindings.insert(dict, key, id, now, wake);
         debug_assert!(result.is_ok());

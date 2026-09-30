@@ -54,3 +54,25 @@ macOS is run locally.
 
 Run `python3 tools/shared_artifacts.py` before compiler, documentation or
 contract-test work. See [shared source setup](docs/shared-sources.md).
+
+## Run the current standard-library graph
+
+```sh
+python3 tools/shared_artifacts.py
+python3 examples/stdlib-const-debug/run.py
+```
+
+Prints `answer: 42` once. The HGL graph imports `const` and `debug_print` from
+the pinned standard library and runs their compiled HGL bodies on the Rust
+engine. See [the example](examples/stdlib-const-debug/README.md) for the compiler
+commands, native bindings and current supported scope.
+
+## Run the standard-library tests
+
+```sh
+python3 tools/test_hgl.py --stdlib
+```
+
+Compiles and runs the unchanged library's 45 tests and 84 eval assertions on
+Rust. These also run in `cargo xtask ci`. See [eval execution](docs/compiler/eval.md)
+for custom modules, native bindings and the supported compiler slice.

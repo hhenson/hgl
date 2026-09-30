@@ -104,6 +104,11 @@ pub fn instantiate_complete(
         let input = built.input(&edge.target, store)?;
         if store.bindings().input(input).kind == store.bindings().output(output).kind {
             store.bind(input, output).map_err(BuildError::Bind)?;
+        } else if matches!(&store.bindings().input(input).kind,TsType::Reference(child) if child.as_ref()==&store.bindings().output(output).kind)
+        {
+            store
+                .bind_designation(input, output)
+                .map_err(BuildError::Bind)?;
         } else {
             store
                 .follow(input, output, EngineTime::NEVER, &mut Quiet)

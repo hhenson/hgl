@@ -17,3 +17,4 @@ workspace = true
 
 [dependencies]
 hgl-documentation = { path = "../hgl-documentation" }
+hgl-program = { path = "../hgl-program" }

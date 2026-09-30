@@ -146,8 +146,11 @@ impl Schedule {
 
     /// The node's scheduler is asked for `time`, replacing what it held.
     #[inline]
-    pub(crate) fn set_request(&mut self, node: NodeId, time: EngineTime) {
-        self.request[node.0 as usize] = time;
+    pub(crate) fn set_request(&mut self, node: NodeId, time: EngineTime, earliest: bool) {
+        let request = &mut self.request[node.0 as usize];
+        if !earliest || *request == EngineTime::NEVER || time < *request {
+            *request = time;
+        }
     }
 
     pub(crate) fn set_child_request(&mut self, node: NodeId, time: EngineTime) {
@@ -179,21 +182,14 @@ impl Schedule {
         } else {
             request.min(self.child_request[index])
         };
-        let request = if request == EngineTime::FOREVER {
+        let entry = if request == EngineTime::FOREVER {
             EngineTime::NEVER
         } else {
             request
         };
-        if self.entry_at[index] != request {
-            self.entry_at[index] = request;
-            self.later.set(
-                index,
-                if request == EngineTime::NEVER {
-                    EngineTime::FOREVER
-                } else {
-                    request
-                },
-            );
+        if self.entry_at[index] != entry {
+            self.entry_at[index] = entry;
+            self.later.set(index, request);
         }
     }
 

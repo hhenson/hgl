@@ -309,3 +309,8 @@ Fixed collection mutation uses the existing ownership and cycle checks:
 `attach_shaped(OutputId, i64, Reference) -> NodeResult` and
 `remove_shaped(OutputId, i64)`. New child graphs may return any shaped output;
 fixed leaf handles are projected during construction and use ordinary `set`.
+
+`Ctx::alarm_in` exposes the source-only alarm of ADR 0015. It retains the
+earliest pending request; `schedule_in` continues to replace its request.
+Both use the existing per-node wake queue. No checkpoint/recovery support is
+claimed; start rearms the source on each run.

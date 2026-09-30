@@ -149,8 +149,8 @@ fn position(
     let wanted = slot.map(count);
     let found = nodes.iter().position(|node| {
         node.implementation == implementation
-            && wanted.is_none_or(|slot| {
-                (node.scalars.iter()).any(|(name, value)| name == SLOT && *value == slot)
+            && wanted.as_ref().is_none_or(|slot| {
+                (node.scalars.iter()).any(|(name, value)| name == SLOT && value == slot)
             })
     })?;
     u32::try_from(found).ok().map(NodeId)
@@ -174,10 +174,12 @@ fn compare(expected: &[Option<ScalarValue>], seen: &[Option<ScalarValue>]) -> Re
 
 /// A cycle a sequence does not reach is a cycle with no tick.
 fn at(ticks: &[Option<ScalarValue>], cycle: usize) -> Option<ScalarValue> {
-    ticks.get(cycle).copied().flatten()
+    ticks.get(cycle).cloned().flatten()
 }
 
 /// A count as the scalar a fixture reads it as.
 fn count(value: usize) -> ScalarValue {
     ScalarValue::I64(i64::try_from(value).unwrap_or(i64::MAX))
 }
+
+pub mod evaluation;

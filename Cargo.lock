@@ -27,10 +27,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "hgl-calendar"
+version = "0.0.0"
+dependencies = [
+ "hgl-types",
+]
+
+[[package]]
+name = "hgl-columns"
+version = "0.0.0"
+dependencies = [
+ "hgl-types",
+]
+
+[[package]]
 name = "hgl-compiler"
 version = "0.0.0"
 dependencies = [
  "hgl-documentation",
+ "hgl-program",
 ]
 
 [[package]]
@@ -82,6 +97,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "hgl-library"
+version = "0.0.0"
+dependencies = [
+ "hgl-source",
+]
+
+[[package]]
 name = "hgl-native"
 version = "0.0.0"
 dependencies = [
@@ -110,6 +132,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "hgl-program"
+version = "0.0.0"
+dependencies = [
+ "hgl-documentation",
+ "hgl-library",
+ "hgl-source",
+]
+
+[[package]]
 name = "hgl-proto-nodes"
 version = "0.0.0"
 dependencies = [
@@ -117,6 +148,22 @@ dependencies = [
  "hgl-describe",
  "hgl-kernel",
  "hgl-store",
+ "hgl-types",
+]
+
+[[package]]
+name = "hgl-source"
+version = "0.0.0"
+dependencies = [
+ "hgl-calendar",
+]
+
+[[package]]
+name = "hgl-std-native"
+version = "0.0.0"
+dependencies = [
+ "hgl-calendar",
+ "hgl-kernel",
  "hgl-types",
 ]
 
@@ -139,6 +186,7 @@ version = "0.0.0"
 dependencies = [
  "hgl-alloc-count",
  "hgl-bindings",
+ "hgl-columns",
  "hgl-types",
 ]
 

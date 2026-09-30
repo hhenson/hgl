@@ -45,18 +45,21 @@ impl EngineDelta {
 pub struct NodeId(pub u32);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum ScalarType { Bool, I64, F64 }
+pub enum ScalarType { Bool, I64, F64, Text, Date, Time, DateTime, Duration }
 
 /// A scalar whose type is known only at run time: a node's scalars, a case
 /// table, a description. Never on the per-tick path.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum ScalarValue { Bool(bool), I64(i64), F64(f64) }
-impl ScalarValue { pub fn scalar_type(self) -> ScalarType; }
+#[derive(Debug, Clone, PartialEq)]
+pub enum ScalarValue {
+    Bool(bool), I64(i64), F64(f64), Text(String), Date(Date), Time(Time),
+    DateTime(EngineTime), Duration(EngineDelta),
+}
+impl ScalarValue { pub fn scalar_type(&self) -> ScalarType; }
 
 /// Recursive, closed shape vocabulary shared by descriptions and endpoints.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TsType {
-    Ts(ScalarType), Dictionary(Box<TsType>), Reference(Box<TsType>),
+    Ts(ScalarType), Dictionary(Box<TsType>), Set(ScalarType), Reference(Box<TsType>),
     List(Box<TsType>, usize), Bundle(Vec<(String, TsType)>),
 }
 
@@ -133,3 +136,10 @@ The [wiring review](../compiler/wiring-review.md) separates that relation from
 WIR-7 inference and from the binding plan needed to connect equivalent shapes.
 `NodeType::child_graphs: usize` declares the required template count; nonzero
 classifies the node as Nested. Existing budgets are unchanged.
+
+`Date(pub i64)` stores epoch-relative days; `Time(pub i64)` stores microseconds
+after midnight. Both derive Default, Clone, Copy, equality, ordering and Hash.
+EngineTime/EngineDelta also derive Default (zero). `TsType::member() ->
+Option<&TsType>` returns dictionary child shape or a boolean set occupancy
+marker. Set keys currently use the runtime's i64 membership table; compiler
+lowering admits bool/i64 elements only.

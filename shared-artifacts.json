@@ -82,7 +82,7 @@
     },
     "docs/compiler/stdlib/nodes.hgl": {
       "path": "compiler/stdlib/nodes.hgl",
-      "repository": "hgraph_spec_audit"
+      "repository": "hgraph_spec"
     },
     "docs/compiler/stdlib/python.json": {
       "path": "compiler/stdlib/python.json",
@@ -698,6 +698,10 @@
     },
     "examples/const-debug/main.hgl": {
       "path": "language/examples/const-debug.hgl",
+      "repository": "hgraph_spec"
+    },
+    "examples/stdlib-const-debug/main.hgl": {
+      "path": "language/examples/stdlib-const-debug.hgl",
       "repository": "hgraph_spec"
     }
   },

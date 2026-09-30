@@ -17,17 +17,13 @@ impl Bindings {
     }
     pub(crate) fn change_output(&mut self, id: OutputId, key: i64, now: EngineTime) {
         self.touch_output(id, now);
-        self.endpoints.outputs[id.0 as usize]
-            .members
-            .changed
-            .push(key);
+        let members = &mut self.endpoints.outputs[id.0 as usize].members;
+        members.changed.push(key);
     }
     pub(crate) fn change_input(&mut self, id: InputId, key: i64, now: EngineTime) {
         self.touch_input(id, now);
-        self.endpoints.inputs[id.0 as usize]
-            .members
-            .changed
-            .push(key);
+        let members = &mut self.endpoints.inputs[id.0 as usize].members;
+        members.changed.push(key);
     }
     /// The live child of an output dictionary, independent of child validity.
     pub fn child_output(&self, id: OutputId, key: i64) -> Option<OutputId> {
@@ -100,8 +96,7 @@ impl Bindings {
                 return Err(BindError::UnknownOutput(id));
             }
         }
-        if !matches!(&self.output(dict).kind, Kind::Dictionary(child_kind) if child_kind.as_ref() == &self.output(child).kind)
-        {
+        if self.output(dict).kind.member() != Some(&self.output(child).kind) {
             return Err(BindError::ShapeMismatch);
         }
         if self
@@ -197,7 +192,7 @@ impl Bindings {
         }
     }
     pub(crate) fn sync_members(&mut self, input: InputId, now: EngineTime) {
-        if !matches!(self.input(input).kind, Kind::Dictionary(_)) {
+        if !matches!(self.input(input).kind, Kind::Dictionary(_) | Kind::Set(_)) {
             return;
         }
         self.touch_input(input, now);
@@ -234,16 +229,12 @@ impl Bindings {
             .remove(&key)
             .unwrap_or_else(|| {
                 let i = self.input(input);
-                let (owner, active, scope, kind) = (
-                    i.owner,
-                    i.active,
-                    i.scope,
-                    if let Kind::Dictionary(k) = &i.kind {
-                        *k.clone()
-                    } else {
-                        unreachable!()
-                    },
-                );
+                let (owner, active, scope) = (i.owner, i.active, i.scope);
+                let kind = i
+                    .kind
+                    .member()
+                    .unwrap_or_else(|| unreachable!("membership input"))
+                    .clone();
                 let previous = self.enter_scope(scope);
                 let child = self.add_input(owner, kind, active);
                 self.enter_scope(previous);
@@ -281,6 +272,16 @@ impl Bindings {
     /// Reference to an input's current source, without copying the value.
     pub fn input_reference(&self, input: InputId) -> Reference {
         let i = self.input(input);
-        i.source.map_or(i.designation, |o| self.reference(o))
+        if matches!(i.kind, Kind::Reference(_)) {
+            i.source.map_or_else(
+                || {
+                    self.resolve(i.designation)
+                        .map_or_else(Reference::default, |o| self.reference(o))
+                },
+                |o| self.reference_value(o),
+            )
+        } else {
+            i.source.map_or(i.designation, |o| self.reference(o))
+        }
     }
 }
