@@ -19,15 +19,11 @@ mod schedule;
 
 use std::any::Any;
 
-use hgl_types::NodeId;
-
 pub use ctx::Ctx;
 pub use engine::{EngineError, RunConfig, run_simulation};
 pub use graph::{Graph, Lifecycle, NodeSlot};
 
-/// What every hook returns. The error is boxed so that success, the only
-/// outcome on the per-tick path, is one word.
-pub type NodeResult = Result<(), Box<NodeError>>;
+pub use hgl_types::{NodeError, NodeResult, Phase};
 
 /// A node's behaviour. `start` and `stop` default to doing nothing.
 /// `Any` is what lets [`Graph::node`] hand a node back as its own type.
@@ -66,47 +62,5 @@ pub trait Node: Any {
     /// Called once, in reverse rank order, for every node that started.
     fn stop(&mut self, _ctx: &mut Ctx<'_>) -> NodeResult {
         Ok(())
-    }
-}
-
-/// Which hook was running.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Phase {
-    /// [`Node::start`].
-    Start,
-    /// [`Node::eval`].
-    Eval,
-    /// [`Node::stop`].
-    Stop,
-}
-
-/// A failure that left a node: which node, in which hook, and why.
-#[derive(Debug, Clone, PartialEq)]
-pub struct NodeError {
-    /// The failing node's rank.
-    pub node: NodeId,
-    /// The failing node's label.
-    pub label: String,
-    /// The hook that failed.
-    pub phase: Phase,
-    /// Why, in the node's words.
-    pub message: String,
-}
-
-impl NodeError {
-    /// A failure with only its message. A node does not know where it sits:
-    /// the graph fills in `node`, `label` and `phase` as the failure leaves
-    /// the hook.
-    #[expect(
-        clippy::unnecessary_box_returns,
-        reason = "a NodeResult carries its error boxed, so a node writes `Err(NodeError::new(..))`"
-    )]
-    pub fn new(message: impl Into<String>) -> Box<Self> {
-        Box::new(Self {
-            node: NodeId(0),
-            label: String::new(),
-            phase: Phase::Eval,
-            message: message.into(),
-        })
     }
 }

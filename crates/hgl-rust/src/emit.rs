@@ -67,6 +67,11 @@ fn value(plan: &Plan, v: &Value) -> String {
                 format!("self.cache{i}")
             }
         }
+        Kind::GlobalGet(i) => format!("_ctx.global_get(self.global{i})?"),
+        Kind::GlobalSet(i, v) => format!(
+            "{{ let value = {}; _ctx.global_set(self.global{i}, &value)?; }}",
+            value(plan, v)
+        ),
         Kind::Local(i) => format!("local{i}.clone()"),
         Kind::Native(i, args) => format!(
             "<crate::Provider as Native>::{}({}){}",
@@ -77,29 +82,7 @@ fn value(plan: &Plan, v: &Value) -> String {
                 .join(", "),
             if plan.natives[*i].throws { "?" } else { "" }
         ),
-        Kind::Binary(op, a, b) => {
-            let a = if a.ty == Ty::Str {
-                native_argument(plan, a)
-            } else {
-                value(plan, a)
-            };
-            let b = if b.ty == Ty::Str {
-                native_argument(plan, b)
-            } else {
-                value(plan, b)
-            };
-            if v.ty == Ty::I64 && matches!(op.as_str(), "+" | "-" | "*" | "%") {
-                integer_binary(op, &a, &b)
-            } else if op == "/" {
-                format!(
-                    "{{ let lhs = ({a}) as f64; let rhs = ({b}) as f64; if rhs == 0.0 {{ return Err(hgl_kernel::NodeError::new(\"division by zero\")); }} lhs / rhs }}"
-                )
-            } else if op == "+" && v.ty == Ty::Str {
-                format!("format!(\"{{}}{{}}\", {a}, {b})")
-            } else {
-                format!("({a} {op} {b})")
-            }
-        }
+        Kind::Binary(op, a, b) => binary(plan, &v.ty, op, a, b),
         Kind::Unary(op, v) if op == "-" && v.ty == Ty::I64 => {
             format!("(({}).wrapping_neg())", value(plan, v))
         }
@@ -122,6 +105,29 @@ fn value(plan: &Plan, v: &Value) -> String {
         }
         Kind::Output => "_ctx.output_value(self._output).expect(\"valid output\")".into(),
         Kind::Wire(_) | Kind::Void | Kind::Capability => unreachable!("checked runtime value"),
+    }
+}
+fn binary(plan: &Plan, result: &Ty, op: &str, a: &Value, b: &Value) -> String {
+    let a = if a.ty == Ty::Str {
+        native_argument(plan, a)
+    } else {
+        value(plan, a)
+    };
+    let b = if b.ty == Ty::Str {
+        native_argument(plan, b)
+    } else {
+        value(plan, b)
+    };
+    if *result == Ty::I64 && matches!(op, "+" | "-" | "*" | "%") {
+        integer_binary(op, &a, &b)
+    } else if op == "/" {
+        format!(
+            "{{ let lhs = ({a}) as f64; let rhs = ({b}) as f64; if rhs == 0.0 {{ return Err(hgl_kernel::NodeError::new(\"division by zero\")); }} lhs / rhs }}"
+        )
+    } else if op == "+" && *result == Ty::Str {
+        format!("format!(\"{{}}{{}}\", {a}, {b})")
+    } else {
+        format!("({a} {op} {b})")
     }
 }
 fn presence(plan: &Plan, value: &Value) -> String {
@@ -172,6 +178,12 @@ fn statements(plan: &Plan, body: &[Statement], out: &mut Vec<String>) {
 }
 fn node(plan: &Plan, n: &Node, index: usize, out: &mut Vec<String>) {
     out.push(format!("#[derive(Debug)]\nstruct Node{index} {{\n"));
+    for (i, (_, ty)) in n.globals.iter().enumerate() {
+        out.push(format!(
+            "global{i}: hgl_store::Global<{}>,\n",
+            rust_type(ty)
+        ));
+    }
     if let Some((name, ty)) = &n.capability {
         out.push(format!(
             "{name}: hgl_std_native::eval_buffers::{}<{}>,\n",
@@ -224,7 +236,9 @@ fn node_eval(plan: &Plan, n: &Node, out: &mut Vec<String>) {
         statements(plan, body, out);
         out.push("}\n".into());
     }
-    out.push("}\nOk(())\n}\n}\n".to_owned());
+    out.push("}\nOk(())\n}\nfn stop(&mut self, _ctx: &mut hgl_kernel::Ctx<'_>) -> hgl_kernel::NodeResult {\n".into());
+    statements(plan, &n.stop, out);
+    out.push("Ok(())\n}\n}\n".into());
 }
 fn node_build(plan: &Plan, n: &Node, index: usize, out: &mut Vec<String>) {
     out.push(format!("impl hgl_describe::Buildable for Node{index} {{\nfn node_type() -> hgl_types::NodeType {{\nhgl_types::NodeType {{ name: {:?}, inputs: vec![",format!("{}#{index}",n.name)));
@@ -232,6 +246,16 @@ fn node_build(plan: &Plan, n: &Node, index: usize, out: &mut Vec<String>) {
         out.push(format!("({name:?},{}),", shape(ty)));
     }
     out.push("],\n".to_owned());
+    if n.global_state {
+        out.push("uses_global_state: true,\nglobal_entries: vec![".into());
+        for (key, ty) in &n.globals {
+            out.push(format!(
+                "({key:?}, hgl_types::ScalarType::{}),",
+                scalar_type(ty)
+            ));
+        }
+        out.push("],\n".into());
+    }
     if n.result != Ty::Void {
         out.push(format!("output: Some({}),\n", shape(&n.result)));
     }
@@ -242,6 +266,12 @@ fn node_build(plan: &Plan, n: &Node, index: usize, out: &mut Vec<String>) {
         out.push("valid_inputs: Some(vec![]),\n".into());
     }
     out.push(format!("uses_scheduler: {}, ..hgl_types::NodeType::default() }}\n}}\nfn build(ports: &mut hgl_describe::Ports<'_>) -> Result<Self,hgl_describe::BuildError> {{\nOk(Self {{\n",n.alarm));
+    for (i, (key, ty)) in n.globals.iter().enumerate() {
+        out.push(format!(
+            "global{i}: ports.global::<{}>({key:?})?,\n",
+            rust_type(ty)
+        ));
+    }
     if let Some((name, _)) = &n.capability {
         let configured = if name == "replay_input" {
             plan.replay_inputs.iter().find(|(id, _)| *id == index).map(|(_, slots)| format!("hgl_std_native::eval_buffers::ReplayInput::new(vec![{}], hgl_types::EngineTime::MIN_START).map_err(|e| hgl_describe::BuildError::InvalidNodeType {{ node: {:?}.into(), what: e.message }})?", sequence(slots), n.name))
@@ -546,7 +576,9 @@ fn native_argument(plan: &Plan, v: &Value) -> String {
         Kind::Output => {
             "_ctx.store().output_ref(self._output).expect(\"valid output\").as_str()".into()
         }
-        Kind::ReplaySlot(_)
+        Kind::GlobalGet(_)
+        | Kind::GlobalSet(..)
+        | Kind::ReplaySlot(_)
         | Kind::IsPresent(_)
         | Kind::Present(_)
         | Kind::Literal(_)

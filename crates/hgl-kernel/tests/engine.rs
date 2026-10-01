@@ -22,6 +22,8 @@ fn slot(label: &str, node: impl Node, required: &[In<i64>]) -> NodeSlot {
         valid_inputs: None,
         uses_scheduler: true,
         schedule_on_start: false,
+        uses_global_state: false,
+        global_entries: Vec::new(),
         child_graphs: 0,
     };
     NodeSlot {

@@ -16,3 +16,7 @@ Copy even when their payload is not. Equal publications still tick (TS-6).
 
 Acceptance: existing allocation tests, scalar round trips, borrowed string
 address stability and the compile-fail sealing test.
+
+`Scalar::try_clone(&self) -> Result<Self, Box<hgl_types::NodeError>>` provides
+fallible ordinary owned copying. Fixed scalar implementations use their copy;
+String reserves fallibly before copying. Existing endpoint reads are unchanged.

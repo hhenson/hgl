@@ -17,6 +17,10 @@ impl Value {
 /// Checked expressions and frontend-only binding markers.
 #[derive(Debug, Clone)]
 pub enum Kind {
+    /// Read the indexed prepared run-owned scalar entry.
+    GlobalGet(usize),
+    /// Replace the indexed prepared entry with an owned scalar value.
+    GlobalSet(usize, Box<Value>),
     /// Owned nullable replay payload at the checked i64 index.
     ReplaySlot(Box<Value>),
     /// Nullable presence test.
@@ -81,6 +85,12 @@ pub struct Node {
     pub alarm: bool,
     /// Checked start-hook statements.
     pub start: Vec<Statement>,
+    /// Whether graph construction requires a provisioned run-wide scalar store.
+    pub global_state: bool,
+    /// Const key and exact scalar type for each prepared node access.
+    pub globals: Vec<(String, Ty)>,
+    /// Checked stop-hook statements.
+    pub stop: Vec<Statement>,
     /// Optional admitted buffer capability name and scalar payload type.
     pub capability: Option<(String, Ty)>,
     /// Cache initializers, indexed by cache expressions.

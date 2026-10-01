@@ -20,6 +20,8 @@ fn node_type(name: &'static str, uses_scheduler: bool) -> NodeType {
         valid_inputs: None,
         uses_scheduler,
         schedule_on_start: false,
+        uses_global_state: false,
+        global_entries: Vec::new(),
         child_graphs: 0,
     }
 }

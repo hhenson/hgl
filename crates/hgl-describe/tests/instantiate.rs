@@ -32,6 +32,8 @@ fn signature(
         valid_inputs: None,
         uses_scheduler: false,
         schedule_on_start: false,
+        uses_global_state: false,
+        global_entries: Vec::new(),
         child_graphs: 0,
     }
 }

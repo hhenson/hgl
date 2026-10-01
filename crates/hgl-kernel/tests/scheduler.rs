@@ -14,6 +14,8 @@ const fn at(micros: i64) -> EngineTime {
 
 fn node_type(name: &'static str, uses_scheduler: bool, schedule_on_start: bool) -> NodeType {
     NodeType {
+        uses_global_state: false,
+        global_entries: Vec::new(),
         child_graphs: 0,
         name,
         inputs: Vec::new(),

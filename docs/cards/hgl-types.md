@@ -3,12 +3,21 @@
 ## Purpose
 
 The vocabulary every other crate shares: engine time, the scalar types, the
-time-series types, and the node type. Data only. Nothing here allocates on a
-tick, and nothing here knows what a graph is.
+time-series types, the node type, and hook failure data. Successful primitive
+access needs no allocation; creating an error message can allocate. No graph
+execution lives here.
 
 ## May use
 
 Nothing.
+
+Shared hook failure data (`Phase`, `NodeError`, `NodeResult`) lives here and is
+re-exported by hgl-kernel. Error construction may allocate; successful scalar
+paths do not. `NodeType::validate_metadata()` checks duplicate input names,
+active/valid input positions and global-state declaration consistency.
+`uses_global_state: bool` requests provisioning;
+`global_entries: Vec<(&'static str, ScalarType)>` declares exact construction
+bindings, including the requirements of retained child templates.
 
 ## Surface
 
@@ -83,6 +92,8 @@ pub struct NodeType {
     /// Positions in `inputs`. `None`: every input must be valid. `Some(vec![])`: none need be.
     pub valid_inputs: Option<Vec<usize>>,
     pub uses_scheduler: bool,
+    pub uses_global_state: bool,
+    pub global_entries: Vec<(&'static str, ScalarType)>,
     pub schedule_on_start: bool,
 }
 impl NodeType {

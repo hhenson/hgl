@@ -37,3 +37,7 @@ selection, separately from `::` qualified names. It is not a method call.
 `Stmt::{Assign,Add}` retain an expression target for checking: the parser does
 not treat a dotted target as an ordinary variable name. The checker determines
 whether the selected field is writable; no new writable field domain is admitted.
+
+`Stmt::{Let,Var}` carry an optional source type annotation alongside their
+name and initializer. Annotation resolution and initializer compatibility are
+frontend checks; a typed local supplies ordinary expected-value context.

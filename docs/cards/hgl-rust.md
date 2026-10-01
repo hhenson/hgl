@@ -44,3 +44,11 @@ read, its presence test and an extraction justified by frontend flow facts.
 owned Rust options; indexing uses the fallible provider read, keeping bounds
 errors distinct from absent slots. Capability operations use receiver-first
 source spelling; internal runtime method calls do not create source aliases.
+
+`Node { global_state, globals, stop, .. }` records a run-wide shared-store requirement
+and checked stop-hook statements. The `globals` key/type pairs describe prepared entries; `Kind::GlobalGet` and
+`Kind::GlobalSet` address them by node-local index. Emission declares typed
+`Global<T>` handles, construction-only `NodeType::global_entries` metadata, and
+`Ports::global` binding. Hook calls use those handles without key lookup or type
+dispatch. Values remain run-owned. Construction validates provisioning and all
+entry requirements before any start hook.

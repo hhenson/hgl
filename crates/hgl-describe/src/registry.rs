@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 
 use hgl_kernel::Node;
-use hgl_store::{In, InputId, Out, OutputId, Scalar, Store};
+use hgl_store::{Global, In, InputId, Out, OutputId, Scalar, Store};
 use hgl_types::{NodeId, NodeType, TsType};
 
 use crate::{BuildError, ChildDescription, NodeDescription};
@@ -42,6 +42,8 @@ use crate::{BuildError, ChildDescription, NodeDescription};
 ///             active_inputs: None,
 ///             valid_inputs: None,
 ///             uses_scheduler: false,
+///             uses_global_state: false,
+///             global_entries: Vec::new(),
 ///             schedule_on_start: false,
 ///             child_graphs: 0,
 ///         }
@@ -81,6 +83,23 @@ pub struct Ports<'a> {
 }
 
 impl Ports<'_> {
+    /// Bind a declared global entry once, before this node can run a hook.
+    pub fn global<T: Scalar>(&mut self, key: &str) -> Result<Global<T>, BuildError> {
+        let invalid = |what| BuildError::InvalidNodeType {
+            node: self.node_type.name,
+            what,
+        };
+        if !self.node_type.uses_global_state
+            || !self.node_type.global_entries.contains(&(key, T::TYPE))
+        {
+            return Err(invalid(format!(
+                "global_state: undeclared key/type {key:?}"
+            )));
+        }
+        self.store
+            .bind_global(key)
+            .map_err(|error| invalid(error.message))
+    }
     /// The input called `name`, active or passive as the node type says.
     ///
     /// Errors: the node type has no such input, or declares another type
@@ -287,25 +306,7 @@ fn check_node_type(node_type: &NodeType) -> Result<(), BuildError> {
     if let Some(kind) = &node_type.output {
         hgl_plan::check_shape(kind)?;
     }
-    let inputs = &node_type.inputs;
-    for (position, &(input, _)) in inputs.iter().enumerate() {
-        if inputs[..position]
-            .iter()
-            .any(|&(earlier, _)| earlier == input)
-        {
-            return Err(invalid(format!("input {input} twice")));
-        }
-    }
-    let listed = [
-        ("active", &node_type.active_inputs),
-        ("valid", &node_type.valid_inputs),
-    ];
-    for (list, positions) in listed {
-        let Some(positions) = positions else { continue };
-        if let Some(position) = positions.iter().find(|&&position| position >= inputs.len()) {
-            return Err(invalid(format!("{list} input {position}")));
-        }
-    }
+    node_type.validate_metadata().map_err(invalid)?;
     Ok(())
 }
 

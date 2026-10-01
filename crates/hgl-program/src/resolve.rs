@@ -11,9 +11,19 @@ struct Checker {
     documented: BTreeSet<usize>,
     test_scope: Option<String>,
     result_hint: Option<Ty>,
-    starting: bool,
+    phase: Phase,
+    types: BTreeMap<String, Ty>,
     runtime_node: bool,
+    global_types: BTreeMap<String, Ty>,
+    globals: Vec<(String, Ty)>,
     facts: BTreeSet<(String, usize)>,
+}
+#[derive(Default, Clone, Copy, PartialEq, Eq)]
+enum Phase {
+    Start,
+    #[default]
+    Evaluation,
+    Stop,
 }
 type Bound = (Vec<Value>, BTreeMap<String, Ty>, Ty);
 type Selection = (usize, Signature, Vec<Value>, BTreeMap<String, Ty>, Ty);
@@ -55,12 +65,13 @@ impl Checker {
         runtime: bool,
     ) -> Result<Value, String> {
         let (module, name) = self.identity(module, name);
-        let (mut id, mut signature, values, _types, result) =
+        let (mut id, mut signature, values, mut types, result) =
             self.select(&module, &name, args, runtime)?;
         let mut decl = self.library.declarations[id].clone();
         self.document(id);
         if decl.role == Role::Operator {
-            (id, signature) = self.implementation(&decl, &signature, &values, &result, runtime)?;
+            (id, signature, types) =
+                self.implementation(&decl, &signature, &values, &result, runtime)?;
             decl = self.library.declarations[id].clone();
             self.document(id);
         }
@@ -81,6 +92,7 @@ impl Checker {
             .zip(&values)
             .map(|(p, v)| (p.name.clone(), v.clone()))
             .collect();
+        let previous_types = std::mem::replace(&mut self.types, types);
         let mut cursor = Cursor::new(&signature.body);
         let value = if signature.value_function || signature.body.iter().any(|t| t.text == "when") {
             self.runtime_node = !signature.value_function;
@@ -98,6 +110,7 @@ impl Checker {
         } else {
             self.graph(&module, &mut cursor, &mut env, &result)?
         };
+        self.types = previous_types;
         self.active.remove(&id);
         self.test_scope = previous_scope;
         Ok(value)
@@ -168,7 +181,7 @@ impl Checker {
         values: &[Value],
         result: &Ty,
         runtime: bool,
-    ) -> Result<(usize, Signature), String> {
+    ) -> Result<(usize, Signature, BTreeMap<String, Ty>), String> {
         let module = declaration.module.as_str();
         let name = declaration.name.as_str();
         let mut implementations = Vec::new();
@@ -217,7 +230,7 @@ impl Checker {
                     continue;
                 }
             }
-            implementations.push((candidate, sig));
+            implementations.push((candidate, sig, inferred));
         }
         if implementations.len() != 1 {
             return Err(format!(
@@ -350,8 +363,9 @@ impl Checker {
         let mut output = Value::new(Ty::Void, Kind::Void);
         for (position, statement) in statements.iter().enumerate() {
             match statement {
-                Stmt::Let(name, expr) | Stmt::Var(name, expr) => {
-                    let value = self.expression(module, expr, env, false)?;
+                Stmt::Let(name, annotation, expr) | Stmt::Var(name, annotation, expr) => {
+                    let value =
+                        self.local_initializer(module, annotation.as_deref(), expr, env, false)?;
                     if env.insert(name.clone(), value).is_some() {
                         return Err(format!("duplicate local {name}"));
                     }
@@ -416,6 +430,9 @@ impl Checker {
             result: result.clone(),
             alarm: false,
             start: Vec::new(),
+            stop: Vec::new(),
+            global_state: false,
+            globals: Vec::new(),
             capability: None,
             caches: Vec::new(),
             handlers: Vec::new(),
@@ -438,22 +455,11 @@ impl Checker {
         self.initializers(decl, c, env, &mut node)?;
         self.injectables(decl, c, env, &mut node)?;
         let mut next_local = 0;
-        if c.take("start") {
-            self.starting = true;
-            node.start = self.statements(
-                &decl.module,
-                &c.block()?,
-                &mut env.clone(),
-                &Ty::Void,
-                &mut next_local,
-            )?;
-            self.starting = false;
-            c.lines();
-        }
-        self.handlers(decl, c, env, &mut node, &mut next_local)?;
+        self.hooks(decl, c, env, &mut node, &mut next_local)?;
         if node.handlers.is_empty() {
             return Err("expected when handler".into());
         }
+        node.globals = std::mem::take(&mut self.globals);
         self.facts.clear();
         self.runtime_node = false;
         c.need("}")?;
@@ -462,6 +468,48 @@ impl Checker {
             return Err("unsupported node body suffix".into());
         }
         Ok(node)
+    }
+    fn hooks(
+        &mut self,
+        decl: &Decl,
+        c: &mut Cursor<'_>,
+        env: &Env,
+        node: &mut Node,
+        next_local: &mut usize,
+    ) -> Result<(), String> {
+        let mut seen = BTreeSet::new();
+        while !c.at("}") {
+            if c.at("when") {
+                self.phase = Phase::Evaluation;
+                self.handlers(decl, c, env, node, next_local)?;
+            } else {
+                let hook = c.consume()?;
+                self.phase = match hook.as_str() {
+                    "start" => Phase::Start,
+                    "stop" => Phase::Stop,
+                    _ => return Err("expected start, when or stop hook".into()),
+                };
+                if !seen.insert(hook.clone()) {
+                    return Err(format!("duplicate {hook} hook"));
+                }
+                self.facts.clear();
+                let body = self.statements(
+                    &decl.module,
+                    &c.block()?,
+                    &mut env.clone(),
+                    &Ty::Void,
+                    next_local,
+                )?;
+                if self.phase == Phase::Start {
+                    node.start = body;
+                } else {
+                    node.stop = body;
+                }
+                c.lines();
+            }
+        }
+        self.phase = Phase::Evaluation;
+        Ok(())
     }
     fn handlers(
         &mut self,
@@ -516,7 +564,8 @@ impl Checker {
         while c.take("inject") {
             loop {
                 match c.name()?.as_str() {
-                    name @ ("alarm" | "clock" | "logger" | "replay_input" | "capture") => {
+                    name @ ("alarm" | "clock" | "logger" | "global_state" | "replay_input"
+                    | "capture") => {
                         inject_capability(name, node, env)?;
                     }
                     "out" => {
@@ -581,7 +630,7 @@ impl Checker {
         let mut bindings = BTreeSet::new();
         let mut checked = Vec::new();
         for statement in statements {
-            if let Stmt::Let(name, _) | Stmt::Var(name, _) = statement
+            if let Stmt::Let(name, _, _) | Stmt::Var(name, _, _) = statement
                 && !bindings.insert(name)
             {
                 return Err(format!("duplicate local {name}"));
@@ -589,6 +638,93 @@ impl Checker {
             checked.push(self.statement(module, statement, env, result, next_local)?);
         }
         Ok(checked)
+    }
+    fn local_initializer(
+        &mut self,
+        module: &str,
+        annotation: Option<&str>,
+        expr: &Expr,
+        env: &Env,
+        runtime: bool,
+    ) -> Result<Value, String> {
+        let ty = annotation
+            .map(|name| resolve_type(name, &self.types).ok_or("unresolved local type"))
+            .transpose()?;
+        let value = self.expected_expression(module, expr, env, runtime, ty.as_ref())?;
+        if ty.as_ref().is_some_and(|ty| *ty != value.ty) {
+            return Err("local initializer type mismatch".into());
+        }
+        Ok(value)
+    }
+    fn global_operation(&mut self, operation: &str, args: &Arguments) -> Result<Value, String> {
+        if operation == "get" {
+            return Err("global_state: get requires a concrete scalar expected type".into());
+        }
+        if operation != "set" {
+            return Err(format!(
+                "global_state: unknown capability operation {operation}"
+            ));
+        }
+        let ordered = order_arguments(&["key", "value"], args)?;
+        let key = ordered.get(&0).ok_or("global_state: missing key")?;
+        let value = ordered.get(&1).ok_or("global_state: missing value")?;
+        if key.ty != Ty::Str || !scalar(&value.ty) || matches!(value.kind, Kind::Input(_, true)) {
+            return Err("global_state: set requires a str key and an ordinary scalar value".into());
+        }
+        let index = self.global_entry(key, &value.ty)?;
+        Ok(Value::new(
+            Ty::Void,
+            Kind::GlobalSet(index, Box::new(value.clone())),
+        ))
+    }
+    fn global_entry(&mut self, key: &Value, ty: &Ty) -> Result<usize, String> {
+        let Kind::Literal(Literal::Str(key)) = &key.kind else {
+            return Err("global_state: key must resolve to a literal str or const str parameter; general const key expressions and runtime keys are unsupported".into());
+        };
+        if let Some(previous) = self.global_types.get(key) {
+            if previous != ty {
+                return Err(format!("global_state: type conflict for key {key:?}"));
+            }
+        } else {
+            self.global_types.insert(key.clone(), ty.clone());
+        }
+        if let Some(index) = self.globals.iter().position(|(name, _)| name == key) {
+            return Ok(index);
+        }
+        let index = self.globals.len();
+        self.globals.push((key.clone(), ty.clone()));
+        Ok(index)
+    }
+    fn expected_expression(
+        &mut self,
+        module: &str,
+        expr: &Expr,
+        env: &Env,
+        runtime: bool,
+        expected: Option<&Ty>,
+    ) -> Result<Value, String> {
+        if let Expr::Call(name, args) = expr
+            && name == "get"
+            && matches!(args.first(), Some((None, Expr::Name(receiver))) if receiver == "global_state" && env.get(receiver).is_some_and(|v| matches!(v.kind, Kind::Capability)))
+        {
+            if !runtime {
+                return Err("global_state: requires a runtime hook".into());
+            }
+            capability_payload("global_state", env)?;
+            let ty = expected
+                .filter(|ty| scalar(ty))
+                .ok_or("global_state: get requires a concrete scalar expected type")?;
+            let values = args[1..]
+                .iter()
+                .map(|(name, expr)| {
+                    Ok((name.clone(), self.expression(module, expr, env, runtime)?))
+                })
+                .collect::<Result<Vec<_>, String>>()?;
+            let values = method_arguments("get(global_state)", &[("key", Ty::Str)], &values)?;
+            let index = self.global_entry(&values[0], ty)?;
+            return Ok(Value::new(ty.clone(), Kind::GlobalGet(index)));
+        }
+        self.expression(module, expr, env, runtime)
     }
     fn statement(
         &mut self,
@@ -599,8 +735,9 @@ impl Checker {
         next_local: &mut usize,
     ) -> Result<Statement, String> {
         Ok(match statement {
-            Stmt::Let(name, expr) | Stmt::Var(name, expr) => {
-                let value = self.expression(module, expr, env, true)?;
+            Stmt::Let(name, annotation, expr) | Stmt::Var(name, annotation, expr) => {
+                let value =
+                    self.local_initializer(module, annotation.as_deref(), expr, env, true)?;
                 if matches!(statement, Stmt::Var(..)) {
                     require_payload(&value)?;
                 }
@@ -608,13 +745,13 @@ impl Checker {
                 Statement::Let(id, value)
             }
             Stmt::Exit => {
-                if self.starting || !self.runtime_node {
+                if self.phase != Phase::Evaluation || !self.runtime_node {
                     return Err("bare return requires runtime evaluation".into());
                 }
                 Statement::Exit
             }
             Stmt::Return(expr) => {
-                let v = self.expression(module, expr, env, true)?;
+                let v = self.expected_expression(module, expr, env, true, Some(result))?;
                 if &v.ty != result || matches!(result, Ty::Void | Ty::Set(_)) {
                     return Err("node return type mismatch".into());
                 }
@@ -645,12 +782,12 @@ impl Checker {
             Stmt::Assign(target, expr) => {
                 let name = assignment_name(target)?;
                 let target = env.get(name).ok_or("unknown assignment target")?.clone();
-                if (self.starting && matches!(target.kind, Kind::Output))
+                if (self.phase != Phase::Evaluation && matches!(target.kind, Kind::Output))
                     || !matches!(target.kind, Kind::Output | Kind::Cache(_))
                 {
                     return Err("assignment requires state, cache or out".into());
                 }
-                let value = self.expression(module, expr, env, true)?;
+                let value = self.expected_expression(module, expr, env, true, Some(&target.ty))?;
                 if target.ty != value.ty || matches!(target.ty, Ty::Ref(_) | Ty::Set(_)) {
                     return Err("assignment type mismatch".into());
                 }
@@ -685,7 +822,7 @@ impl Checker {
         result: &Ty,
         next_local: &mut usize,
     ) -> Result<Statement, String> {
-        let condition = self.expression(module, expr, env, true)?;
+        let condition = self.expected_expression(module, expr, env, true, Some(&Ty::Bool))?;
         if condition.ty != Ty::Bool {
             return Err("condition requires bool".into());
         }
@@ -717,7 +854,7 @@ impl Checker {
                 if !matches!(receiver.as_ref(), Expr::Name(name) if name == "replay_input")
                     || !runtime
                     || !self.runtime_node
-                    || self.starting
+                    || self.phase != Phase::Evaluation
                 {
                     return Err(
                         "replay_input: indexing requires the injected source in evaluation".into(),
@@ -743,8 +880,15 @@ impl Checker {
                 if matches!(value.kind, Kind::Void | Kind::Capability) {
                     return Err(format!("{name}: injectable cannot escape as a value"));
                 }
-                if self.starting && matches!(value.kind, Kind::Input(..) | Kind::Output) {
-                    return Err("start cannot access temporal endpoints".into());
+                if self.phase != Phase::Evaluation
+                    && matches!(value.kind, Kind::Input(..) | Kind::Output)
+                {
+                    let phase = if self.phase == Phase::Stop {
+                        "stop"
+                    } else {
+                        "start"
+                    };
+                    return Err(format!("{phase} cannot access temporal endpoints"));
                 }
                 if let (Ty::Nullable(payload), Kind::Local(id)) = (&value.ty, &value.kind)
                     && self.facts.contains(&("present".into(), *id))
@@ -795,15 +939,18 @@ impl Checker {
                     Ok((n.clone(), value))
                 })
                 .collect::<Result<Vec<_>, String>>()?;
+            if receiver == "global_state" {
+                return self.global_operation(name, &values);
+            }
             if receiver == "logger" && name == "info" {
                 return self.log_info(&values);
             }
-            return capability_function(receiver, name, &values, env, self.starting);
+            return capability_function(receiver, name, &values, env, self.phase);
         }
         if name == "delta_value" {
             if !runtime
                 || !self.runtime_node
-                || self.starting
+                || self.phase != Phase::Evaluation
                 || args.len() != 1
                 || args[0].0.is_some()
             {
@@ -1417,18 +1564,20 @@ fn capability_function(
     method: &str,
     args: &Arguments,
     env: &Env,
-    starting: bool,
+    phase: Phase,
 ) -> Result<Value, String> {
     let name = format!("{method}({receiver})");
     let payload = capability_payload(receiver, env)?;
     let (parameters, result) = match (receiver, method) {
-        ("replay_input", "len") => (vec![], Ty::I64),
-        ("capture", "begin") if starting => (vec![], Ty::Void),
-        ("capture", "append") if !starting => {
+        ("replay_input", "len") if phase != Phase::Stop => (vec![], Ty::I64),
+        ("capture", "begin") if phase == Phase::Start => (vec![], Ty::Void),
+        ("capture", "append") if phase == Phase::Evaluation => {
             (vec![("time", Ty::DateTime), ("delta", payload)], Ty::Void)
         }
-        ("alarm", "schedule") => (vec![("delay", Ty::Duration)], Ty::Void),
-        ("alarm", "schedule_at") => (vec![("time", Ty::DateTime)], Ty::Void),
+        ("alarm", "schedule") if phase != Phase::Stop => (vec![("delay", Ty::Duration)], Ty::Void),
+        ("alarm", "schedule_at") if phase != Phase::Stop => {
+            (vec![("time", Ty::DateTime)], Ty::Void)
+        }
         _ => {
             return Err(format!(
                 "{name}: unknown capability operation or forbidden hook phase"
@@ -1459,7 +1608,7 @@ fn inject_capability(name: &str, node: &mut Node, env: &mut Env) -> Result<(), S
         {
             node.inputs[0].2.clone()
         }
-        "alarm" | "clock" | "logger" => Ty::Void,
+        "alarm" | "clock" | "logger" | "global_state" => Ty::Void,
         _ => return Err(format!("{name}: unsupported node shape or scalar type")),
     };
     if matches!(name, "replay_input" | "capture")
@@ -1468,6 +1617,7 @@ fn inject_capability(name: &str, node: &mut Node, env: &mut Env) -> Result<(), S
         return Err(format!("{name}: only one storage capability is admitted"));
     }
     node.alarm |= name == "alarm";
+    node.global_state |= name == "global_state";
     if env
         .insert(name.into(), Value::new(ty, Kind::Capability))
         .is_some()

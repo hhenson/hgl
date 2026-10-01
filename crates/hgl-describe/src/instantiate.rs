@@ -68,6 +68,7 @@ pub fn instantiate_complete(
     store: &mut Store,
 ) -> Result<BuiltGraph, BuildError> {
     validate(description, registry)?;
+    preflight_globals(description, registry, store)?;
     let mut slots = Vec::new();
     let mut inputs = Vec::new();
     let mut outputs = Vec::new();
@@ -166,4 +167,30 @@ fn required(node_type: &NodeType, inputs: &[InputId]) -> Vec<InputId> {
         None => inputs.to_vec(),
         Some(valid) => valid.iter().map(|&position| inputs[position]).collect(),
     }
+}
+
+fn preflight_globals(
+    description: &GraphDescription,
+    registry: &Registry,
+    store: &mut Store,
+) -> Result<(), BuildError> {
+    for node in &description.nodes {
+        let ty = &registry.find(&node.implementation)?.node_type;
+        let invalid = |what| BuildError::InvalidNodeType {
+            node: ty.name,
+            what,
+        };
+        if ty.uses_global_state && !store.global_state_provisioned() {
+            return Err(invalid("global_state: unprovisioned run store".into()));
+        }
+        for &(key, scalar) in &ty.global_entries {
+            store
+                .prepare_global(key, scalar)
+                .map_err(|error| invalid(error.message))?;
+        }
+        for child in &node.children {
+            preflight_globals(&child.graph, registry, store)?;
+        }
+    }
+    Ok(())
 }

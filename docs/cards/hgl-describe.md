@@ -53,3 +53,11 @@ Current construction limit: a boundary path cannot descend through an input
 following a live REF. Capture that whole target and project inside the child.
 Reject the unsupported boundary before allocation; taking its current target
 would silently lose later rebinding.
+
+Global-state preflight visits every retained child template before building
+the root nodes. It checks provisioning and prepares each NodeType-declared
+key/type against the same Store, including host seeds. `Ports::global<T>(key)`
+returns an opaque typed handle only for a declared matching requirement.
+Undeclared native constructor requests fail; hooks perform no string lookup.
+Local input-name and active/valid-position validation delegates to NodeType;
+shape validation and BuildError translation remain here.

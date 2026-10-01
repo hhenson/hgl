@@ -239,9 +239,9 @@ pub enum Expr {
 /// A statement before phase and type checking.
 pub enum Stmt {
     /// Local binding.
-    Let(String, Expr),
+    Let(String, Option<String>, Expr),
     /// Mutable local binding.
-    Var(String, Expr),
+    Var(String, Option<String>, Expr),
     /// End runtime evaluation without publication.
     Exit,
     /// Result publication.
@@ -488,11 +488,16 @@ impl<'a> Cursor<'a> {
             } else if self.at("let") || self.at("var") {
                 let mutable = self.consume()? == "var";
                 let name = self.name()?;
+                let annotation = if self.take(":") {
+                    Some(self.type_name()?)
+                } else {
+                    None
+                };
                 self.need("=")?;
                 if mutable {
-                    Stmt::Var(name, self.expr()?)
+                    Stmt::Var(name, annotation, self.expr()?)
                 } else {
-                    Stmt::Let(name, self.expr()?)
+                    Stmt::Let(name, annotation, self.expr()?)
                 }
             } else if self.take("return") {
                 if self.at("}") || self.at("\n") {

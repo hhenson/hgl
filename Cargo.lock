@@ -87,6 +87,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "hgl-global"
+version = "0.0.0"
+dependencies = [
+ "hgl-columns",
+ "hgl-types",
+]
+
+[[package]]
 name = "hgl-kernel"
 version = "0.0.0"
 dependencies = [
@@ -196,6 +204,7 @@ dependencies = [
  "hgl-alloc-count",
  "hgl-bindings",
  "hgl-columns",
+ "hgl-global",
  "hgl-types",
 ]
 
