@@ -129,3 +129,13 @@ conflicts are checking errors. Per-node typed entry requirements are emitted for
 construction preflight; binding does not initialize an entry. Direct annotated
 initializers, returns, assignments and conditions supply get expected types;
 nested expression and overload-argument inference are outside this subset.
+
+Initialized runtime `var` bindings of the eight primitive scalar types are
+writable owned locals, including in lifecycle hooks and lifted ordinary value
+function bodies. `let`, parameters and `for` bindings remain read-only. Branch
+scopes preserve each binding identity across shadowing. Scalar assignments
+retain their exact type; local `+=` uses existing addition typing (i64, f64,
+str), while cache increments retain their i64 profile. Primitive global get
+initializes an owned local, so local mutation never implicitly writes the entry.
+Uninitialized locals, aggregate borrows and general value-helper runtime calls
+remain outside this backend subset. No value-type qualifier is introduced.

@@ -742,7 +742,18 @@ impl Checker {
                     require_payload(&value)?;
                 }
                 let id = local(env, name, value.ty.clone(), next_local);
-                Statement::Let(id, value)
+                if matches!(statement, Stmt::Var(..)) {
+                    if !scalar(&value.ty) {
+                        return Err("mutable locals currently require an ordinary scalar".into());
+                    }
+                    env.insert(
+                        name.clone(),
+                        Value::new(value.ty.clone(), Kind::MutableLocal(id)),
+                    );
+                    Statement::Var(id, value)
+                } else {
+                    Statement::Let(id, value)
+                }
             }
             Stmt::Exit => {
                 if self.phase != Phase::Evaluation || !self.runtime_node {
@@ -779,40 +790,61 @@ impl Checker {
                 self.facts = previous;
                 Statement::For(id, collection, body)
             }
-            Stmt::Assign(target, expr) => {
-                let name = assignment_name(target)?;
-                let target = env.get(name).ok_or("unknown assignment target")?.clone();
-                if (self.phase != Phase::Evaluation && matches!(target.kind, Kind::Output))
-                    || !matches!(target.kind, Kind::Output | Kind::Cache(_))
-                {
-                    return Err("assignment requires state, cache or out".into());
-                }
-                let value = self.expected_expression(module, expr, env, true, Some(&target.ty))?;
-                if target.ty != value.ty || matches!(target.ty, Ty::Ref(_) | Ty::Set(_)) {
-                    return Err("assignment type mismatch".into());
-                }
-                Statement::Assign(target, value)
-            }
-            Stmt::Add(target, expr) => {
-                let name = assignment_name(target)?;
-                let Some(Value {
-                    kind: Kind::Cache(id),
-                    ty,
-                }) = env.get(name)
-                else {
-                    return Err("assignment requires a cache variable".into());
-                };
-                let id = *id;
-                let v = self.expression(module, expr, env, true)?;
-                if *ty != Ty::I64 || v.ty != Ty::I64 {
-                    return Err("cache increment requires i64 target and value".into());
-                }
-                Statement::Add(id, v)
-            }
+            Stmt::Assign(target, expr) => self.assignment(module, target, expr, env)?,
+            Stmt::Add(target, expr) => self.increment(module, target, expr, env)?,
             Stmt::If(expr, yes, no) => {
                 self.conditional(module, (expr, yes, no), env, result, next_local)?
             }
         })
+    }
+    fn increment(
+        &mut self,
+        module: &str,
+        target: &Expr,
+        expr: &Expr,
+        env: &Env,
+    ) -> Result<Statement, String> {
+        let name = assignment_name(target)?;
+        let binding = env.get(name).ok_or("unknown assignment target")?;
+        if matches!(binding.kind, Kind::Cache(_)) {
+            let value = self.expression(module, expr, env, true)?;
+            if binding.ty != Ty::I64 || value.ty != Ty::I64 {
+                return Err("cache increment requires i64 target and value".into());
+            }
+            let sum = Value::new(
+                Ty::I64,
+                Kind::Binary("+".into(), Box::new(binding.clone()), Box::new(value)),
+            );
+            return Ok(Statement::Assign(binding.clone(), sum));
+        }
+        if !matches!(binding.kind, Kind::MutableLocal(_)) {
+            return Err("increment requires a cache variable or writable var".into());
+        }
+        let sum = Expr::Binary("+".into(), Box::new(target.clone()), Box::new(expr.clone()));
+        self.assignment(module, target, &sum, env)
+    }
+    fn assignment(
+        &mut self,
+        module: &str,
+        target: &Expr,
+        expr: &Expr,
+        env: &Env,
+    ) -> Result<Statement, String> {
+        let name = assignment_name(target)?;
+        let target = env.get(name).ok_or("unknown assignment target")?.clone();
+        if (self.phase != Phase::Evaluation && matches!(target.kind, Kind::Output))
+            || !matches!(
+                target.kind,
+                Kind::Output | Kind::Cache(_) | Kind::MutableLocal(_)
+            )
+        {
+            return Err("assignment requires writable var, state, cache or out".into());
+        }
+        let value = self.expected_expression(module, expr, env, true, Some(&target.ty))?;
+        if target.ty != value.ty || !scalar(&target.ty) {
+            return Err("assignment type mismatch".into());
+        }
+        Ok(Statement::Assign(target, value))
     }
     fn conditional(
         &mut self,
@@ -1670,7 +1702,7 @@ fn terminates(body: &[Statement]) -> bool {
         Statement::If(_, yes, no) => terminates(yes) && terminates(no),
         Statement::Let(..)
         | Statement::Call(_)
-        | Statement::Add(..)
+        | Statement::Var(..)
         | Statement::Assign(..)
         | Statement::For(..) => false,
     })

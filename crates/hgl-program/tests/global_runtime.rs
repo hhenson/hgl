@@ -44,11 +44,62 @@ fn text(value:i64) {
     }
     when {}
 }
+const fn adjust(value:i64)->i64 {
+    var result=value
+    if value==1 { result+=4 } else { result=9 }
+    return result
+}
+fn helper_result(value:i64) {
+    inject global_state
+    when { set(global_state,"helper",delta_value(value)) }
+}
+fn locals(value:i64) {
+    inject global_state
+    start {
+        var started=1
+        started+=2
+        set(global_state,"local_start",started)
+    }
+    when {
+        var number=10
+        let initial=number
+        if value==1 { number+=2 } else { number=15 }
+        if true {
+            var number=100
+            number+=1
+            set(global_state,"shadow",number)
+        }
+        let snapshot=number
+        number+=3
+        set(global_state,"initial",initial)
+        set(global_state,"local_snapshot",snapshot)
+        set(global_state,"local_final",number)
+        var text="a"
+        let saved=text
+        text+="b"
+        text=text+"c"
+        set(global_state,"local_text_snapshot",saved)
+        set(global_state,"local_text",text)
+        var real=1.5
+        real+=2
+        set(global_state,"local_real",real)
+        var count:i64=get(global_state,"counter")
+        count+=100
+        set(global_state,"local_counter",count)
+    }
+    stop {
+        var done=false
+        done=true
+        set(global_state,"local_stop",done)
+    }
+}
 export fn main() {
     let input=ticks()
     observe(increment(input,"counter"))
     text(input)
     scalars(input)
+    locals(input)
+    helper_result(adjust(input))
 }
 "#;
 
@@ -89,6 +140,19 @@ fn run(seed:i64) {
     assert_eq!(store.global_get(snapshot).unwrap(),"");
     let text=store.bind_global::<String>("text").unwrap();
     assert_eq!(store.global_get(text).unwrap(),"changed");
+    for (name,expected) in [("local_start",3),("initial",10),("shadow",101),("local_snapshot",15),("local_final",18),("helper",9),("local_counter",seed+102)] {
+        let entry=store.bind_global::<i64>(name).unwrap();
+        assert_eq!(store.global_get(entry).unwrap(),expected,"{name}");
+    }
+    for (name,expected) in [("local_text_snapshot","a"),("local_text","abc")] {
+        let entry=store.bind_global::<String>(name).unwrap();
+        assert_eq!(store.global_get(entry).unwrap(),expected);
+    }
+    let real=store.bind_global::<f64>("local_real").unwrap();
+    assert_eq!(store.global_get(real).unwrap(),3.5);
+    let stopped=store.bind_global::<bool>("local_stop").unwrap();
+    assert!(store.global_get(stopped).unwrap());
+    assert_eq!(store.global_get(counter).unwrap(),seed+2);
     scalar_assertions(&mut store);
 }
 fn main() { run(40); run(40); run(-2); missing_values(); }

@@ -37,6 +37,8 @@ pub enum Kind {
     Cache(usize),
     /// Local binding index.
     Local(usize),
+    /// Writable owned scalar local binding index.
+    MutableLocal(usize),
     /// Selected native signature index and checked arguments.
     Native(usize, Vec<Value>),
     /// Checked binary operator and operands.
@@ -59,12 +61,12 @@ pub enum Statement {
     Exit,
     /// Local binding index and initializer.
     Let(usize, Value),
+    /// Writable local binding index and owned initializer.
+    Var(usize, Value),
     /// Publish a checked return value.
     Return(Value),
     /// Evaluate an operation for its effect.
     Call(Value),
-    /// Add a checked value to the indexed cache.
-    Add(usize, Value),
     /// Assign a checked value to its target.
     Assign(Value, Value),
     /// Iterate checked elements using a local binding index.

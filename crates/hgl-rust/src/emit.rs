@@ -72,7 +72,7 @@ fn value(plan: &Plan, v: &Value) -> String {
             "{{ let value = {}; _ctx.global_set(self.global{i}, &value)?; }}",
             value(plan, v)
         ),
-        Kind::Local(i) => format!("local{i}.clone()"),
+        Kind::Local(i) | Kind::MutableLocal(i) => format!("local{i}.clone()"),
         Kind::Native(i, args) => format!(
             "<crate::Provider as Native>::{}({}){}",
             plan.natives[*i].method,
@@ -155,6 +155,7 @@ fn statements(plan: &Plan, body: &[Statement], out: &mut Vec<String>) {
         out.push(match statement {
             Statement::Exit => "return Ok(());\n".into(),
             Statement::Let(i, v) => format!("let local{i} = {};\n", condition_code(plan, v)),
+            Statement::Var(i, v) => format!("let mut local{i} = {};\n", condition_code(plan, v)),
             Statement::Return(v) => if matches!(v.ty,Ty::Ref(_)) {format!("_ctx.set_reference(self._output,{})?;\nreturn Ok(());\n",condition_code(plan,v))} else {format!("_ctx.set(self._output, {});\nreturn Ok(());\n",condition_code(plan,v))},
             Statement::Call(v) => format!("{};\n", condition_code(plan, v)),
             Statement::For(id,collection,body)=> {
@@ -163,8 +164,7 @@ fn statements(plan: &Plan, body: &[Statement], out: &mut Vec<String>) {
                 let mut code=vec![format!("let mut index{id}=0;\nwhile let Some(key{id})=_ctx.store().bindings().changed_keys(self.input{input}).get(index{id}).copied() {{\nindex{id}+=1;\nif _ctx.store().bindings().input(self.input{input}).members.initial.get(&key{id})==Some(&false) && _ctx.store().bindings().child_input(self.input{input},key{id}).is_some() {{\nlet local{id}={};\n",if **element==Ty::Bool {format!("key{id}!=0")} else {format!("key{id}")})];
                 statements(plan,body,&mut code);code.push("}\n}\n".into());code.concat()
             }
-            Statement::Assign(target,v)=> if matches!(target.kind,Kind::Output) { format!("_ctx.set(self._output, {});\n",condition_code(plan,v)) } else {let Kind::Cache(i)=target.kind else {unreachable!("checked assignment")}; format!("self.cache{i} = {};\n",condition_code(plan,v))},
-            Statement::Add(i, v) => format!("self.cache{i} = self.cache{i}.wrapping_add({});\n", condition_code(plan, v)),
+            Statement::Assign(target,v) => assignment(plan, target, v),
             Statement::If(condition, yes, no) => {
                 let mut code = vec![format!("if {} {{\n", condition_code(plan, condition))];
                 statements(plan, yes, &mut code);
@@ -174,6 +174,18 @@ fn statements(plan: &Plan, body: &[Statement], out: &mut Vec<String>) {
                 code.concat()
             }
         });
+    }
+}
+fn assignment(plan: &Plan, target: &Value, v: &Value) -> String {
+    let v = condition_code(plan, v);
+    if matches!(target.kind, Kind::Output) {
+        format!("_ctx.set(self._output, {v});\n")
+    } else if let Kind::Cache(i) = target.kind {
+        format!("self.cache{i} = {v};\n")
+    } else if let Kind::MutableLocal(i) = target.kind {
+        format!("local{i} = {v};\n")
+    } else {
+        unreachable!("checked assignment")
     }
 }
 fn node(plan: &Plan, n: &Node, index: usize, out: &mut Vec<String>) {
@@ -416,7 +428,7 @@ pub fn emit_test_body(plan: &Plan, expected: Option<&[Option<Literal>]>) -> Stri
         out.push("}\n".into());
     }
     out.push("pub fn test()->Result<(),String> {\nlet mut registry=hgl_describe::Registry::new();\nregister(&mut registry).map_err(|e|format!(\"{e:?}\"))?;\nlet graph=main(&registry).map_err(|e|format!(\"{e:?}\"))?;\n".into());
-    out.push("let mut store=hgl_store::Store::new();\nlet mut built=hgl_describe::instantiate_complete(&graph,&registry,&mut store).map_err(|e|format!(\"{e:?}\"))?;\nhgl_kernel::run_simulation(&mut built.graph,&mut store,&hgl_kernel::RunConfig { start_time:hgl_types::EngineTime::MIN_START,end_time:hgl_types::EngineTime::MAX_END }).map_err(|e|format!(\"{e:?}\"))?;\n".into());
+    out.push("let mut store=hgl_store::Store::new();\nstore.provision_global_state();\nlet mut built=hgl_describe::instantiate_complete(&graph,&registry,&mut store).map_err(|e|format!(\"{e:?}\"))?;\nhgl_kernel::run_simulation(&mut built.graph,&mut store,&hgl_kernel::RunConfig { start_time:hgl_types::EngineTime::MIN_START,end_time:hgl_types::EngineTime::MAX_END }).map_err(|e|format!(\"{e:?}\"))?;\n".into());
     if let Some((record, _)) = &plan.output {
         let identity = format!("{}#{record}", plan.nodes[*record].name);
         out.push(format!("let record=u32::try_from(graph.nodes.iter().position(|n|n.implementation=={identity:?}).ok_or(\"missing eval record\")?).map_err(|e|e.to_string())?;\nlet ticks=built.graph.node_mut::<Node{record}>(hgl_types::NodeId(record)).ok_or(\"missing eval record\")?.capture.take_ticks().map_err(|e|e.message)?;\ndrop(built);\nlet _observed=hgl_testkit::evaluation::observe(ticks,{})?;\n", plan.input_length));
@@ -572,7 +584,7 @@ fn native_argument(plan: &Plan, v: &Value) -> String {
         }
         Kind::Literal(Literal::Str(s)) => format!("{s:?}"),
         Kind::Cache(i) => format!("self.cache{i}.as_str()"),
-        Kind::Local(i) => format!("local{i}.as_str()"),
+        Kind::Local(i) | Kind::MutableLocal(i) => format!("local{i}.as_str()"),
         Kind::Output => {
             "_ctx.store().output_ref(self._output).expect(\"valid output\").as_str()".into()
         }
