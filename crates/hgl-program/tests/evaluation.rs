@@ -272,6 +272,7 @@ fn actual_stdlib_and_harness_regressions_run_on_rust() -> Result<(), Box<dyn std
     capability_failure_images(&dir)?;
     source_operator_image(&dir)?;
     nullable_images(&dir)?;
+    global_images(&dir)?;
     manifest(&root, &dir)?;
     fs::write(
         dir.join("src/main.rs"),
@@ -281,10 +282,12 @@ mod native { pub use hgl_std_native::*; }
 mod integer_zero; mod float_zero; mod late_output; mod modulo_zero;
 mod bounds; mod past_end; mod repeated_begin; mod append_unbegun; mod duplicate_time; mod wrong_time;
 mod source_operators; mod missing_binding; mod start_failure; mod nullable;
+mod globals; mod globals_missing;
 mod standard; mod regression; mod wrong; mod long; mod short; mod throwing;
 fn main() { match std::env::args().nth(1).as_deref() {
 Some("bounds") => bounds::main(), Some("past_end") => past_end::main(), Some("repeated_begin") => repeated_begin::main(), Some("append_unbegun") => append_unbegun::main(), Some("duplicate_time") => duplicate_time::main(), Some("wrong_time") => wrong_time::main(),
 Some("nullable") => nullable::main(), Some("source_operators") => source_operators::main(), Some("missing_binding") => missing_binding::main(), Some("start_failure") => start_failure::main(),
+Some("globals") => globals::main(), Some("globals_missing") => globals_missing::main(),
 Some("modulo_zero") => modulo_zero::main(), Some("integer_zero") => integer_zero::main(), Some("float_zero") => float_zero::main(), Some("late_output") => late_output::main(),
 Some("throwing") => throwing::main(), Some("standard") => standard::main(), Some("regression") => regression::main(),
 Some("wrong") => wrong::main(), Some("long") => long::main(), Some("short") => short::main(),
@@ -301,6 +304,8 @@ fn check_images(binary: &Path) -> Result<(), Box<dyn std::error::Error>> {
         ("standard", true, "83 tests, 132 evaluations, 0 failures"),
         ("source_operators", true, "0 failures"),
         ("nullable", true, "0 failures"),
+        ("globals", true, "9 tests, 17 evaluations, 0 failures"),
+        ("globals_missing", false, "global_state: missing value"),
         ("bounds", false, "replay_input: index out of range"),
         ("past_end", false, "replay_input: index out of range"),
         ("repeated_begin", false, "capture: already begun"),
@@ -516,6 +521,88 @@ fn capability_failure_images(dir: &Path) -> Result<(), Box<dyn std::error::Error
             .replace("inject capture", "inject capture, clock");
         module(dir, name, &emit_tests(&compile_tests(&sources)?))?;
     }
+    Ok(())
+}
+
+fn global_images(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let mut definitions = String::new();
+    for (index, (ty, initial, changed)) in [
+        ("bool", "false", "true"),
+        ("i64", "0", "-7"),
+        ("f64", "0.0", "1.5"),
+        ("str", "\"\"", "\"changed\""),
+        ("date", "@1970-01-01", "@1970-01-02"),
+        ("time", "@00:00:00", "@00:00:01"),
+        ("datetime", "@1970-01-01T00:00:00Z", "@1970-01-01T00:00:01Z"),
+        ("duration", "0us", "1s"),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        writeln!(
+            definitions,
+            r#"
+fn stored{index}(value:{ty})->{ty} {{
+    inject global_state
+    start {{ set(global_state,"shared",{initial}) }}
+    when {{
+        let previous:{ty}=get(global_state,"shared")
+        set(global_state,"shared",delta_value(value))
+        return previous
+    }}
+    stop {{
+        let final_value:{ty}=get(global_state,"shared")
+        set(global_state,"stopped",final_value)
+    }}
+}}
+test global_scalar{index} {{
+    assert eval(stored{index},[{changed},_,{initial}]) == [{initial},_,{changed}]
+    assert eval(stored{index},[{changed}]) == [{initial}]
+}}
+"#
+        )?;
+    }
+    definitions.push_str(
+        r#"
+fn empty_global(value:i64) {
+    inject global_state
+    start { set(global_state,"empty",42) }
+    when {}
+    stop {
+        let count:i64=get(global_state,"empty")
+        set(global_state,"stopped",count)
+    }
+}
+test global_empty { eval(empty_global,[]) }
+"#,
+    );
+    module(
+        dir,
+        "globals",
+        &emit_tests(&compile_tests(&source(&definitions))?),
+    )?;
+    let missing = source(
+        r#"
+fn seed(value:i64)->i64 {
+    inject global_state
+    start { set(global_state,"previous_run",42) }
+    when { return delta_value(value) }
+}
+fn absent(value:i64)->i64 {
+    inject global_state
+    when { return get(global_state,"previous_run") }
+}
+test fresh_global_store {
+    assert eval(seed,[1]) == [1]
+    eval(absent,[1])
+}
+"#,
+    );
+    module(
+        dir,
+        "globals_missing",
+        &emit_tests(&compile_tests(&missing)?),
+    )?;
     Ok(())
 }
 

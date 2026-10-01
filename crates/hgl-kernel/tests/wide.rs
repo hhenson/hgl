@@ -51,6 +51,8 @@ fn slot(node: Probe) -> NodeSlot {
         valid_inputs: None,
         uses_scheduler: true,
         schedule_on_start: false,
+        uses_global_state: false,
+        global_entries: Vec::new(),
         child_graphs: 0,
     };
     NodeSlot {

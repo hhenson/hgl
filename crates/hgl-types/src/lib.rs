@@ -1,8 +1,8 @@
 //! The vocabulary every other crate shares: engine time, the scalar types,
 //! the time-series types, and the node type.
 //!
-//! Data only. Nothing here allocates on a tick, and nothing here knows what a
-//! graph is.
+//! Shared data only. Successful primitive access needs no allocation; creating
+//! a node-error message can allocate. No graph execution lives here.
 
 /// An instant on the UTC timeline, in microseconds. C++: hgraph's `DateTime`.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -256,11 +256,41 @@ pub struct NodeType {
     pub valid_inputs: Option<Vec<usize>>,
     /// Whether the node asks for a scheduler. One that does not has none.
     pub uses_scheduler: bool,
+    /// Whether this node requests the run's ordinary shared state.
+    pub uses_global_state: bool,
+    /// Const keys and exact scalar types prepared before the root starts.
+    pub global_entries: Vec<(&'static str, ScalarType)>,
     /// Whether the node is scheduled for the start time when it starts.
     pub schedule_on_start: bool,
 }
 
 impl NodeType {
+    /// Validate local input positions, names and capability declarations.
+    pub fn validate_metadata(&self) -> Result<(), String> {
+        if !self.uses_global_state && !self.global_entries.is_empty() {
+            return Err("global_state: entries require capability declaration".into());
+        }
+        let inputs = &self.inputs;
+        for (position, &(input, _)) in inputs.iter().enumerate() {
+            if inputs[..position]
+                .iter()
+                .any(|&(earlier, _)| earlier == input)
+            {
+                return Err(format!("input {input} twice"));
+            }
+        }
+        let listed = [
+            ("active", &self.active_inputs),
+            ("valid", &self.valid_inputs),
+        ];
+        for (list, positions) in listed {
+            let Some(positions) = positions else { continue };
+            if let Some(position) = positions.iter().find(|&&position| position >= inputs.len()) {
+                return Err(format!("{list} input {position}"));
+            }
+        }
+        Ok(())
+    }
     /// From the signature: no inputs and an output is a pull source; inputs
     /// and an output, compute; inputs and no output, a sink; neither, compute
     /// (as hgraph). Owning child templates makes the node nested.
@@ -276,5 +306,51 @@ impl NodeType {
             // Neither follows the oracle: hgraph's `static_node.h`, `node_kind`.
             (true, true) | (false, false) => NodeKind::Compute,
         }
+    }
+}
+
+/// What every hook returns. The error is boxed so that success, the only
+/// outcome on the per-tick path, is one word.
+pub type NodeResult = Result<(), Box<NodeError>>;
+
+/// Which hook was running.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Phase {
+    /// The start hook.
+    Start,
+    /// The evaluation hook.
+    Eval,
+    /// The stop hook.
+    Stop,
+}
+
+/// A failure that left a node: which node, in which hook, and why.
+#[derive(Debug, Clone, PartialEq)]
+pub struct NodeError {
+    /// The failing node's rank.
+    pub node: NodeId,
+    /// The failing node's label.
+    pub label: String,
+    /// The hook that failed.
+    pub phase: Phase,
+    /// Why, in the node's words.
+    pub message: String,
+}
+
+impl NodeError {
+    /// A failure with only its message. A node does not know where it sits:
+    /// the graph fills in `node`, `label` and `phase` as the failure leaves
+    /// the hook.
+    #[expect(
+        clippy::unnecessary_box_returns,
+        reason = "a NodeResult carries its error boxed, so a node writes `Err(NodeError::new(..))`"
+    )]
+    pub fn new(message: impl Into<String>) -> Box<Self> {
+        Box::new(Self {
+            node: NodeId(0),
+            label: String::new(),
+            phase: Phase::Eval,
+            message: message.into(),
+        })
     }
 }

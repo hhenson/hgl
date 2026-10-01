@@ -1,0 +1,17 @@
+[package]
+name = "hgl-global"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "Run-owned ordinary scalar entries with construction-bound typed handles."
+
+[package.metadata.hgl]
+line-budget = 200
+
+[dependencies]
+hgl-types = { path = "../hgl-types" }
+hgl-columns = { path = "../hgl-columns" }
+
+[lints]
+workspace = true

@@ -78,6 +78,10 @@ pub trait Column: Default {
 /// }
 /// ```
 pub trait Scalar: Clone + PartialEq + Debug + Column + 'static {
+    /// Independently copy an ordinary value, translating allocation failure.
+    fn try_clone(&self) -> Result<Self, Box<hgl_types::NodeError>> {
+        Ok(self.clone())
+    }
     /// The run-time name of this type.
     const TYPE: ScalarType;
     /// This value, carrying its type with it.
@@ -185,6 +189,14 @@ impl Column for String {
     }
 }
 impl Scalar for String {
+    fn try_clone(&self) -> Result<Self, Box<hgl_types::NodeError>> {
+        let mut owned = Self::new();
+        owned
+            .try_reserve(self.len())
+            .map_err(|error| hgl_types::NodeError::new(error.to_string()))?;
+        owned.push_str(self);
+        Ok(owned)
+    }
     const TYPE: ScalarType = ScalarType::Text;
     fn into_value(self) -> ScalarValue {
         ScalarValue::Text(self)

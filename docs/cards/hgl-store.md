@@ -10,6 +10,19 @@ nodes beyond an id to wake.
 
 `hgl-types`, `hgl-bindings`, `hgl-columns`.
 
+The ordinary global-value facility also uses `hgl-global`, independently of
+time-series columns. Store re-exports its typed `Global<T>` handle.
+
+`provision_global_state()` enables the run's store; `global_state_provisioned()`
+reports availability. `bind_global<T>(key)` and `prepare_global(key, ScalarType)`
+resolve exact types during owner configuration/graph construction.
+`global_get(Global<T>) -> Result<T, Box<NodeError>>` and
+`global_set(Global<T>, &T) -> NodeResult` use only typed slots and presence on
+the hook path. Bindings do not initialize values. Owned scalar copies are
+independent of later sets; String copying can allocate/fail. These methods
+neither publish nor schedule. Nested graph scopes share the same facility;
+independent runs use distinct Stores. Owner binding/extraction is outside hooks.
+
 ## The layout
 
 Scalar values remain in typed columns, addressed by dense indices. Endpoint

@@ -9,8 +9,8 @@ No third-party dependencies or runtime execution dependencies.
 Public surface:
 
 - `Value { ty, kind }`, `Value::new(Ty, Kind)`; `Kind::{Literal, Wire, Input,
-  Cache, Local, Native, Binary, Unary, Query, Output, Capability, Void}`.
-- `Statement::{Let, Return, Call, Add, Assign, For, If}`.
+  Cache, Local, MutableLocal, Native, Binary, Unary, Query, Output, Capability, Void}`.
+- `Statement::{Let, Var, Return, Call, Assign, For, If}`.
 - `Node { name, inputs, result, alarm, start, capability, caches, handlers }`.
 - `Native { name, method, throws, args, result }`.
 - `Plan { nodes, natives, docs, output, input_length, replay_inputs }`.
@@ -44,3 +44,16 @@ read, its presence test and an extraction justified by frontend flow facts.
 owned Rust options; indexing uses the fallible provider read, keeping bounds
 errors distinct from absent slots. Capability operations use receiver-first
 source spelling; internal runtime method calls do not create source aliases.
+
+`Node { global_state, globals, stop, .. }` records a run-wide shared-store requirement
+and checked stop-hook statements. The `globals` key/type pairs describe prepared entries; `Kind::GlobalGet` and
+`Kind::GlobalSet` address them by node-local index. Emission declares typed
+`Global<T>` handles, construction-only `NodeType::global_entries` metadata, and
+`Ports::global` binding. Hook calls use those handles without key lookup or type
+dispatch. Values remain run-owned. Construction validates provisioning and all
+entry requirements before any start hook.
+
+`MutableLocal` and `Statement::Var` retain writable owned scalar binding identity.
+Assignments target the checked binding; compound addition lowers through the
+ordinary typed binary expression and assignment paths. Read-only locals remain
+`Local`. Every generated eval provisions its fresh Store before construction.

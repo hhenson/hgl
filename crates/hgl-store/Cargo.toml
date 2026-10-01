@@ -13,6 +13,7 @@ line-budget = 500
 hgl-columns = { path = "../hgl-columns" }
 hgl-bindings = { path = "../hgl-bindings" }
 hgl-types = { path = "../hgl-types" }
+hgl-global = { path = "../hgl-global" }
 
 [dev-dependencies]
 hgl-alloc-count = { path = "../hgl-alloc-count" }

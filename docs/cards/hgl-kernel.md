@@ -314,3 +314,9 @@ fixed leaf handles are projected during construction and use ordinary `set`.
 earliest pending request; `schedule_in` continues to replace its request.
 Both use the existing per-node wake queue. No checkpoint/recovery support is
 claimed; start rearms the source on each run.
+
+`Ctx::global_get<T: Scalar>(Global<T>) -> Result<T, Box<NodeError>>` and
+`global_set<T: Scalar>(Global<T>, &T) -> NodeResult` forward prepared ordinary
+value access in start, evaluation and stop. They neither resolve keys/types
+nor publish or schedule. Phase and node-error data now comes from hgl-types;
+the existing hgl-kernel exports remain available.

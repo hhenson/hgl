@@ -103,8 +103,39 @@ is not a no-output operation. Scalar endpoint `delta_value` proofs remain separa
 
 Clock observations use read-only properties of the direct injected clock:
 `clock.evaluation_time` and `clock.next_cycle_evaluation_time` produce owned
-`datetime` values in supported start/evaluation hooks. A local snapshots the
+`datetime` values in supported start/evaluation/stop hooks. A local snapshots the
 read value. Property invocation, free-function clock aliases, property writes,
 unknown properties and non-capability receivers are rejected. `clock.now`
-requires wall-clock support absent from this backend and is diagnosed explicitly;
-this change does not add scheduler, stop-hook or value-helper capability support.
+requires wall-clock support absent from this backend and is diagnosed explicitly.
+Scheduling remains limited to start/evaluation hooks; capability access from
+ordinary value helpers remains outside this profile.
+
+Scalar `global_state` is an ordinary run-wide keyed facility, admitted in
+start/evaluation/stop without temporal shape or source/sink role constraints.
+Get uses an ordinary concrete scalar expected type, never a key spelling or
+an enclosing temporal shape; unconstrained reads are diagnosed. Annotated
+locals resolve selected generic bindings. Set takes ordinary scalar payloads;
+capabilities, endpoint references, signals, aggregates and nullable values do
+not enter this scalar profile. Stop bodies use checked ordinary statements;
+input/output publication and evaluation-only operations remain unavailable.
+No new replay or recording representation follows from this facility.
+
+Global-state keys currently admit string literals and resolved const string
+parameters. General const expressions (including literal concatenation) and
+hook-local keys are not evaluated as keys by this backend; diagnostics identify
+that subset limitation. Temporal keys are unsupported by the source profile. Equal
+keys have one exact scalar type throughout the statically assembled plan; known
+conflicts are checking errors. Per-node typed entry requirements are emitted for
+construction preflight; binding does not initialize an entry. Direct annotated
+initializers, returns, assignments and conditions supply get expected types;
+nested expression and overload-argument inference are outside this subset.
+
+Initialized runtime `var` bindings of the eight primitive scalar types are
+writable owned locals, including in lifecycle hooks and lifted ordinary value
+function bodies. `let`, parameters and `for` bindings remain read-only. Branch
+scopes preserve each binding identity across shadowing. Scalar assignments
+retain their exact type; local `+=` uses existing addition typing (i64, f64,
+str), while cache increments retain their i64 profile. Primitive global get
+initializes an owned local, so local mutation never implicitly writes the entry.
+Uninitialized locals, aggregate borrows and general value-helper runtime calls
+remain outside this backend subset. No value-type qualifier is introduced.

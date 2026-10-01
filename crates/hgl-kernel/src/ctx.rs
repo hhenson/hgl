@@ -1,6 +1,6 @@
 //! What a node can reach while one of its hooks runs.
 
-use hgl_store::{DictOut, In, InputId, Out, OutputId, Reference, Scalar, ScopeId, Store};
+use hgl_store::{DictOut, Global, In, InputId, Out, OutputId, Reference, Scalar, ScopeId, Store};
 use hgl_types::{EngineDelta, EngineTime, NodeId, NodeType};
 
 use crate::schedule::Schedule;
@@ -44,6 +44,14 @@ pub struct Ctx<'a> {
 }
 
 impl Ctx<'_> {
+    /// Read a prepared global scalar in start, evaluation or stop.
+    pub fn global_get<T: Scalar>(&self, handle: Global<T>) -> Result<T, Box<NodeError>> {
+        self.store.global_get(handle)
+    }
+    /// Replace a prepared global scalar without publishing or scheduling.
+    pub fn global_set<T: Scalar>(&mut self, handle: Global<T>, value: &T) -> NodeResult {
+        self.store.global_set(handle, value)
+    }
     /// The input's value. The input must be valid: one the node requires is;
     /// any other is asked first.
     #[inline]

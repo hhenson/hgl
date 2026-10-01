@@ -18,7 +18,9 @@
 
 use std::marker::PhantomData;
 
+pub use hgl_global::Global;
 use hgl_types::{EngineTime, NodeId, ScalarType, ScalarValue};
+use hgl_types::{NodeError, NodeResult};
 
 use hgl_bindings::Bindings;
 pub use hgl_bindings::Kind;
@@ -67,6 +69,7 @@ impl<T: Scalar> In<T> {
 pub struct Store {
     columns: Columns,
     bindings: Bindings,
+    globals: hgl_global::GlobalState,
 }
 
 /// A dictionary with i64 keys and scalar children.
@@ -95,6 +98,30 @@ impl<T: Scalar> DictIn<T> {
 }
 
 impl Store {
+    /// Provision this run's ordinary state, independently of temporal endpoints.
+    pub fn provision_global_state(&mut self) {
+        self.globals.provision();
+    }
+    /// Whether an owner supplied the run's state before construction.
+    pub fn global_state_provisioned(&self) -> bool {
+        self.globals.provisioned()
+    }
+    /// Resolve a key and exact type during owner configuration or construction.
+    pub fn bind_global<T: Scalar>(&mut self, key: &str) -> Result<Global<T>, Box<NodeError>> {
+        self.globals.bind(key)
+    }
+    /// Preflight description metadata before any node starts.
+    pub fn prepare_global(&mut self, key: &str, ty: ScalarType) -> NodeResult {
+        self.globals.prepare(key, ty)
+    }
+    /// Read a prepared scalar entry without name lookup or runtime type tests.
+    pub fn global_get<T: Scalar>(&self, handle: Global<T>) -> Result<T, Box<NodeError>> {
+        self.globals.get(handle)
+    }
+    /// Independently copy a scalar into its prepared ordinary entry.
+    pub fn global_set<T: Scalar>(&mut self, handle: Global<T>, value: &T) -> NodeResult {
+        self.globals.set(handle, value)
+    }
     /// An empty run.
     pub fn new() -> Self {
         Self::default()

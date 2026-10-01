@@ -30,6 +30,23 @@ jobs:
       - name: Materialize pinned shared sources
         run: python tools/shared_artifacts.py
       - uses: Swatinem/rust-cache@v2
+        with:
+          cache-targets: "false"
+      - name: Identify build environment
+        id: build-environment
+        run: python tools/ci_build_cache.py key
+      - uses: actions/cache@v4
+        with:
+          path: |
+            target/debug
+            target/release
+            target/ci-source-mtimes.json
+            experiments/compiler-tools/target/debug
+          key: workspace-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.build-environment.outputs.key }}-${{ github.sha }}
+          restore-keys: |
+            workspace-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.build-environment.outputs.key }}-
+      - name: Restore timestamps of unchanged build inputs
+        run: python tools/ci_build_cache.py restore
       - run: python tools/fixed_fixtures.py --check
       - run: python tools/description_fixtures.py --check
       - run: python docs/runtime_spec/validation/descriptions/check.py

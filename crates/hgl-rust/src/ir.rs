@@ -17,6 +17,10 @@ impl Value {
 /// Checked expressions and frontend-only binding markers.
 #[derive(Debug, Clone)]
 pub enum Kind {
+    /// Read the indexed prepared run-owned scalar entry.
+    GlobalGet(usize),
+    /// Replace the indexed prepared entry with an owned scalar value.
+    GlobalSet(usize, Box<Value>),
     /// Owned nullable replay payload at the checked i64 index.
     ReplaySlot(Box<Value>),
     /// Nullable presence test.
@@ -33,6 +37,8 @@ pub enum Kind {
     Cache(usize),
     /// Local binding index.
     Local(usize),
+    /// Writable owned scalar local binding index.
+    MutableLocal(usize),
     /// Selected native signature index and checked arguments.
     Native(usize, Vec<Value>),
     /// Checked binary operator and operands.
@@ -55,12 +61,12 @@ pub enum Statement {
     Exit,
     /// Local binding index and initializer.
     Let(usize, Value),
+    /// Writable local binding index and owned initializer.
+    Var(usize, Value),
     /// Publish a checked return value.
     Return(Value),
     /// Evaluate an operation for its effect.
     Call(Value),
-    /// Add a checked value to the indexed cache.
-    Add(usize, Value),
     /// Assign a checked value to its target.
     Assign(Value, Value),
     /// Iterate checked elements using a local binding index.
@@ -81,6 +87,12 @@ pub struct Node {
     pub alarm: bool,
     /// Checked start-hook statements.
     pub start: Vec<Statement>,
+    /// Whether graph construction requires a provisioned run-wide scalar store.
+    pub global_state: bool,
+    /// Const key and exact scalar type for each prepared node access.
+    pub globals: Vec<(String, Ty)>,
+    /// Checked stop-hook statements.
+    pub stop: Vec<Statement>,
     /// Optional admitted buffer capability name and scalar payload type.
     pub capability: Option<(String, Ty)>,
     /// Cache initializers, indexed by cache expressions.

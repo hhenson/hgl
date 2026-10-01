@@ -67,7 +67,12 @@ fn value(plan: &Plan, v: &Value) -> String {
                 format!("self.cache{i}")
             }
         }
-        Kind::Local(i) => format!("local{i}.clone()"),
+        Kind::GlobalGet(i) => format!("_ctx.global_get(self.global{i})?"),
+        Kind::GlobalSet(i, v) => format!(
+            "{{ let value = {}; _ctx.global_set(self.global{i}, &value)?; }}",
+            value(plan, v)
+        ),
+        Kind::Local(i) | Kind::MutableLocal(i) => format!("local{i}.clone()"),
         Kind::Native(i, args) => format!(
             "<crate::Provider as Native>::{}({}){}",
             plan.natives[*i].method,
@@ -77,29 +82,7 @@ fn value(plan: &Plan, v: &Value) -> String {
                 .join(", "),
             if plan.natives[*i].throws { "?" } else { "" }
         ),
-        Kind::Binary(op, a, b) => {
-            let a = if a.ty == Ty::Str {
-                native_argument(plan, a)
-            } else {
-                value(plan, a)
-            };
-            let b = if b.ty == Ty::Str {
-                native_argument(plan, b)
-            } else {
-                value(plan, b)
-            };
-            if v.ty == Ty::I64 && matches!(op.as_str(), "+" | "-" | "*" | "%") {
-                integer_binary(op, &a, &b)
-            } else if op == "/" {
-                format!(
-                    "{{ let lhs = ({a}) as f64; let rhs = ({b}) as f64; if rhs == 0.0 {{ return Err(hgl_kernel::NodeError::new(\"division by zero\")); }} lhs / rhs }}"
-                )
-            } else if op == "+" && v.ty == Ty::Str {
-                format!("format!(\"{{}}{{}}\", {a}, {b})")
-            } else {
-                format!("({a} {op} {b})")
-            }
-        }
+        Kind::Binary(op, a, b) => binary(plan, &v.ty, op, a, b),
         Kind::Unary(op, v) if op == "-" && v.ty == Ty::I64 => {
             format!("(({}).wrapping_neg())", value(plan, v))
         }
@@ -122,6 +105,29 @@ fn value(plan: &Plan, v: &Value) -> String {
         }
         Kind::Output => "_ctx.output_value(self._output).expect(\"valid output\")".into(),
         Kind::Wire(_) | Kind::Void | Kind::Capability => unreachable!("checked runtime value"),
+    }
+}
+fn binary(plan: &Plan, result: &Ty, op: &str, a: &Value, b: &Value) -> String {
+    let a = if a.ty == Ty::Str {
+        native_argument(plan, a)
+    } else {
+        value(plan, a)
+    };
+    let b = if b.ty == Ty::Str {
+        native_argument(plan, b)
+    } else {
+        value(plan, b)
+    };
+    if *result == Ty::I64 && matches!(op, "+" | "-" | "*" | "%") {
+        integer_binary(op, &a, &b)
+    } else if op == "/" {
+        format!(
+            "{{ let lhs = ({a}) as f64; let rhs = ({b}) as f64; if rhs == 0.0 {{ return Err(hgl_kernel::NodeError::new(\"division by zero\")); }} lhs / rhs }}"
+        )
+    } else if op == "+" && *result == Ty::Str {
+        format!("format!(\"{{}}{{}}\", {a}, {b})")
+    } else {
+        format!("({a} {op} {b})")
     }
 }
 fn presence(plan: &Plan, value: &Value) -> String {
@@ -149,6 +155,7 @@ fn statements(plan: &Plan, body: &[Statement], out: &mut Vec<String>) {
         out.push(match statement {
             Statement::Exit => "return Ok(());\n".into(),
             Statement::Let(i, v) => format!("let local{i} = {};\n", condition_code(plan, v)),
+            Statement::Var(i, v) => format!("let mut local{i} = {};\n", condition_code(plan, v)),
             Statement::Return(v) => if matches!(v.ty,Ty::Ref(_)) {format!("_ctx.set_reference(self._output,{})?;\nreturn Ok(());\n",condition_code(plan,v))} else {format!("_ctx.set(self._output, {});\nreturn Ok(());\n",condition_code(plan,v))},
             Statement::Call(v) => format!("{};\n", condition_code(plan, v)),
             Statement::For(id,collection,body)=> {
@@ -157,8 +164,7 @@ fn statements(plan: &Plan, body: &[Statement], out: &mut Vec<String>) {
                 let mut code=vec![format!("let mut index{id}=0;\nwhile let Some(key{id})=_ctx.store().bindings().changed_keys(self.input{input}).get(index{id}).copied() {{\nindex{id}+=1;\nif _ctx.store().bindings().input(self.input{input}).members.initial.get(&key{id})==Some(&false) && _ctx.store().bindings().child_input(self.input{input},key{id}).is_some() {{\nlet local{id}={};\n",if **element==Ty::Bool {format!("key{id}!=0")} else {format!("key{id}")})];
                 statements(plan,body,&mut code);code.push("}\n}\n".into());code.concat()
             }
-            Statement::Assign(target,v)=> if matches!(target.kind,Kind::Output) { format!("_ctx.set(self._output, {});\n",condition_code(plan,v)) } else {let Kind::Cache(i)=target.kind else {unreachable!("checked assignment")}; format!("self.cache{i} = {};\n",condition_code(plan,v))},
-            Statement::Add(i, v) => format!("self.cache{i} = self.cache{i}.wrapping_add({});\n", condition_code(plan, v)),
+            Statement::Assign(target,v) => assignment(plan, target, v),
             Statement::If(condition, yes, no) => {
                 let mut code = vec![format!("if {} {{\n", condition_code(plan, condition))];
                 statements(plan, yes, &mut code);
@@ -170,8 +176,26 @@ fn statements(plan: &Plan, body: &[Statement], out: &mut Vec<String>) {
         });
     }
 }
+fn assignment(plan: &Plan, target: &Value, v: &Value) -> String {
+    let v = condition_code(plan, v);
+    if matches!(target.kind, Kind::Output) {
+        format!("_ctx.set(self._output, {v});\n")
+    } else if let Kind::Cache(i) = target.kind {
+        format!("self.cache{i} = {v};\n")
+    } else if let Kind::MutableLocal(i) = target.kind {
+        format!("local{i} = {v};\n")
+    } else {
+        unreachable!("checked assignment")
+    }
+}
 fn node(plan: &Plan, n: &Node, index: usize, out: &mut Vec<String>) {
     out.push(format!("#[derive(Debug)]\nstruct Node{index} {{\n"));
+    for (i, (_, ty)) in n.globals.iter().enumerate() {
+        out.push(format!(
+            "global{i}: hgl_store::Global<{}>,\n",
+            rust_type(ty)
+        ));
+    }
     if let Some((name, ty)) = &n.capability {
         out.push(format!(
             "{name}: hgl_std_native::eval_buffers::{}<{}>,\n",
@@ -224,7 +248,9 @@ fn node_eval(plan: &Plan, n: &Node, out: &mut Vec<String>) {
         statements(plan, body, out);
         out.push("}\n".into());
     }
-    out.push("}\nOk(())\n}\n}\n".to_owned());
+    out.push("}\nOk(())\n}\nfn stop(&mut self, _ctx: &mut hgl_kernel::Ctx<'_>) -> hgl_kernel::NodeResult {\n".into());
+    statements(plan, &n.stop, out);
+    out.push("Ok(())\n}\n}\n".into());
 }
 fn node_build(plan: &Plan, n: &Node, index: usize, out: &mut Vec<String>) {
     out.push(format!("impl hgl_describe::Buildable for Node{index} {{\nfn node_type() -> hgl_types::NodeType {{\nhgl_types::NodeType {{ name: {:?}, inputs: vec![",format!("{}#{index}",n.name)));
@@ -232,6 +258,16 @@ fn node_build(plan: &Plan, n: &Node, index: usize, out: &mut Vec<String>) {
         out.push(format!("({name:?},{}),", shape(ty)));
     }
     out.push("],\n".to_owned());
+    if n.global_state {
+        out.push("uses_global_state: true,\nglobal_entries: vec![".into());
+        for (key, ty) in &n.globals {
+            out.push(format!(
+                "({key:?}, hgl_types::ScalarType::{}),",
+                scalar_type(ty)
+            ));
+        }
+        out.push("],\n".into());
+    }
     if n.result != Ty::Void {
         out.push(format!("output: Some({}),\n", shape(&n.result)));
     }
@@ -242,6 +278,12 @@ fn node_build(plan: &Plan, n: &Node, index: usize, out: &mut Vec<String>) {
         out.push("valid_inputs: Some(vec![]),\n".into());
     }
     out.push(format!("uses_scheduler: {}, ..hgl_types::NodeType::default() }}\n}}\nfn build(ports: &mut hgl_describe::Ports<'_>) -> Result<Self,hgl_describe::BuildError> {{\nOk(Self {{\n",n.alarm));
+    for (i, (key, ty)) in n.globals.iter().enumerate() {
+        out.push(format!(
+            "global{i}: ports.global::<{}>({key:?})?,\n",
+            rust_type(ty)
+        ));
+    }
     if let Some((name, _)) = &n.capability {
         let configured = if name == "replay_input" {
             plan.replay_inputs.iter().find(|(id, _)| *id == index).map(|(_, slots)| format!("hgl_std_native::eval_buffers::ReplayInput::new(vec![{}], hgl_types::EngineTime::MIN_START).map_err(|e| hgl_describe::BuildError::InvalidNodeType {{ node: {:?}.into(), what: e.message }})?", sequence(slots), n.name))
@@ -386,7 +428,7 @@ pub fn emit_test_body(plan: &Plan, expected: Option<&[Option<Literal>]>) -> Stri
         out.push("}\n".into());
     }
     out.push("pub fn test()->Result<(),String> {\nlet mut registry=hgl_describe::Registry::new();\nregister(&mut registry).map_err(|e|format!(\"{e:?}\"))?;\nlet graph=main(&registry).map_err(|e|format!(\"{e:?}\"))?;\n".into());
-    out.push("let mut store=hgl_store::Store::new();\nlet mut built=hgl_describe::instantiate_complete(&graph,&registry,&mut store).map_err(|e|format!(\"{e:?}\"))?;\nhgl_kernel::run_simulation(&mut built.graph,&mut store,&hgl_kernel::RunConfig { start_time:hgl_types::EngineTime::MIN_START,end_time:hgl_types::EngineTime::MAX_END }).map_err(|e|format!(\"{e:?}\"))?;\n".into());
+    out.push("let mut store=hgl_store::Store::new();\nstore.provision_global_state();\nlet mut built=hgl_describe::instantiate_complete(&graph,&registry,&mut store).map_err(|e|format!(\"{e:?}\"))?;\nhgl_kernel::run_simulation(&mut built.graph,&mut store,&hgl_kernel::RunConfig { start_time:hgl_types::EngineTime::MIN_START,end_time:hgl_types::EngineTime::MAX_END }).map_err(|e|format!(\"{e:?}\"))?;\n".into());
     if let Some((record, _)) = &plan.output {
         let identity = format!("{}#{record}", plan.nodes[*record].name);
         out.push(format!("let record=u32::try_from(graph.nodes.iter().position(|n|n.implementation=={identity:?}).ok_or(\"missing eval record\")?).map_err(|e|e.to_string())?;\nlet ticks=built.graph.node_mut::<Node{record}>(hgl_types::NodeId(record)).ok_or(\"missing eval record\")?.capture.take_ticks().map_err(|e|e.message)?;\ndrop(built);\nlet _observed=hgl_testkit::evaluation::observe(ticks,{})?;\n", plan.input_length));
@@ -542,11 +584,13 @@ fn native_argument(plan: &Plan, v: &Value) -> String {
         }
         Kind::Literal(Literal::Str(s)) => format!("{s:?}"),
         Kind::Cache(i) => format!("self.cache{i}.as_str()"),
-        Kind::Local(i) => format!("local{i}.as_str()"),
+        Kind::Local(i) | Kind::MutableLocal(i) => format!("local{i}.as_str()"),
         Kind::Output => {
             "_ctx.store().output_ref(self._output).expect(\"valid output\").as_str()".into()
         }
-        Kind::ReplaySlot(_)
+        Kind::GlobalGet(_)
+        | Kind::GlobalSet(..)
+        | Kind::ReplaySlot(_)
         | Kind::IsPresent(_)
         | Kind::Present(_)
         | Kind::Literal(_)
