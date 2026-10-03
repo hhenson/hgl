@@ -18,14 +18,14 @@
 
 use std::marker::PhantomData;
 
-pub use hgl_global::Global;
+pub use hgl_global::{Global, GlobalValue, ValueSlot};
 use hgl_types::{EngineTime, NodeId, ScalarType, ScalarValue};
 use hgl_types::{NodeError, NodeResult};
 
 use hgl_bindings::Bindings;
 pub use hgl_bindings::Kind;
 pub use hgl_bindings::{BindError, InputId, OutputId, Reference, ScopeId, Wake};
-use hgl_columns::Columns;
+pub use hgl_columns::Columns;
 pub use hgl_columns::Scalar;
 mod fixed;
 
@@ -107,20 +107,49 @@ impl Store {
         self.globals.provisioned()
     }
     /// Resolve a key and exact type during owner configuration or construction.
-    pub fn bind_global<T: Scalar>(&mut self, key: &str) -> Result<Global<T>, Box<NodeError>> {
+    pub fn bind_global<T: GlobalValue>(&mut self, key: &str) -> Result<Global<T>, Box<NodeError>> {
         self.globals.bind(key)
     }
     /// Preflight description metadata before any node starts.
-    pub fn prepare_global(&mut self, key: &str, ty: ScalarType) -> NodeResult {
+    pub fn prepare_global(&mut self, key: &str, ty: hgl_types::OrdinaryType) -> NodeResult {
         self.globals.prepare(key, ty)
     }
-    /// Read a prepared scalar entry without name lookup or runtime type tests.
-    pub fn global_get<T: Scalar>(&self, handle: Global<T>) -> Result<T, Box<NodeError>> {
+    /// Retain a prepared entry without name lookup or runtime type tests.
+    pub fn global_get<T: GlobalValue>(
+        &self,
+        handle: Global<T>,
+    ) -> Result<T::Value, Box<NodeError>> {
         self.globals.get(handle)
     }
-    /// Independently copy a scalar into its prepared ordinary entry.
-    pub fn global_set<T: Scalar>(&mut self, handle: Global<T>, value: &T) -> NodeResult {
+    /// Independently retain a value in its prepared ordinary entry.
+    pub fn global_set<T: GlobalValue>(
+        &mut self,
+        handle: Global<T>,
+        value: &T::Value,
+    ) -> NodeResult {
         self.globals.set(handle, value)
+    }
+    /// Borrow a present root without copying its payload.
+    pub fn global_borrow<T: GlobalValue>(
+        &self,
+        handle: Global<T>,
+    ) -> Result<ValueSlot<T>, Box<NodeError>> {
+        self.globals.borrow(handle)
+    }
+    /// Read a prepared projection as an independently owned value.
+    pub fn global_read<T: GlobalValue>(
+        &self,
+        slot: ValueSlot<T>,
+    ) -> Result<T::Value, Box<NodeError>> {
+        self.globals.read(slot)
+    }
+    /// Retain a replacement fully before modifying a borrowed root or projection.
+    pub fn global_write<T: GlobalValue>(
+        &mut self,
+        slot: ValueSlot<T>,
+        value: &T::Value,
+    ) -> NodeResult {
+        self.globals.write(slot, value)
     }
     /// An empty run.
     pub fn new() -> Self {

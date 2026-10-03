@@ -61,3 +61,8 @@ returns an opaque typed handle only for a declared matching requirement.
 Undeclared native constructor requests fail; hooks perform no string lookup.
 Local input-name and active/valid-position validation delegates to NodeType;
 shape validation and BuildError translation remain here.
+
+`Ports::global<T: GlobalValue>` also binds generated nominal markers, checking
+`T::schema()` against the exact declared ordinary requirement. Recursive preflight
+reconciles complete nominal identities/required field types against host seeds,
+including unexecuted child templates, before any constructor or start hook runs.

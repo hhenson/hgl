@@ -183,9 +183,9 @@ fn preflight_globals(
         if ty.uses_global_state && !store.global_state_provisioned() {
             return Err(invalid("global_state: unprovisioned run store".into()));
         }
-        for &(key, scalar) in &ty.global_entries {
+        for (key, value_type) in &ty.global_entries {
             store
-                .prepare_global(key, scalar)
+                .prepare_global(key, value_type.clone())
                 .map_err(|error| invalid(error.message))?;
         }
         for child in &node.children {

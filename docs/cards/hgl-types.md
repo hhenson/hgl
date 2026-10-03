@@ -154,3 +154,12 @@ EngineTime/EngineDelta also derive Default (zero). `TsType::member() ->
 Option<&TsType>` returns dictionary child shape or a boolean set occupancy
 marker. Set keys currently use the runtime's i64 membership table; compiler
 lowering admits bool/i64 elements only.
+
+`OrdinaryType::{Scalar(ScalarType), Struct(&'static str,
+Vec<(&'static str, OrdinaryType)>)}` describes a finite ordinary value with
+canonical nominal identity and required named fields. `From<ScalarType>` wraps
+primitive requirements. `NodeType::global_entries` uses this exact ordinary type;
+access permissions are not part of type identity.
+
+`NodeResult<T = ()>` also names typed capability results with the same translated
+node error; existing hook results retain their unit default.

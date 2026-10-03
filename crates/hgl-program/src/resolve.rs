@@ -1,6 +1,7 @@
 use crate::index::{Decl, Library, Role, Signature};
 use crate::syntax::{Cursor, Expr, Literal, Stmt, Ty};
 use hgl_rust::{Kind, Native, Node, Plan, Statement, Value};
+use hgl_value_check::{field, ordinary, writable};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Default)]
@@ -460,6 +461,7 @@ impl Checker {
             return Err("expected when handler".into());
         }
         node.globals = std::mem::take(&mut self.globals);
+        hgl_value_check::validate(&node)?;
         self.facts.clear();
         self.runtime_node = false;
         c.need("}")?;
@@ -749,7 +751,7 @@ impl Checker {
     }
     fn global_operation(&mut self, operation: &str, args: &Arguments) -> Result<Value, String> {
         if operation == "get" {
-            return Err("global_state: get requires a concrete scalar expected type".into());
+            return Err("global_state: get requires a concrete scalar expected type or a typed ordinary struct binding".into());
         }
         if operation != "set" {
             return Err(format!(
@@ -759,11 +761,8 @@ impl Checker {
         let ordered = order_arguments(&["key", "value"], args)?;
         let key = ordered.get(&0).ok_or("global_state: missing key")?;
         let value = ordered.get(&1).ok_or("global_state: missing value")?;
-        if matches!(value.ty, Ty::Struct(..)) {
-            return Err("global_state: ordinary aggregate storage and borrowing are not supported by this backend".into());
-        }
-        if key.ty != Ty::Str || !scalar(&value.ty) || matches!(value.kind, Kind::Input(_, true)) {
-            return Err("global_state: set requires a str key and an ordinary scalar value".into());
+        if key.ty != Ty::Str || !ordinary(&value.ty) || matches!(value.kind, Kind::Input(_, true)) {
+            return Err("global_state: set requires a str key and an ordinary scalar value or required-field struct".into());
         }
         let index = self.global_entry(key, &value.ty)?;
         Ok(Value::new(
@@ -805,12 +804,9 @@ impl Checker {
                 return Err("global_state: requires a runtime hook".into());
             }
             capability_payload("global_state", env)?;
-            if expected.is_some_and(|ty| matches!(ty, Ty::Struct(..))) {
-                return Err("global_state: ordinary aggregate storage and borrowing are not supported by this backend".into());
-            }
             let ty = expected
-                .filter(|ty| scalar(ty))
-                .ok_or("global_state: get requires a concrete scalar expected type")?;
+                .filter(|ty| ordinary(ty))
+                .ok_or("global_state: get requires a concrete scalar expected type or a typed ordinary struct binding")?;
             let values = args[1..]
                 .iter()
                 .map(|(name, expr)| {
@@ -835,20 +831,22 @@ impl Checker {
             Stmt::Let(name, annotation, expr) | Stmt::Var(name, annotation, expr) => {
                 let value =
                     self.local_initializer(module, annotation.as_deref(), expr, env, true)?;
-                if matches!(statement, Stmt::Var(..)) {
+                let mutable = matches!(statement, Stmt::Var(..));
+                if mutable {
                     require_payload(&value)?;
                 }
-                let id = local(env, name, value.ty.clone(), next_local);
-                if matches!(statement, Stmt::Var(..)) {
-                    if !ordinary(&value.ty) {
-                        return Err(
-                            "mutable locals currently require an ordinary scalar or struct".into(),
-                        );
-                    }
-                    env.insert(
-                        name.clone(),
-                        Value::new(value.ty.clone(), Kind::MutableLocal(id)),
+                if mutable && !ordinary(&value.ty) {
+                    return Err(
+                        "mutable locals currently require an ordinary scalar or struct".into(),
                     );
+                }
+                let id = local(env, name, value.ty.clone(), next_local);
+                let binding = hgl_value_check::binding(id, &value, mutable, annotation.is_some())?;
+                let borrowed = matches!(binding.kind, Kind::BorrowedLocal(..));
+                env.insert(name.clone(), binding);
+                if borrowed {
+                    Statement::Borrow(id, value, mutable)
+                } else if mutable {
                     Statement::Var(id, value)
                 } else {
                     Statement::Let(id, value)
@@ -1109,6 +1107,9 @@ impl Checker {
                 Ok((n.clone(), value))
             })
             .collect::<Result<Vec<_>, String>>()?;
+        for (_, value) in &args {
+            hgl_value_check::helper_argument(value)?;
+        }
         self.value_call(module, name, args, runtime)
     }
     fn delta_value(
@@ -1754,26 +1755,6 @@ fn assignment_target(module: &str, target: &Expr, env: &Env) -> Result<Value, St
         )),
     }
 }
-fn ordinary(ty: &Ty) -> bool {
-    scalar(ty) || matches!(ty, Ty::Struct(..))
-}
-fn writable(value: &Value) -> bool {
-    if let Kind::Field(parent, _) = &value.kind {
-        return writable(parent);
-    }
-    matches!(value.kind, Kind::MutableLocal(_))
-}
-fn field(parent: Value, name: &str) -> Result<Value, String> {
-    let Ty::Struct(_, fields) = &parent.ty else {
-        return Err("field access requires an ordinary struct or direct injected clock".into());
-    };
-    let (index, (_, ty)) = fields
-        .iter()
-        .enumerate()
-        .find(|(_, (field, _))| field == name)
-        .ok_or_else(|| format!("unknown struct field {name}"))?;
-    Ok(Value::new(ty.clone(), Kind::Field(Box::new(parent), index)))
-}
 fn clock_property(receiver: &Expr, name: &str, env: &Env, runtime: bool) -> Result<Value, String> {
     if !matches!(receiver, Expr::Name(receiver) if receiver == "clock") || !runtime {
         return Err("clock property requires the direct injected clock in a runtime hook".into());
@@ -1917,6 +1898,7 @@ fn terminates(body: &[Statement]) -> bool {
         Statement::Let(..)
         | Statement::Call(_)
         | Statement::Var(..)
+        | Statement::Borrow(..)
         | Statement::Assign(..)
         | Statement::For(..) => false,
     })

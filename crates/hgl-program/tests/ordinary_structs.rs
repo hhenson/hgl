@@ -44,21 +44,21 @@ fn value_mutability_rejects_readonly_and_incompatible_struct_writes() {
             "let box=Box(amount:1)\nlet x=box.missing",
             "unknown struct field",
         ),
-        (
-            "set(global_state,\"box\",Box(amount:1))",
-            "aggregate storage and borrowing",
-        ),
-        (
-            "var box:Box=get(global_state,\"box\")",
-            "aggregate storage and borrowing",
-        ),
-        (
-            "let box:Box=get(global_state,\"box\")",
-            "aggregate storage and borrowing",
-        ),
     ] {
         let actual = checked(TYPES, body).unwrap_err();
         assert!(actual.contains(error), "{body}: {actual}");
+    }
+}
+
+#[test]
+fn required_structs_admit_global_storage_and_typed_borrow_bindings() {
+    for body in [
+        "set(global_state,\"box\",Box(amount:1))",
+        "var box:Box=get(global_state,\"box\")",
+        "let box:Box=get(global_state,\"box\")",
+    ] {
+        let result = checked(TYPES, body);
+        assert!(result.is_ok(), "{body}: {result:?}");
     }
 }
 
