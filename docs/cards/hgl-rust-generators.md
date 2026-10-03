@@ -31,3 +31,7 @@ outputs, nested loops/conditionals, hoisted shadowed locals, past/due/future
 ordering, failures and duplicate timestamps, operand once-only effects, pending
 payload independence, source completion and restart reset. Root integration
 checks use only pinned spec cases and HGL implementation.
+
+Structural generator pending owners use delta_of(result), preserving exact
+sparse data across suspension. Publishing a pending value applies its prepared
+shape without reevaluating either operand or reconstructing held snapshots.

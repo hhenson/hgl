@@ -23,6 +23,8 @@ fn value(plan: &Plan, v: &Value) -> String {
         Kind::WiringFailure(message) => {
             format!("return Err(hgl_types::NodeError::new({message:?}))")
         }
+        Kind::Delta(_) => hgl_rust_deltas::construct(v, |v| value(plan, v), literal),
+        Kind::ObservedLocal(id) => hgl_rust_deltas::observe(&v.ty, &format!("local{id}")),
         Kind::List(values) => list_value(plan, &v.ty, values),
         Kind::Length(parent) => length(plan, parent),
         Kind::Push(parent, item) => push(plan, parent, item),
@@ -144,7 +146,7 @@ fn retained(source: &str, ty: &Ty) -> String {
     if matches!(ty, Ty::Nullable(_)) {
         return format!("({source}).as_ref().map(hgl_store::Scalar::try_clone).transpose()?");
     }
-    if let Ty::List(..) = ty {
+    if matches!(ty, Ty::List(..) | Ty::Delta(_)) {
         return format!(
             "<{} as hgl_store::GlobalValue>::retain(&({source}))?",
             global_type(ty)
@@ -237,7 +239,10 @@ pub fn statements(plan: &Plan, body: &[Statement], out: &mut Vec<String>) {
             }
             Statement::Yield(v) => format!("return Ok({});\n", value(plan, v)),
             Statement::Exit => "return Ok(());\n".into(),
-            Statement::Let(i, v) => format!("let local{i} = {};\n", condition_code(plan, v)),
+            Statement::Let(i,v) => {
+                let init = observation(v).unwrap_or_else(||condition_code(plan,v));
+                format!("let local{i} = {init};\n")
+            },
             Statement::Borrow(i, v, _) => {
                 let source = if let Kind::GlobalGet(entry) = v.kind {
                     format!("_ctx.global_state().borrow(self.global{entry})?")
@@ -246,14 +251,15 @@ pub fn statements(plan: &Plan, body: &[Statement], out: &mut Vec<String>) {
             },
             Statement::Var(i, v) => format!("let mut local{i} = {};\n", condition_code(plan, v)),
             Statement::Return(v) => {
-                let publish = if matches!(v.ty, Ty::Ref(_)) { "_ctx.set_reference(self._output, publication)?;" } else { "_ctx.set(self._output, publication);" };
+                let publish = if matches!(v.ty, Ty::Ref(_)) { "_ctx.set_reference(self._output, publication)?;" } else { "" };
+                let publish = if publish.is_empty() { hgl_rust_deltas::publish(&v.ty,"publication") } else { publish.into() };
                 format!("let publication = {};\n{publish}\nreturn Ok(());\n", condition_code(plan, v))
             },
             Statement::Call(v) => format!("{};\n", condition_code(plan, v)),
             Statement::For(id,collection,body)=> {
                 let Kind::Input(input, _)=collection.kind else {unreachable!("checked collection")};
                 let Ty::Set(element)=&collection.ty else {unreachable!("checked collection")};
-                let mut code=vec![format!("let mut index{id}=0;\nwhile let Some(key{id})=_ctx.store().bindings().changed_keys(self.input{input}).get(index{id}).copied() {{\nindex{id}+=1;\nif _ctx.store().bindings().input(self.input{input}).members.initial.get(&key{id})==Some(&false) && _ctx.store().bindings().child_input(self.input{input},key{id}).is_some() {{\nlet local{id}={};\n",if **element==Ty::Bool {format!("key{id}!=0")} else {format!("key{id}")})];
+                let mut code=vec![format!("let mut index{id}=0;\nwhile let Some(key{id})=_ctx.store().bindings().changed_keys(self.input{input}.id()).get(index{id}).copied() {{\nindex{id}+=1;\nif _ctx.store().bindings().input(self.input{input}.id()).members.initial.get(&key{id})==Some(&false) && _ctx.store().bindings().child_input(self.input{input}.id(),key{id}).is_some() {{\nlet local{id}={};\n",if **element==Ty::Bool {format!("key{id}!=0")} else {format!("key{id}")})];
                 statements(plan,body,&mut code);code.push("}\n}\n".into());code.concat()
             }
             Statement::Assign(target,v) => assignment(plan, target, v),
@@ -269,6 +275,7 @@ pub fn statements(plan: &Plan, body: &[Statement], out: &mut Vec<String>) {
     }
 }
 fn assignment(plan: &Plan, target: &Value, v: &Value) -> String {
+    let publish = hgl_rust_deltas::publish(&v.ty, "publication");
     let v = condition_code(plan, v);
     if let Some(slot) = borrowed_place(plan, target) {
         return format!(
@@ -276,7 +283,7 @@ fn assignment(plan: &Plan, target: &Value, v: &Value) -> String {
         );
     }
     if matches!(target.kind, Kind::Output) {
-        format!("{{ let publication = {v}; _ctx.set(self._output, publication); }}\n")
+        format!("{{ let publication = {v}; {publish} }}\n")
     } else if let Kind::Cache(i) = target.kind {
         format!("self.cache{i} = {v};\n")
     } else if matches!(
@@ -327,7 +334,27 @@ pub fn query(op: &str, args: &[Value]) -> String {
             let Kind::Input(i, _) = v.kind else {
                 unreachable!("checked endpoint query")
             };
-            if matches!(v.ty, Ty::Ref(_) | Ty::Set(_)) {
+            if hgl_rust_deltas::structural(&v.ty) {
+                let input = format!("self.input{i}");
+                return match op {
+                    "delta_value" => hgl_rust_deltas::observe(
+                        &v.ty
+                            .clone()
+                            .delta()
+                            .unwrap_or_else(|_| unreachable!("checked delta")),
+                        &input,
+                    ),
+                    "valid" => format!("_ctx.store().input_valid({input}.id())"),
+                    "modified" => format!(
+                        "_ctx.store().bindings().modified({input}.id(),_ctx.evaluation_time())"
+                    ),
+                    "last_modified" => {
+                        format!("_ctx.store().bindings().last_modified({input}.id())")
+                    }
+                    _ => unreachable!("checked structural query"),
+                };
+            }
+            if matches!(v.ty, Ty::Ref(_)) {
                 return match op {
                     "valid" => format!("_ctx.store().input_valid(self.input{i})"),
                     "modified" => format!(
@@ -361,10 +388,10 @@ pub fn query(op: &str, args: &[Value]) -> String {
 
 fn set_query(plan: &Plan, op: &str, args: &[Value]) -> String {
     let endpoint = if let Kind::Input(i, _) = args[0].kind {
-        format!("self.input{i}")
+        format!("self.input{i}.id()")
     } else {
         assert!(matches!(args[0].kind, Kind::Output), "checked set endpoint");
-        "self._output".to_owned()
+        "self._output.id()".to_owned()
     };
     if op == "set_bound" {
         return format!("_ctx.store().bindings().has_peer({endpoint})");
@@ -386,7 +413,7 @@ fn set_query(plan: &Plan, op: &str, args: &[Value]) -> String {
         }
         "set_discard" => format!("_ctx.remove_shaped({endpoint},{key})"),
         "set_upsert" => format!(
-            "{{let key={key}; if _ctx.store().bindings().child_output({endpoint},key).is_none() {{let child=_ctx.get_or_create_shaped({endpoint},key);let child=_ctx.store().scalar_output::<bool>(child).map_err(|e|hgl_kernel::NodeError::new(format!(\"{{e:?}}\")))?;_ctx.set(child,true);}}}}"
+            "{{let key={key}; if _ctx.store().bindings().child_output({endpoint},key).is_none() {{_ctx.get_or_create_with({endpoint},key,|store,owner|store.add_output::<bool>(owner).id());let child=self._output.member(_ctx.store().bindings(),key).ok_or_else(||hgl_kernel::NodeError::new(\"missing created set member\"))?;_ctx.set(hgl_store::Store::prepared_output(child),true);}}}}"
         ),
         _ => unreachable!("checked set operation"),
     }
@@ -412,7 +439,9 @@ fn native_argument(plan: &Plan, v: &Value) -> String {
         Kind::Output => {
             "_ctx.store().output_ref(self._output).expect(\"valid output\").as_str()".into()
         }
-        Kind::WiringFailure(_)
+        Kind::Delta(_)
+        | Kind::ObservedLocal(_)
+        | Kind::WiringFailure(_)
         | Kind::List(_)
         | Kind::Length(_)
         | Kind::Push(..)
@@ -558,4 +587,22 @@ fn length(plan: &Plan, parent: &Value) -> String {
     } else {
         format!("hgl_store::list_len(&({}))?", place(plan, parent))
     }
+}
+
+fn observation(v: &Value) -> Option<String> {
+    if !matches!(v.ty, Ty::Delta(_)) {
+        return None;
+    }
+    if let Kind::ObservedLocal(id) = v.kind {
+        return Some(format!("local{id}"));
+    }
+    if let Kind::Query(op, args) = &v.kind
+        && op == "delta_value"
+    {
+        let Kind::Input(id, _) = args[0].kind else {
+            unreachable!("checked observed input")
+        };
+        return Some(format!("self.input{id}"));
+    }
+    None
 }

@@ -15,6 +15,13 @@ fn rewrite(value: &mut Value) {
                 rewrite(value);
             }
         }
+        Kind::Delta(entries) => {
+            for entry in entries {
+                if let hgl_rust_ir::DeltaEntry::Child(_, v) = entry {
+                    rewrite(v);
+                }
+            }
+        }
         Kind::Construct(fields) => {
             for (_, value) in fields {
                 rewrite(value);
@@ -44,6 +51,7 @@ fn rewrite(value: &mut Value) {
         | Kind::Input(..)
         | Kind::Cache(_)
         | Kind::GeneratorLocal(_)
+        | Kind::ObservedLocal(_)
         | Kind::Output
         | Kind::Capability
         | Kind::Void => {}

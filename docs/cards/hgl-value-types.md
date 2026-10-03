@@ -15,6 +15,19 @@ struct/list construction and global configuration fixtures in hgl-program.
 Specialization substitutes type parameters recursively through nested lists and
 nominal applications, resolving declaration-owned names in their declaring
 module and application argument names at the use site. Constraints are checked
-before producing a type. Imports and exports include every nominal argument,
-including phantom parameters. `unify` recursively matches source field patterns
+before producing a type. Export closure follows declaration-owned field/argument references, including
+phantom arguments written by the exporting declaration. Applying an exported
+generic family to a private local argument does not export that argument. `unify` recursively matches source field patterns
 against checked types without covariance or changing list fixedness.
+
+Publication type resolution also handles positional tuples, maps, sets and
+contextual delta_of. Nominal temporal schemas preserve the same declaring
+identity and argument invariance as ordinary schemas. Generic unification
+inverts delta_of: structural delta origins and scalar reduced forms bind the
+exact originating T, including nested TimedValue/list patterns. Formation
+rejects unsupported concrete origins after substitution; unresolved generic
+patterns remain source spellings until a concrete specialization is selected.
+
+Resolution and inference consume Library's checked constant sizes. This keeps
+helper calls in size positions on the same source/effect/type path as ordinary
+constant evaluation, without alias-dependent size identity.

@@ -1,10 +1,13 @@
-use crate::{rust_type, scalar_type};
+use crate::{delta_storage, delta_type, rust_type, scalar_type};
 use hgl_rust_ir::Plan;
 use hgl_source::Ty;
 use std::collections::BTreeMap;
 
 /// Rust marker identifying an exact prepared entry type.
 pub fn global_type(ty: &Ty) -> String {
+    if let Ty::Delta(origin) = ty {
+        return global_type(&delta_storage(origin));
+    }
     if let Ty::List(element, size) = ty {
         return format!(
             "hgl_store::List<{}, {}>",
@@ -26,7 +29,7 @@ pub fn global_type(ty: &Ty) -> String {
 }
 /// Construction-only exact ordinary type descriptor.
 pub fn global_schema(ty: &Ty) -> String {
-    if matches!(ty, Ty::Struct(..) | Ty::List(..)) {
+    if matches!(ty, Ty::Delta(_) | Ty::Struct(..) | Ty::List(..)) {
         format!("<{} as hgl_store::GlobalValue>::schema()", global_type(ty))
     } else {
         format!("hgl_types::ScalarType::{}.into()", scalar_type(ty))
@@ -36,6 +39,11 @@ pub fn global_schema(ty: &Ty) -> String {
 pub fn global_markers(plan: &Plan) -> String {
     let mut types = BTreeMap::new();
     for node in &plan.nodes {
+        for ty in std::iter::once(&node.result).chain(node.inputs.iter().map(|(_, _, ty)| ty)) {
+            if ty.publication() {
+                collect(&delta_type(ty), &mut types);
+            }
+        }
         for value in &node.configuration {
             value_types(value, &mut types);
         }
@@ -54,18 +62,17 @@ pub fn global_markers(plan: &Plan) -> String {
             collect(ty, &mut types);
         }
     }
-    types
-        .values()
-        .map(|ty| marker(ty))
-        .collect::<Vec<_>>()
-        .concat()
+    types.values().map(marker).collect::<Vec<_>>().concat()
 }
-fn collect<'a>(ty: &'a Ty, types: &mut BTreeMap<String, &'a Ty>) {
+fn collect(ty: &Ty, types: &mut BTreeMap<String, Ty>) {
+    if let Ty::Delta(origin) = ty {
+        collect(&delta_storage(origin), types);
+    }
     if let Ty::List(element, _) = ty {
         collect(element, types);
     }
     if let Ty::Struct(name, fields) = ty {
-        types.insert(name.source_name(), ty);
+        types.insert(name.source_name(), ty.clone());
         for (_, ty) in fields {
             collect(ty, types);
         }
@@ -161,10 +168,7 @@ fn marker(ty: &Ty) -> String {
     )
 }
 
-fn statement_types<'a>(
-    statements: &'a [hgl_rust_ir::Statement],
-    types: &mut BTreeMap<String, &'a Ty>,
-) {
+fn statement_types(statements: &[hgl_rust_ir::Statement], types: &mut BTreeMap<String, Ty>) {
     use hgl_rust_ir::Statement;
     for statement in statements {
         match statement {
@@ -191,13 +195,20 @@ fn statement_types<'a>(
         }
     }
 }
-fn value_types<'a>(value: &'a hgl_rust_ir::Value, types: &mut BTreeMap<String, &'a Ty>) {
+fn value_types(value: &hgl_rust_ir::Value, types: &mut BTreeMap<String, Ty>) {
     use hgl_rust_ir::Kind;
     collect(&value.ty, types);
     match &value.kind {
         Kind::List(values) | Kind::Native(_, values) | Kind::Query(_, values) => {
             for value in values {
                 value_types(value, types);
+            }
+        }
+        Kind::Delta(entries) => {
+            for entry in entries {
+                if let hgl_rust_ir::DeltaEntry::Child(_, v) = entry {
+                    value_types(v, types);
+                }
             }
         }
         Kind::Construct(fields) => {
@@ -230,6 +241,7 @@ fn value_types<'a>(value: &'a hgl_rust_ir::Value, types: &mut BTreeMap<String, &
         | Kind::Input(..)
         | Kind::Cache(_)
         | Kind::GeneratorLocal(_)
+        | Kind::ObservedLocal(_)
         | Kind::Local(_)
         | Kind::MutableLocal(_)
         | Kind::Output

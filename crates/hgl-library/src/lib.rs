@@ -83,6 +83,8 @@ pub struct RequiredStruct {
 #[derive(Debug, Default, Clone)]
 /// Indexed source declarations, imports and explicit instances.
 pub struct Library {
+    /// Declaration-owned list sizes checked before concrete type formation.
+    pub type_sizes: BTreeMap<(String, String), i64>,
     /// All indexed declarations.
     pub declarations: Vec<Decl>,
     /// First source's module.
@@ -471,7 +473,7 @@ fn instantiate(library: &mut Library, module: &str, d: &mut Cursor<'_>) -> Resul
         d.need("<")?;
         let mut types = Vec::new();
         while !d.take(">") {
-            types.push(d.consume()?);
+            types.push(d.type_name()?);
             if !d.take(",") {
                 d.need(">")?;
                 break;

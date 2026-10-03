@@ -35,7 +35,8 @@ never the expected sequence. A mismatch or node error fails the executable.
 Test helpers have a module-wide scope; production calls cannot see them.
 The current test body accepts direct `assert eval(...) == [...]`, outputless
 `eval(...)`, and deterministic ordinary bool assertions. Harness locals, timed input,
-structural delta literals and empty generic sequences remain unsupported.
+and empty generic sequences remain unsupported. Structural delta literals use
+the exact originating-shape publication profile described below.
 Unused library bodies are not advertised as implemented: reachable unsupported
 forms produce diagnostics. This is not the full language checker.
 
@@ -57,8 +58,8 @@ Start hooks use ordinary checked statements, native calls, conditions and cache
 access; temporal input reads and return publication remain rejected there.
 
 `delta_value(input)` checks the concrete instance of the endpoint-derived delta
-relationship. The admitted eight scalars have delta type equal to scalar type;
-structural delta lowering is not yet implemented and those instances are diagnosed.
+relationship. The admitted eight scalars have delta type equal to scalar type; structural
+instances have an exact ordinary Delta type retaining the complete origin.
 Formal `signal` parameters retain their signal identity even when the producer
 has a scalar payload; they are excluded from delta access and recording.
 Only runtime evaluation can read delta metadata. Endpoint identity and proof of
@@ -72,11 +73,11 @@ failure, removed bespoke injectable rejection, generic delta forwarding and
 endpoint-specific proof checks. No runtime control flow is selected by
 replay/record operator name.
 
-Implicit handler-selector normalization is applied to the scalar-input profile.
-Existing structural guard emission is retained: applying scalar normalization to
-reference startup handlers exposes an unresolved mismatch between reference
-binding modification time and startup activation. Structural delta metadata and
-that normalization/runtime integration remain outside this completed profile.
+Implicit handler-selector normalization applies to the finite publication
+profile. Reference startup handlers retain their existing guard path: reference
+binding modification and startup activation remain outside the structural delta
+profile. Top-level valid plus endpoint-specific modification proves an admitted
+structural delta observation; all_valid is not required.
 
 Capability actions and non-clock queries use receiver-first prelude calls
 with a direct injected name as the first positional argument; remaining arguments use ordinary
@@ -181,7 +182,7 @@ assertion operation failures fail checking; wiring operation failures are stored
 on the plan and reported by generated graph construction before any start.
 Unsupported native/capability effects in deterministic wiring remain explicit
 backend diagnostics. This is not a claim of complete effectful construction
-execution or temporal aggregate ports.
+execution or complete held-value operations on temporal aggregate ports.
 
 Acceptance includes source-executed scalar observations of nested owning and
 global lists, fixedness, readonly aliases, self-source push, indexed field
@@ -199,7 +200,8 @@ field execution. Concrete specializations use the existing ordinary value,
 configuration and global borrow paths. No new generic callable syntax is admitted.
 
 A timed yield anywhere in a temporal function body classifies it as a generator
-before phase checks. Generators require scalar8 output and const-only parameters;
+before phase checks. Generators require an admitted publication output shape and
+const-only parameters;
 clock/logger are the currently admitted explicit capabilities. State/cache,
 lifecycle hooks, output/scheduling injections, for and value-return are rejected.
 Configuration values use the existing retained read-only node configuration.
@@ -221,8 +223,18 @@ transitive calls from generators. Their checked effects stay inside ValueCall IR
 no graph scheduling or extra runtime node is introduced. Wiring/constant service
 execution and other helper injectables remain explicitly unsupported.
 
-Eval configures ordinary replay values as `list<TimedValue<T>>`: only present
-scalar inputs become absolute timed entries and the dense horizon stays on the
+Structural publication frontend (spec60a2d7e): exact finite shapes and derived
+ordinary delta types are checked before construction. Sparse delta constructors
+use hgl-delta-check prevalidation and ordered IR parts. Scalar payload rules
+remain reduced delta types; structural return/out/yield match exact originating
+shape. Structural delta_value preserves a readonly evaluation-local observation,
+with typed immutable aliases and explicit retention boundaries. hgl-flow-check
+owns the unchanged guard proof analysis, now shared across admitted publication
+shapes. Neither complete held structural values nor structural-delta inspection,
+comparison or temporal payload endpoints are admitted by this extension.
+
+Eval configures ordinary replay values as `list<TimedValue<delta_of(T)>>`: only
+present input deltas become absolute timed entries and the dense horizon stays on the
 plan. It invokes the normal source replay and record operators, supplies the
 recorder's ordinary const key, and binds that exact typed recording before start.
 Nested ordinary generic parameter inference applies equally to operator
@@ -234,3 +246,22 @@ including unexecuted branches and regardless of type. The current eval entry
 creates a fresh store and has no supplied seed or dynamic nested-graph interface;
 those source APIs are not implied. Selection adds no reserved string namespace
 or per-tick key comparisons. Ordinary caller-selected keys keep normal sharing.
+
+Collection eval normalizes closed delta expressions with their exact parameter
+shape and validates each input trace before start through hgl-eval-data. Invalid
+membership/empty publications retain a graph-construction error with the input
+parameter and zero-based position. Expected values retain exact derived types;
+comparison ignores sparse entry ordering but preserves child omission.
+
+Explicit list sizes are normalized through normal checked ordinary expression
+resolution and constant evaluation before type formation. Supplied const
+configuration is available in signature sizes and local annotations/explicit
+constructors; runtime inputs and service effects cannot determine a type.
+Nested type arguments retain canonical evaluated size identities. The independent
+hgl-type-sizes layer handles nested type traversal and closed scalar size forms.
+Endpoint/clock/payload helper checking is extracted to hgl-endpoint-check.
+
+Eval signature candidates use independent checking/evaluation state; only the
+selected candidate contributes configuration failures, documentation, and type
+normalization caches to graph construction. Rejected candidates cannot poison
+the selected graph with an operation failure.

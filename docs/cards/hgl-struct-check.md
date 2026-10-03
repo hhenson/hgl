@@ -18,3 +18,7 @@ once their concrete expected types are available.
 
 Acceptance: explicit/inferred/contextual and nested constructors, constraints,
 written field order, repeated argument conflicts, and read-only borrowing/copies.
+
+`schema_sizes` discovers declaration-owned size expressions in reachable nominal
+fields for evaluation by the normal source checker before schema specialization.
+Dependencies also include hgl-type-sizes; recursive references are visited once.

@@ -15,3 +15,4 @@ workspace = true
 hgl-source = { path = "../hgl-source" }
 hgl-library = { path = "../hgl-library" }
 hgl-value-check = { path = "../hgl-value-check" }
+hgl-type-sizes = { path = "../hgl-type-sizes" }

@@ -50,6 +50,20 @@ Generator body local identifiers are unique across nested lexical blocks.
 outer lexical local uses with owned node storage, leaving value-call body
 locals lexical. No borrowed global view is admitted into generator storage.
 
+`Kind::Delta(Vec<DeltaEntry>)` retains ordered structural delta constructor
+parts. `DeltaEntry::{Add(Literal),Remove(Literal),Child(i64,Value)}` uses checked
+constant members/keys/indices; Value.ty is exact Ty::Delta(origin), so each
+child's representation is determined before runtime. No shape registry or
+runtime type test is required. Every child expression is evaluated once and
+retained before the next part. `Kind::ObservedLocal(id)` preserves a readonly
+evaluation-local structural delta observation; it is not an owning copy.
+Direct structural Query(delta_value) and observation aliases retain endpoint
+observation identity until an admitted owning retention/publication boundary.
+
+`Value::closed()` recognizes fully retained literal/list/struct/delta data and
+void; it rejects every operational or borrowed IR form, including wiring
+failure. Ordinary evaluation shares this classifier across its phase boundary.
+
 Plan recording metadata carries its ordinary key and exact retained list type.
 The eval run owner reads that prepared entry after stop; no node-private capture
 buffer is needed. Source replay configuration consists of ordinary value data.

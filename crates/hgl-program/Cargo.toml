@@ -22,3 +22,8 @@ hgl-value-bind = { path = "../hgl-value-bind" }
 hgl-value-eval = { path = "../hgl-value-eval" }
 hgl-struct-check = { path = "../hgl-struct-check" }
 hgl-body-check = { path = "../hgl-body-check" }
+hgl-flow-check = { path = "../hgl-flow-check" }
+hgl-delta-check = { path = "../hgl-delta-check" }
+hgl-endpoint-check = { path = "../hgl-endpoint-check" }
+hgl-type-sizes = { path = "../hgl-type-sizes" }
+hgl-eval-data = { path = "../hgl-eval-data" }

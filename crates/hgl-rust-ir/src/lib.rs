@@ -18,6 +18,10 @@ impl Value {
 /// Checked expressions and frontend-only binding markers.
 #[derive(Debug, Clone)]
 pub enum Kind {
+    /// Ordered sparse constructor parts with exact originating type in Value.ty.
+    Delta(Vec<DeltaEntry>),
+    /// Evaluation-local readonly publication observation, without ownership.
+    ObservedLocal(usize),
     /// Typed unavailable result after a recorded wiring operation failure.
     WiringFailure(String),
     /// Independently owned ordinary list construction.
@@ -74,6 +78,16 @@ pub enum Kind {
     Capability,
     /// Absence of a payload; cannot be emitted as a payload.
     Void,
+}
+/// One constructor component in written evaluation order.
+#[derive(Debug, Clone)]
+pub enum DeltaEntry {
+    /// Constant set member addition.
+    Add(Literal),
+    /// Constant set member or map key removal.
+    Remove(Literal),
+    /// Constant field/position/key and its exact child publication payload.
+    Child(i64, Value),
 }
 /// Checked statements in a node lifecycle hook or handler.
 #[derive(Debug, Clone)]
@@ -162,4 +176,44 @@ pub struct Plan {
     pub recording: Option<(String, Ty)>,
     /// Dense eval input length, independent of expected output.
     pub input_length: usize,
+}
+
+impl Value {
+    /// Whether an expression is already a closed ordinary constant.
+    pub fn closed(&self) -> bool {
+        match &self.kind {
+            Kind::Delta(parts) => parts.iter().all(|part| match part {
+                DeltaEntry::Child(_, value) => value.closed(),
+                DeltaEntry::Add(_) | DeltaEntry::Remove(_) => true,
+            }),
+            Kind::Literal(_) | Kind::Void => true,
+            Kind::List(items) => items.iter().all(Value::closed),
+            Kind::Construct(fields) => fields.iter().all(|(_, value)| value.closed()),
+            Kind::WiringFailure(_)
+            | Kind::Index(..)
+            | Kind::Length(_)
+            | Kind::Push(..)
+            | Kind::ValueCall(..)
+            | Kind::Configuration(_)
+            | Kind::Field(..)
+            | Kind::GlobalGet(_)
+            | Kind::BorrowedLocal(..)
+            | Kind::GlobalSet(..)
+            | Kind::IsPresent(_)
+            | Kind::Present(_)
+            | Kind::Wire(_)
+            | Kind::Input(..)
+            | Kind::Cache(_)
+            | Kind::ObservedLocal(_)
+            | Kind::Local(_)
+            | Kind::MutableLocal(_)
+            | Kind::Native(..)
+            | Kind::Binary(..)
+            | Kind::Unary(..)
+            | Kind::Query(..)
+            | Kind::Output
+            | Kind::Capability
+            | Kind::GeneratorLocal(_) => false,
+        }
+    }
 }

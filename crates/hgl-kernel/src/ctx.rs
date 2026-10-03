@@ -221,6 +221,17 @@ impl Ctx<'_> {
         self.store
             .get_or_create_shaped(dict, key, self.now, self.schedule)
     }
+    /// Create a missing member using its statically prepared allocation factory.
+    pub fn get_or_create_with(
+        &mut self,
+        dict: OutputId,
+        key: i64,
+        create: impl FnOnce(&mut Store, NodeId) -> OutputId,
+    ) -> OutputId {
+        self.writes(dict);
+        self.store
+            .get_or_create_with(dict, key, self.now, self.schedule, create)
+    }
     /// Attach a compound child graph output without copying it.
     pub fn attach_shaped(&mut self, dict: OutputId, key: i64, child: Reference) -> NodeResult {
         self.writes(dict);

@@ -31,6 +31,7 @@ pub use hgl_bindings::{BindError, InputId, OutputId, Reference, ScopeId, Wake};
 pub use hgl_columns::Columns;
 pub use hgl_columns::Scalar;
 mod fixed;
+pub use hgl_shapes as shapes;
 
 /// A node's handle to its own `TS<T>` output. Eight bytes.
 #[derive(Debug, Clone)]
@@ -135,28 +136,6 @@ impl Store {
         value: &T::Value,
     ) -> NodeResult {
         self.globals.set(handle, value)
-    }
-    /// Borrow a present root without copying its payload.
-    pub fn global_borrow<T: GlobalValue>(
-        &self,
-        handle: Global<T>,
-    ) -> Result<ValueSlot<T>, Box<NodeError>> {
-        self.globals.borrow(handle)
-    }
-    /// Read a prepared projection as an independently owned value.
-    pub fn global_read<T: GlobalValue>(
-        &self,
-        slot: ValueSlot<T>,
-    ) -> Result<T::Value, Box<NodeError>> {
-        self.globals.read(slot)
-    }
-    /// Retain a replacement fully before modifying a borrowed root or projection.
-    pub fn global_write<T: GlobalValue>(
-        &mut self,
-        slot: ValueSlot<T>,
-        value: &T::Value,
-    ) -> NodeResult {
-        self.globals.write(slot, value)
     }
     /// An empty run.
     pub fn new() -> Self {

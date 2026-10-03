@@ -42,3 +42,8 @@ Datetime/duration add/subtract and duration negation use checked microsecond
 arithmetic. Overflow is an Operation error (`time arithmetic overflow`) at the
 ordinary evaluation phase; the same typed IR fails at runtime before subsequent
 expression evaluation. Integer overflow policy remains unchanged.
+
+Closed ordinary Delta constructors evaluate each supplied child in source order
+and retain independent IR data. Observation locals are runtime-only and cannot
+be folded as ordinary constant data. Empty sparse data formation is valid and
+performs no publication or fresh-endpoint trace admission.

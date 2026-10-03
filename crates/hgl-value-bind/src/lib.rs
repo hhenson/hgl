@@ -81,13 +81,17 @@ pub fn bind(
 
 /// Check supported type at the typed call boundary.
 pub fn supported_type(ty: &Ty) -> Result<(), String> {
-    if matches!(ty, Ty::Struct(..) | Ty::List(..)) {
-        return Err("ordinary structs currently require hook-local values, not temporal ports or helper arguments".into());
-    }
     if let Ty::Set(child) = ty
         && !matches!(**child, Ty::Bool | Ty::I64)
     {
         return Err("Rust set elements currently require bool or i64".into());
+    }
+    if matches!(
+        ty,
+        Ty::Struct(..) | Ty::List(..) | Ty::Map(..) | Ty::Tuple(_) | Ty::Delta(_) | Ty::Set(_)
+    ) && !ty.publication()
+    {
+        return Err("unsupported temporal publication shape".into());
     }
     if let Ty::Ref(child) = ty {
         if **child == Ty::Void {
@@ -154,6 +158,24 @@ pub fn resolve_type(name: &str, types: &BTreeMap<String, Ty>) -> Option<Ty> {
     if let Some(ty) = types.get(name) {
         return Some(ty.clone());
     }
+    if let Some(origin) = hgl_source::delta_argument(name) {
+        return resolve_type(origin, types)?.delta().ok();
+    }
+    if let Some((base, args)) = hgl_source::application(name) {
+        if base == "tuple" {
+            return Some(Ty::Tuple(
+                args.into_iter()
+                    .map(|s| resolve_type(s, types))
+                    .collect::<Option<_>>()?,
+            ));
+        }
+        if base == "map" && args.len() == 2 {
+            return Some(Ty::Map(
+                Box::new(resolve_type(args[0], types)?),
+                Box::new(resolve_type(args[1], types)?),
+            ));
+        }
+    }
     if let Some(t) = name.strip_prefix("ref<").and_then(|s| s.strip_suffix('>')) {
         return Some(Ty::Ref(Box::new(resolve_type(t, types)?)));
     }
@@ -208,6 +230,12 @@ pub fn order_arguments(
 
 /// Whether a checked value is closed ordinary configuration data.
 pub fn constant(value: &Value) -> bool {
+    if let Kind::Delta(parts) = &value.kind {
+        return parts.iter().all(|part| match part {
+            hgl_rust_ir::DeltaEntry::Child(_, value) => constant(value),
+            hgl_rust_ir::DeltaEntry::Add(_) | hgl_rust_ir::DeltaEntry::Remove(_) => true,
+        });
+    }
     if let Kind::Construct(fields) = &value.kind {
         return fields.iter().all(|(_, v)| constant(v));
     }
@@ -241,7 +269,11 @@ pub fn signature_types(
             .unwrap_or(&parameter.ty);
         if signature.generics.iter().any(|name| name == formal) {
             bind_type(signature, parameter, value, &mut types)?;
-        } else if matches!(value.ty, Ty::Struct(..) | Ty::List(..)) {
+        } else if matches!(
+            value.ty,
+            Ty::Struct(..) | Ty::List(..) | Ty::Delta(_) | Ty::Map(..) | Ty::Tuple(_)
+        ) || parameter.ty.starts_with("delta_of(")
+        {
             hgl_value_types::unify(
                 library,
                 module,
@@ -345,4 +377,27 @@ pub fn native(
         });
     }
     Ok(Value::new(result, Kind::Native(native, values)))
+}
+
+/// Match an explicit materialization against exact resolved source types.
+pub fn instantiated(
+    library: &hgl_library::Library,
+    module: &str,
+    name: &str,
+    generics: &[String],
+    inferred: &BTreeMap<String, Ty>,
+) -> bool {
+    library.instances.iter().any(|(owner, item, args)| {
+        owner == module
+            && item == name
+            && args.len() == generics.len()
+            && args.iter().zip(generics).all(|(argument, generic)| {
+                inferred.get(generic).is_some_and(|actual| {
+                    argument == "_"
+                        || hgl_value_types::resolve(library, module, argument, &mut BTreeSet::new())
+                            .as_ref()
+                            == Ok(actual)
+                })
+            })
+    })
 }

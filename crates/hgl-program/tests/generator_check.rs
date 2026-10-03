@@ -97,7 +97,7 @@ fn generator_context_rejects_each_forbidden_construct() {
     ] {
         let error = checked(declaration, "produce()").unwrap_err();
         assert!(
-            error.contains("generator requires a declared scalar output type"),
+            error.contains("generator requires a declared publication output type"),
             "{error}"
         );
     }

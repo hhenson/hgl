@@ -1,0 +1,17 @@
+# Card: hgl-value-access
+
+Ordinary access classification, separate from effect traversal and payload
+operations. Dependencies hgl-source/hgl-rust-ir; budget 200 source lines.
+
+Public: ordinary, writable, field, provenance, binding, helper_argument,
+observed. Owning values, lexical global aggregates and evaluation-local
+structural delta observations retain distinct provenance without source type
+qualifiers. Delta objects admit ownership and whole replacement, no inspection.
+An immutable observation alias preserves observation identity; an annotation
+adds no ownership and a var initializer cannot upgrade it. Helper boundaries
+reject observations and lexical borrows; explicit retention operations consume
+independent copies. Scalar delta_value remains owned. Existing struct/list
+projection and lexical borrow authority rules are unchanged.
+
+Acceptance: source borrowed global tests plus structural delta observation,
+retention, typed alias and helper-escape checking tests.

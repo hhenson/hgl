@@ -21,3 +21,13 @@ concrete nominal results are specialized after parameter inference.
 `native` validates an exact selected native implementation, interns its checked
 signature and returns Native value IR. This moves native binding preparation out
 of graph checking; it neither calls providers nor broadens wiring-time effects.
+
+Exact recursive publication shapes are admitted at temporal boundaries;
+structural Delta values are not temporal shapes. Signature inference recognizes
+inverse delta_of relationships recursively through ordinary lists/nominal
+arguments before binding the selected operator. No payload-content inference
+or result-only structural inference is introduced.
+
+`instantiated` matches explicit materializations against fully resolved exact
+source types, retaining nominal origins, phantom arguments and recursive shape.
+Implementation binding uses the same nested signature inference as declarations.

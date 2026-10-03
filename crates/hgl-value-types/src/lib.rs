@@ -1,6 +1,6 @@
 //! Resolve finite ordinary value schemas against source library declarations.
 use hgl_library::{Decl, Library, Role};
-use hgl_source::{Nominal, Ty, application};
+use hgl_source::{Nominal, Ty, application, delta_argument};
 use hgl_value_check::ordinary;
 use std::collections::{BTreeMap, BTreeSet};
 /// Resolve imported declaration identity.
@@ -81,8 +81,13 @@ pub fn substitute(
     bindings: &BTreeMap<String, Ty>,
     active: &mut BTreeSet<String>,
 ) -> Result<Ty, String> {
+    let normalized = hgl_type_sizes::normalize(name, &mut |expr| size(library, module, expr))?;
+    let name = normalized.as_str();
     if let Some(ty) = bindings.get(name) {
         return Ok(ty.clone());
+    }
+    if let Some(origin) = delta_argument(name) {
+        return substitute(library, module, origin, bindings, active)?.delta();
     }
     if let Some(ty) = Ty::parse(name) {
         return Ok(ty);
@@ -95,7 +100,19 @@ pub fn substitute(
     }
     let (base, arguments) =
         application(name).map_or((name, Vec::new()), |(base, args)| (base, args));
-    if matches!(base, "atomic" | "rolling" | "ref" | "set") {
+    if matches!(base, "map" | "tuple" | "set") {
+        let children = arguments
+            .into_iter()
+            .map(|arg| substitute(library, module, arg, bindings, active))
+            .collect::<Result<Vec<_>, _>>()?;
+        return match (base, children.as_slice()) {
+            ("map", [key, child]) => Ok(Ty::Map(Box::new(key.clone()), Box::new(child.clone()))),
+            ("set", [member]) => Ok(Ty::Set(Box::new(member.clone()))),
+            ("tuple", _) => Ok(Ty::Tuple(children)),
+            _ => Err(format!("invalid structural type arguments {name}")),
+        };
+    }
+    if matches!(base, "atomic" | "rolling" | "ref") {
         return Err(format!(
             "unsupported ordinary struct argument or field {name}"
         ));
@@ -123,8 +140,16 @@ pub fn specialize(
             schema.generics.len()
         ));
     }
-    if arguments.iter().any(|ty| !ordinary(ty)) {
+    if arguments
+        .iter()
+        .any(|ty| !ordinary(ty) && !ty.publication())
+    {
         return Err("struct type arguments require canonical ordinary value types".into());
+    }
+    if exported(decl) {
+        for (_, field) in &schema.fields {
+            exported_name(library, &decl.module, field, &schema.generics)?;
+        }
     }
     let bindings = schema
         .generics
@@ -144,19 +169,11 @@ pub fn specialize(
     if !active.insert(origin.clone()) {
         return Err("recursive ordinary structs are not supported".into());
     }
-    if exported(decl) {
-        for argument in &arguments {
-            exported_type(library, argument)?;
-        }
-    }
     let mut fields = Vec::new();
     for (name, ty) in schema.fields {
         let ty = substitute(library, &decl.module, &ty, &bindings, active)?;
-        if !ordinary(&ty) {
+        if !ordinary(&ty) && !ty.publication() {
             return Err("ordinary struct fields require ordinary value types".into());
-        }
-        if exported(decl) {
-            exported_type(library, &ty)?;
         }
         fields.push((name, ty));
     }
@@ -172,8 +189,10 @@ pub fn unify(
     generics: &[String],
     bindings: &mut BTreeMap<String, Ty>,
 ) -> Result<(), String> {
+    let normalized = hgl_type_sizes::normalize(pattern, &mut |expr| size(library, module, expr))?;
+    let pattern = normalized.as_str();
     if generics.iter().any(|name| name == pattern) {
-        if !ordinary(actual) {
+        if !ordinary(actual) && !actual.publication() {
             return Err("struct type arguments require canonical ordinary value types".into());
         }
         if bindings
@@ -183,6 +202,17 @@ pub fn unify(
             return Err(format!("conflicting struct inference for {pattern}"));
         }
         return Ok(());
+    }
+    if let Some(origin) = delta_argument(pattern) {
+        let actual_origin = if let Ty::Delta(origin) = actual {
+            origin.as_ref()
+        } else {
+            actual
+        };
+        if actual_origin.clone().delta()? != *actual {
+            return Err("delta_of originating shape mismatch".into());
+        }
+        return unify(library, module, origin, actual_origin, generics, bindings);
     }
     if let Some((element, size)) = Ty::list_parts(pattern) {
         let Ty::List(child, actual_size) = actual else {
@@ -194,6 +224,21 @@ pub fn unify(
         return unify(library, module, element, child, generics, bindings);
     }
     if let Some((base, arguments)) = application(pattern) {
+        let children = match (base, actual) {
+            ("map", Ty::Map(key, child)) => Some(vec![key.as_ref(), child.as_ref()]),
+            ("tuple", Ty::Tuple(children)) => Some(children.iter().collect()),
+            ("set", Ty::Set(member)) => Some(vec![member.as_ref()]),
+            _ => None,
+        };
+        if let Some(children) = children {
+            if arguments.len() != children.len() {
+                return Err("structural type arity mismatch".into());
+            }
+            for (pattern, actual) in arguments.into_iter().zip(children) {
+                unify(library, module, pattern, actual, generics, bindings)?;
+            }
+            return Ok(());
+        }
         let decl = declaration(library, module, base)?
             .ok_or_else(|| format!("unresolved ordinary type {base}"))?;
         let Ty::Struct(identity, _) = actual else {
@@ -219,24 +264,50 @@ fn exported(decl: &Decl) -> bool {
         .first()
         .is_some_and(|token| token.text == "export")
 }
-fn exported_type(library: &Library, ty: &Ty) -> Result<(), String> {
-    if let Ty::List(element, _) = ty {
-        return exported_type(library, element);
+fn exported_name(
+    library: &Library,
+    module: &str,
+    name: &str,
+    generics: &[String],
+) -> Result<(), String> {
+    if generics.iter().any(|generic| generic == name) {
+        return Ok(());
     }
-    if let Ty::Struct(identity, fields) = ty {
-        if !library.declarations.iter().any(|d| {
-            d.role == Role::Struct
-                && format!("{}::{}", d.module, d.name) == identity.origin
-                && exported(d)
-        }) {
-            return Err(format!("exported struct reaches unexported {identity}"));
-        }
-        for argument in &identity.arguments {
-            exported_type(library, argument)?;
-        }
-        for (_, field) in fields {
-            exported_type(library, field)?;
-        }
+    if let Some(origin) = delta_argument(name) {
+        return exported_name(library, module, origin, generics);
+    }
+    let (base, args) = application(name).unwrap_or((name, Vec::new()));
+    for argument in args
+        .iter()
+        .take(if base == "list" { 1 } else { args.len() })
+    {
+        exported_name(library, module, argument, generics)?;
+    }
+    if Ty::parse(name).is_some()
+        || matches!(
+            base,
+            "list" | "map" | "tuple" | "set" | "ref" | "rolling" | "atomic"
+        )
+    {
+        return Ok(());
+    }
+    if let Some(decl) = declaration(library, module, base)?
+        && !exported(decl)
+    {
+        return Err(format!(
+            "exported struct reaches unexported {}::{}",
+            decl.module, decl.name
+        ));
     }
     Ok(())
+}
+
+fn size(library: &Library, module: &str, expr: &str) -> Result<hgl_source::Literal, String> {
+    library
+        .type_sizes
+        .get(&(module.into(), expr.into()))
+        .map_or_else(
+            || hgl_type_sizes::literal(expr),
+            |size| Ok(hgl_source::Literal::Int(*size)),
+        )
 }

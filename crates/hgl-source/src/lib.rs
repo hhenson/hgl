@@ -1,6 +1,6 @@
 //! Source tokens, expressions and statements shared by HGL compiler stages.
 pub use hgl_lex::{Token, lex};
-pub use hgl_type_shape::{Nominal, Ty, application};
+pub use hgl_type_shape::{Nominal, Ty, application, delta_argument};
 #[derive(Debug, Clone, PartialEq)]
 /// A fixed scalar value in HGL source.
 pub enum Literal {
@@ -51,6 +51,10 @@ pub enum Expr {
     Name(String),
     /// Dense harness cells; absent cells carry no tick.
     Sequence(Vec<Option<Self>>),
+    /// Ordered sparse delta entries; admitted only in delta constructor arguments.
+    Sparse(Vec<(Self, Self)>),
+    /// Positional harness tuple cells; absent children carry no publication.
+    Tuple(Vec<Option<Self>>),
     /// Unary operator.
     Unary(String, Box<Self>),
     /// Callable name and positional or named arguments.
@@ -160,7 +164,12 @@ impl<'a> Cursor<'a> {
             name.push_str("::");
             name.push_str(&self.name()?);
         }
-        if self.at("<") {
+        if name == "delta_of" && self.take("(") {
+            self.lines();
+            name = format!("delta_of({})", self.type_name()?);
+            self.lines();
+            self.need(")")?;
+        } else if self.at("<") {
             name.push_str(&self.type_arguments()?);
             if name.starts_with("ref<ref<") {
                 return Err("explicit ref<ref<T>> is not valid".into());
@@ -172,12 +181,19 @@ impl<'a> Cursor<'a> {
         self.need("<")?;
         let mut text = String::from("<");
         let mut depth = 1;
+        let mut parentheses = 0;
         while depth > 0 {
             let token = self.consume()?;
-            if token == "<" {
+            if token == "(" {
+                parentheses += 1;
+            }
+            if token == ")" {
+                parentheses -= 1;
+            }
+            if token == "<" && parentheses == 0 {
                 depth += 1;
             }
-            if token == ">" {
+            if token == ">" && parentheses == 0 {
                 depth -= 1;
             }
             if token != "\n" {
@@ -297,11 +313,7 @@ impl<'a> Cursor<'a> {
             return Ok(Expr::Sequence(values));
         }
         if self.take("(") {
-            self.lines();
-            let value = self.expr()?;
-            self.lines();
-            self.need(")")?;
-            return Ok(value);
+            return self.parenthesized();
         }
         if self.take("!") {
             return Ok(Expr::Unary("!".into(), Box::new(self.atom()?)));
@@ -336,14 +348,43 @@ impl<'a> Cursor<'a> {
         if !self.take("(") {
             return Ok(Expr::Name(name));
         }
-        let args = self.call_arguments()?;
+        let args = self.call_arguments(applied && name.starts_with("delta<"))?;
         Ok(if applied {
             Expr::Applied(name, args)
         } else {
             Expr::Call(name, args)
         })
     }
-    fn call_arguments(&mut self) -> Result<Vec<(Option<String>, Expr)>, String> {
+    fn parenthesized(&mut self) -> Result<Expr, String> {
+        self.lines();
+        let first = if self.take("_") {
+            None
+        } else {
+            Some(self.expr()?)
+        };
+        self.lines();
+        if !self.take(",") {
+            self.need(")")?;
+            return first.ok_or("absent tuple child requires a tuple comma".into());
+        }
+        let mut values = vec![first];
+        self.lines();
+        while !self.take(")") {
+            values.push(if self.take("_") {
+                None
+            } else {
+                Some(self.expr()?)
+            });
+            self.lines();
+            if !self.take(",") {
+                self.need(")")?;
+                break;
+            }
+            self.lines();
+        }
+        Ok(Expr::Tuple(values))
+    }
+    fn call_arguments(&mut self, delta: bool) -> Result<Vec<(Option<String>, Expr)>, String> {
         let mut args = Vec::new();
         self.lines();
         while !self.at(")") {
@@ -354,7 +395,12 @@ impl<'a> Cursor<'a> {
             } else {
                 None
             };
-            args.push((named, self.expr()?));
+            let value = if delta && self.take("[") {
+                self.delta_entries()?
+            } else {
+                self.expr()?
+            };
+            args.push((named, value));
             self.lines();
             if !self.take(",") {
                 break;
@@ -363,6 +409,42 @@ impl<'a> Cursor<'a> {
         }
         self.need(")")?;
         Ok(args)
+    }
+    fn delta_entries(&mut self) -> Result<Expr, String> {
+        self.lines();
+        if self.take("]") {
+            return Ok(Expr::Sequence(Vec::new()));
+        }
+        let first = self.expr()?;
+        let sparse = self.take(":");
+        let mut entries = Vec::new();
+        let mut values = Vec::new();
+        if sparse {
+            entries.push((first, self.expr()?));
+        } else {
+            values.push(Some(first));
+        }
+        self.lines();
+        while self.take(",") {
+            self.lines();
+            if self.at("]") {
+                break;
+            }
+            let value = self.expr()?;
+            if sparse {
+                self.need(":")?;
+                entries.push((value, self.expr()?));
+            } else {
+                values.push(Some(value));
+            }
+            self.lines();
+        }
+        self.need("]")?;
+        Ok(if sparse {
+            Expr::Sparse(entries)
+        } else {
+            Expr::Sequence(values)
+        })
     }
     fn else_body(&mut self) -> Result<Vec<Stmt>, String> {
         if !self.take("if") {
@@ -510,7 +592,9 @@ impl Expr {
             | Self::Name(_)
             | Self::Call(..)
             | Self::Applied(..)
-            | Self::Sequence(_) => None,
+            | Self::Sequence(_)
+            | Self::Sparse(_)
+            | Self::Tuple(_) => None,
         }
     }
 }
@@ -607,6 +691,8 @@ fn expand_selectors(expr: Expr, inputs: &[(Option<String>, Expr)]) -> (Expr, u8)
         | Expr::Literal(_)
         | Expr::Name(_)
         | Expr::Sequence(_)
+        | Expr::Sparse(_)
+        | Expr::Tuple(_)
         | Expr::Unary(..)
         | Expr::Call(..)
         | Expr::Applied(..)

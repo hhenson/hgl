@@ -1,6 +1,8 @@
 //! Checked Rust type spellings and ordinary nominal storage layouts.
 use hgl_source::Ty;
+mod delta;
 mod globals;
+pub use delta::{delta_storage, delta_type};
 pub use globals::{global_markers, global_schema, global_type};
 
 /// Emit the checked rust type form.
@@ -15,7 +17,12 @@ pub fn rust_type(ty: &Ty) -> &'static str {
         Ty::F64 => "f64",
         Ty::Str => "String",
         Ty::Void => "()",
-        Ty::Struct(..) | Ty::List(..) | Ty::Nullable(_) => {
+        Ty::Map(..)
+        | Ty::Tuple(_)
+        | Ty::Delta(_)
+        | Ty::Struct(..)
+        | Ty::List(..)
+        | Ty::Nullable(_) => {
             unreachable!("ordinary aggregate and nullable locals use inferred Rust types")
         }
         Ty::Ref(_) => "hgl_store::Reference",
@@ -33,13 +40,24 @@ pub fn scalar_type(ty: &Ty) -> &'static str {
         Ty::Date => "Date",
         Ty::Time => "Time",
         Ty::DateTime => "DateTime",
-        Ty::Ref(_) | Ty::Set(_) | Ty::Nullable(_) | Ty::Struct(..) | Ty::List(..) | Ty::Void => {
+        Ty::Map(..)
+        | Ty::Tuple(_)
+        | Ty::Delta(_)
+        | Ty::Ref(_)
+        | Ty::Set(_)
+        | Ty::Nullable(_)
+        | Ty::Struct(..)
+        | Ty::List(..)
+        | Ty::Void => {
             unreachable!("checked endpoint type")
         }
     }
 }
 /// Rust owned representation of a concrete ordinary type.
 pub fn owned_type(ty: &Ty) -> String {
+    if let Ty::Delta(origin) = ty {
+        return owned_type(&delta_storage(origin));
+    }
     if let Ty::List(element, _) = ty {
         return format!("Vec<{}>", owned_type(element));
     }

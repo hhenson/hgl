@@ -143,21 +143,24 @@ fn required_presence_nested_write_through_and_whole_replacement() -> Result<()> 
     let entry = store.bind_global::<Outer>("entry")?;
     assert!(
         store
-            .global_borrow(entry)
+            .global_state()
+            .borrow(entry)
             .unwrap_err()
             .message
             .contains("missing value")
     );
     assert!(store.global_get(entry).is_err());
     store.global_set(entry, &original())?;
-    let root = store.global_borrow(entry)?;
+    let root = store.global_state().borrow(entry)?;
     let nested = root.fields().1;
-    store.global_write(nested.fields().0, &9)?;
+    store.global_state().write(nested.fields().0, &9)?;
     assert_eq!(store.global_get(entry)?.1.0, 9);
-    assert_eq!(store.global_read(root)?.0, "label");
-    store.global_write(root, &("replacement".into(), (11, "new".into()), true))?;
-    assert_eq!(store.global_read(nested)?.0, 11);
-    assert_eq!(store.global_read(root)?.0, "replacement");
+    assert_eq!(store.global_state().read(root)?.0, "label");
+    store
+        .global_state()
+        .write(root, &("replacement".into(), (11, "new".into()), true))?;
+    assert_eq!(store.global_state().read(nested)?.0, 11);
+    assert_eq!(store.global_state().read(root)?.0, "replacement");
     let alias = store.bind_global::<Outer>("entry")?;
     assert_eq!(store.global_get(alias)?, store.global_get(entry)?);
     Ok(())
@@ -177,8 +180,10 @@ fn retained_nested_values_are_independent_and_survive_run_disposal() -> Result<(
         let retained = store.global_get(entry)?;
         let destination = store.bind_global::<Outer>("copy")?;
         store.global_set(destination, &store.global_get(entry)?)?;
-        let root = store.global_borrow(entry)?;
-        store.global_write(root.fields().1.fields().1, &"changed".into())?;
+        let root = store.global_state().borrow(entry)?;
+        store
+            .global_state()
+            .write(root.fields().1.fields().1, &"changed".into())?;
         assert_eq!(store.global_get(destination)?, original());
         retained
     };
@@ -197,14 +202,19 @@ fn failed_retention_preserves_all_fields_and_absence() -> Result<()> {
         true,
     );
     assert!(store.global_set(entry, &failing).is_err());
-    assert!(store.global_borrow(entry).is_err());
+    assert!(store.global_state().borrow(entry).is_err());
     store.global_set(entry, &original())?;
     assert!(store.global_set(entry, &failing).is_err());
     assert_eq!(store.global_get(entry)?, original());
-    let root = store.global_borrow(entry)?;
-    assert!(store.global_write(root, &failing).is_err());
+    let root = store.global_state().borrow(entry)?;
+    assert!(store.global_state().write(root, &failing).is_err());
     assert_eq!(store.global_get(entry)?, original());
-    assert!(store.global_write(root.fields().1, &failing.1).is_err());
+    assert!(
+        store
+            .global_state()
+            .write(root.fields().1, &failing.1)
+            .is_err()
+    );
     assert_eq!(store.global_get(entry)?, original());
     Ok(())
 }
@@ -257,9 +267,10 @@ fn borrowing_large_text_aggregate_and_mutating_primitive_leaf_allocates_nothing(
     store.global_set(entry, &("a".repeat(8192), (0, "b".repeat(8192)), false))?;
     let (result, allocations) = count_in(|| -> Result<()> {
         for _ in 0..10_000 {
-            let root = store.global_borrow(entry)?;
+            let root = store.global_state().borrow(entry)?;
             let amount = root.fields().1.fields().0;
-            store.global_write(amount, &(store.global_read(amount)? + 1))?;
+            let previous = store.global_state().read(amount)?;
+            store.global_state().write(amount, &(previous + 1))?;
         }
         Ok(())
     });

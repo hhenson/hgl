@@ -32,3 +32,13 @@ and unsupported generic declarations are diagnosed when this subset is requested
 retain ordered type parameters and the supported finite type-domain constraint.
 Type parameters are distinct; const parameters, defaults, optional fields,
 inheritance and unsupported constraints are diagnosed explicitly.
+
+Explicit instantiate arguments preserve complete nested type syntax (including
+contextual delta_of); wildcard `_` remains a retained generic argument. The
+binder resolves their declaration-owned canonical identity before matching an
+implementation, never comparing only a scalar/shape display name.
+
+`Library::type_sizes` caches checked declaration-owned constant size expressions
+by module and expression during source compilation. It contains only canonical
+i64 values, is populated by the normal ordinary expression checker/evaluator,
+and never reaches runtime shape storage or emitted lookup code.

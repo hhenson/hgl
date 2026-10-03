@@ -1,0 +1,114 @@
+//! Ordinary owning, lexical global and evaluation-local observation authority.
+use hgl_rust_ir::{Kind, Value};
+use hgl_source::Ty;
+/// Whether the checked type admits ordinary owning retention.
+pub fn ordinary(ty: &Ty) -> bool {
+    if let Ty::Struct(_, fields) = ty {
+        return fields.iter().all(|(_, ty)| ordinary(ty));
+    }
+    if let Ty::List(element, _) = ty {
+        return ordinary(element);
+    }
+    matches!(
+        ty,
+        Ty::Bool
+            | Ty::I64
+            | Ty::F64
+            | Ty::Str
+            | Ty::Date
+            | Ty::Time
+            | Ty::DateTime
+            | Ty::Duration
+            | Ty::Struct(..)
+            | Ty::Delta(_)
+    )
+}
+/// Whether a checked place carries recursive write authority.
+pub fn writable(value: &Value) -> bool {
+    if let Kind::Field(parent, _) | Kind::Index(parent, _) = &value.kind {
+        return writable(parent);
+    }
+    matches!(
+        value.kind,
+        Kind::MutableLocal(_) | Kind::BorrowedLocal(_, _, true)
+    )
+}
+/// Resolve a declared ordinary field without changing its parent's authority.
+pub fn field(parent: Value, name: &str) -> Result<Value, String> {
+    let Ty::Struct(_, fields) = &parent.ty else {
+        return Err("field access requires an ordinary struct or direct injected clock".into());
+    };
+    if matches!(parent.kind, Kind::Input(..) | Kind::Wire(_) | Kind::Output) {
+        return Err(
+            "temporal child projection is outside the admitted publication-delta profile".into(),
+        );
+    }
+    let (index, (_, ty)) = fields
+        .iter()
+        .enumerate()
+        .find(|(_, (field, _))| field == name)
+        .ok_or_else(|| format!("unknown struct field {name}"))?;
+    Ok(Value::new(ty.clone(), Kind::Field(Box::new(parent), index)))
+}
+/// Return the entry and access mode carried by an aggregate view.
+pub fn provenance(value: &Value) -> Option<(usize, bool)> {
+    if !matches!(value.ty, Ty::Struct(..) | Ty::List(..) | Ty::Delta(_)) {
+        return None;
+    }
+    if let Kind::BorrowedLocal(_, entry, writable) = value.kind {
+        return Some((entry, writable));
+    }
+    if let Kind::Field(parent, _) | Kind::Index(parent, _) = &value.kind {
+        return provenance(parent);
+    }
+    None
+}
+/// Bind an owning value or preserve an explicitly borrowed initializer.
+pub fn binding(id: usize, value: &Value, mutable: bool, annotated: bool) -> Result<Value, String> {
+    let kind = if observed(value) {
+        if mutable {
+            return Err("structural delta observation cannot initialize writable access".into());
+        }
+        Kind::ObservedLocal(id)
+    } else if let Kind::GlobalGet(entry) = value.kind
+        && matches!(value.ty, Ty::Struct(..) | Ty::List(..) | Ty::Delta(_))
+    {
+        if !annotated {
+            return Err("aggregate get requires a typed let or var binding".into());
+        }
+        Kind::BorrowedLocal(id, entry, mutable)
+    } else if let Some((entry, source_mutable)) = provenance(value) {
+        if source_mutable {
+            return Err("cannot alias an exclusive writable global borrow".into());
+        }
+        if mutable {
+            return Err("cannot upgrade a read-only global borrow to writable access".into());
+        }
+        Kind::BorrowedLocal(id, entry, false)
+    } else if mutable {
+        Kind::MutableLocal(id)
+    } else {
+        Kind::Local(id)
+    };
+    Ok(Value::new(value.ty.clone(), kind))
+}
+/// Reject passing a borrowed aggregate through an ordinary helper boundary.
+pub fn helper_argument(value: &Value) -> Result<(), String> {
+    if observed(value) {
+        return Err(
+            "structural delta observation cannot escape through an ordinary helper call".into(),
+        );
+    }
+    if provenance(value).is_some() {
+        return Err(
+            "borrowed global aggregate cannot escape through an ordinary helper call".into(),
+        );
+    }
+    Ok(())
+}
+/// Whether a structural delta is an evaluation-local input observation.
+pub fn observed(value: &Value) -> bool {
+    matches!(value.ty, Ty::Delta(_))
+        && (matches!(value.kind, Kind::ObservedLocal(_))
+            || matches!(&value.kind, Kind::Query(name, _) if name == "delta_value"))
+}

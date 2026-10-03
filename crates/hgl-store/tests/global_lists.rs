@@ -134,9 +134,9 @@ fn list_empty_bounds_owned_growth_and_self_source() -> NodeResult {
 fn fixed_identity_seed_validation_and_absence_are_recursive() -> NodeResult {
     let mut store = provisioned();
     let fixed = store.bind_global::<List<i64, 2>>("fixed")?;
-    assert!(store.global_borrow(fixed).is_err());
+    assert!(store.global_state().borrow(fixed).is_err());
     assert!(store.global_set(fixed, &vec![]).is_err());
-    assert!(store.global_borrow(fixed).is_err());
+    assert!(store.global_state().borrow(fixed).is_err());
     store.global_set(fixed, &vec![1, 2])?;
     assert!(store.global_set(fixed, &vec![9]).is_err());
     assert_eq!(store.global_get(fixed)?, [1, 2]);
@@ -153,7 +153,7 @@ fn fixed_identity_seed_validation_and_absence_are_recursive() -> NodeResult {
     assert_eq!(store.global_get(nested)?, original);
     let zero = store.bind_global::<List<i64, 0>>("zero")?;
     store.global_set(zero, &vec![])?;
-    let slot = store.global_borrow(zero)?;
+    let slot = store.global_state().borrow(zero)?;
     assert_eq!(store.global_state().list_len(slot)?, 0);
     assert!(store.global_state().list_index(slot, 0).is_err());
     Ok(())
@@ -167,17 +167,23 @@ fn nested_lists_and_struct_fields_are_live_without_aliasing_retained_payloads() 
     let mut original = ("root".into(), vec![("child".into(), vec![1])]);
     store.global_set(entry, &original)?;
     original.1[0].1.push(99);
-    let root = store.global_borrow(entry)?;
+    let root = store.global_state().borrow(entry)?;
     let items = root.fields().1;
     let first = store.global_state().list_index(items, 0)?;
-    let retained = store.global_read(first)?;
+    let retained = store.global_state().read(first)?;
     store.global_state().list_push(items, &retained)?;
     store.global_state().list_push(first.fields().1, &2)?;
-    assert_eq!(store.global_read(first)?, ("child".into(), vec![1, 2]));
+    assert_eq!(
+        store.global_state().read(first)?,
+        ("child".into(), vec![1, 2])
+    );
     let second = store.global_state().list_index(items, 1)?;
-    assert_eq!(store.global_read(second)?, ("child".into(), vec![1]));
+    assert_eq!(
+        store.global_state().read(second)?,
+        ("child".into(), vec![1])
+    );
     let snapshot = store.global_get(entry)?;
-    store.global_write(root, &("new".into(), vec![]))?;
+    store.global_state().write(root, &("new".into(), vec![]))?;
     assert_eq!(store.global_state().list_len(root.fields().1)?, 0);
     drop(store);
     assert_eq!(
@@ -193,7 +199,7 @@ fn failed_retention_and_capacity_reservation_preserve_values_and_slot_counts() -
     let entry = store.bind_global::<Envelope<List<Envelope<List<Fallible>>>>>("root")?;
     let original = ("outer".into(), vec![("child".into(), vec![1])]);
     store.global_set(entry, &original)?;
-    let root = store.global_borrow(entry)?;
+    let root = store.global_state().borrow(entry)?;
     let items = root.fields().1;
     let counts = store.global_state().slot_counts();
     for failure in [-1, -2] {
@@ -202,7 +208,8 @@ fn failed_retention_and_capacity_reservation_preserve_values_and_slot_counts() -
             assert!(store.global_state().list_push(items, &failed_item).is_err());
             assert!(
                 store
-                    .global_write(root, &("changed".into(), vec![failed_item.clone()]))
+                    .global_state()
+                    .write(root, &("changed".into(), vec![failed_item.clone()]))
                     .is_err()
             );
             assert_eq!(store.global_get(entry)?, original);
@@ -218,14 +225,14 @@ fn repeated_whole_replacement_and_push_reuse_all_recursive_slots() -> NodeResult
     let entry = store.bind_global::<List<Envelope<List<String>>>>("root")?;
     let value = vec![("label".into(), vec!["one".into(), "two".into()])];
     store.global_set(entry, &value)?;
-    let root = store.global_borrow(entry)?;
+    let root = store.global_state().borrow(entry)?;
     for _ in 0..4 {
-        store.global_write(root, &value)?;
+        store.global_state().write(root, &value)?;
         store.global_state().list_push(root, &value[0])?;
     }
     let counts = store.global_state().slot_counts();
     for _ in 0..1000 {
-        store.global_write(root, &value)?;
+        store.global_state().write(root, &value)?;
         store.global_state().list_push(root, &value[0])?;
     }
     assert_eq!(store.global_state().slot_counts(), counts);
@@ -246,7 +253,7 @@ fn list_borrow_length_and_nested_projection_do_not_copy_or_allocate() -> NodeRes
     )?;
     let (result, allocations) = count_in(|| -> NodeResult {
         for _ in 0..10_000 {
-            let root = store.global_borrow(entry)?;
+            let root = store.global_state().borrow(entry)?;
             assert_eq!(store.global_state().list_len(root)?, 1);
             let first = store.global_state().list_index(root, 0)?;
             assert_eq!(store.global_state().list_len(first.fields().1)?, 1);
@@ -263,10 +270,10 @@ fn scalar_list<T: hgl_store::Scalar>(item: &T) -> NodeResult {
     let mut store = provisioned();
     let entry = store.bind_global::<List<T>>("value")?;
     store.global_set(entry, &vec![])?;
-    let slot = store.global_borrow(entry)?;
+    let slot = store.global_state().borrow(entry)?;
     store.global_state().list_push(slot, item)?;
     let element = store.global_state().list_index(slot, 0)?;
-    assert_eq!(&store.global_read(element)?, item);
+    assert_eq!(&store.global_state().read(element)?, item);
     Ok(())
 }
 #[test]

@@ -94,7 +94,15 @@ first evaluation, and evaluation executes the checked resume machine. Ordinary
 handlers retain their existing path. Generator selection uses checked IR only,
 never a source operator name or native role.
 
+Structural ports store prepared hgl-shapes tokens, validated at node build.
+Generated delta shape application/extraction is emitted by hgl-rust-deltas.
+
 Eval prepares its typed ordinary recording binding before graph start and reads
 an independent owned list after stop. It converts timed scalar entries to the
 existing dense observation comparison while retaining the separate input horizon.
 It does not inspect a recorder node's private storage or inject replay data.
+
+`emit_test_body(plan, expected: Option<&[Option<Value>]>)` materializes checked
+closed expected values after stop and uses shape-specific sparse comparison.
+Recorded construction errors return before generating references to absent
+node/layout declarations. Expected emission is a fallible owning boundary.

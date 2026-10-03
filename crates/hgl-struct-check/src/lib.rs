@@ -1,7 +1,7 @@
 //! Contextual specialization and field checking for ordinary constructors.
 use hgl_library::{Decl, Library, RequiredStruct};
 use hgl_rust_ir::{Kind, Value};
-use hgl_source::{Expr, Ty, application};
+use hgl_source::{Expr, Ty, application, delta_argument};
 use hgl_value_types::{declaration, specialize, substitute, unify};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -239,6 +239,8 @@ fn needs_context(library: &Library, module: &str, expr: &Expr) -> bool {
                 .any(|(_, expr)| needs_context(library, module, expr))
         }
         Expr::Applied(..)
+        | Expr::Sparse(_)
+        | Expr::Tuple(_)
         | Expr::Literal(_)
         | Expr::Name(_)
         | Expr::Property(..)
@@ -246,4 +248,59 @@ fn needs_context(library: &Library, module: &str, expr: &Expr) -> bool {
         | Expr::Unary(..)
         | Expr::Binary(..) => false,
     }
+}
+
+/// Gather declaration-owned schema size expressions reachable from a type use.
+pub fn schema_sizes(
+    library: &Library,
+    module: &str,
+    name: &str,
+) -> Result<Vec<(String, String)>, String> {
+    let mut sizes = Vec::new();
+    schema_names(library, module, name, &mut BTreeSet::new(), &mut sizes)?;
+    Ok(sizes)
+}
+fn schema_names(
+    library: &Library,
+    module: &str,
+    name: &str,
+    seen: &mut BTreeSet<String>,
+    sizes: &mut Vec<(String, String)>,
+) -> Result<(), String> {
+    if let Some(origin) = delta_argument(name) {
+        return schema_names(library, module, origin, seen, sizes);
+    }
+    let (base, args) = application(name).unwrap_or((name, Vec::new()));
+    for argument in args
+        .iter()
+        .take(if base == "list" { 1 } else { args.len() })
+    {
+        schema_names(library, module, argument, seen, sizes)?;
+    }
+    if Ty::parse(name).is_some()
+        || matches!(
+            base,
+            "list" | "map" | "tuple" | "set" | "ref" | "atomic" | "rolling"
+        )
+    {
+        return Ok(());
+    }
+    if let Some(decl) = declaration(library, module, base)? {
+        if !seen.insert(format!("{}::{}", decl.module, decl.name)) {
+            return Ok(());
+        }
+        for (_, field) in decl.required_struct()?.fields {
+            let _normalized = hgl_type_sizes::normalize(&field, &mut |expr| {
+                if !library
+                    .type_sizes
+                    .contains_key(&(decl.module.clone(), expr.into()))
+                {
+                    sizes.push((decl.module.clone(), expr.into()));
+                }
+                Ok(hgl_source::Literal::Int(0))
+            })?;
+            schema_names(library, &decl.module, &field, seen, sizes)?;
+        }
+    }
+    Ok(())
 }

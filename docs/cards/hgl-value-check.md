@@ -42,3 +42,10 @@ numeric widening. Checked time arithmetic admits datetime plus/minus duration,
 duration plus datetime, datetime minus datetime, and duration plus/minus duration.
 Duration negation is also checked. Scaling, division and date arithmetic remain
 outside this implementation slice; no wrapping behavior is introduced.
+
+Access classification is delegated/re-exported from hgl-value-access, including
+`observed`. Typed Delta globals retain lexical aggregate borrowing. Ordinary
+constructor/list/global/owning assignment and matching delta publication are
+explicit retention boundaries; helper returns/calls cannot escape observations.
+Ordered delta children are traversed for entry effects without weakening borrow
+conflict checks. Delta binary comparison and field/index inspection are rejected.

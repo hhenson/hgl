@@ -16,3 +16,15 @@ names encode complete specialization identities without hashing collisions.
 Acceptance: unchanged emitted ordinary scalar/list/struct programs and global
 metadata; generator locals containing nested ordinary aggregates reference the
 same independently owned layouts as existing hook locals and configurations.
+
+Structural delta layouts use private synthetic required fields made of ordinary
+lists and child delta owners. Canonical delta origin identities are distinct
+from user nominal identities; sparse field vectors have zero or one child.
+Homogeneous sparse shapes use paired key/payload vectors; sets use addition and
+removal vectors. Generated GlobalValue implementations retain the existing
+fallible staging and infallible move-commit contract.
+
+`delta_type(&Ty) -> Ty` forms the checked ordinary publication type.
+`delta_storage(&Ty) -> Ty` exposes the backend-only synthetic owning layout,
+whose NUL-prefixed canonical name cannot alias a source nominal declaration.
+These helpers perform compiler-time shape selection, never runtime dispatch.

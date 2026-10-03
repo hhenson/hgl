@@ -67,3 +67,14 @@ omitted condition as true. `yield` and `while` are reserved identifiers.
 `Cursor::block_contents` parses statements after an already-consumed opening
 brace, for function headers that contain injections. Phase and generator
 admission remain checker responsibilities.
+
+Contextual `delta_of(type)` is accepted in type positions without reserving
+its value-level name. `Expr::Sparse` retains ordered constant-key/payload
+syntax only inside delta constructor arguments; ordinary list and harness
+sequence parsing does not admit sparse entries. Constructor shape, names,
+constant positions and payload compatibility remain checker obligations.
+
+`Expr::Tuple` preserves contextual positional harness cells and omissions.
+Grouping has no comma; a one-element tuple has a trailing comma. Source checking
+restricts this shorthand to harness publication positions of an exact tuple
+shape, without admitting ordinary tuple value operations in this backend slice.

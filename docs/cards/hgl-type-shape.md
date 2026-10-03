@@ -13,3 +13,12 @@ Canonical source names identify specializations without importer aliases.
 
 Acceptance: compiler generic constructor/import/inference tests and distinct
 prepared global schemas for equal-layout specializations.
+
+Structural publication shapes add `Ty::{Map,Tuple}` and ordinary
+`Ty::Delta(origin)`. `Ty::publication` admits exactly the finite recursive
+scalar8/bool-i64-set/fixed-list/tuple/nominal/i64-key-map profile.
+`Ty::delta` validates that profile and reduces scalar origins to themselves;
+structural origins retain their complete exact shape. Delta is never itself a
+temporal publication shape. `delta_argument` recognizes only the contextual
+outer `delta_of(type)` spelling. These rules derive from spec60a2d7e
+ordinary-delta-types and contextual-collection-deltas.

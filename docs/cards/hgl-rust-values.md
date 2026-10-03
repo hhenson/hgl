@@ -47,3 +47,7 @@ separate capability check. This supplies written generator time expressions,
 whose failures precede payload evaluation, separately from implicit relative
 target resolution after both yield operands. Scaling/division and civil-date
 arithmetic remain outside this implementation slice.
+
+Ordered Delta construction and ObservedLocal aliases are lowered through
+hgl-rust-deltas. Structural publication uses typed prepared recursive shapes;
+retention materializes sparse observations only at explicit owning boundaries.

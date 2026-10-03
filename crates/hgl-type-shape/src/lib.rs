@@ -47,6 +47,12 @@ impl fmt::Display for Nominal {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 /// Types admitted by the executable source compiler.
 pub enum Ty {
+    /// Integer-keyed temporal map and recursively checked child shape.
+    Map(Box<Self>, Box<Self>),
+    /// Positional temporal children.
+    Tuple(Vec<Self>),
+    /// Ordinary publication data retaining its exact structural origin.
+    Delta(Box<Self>),
     /// Ordinary list element and optional exact fixed length.
     List(Box<Self>, Option<usize>),
     /// Qualified nominal identity and required ordinary field types.
@@ -94,10 +100,32 @@ impl Ty {
             Self::Void => "void",
             Self::Struct(..) => "struct",
             Self::List(..) => "list",
+            Self::Map(..) => "map",
+            Self::Tuple(..) => "tuple",
+            Self::Delta(..) => "delta_of",
         }
     }
     /// Parse a concrete admitted type spelling.
     pub fn parse(name: &str) -> Option<Self> {
+        if let Some(origin) = delta_argument(name) {
+            return Self::parse(origin)?.delta().ok();
+        }
+        if let Some((base, arguments)) = application(name) {
+            if base == "tuple" {
+                return Some(Self::Tuple(
+                    arguments
+                        .into_iter()
+                        .map(Self::parse)
+                        .collect::<Option<_>>()?,
+                ));
+            }
+            if base == "map" && arguments.len() == 2 {
+                return Some(Self::Map(
+                    Box::new(Self::parse(arguments[0])?),
+                    Box::new(Self::parse(arguments[1])?),
+                ));
+            }
+        }
         if let Some(child) = name.strip_prefix("ref<").and_then(|s| s.strip_suffix('>')) {
             return Some(Self::Ref(Box::new(Self::parse(child)?)));
         }
@@ -125,10 +153,10 @@ impl Ty {
         let body = name.strip_prefix("list<")?.strip_suffix('>')?;
         let mut depth = 0;
         for (index, ch) in body.char_indices() {
-            if ch == '<' {
+            if matches!(ch, '<' | '(') {
                 depth += 1;
             }
-            if ch == '>' {
+            if matches!(ch, '>' | ')') {
                 depth -= 1;
             }
             if ch == ',' && depth == 0 {
@@ -152,6 +180,16 @@ impl Ty {
     pub fn source_name(&self) -> String {
         match self {
             Self::Struct(identity, _) => identity.source_name(),
+            Self::Delta(origin) => format!("delta_of({})", origin.source_name()),
+            Self::Tuple(children) => format!(
+                "tuple<{}>",
+                children
+                    .iter()
+                    .map(Self::source_name)
+                    .collect::<Vec<_>>()
+                    .join(",")
+            ),
+            Self::Map(key, child) => format!("map<{},{}>", key.source_name(), child.source_name()),
             Self::List(element, size) => match size {
                 Some(size) => format!("list<{},{}>", element.source_name(), size),
                 None => format!("list<{}>", element.source_name()),
@@ -174,27 +212,86 @@ impl Ty {
 /// Split an outer application without confusing nested argument separators.
 pub fn application(name: &str) -> Option<(&str, Vec<&str>)> {
     let (origin, body) = name.split_once('<')?;
+    if origin.contains(['(', ')']) {
+        return None;
+    }
     let body = body.strip_suffix('>')?;
     let mut depth = 0_i32;
+    let mut parentheses = 0_i32;
     let mut start = 0;
     let mut arguments = Vec::new();
     for (index, ch) in body.char_indices() {
         match ch {
-            '<' | '(' => depth += 1,
-            '>' | ')' => depth -= 1,
-            ',' if depth == 0 => {
+            '(' => parentheses += 1,
+            ')' => parentheses -= 1,
+            '<' if parentheses == 0 => depth += 1,
+            '>' if parentheses == 0 => depth -= 1,
+            ',' if depth == 0 && parentheses == 0 => {
                 arguments.push(&body[start..index]);
                 start = index + 1;
             }
             _ => {}
         }
-        if depth < 0 {
+        if depth < 0 || parentheses < 0 {
             return None;
         }
     }
-    if depth != 0 {
+    if depth != 0 || parentheses != 0 {
         return None;
     }
     arguments.push(&body[start..]);
     Some((origin, arguments))
+}
+
+/// Recognize the contextual type relationship without consuming nested applications.
+pub fn delta_argument(name: &str) -> Option<&str> {
+    name.strip_prefix("delta_of(")?.strip_suffix(')')
+}
+impl Ty {
+    /// Whether this exact type belongs to the finite publication profile.
+    pub fn publication(&self) -> bool {
+        match self {
+            Self::Bool
+            | Self::I64
+            | Self::F64
+            | Self::Str
+            | Self::Date
+            | Self::Time
+            | Self::DateTime
+            | Self::Duration => true,
+            Self::Set(member) => matches!(**member, Self::Bool | Self::I64),
+            Self::List(child, Some(_)) => child.publication(),
+            Self::Tuple(children) => children.iter().all(Self::publication),
+            Self::Struct(_, fields) => fields.iter().all(|(_, child)| child.publication()),
+            Self::Map(key, child) => **key == Self::I64 && child.publication(),
+            Self::List(_, None)
+            | Self::Delta(_)
+            | Self::Ref(_)
+            | Self::Nullable(_)
+            | Self::Void => false,
+        }
+    }
+    /// Form the exact ordinary publication type, reducing scalar origins.
+    pub fn delta(self) -> Result<Self, String> {
+        if !self.publication() {
+            return Err(format!(
+                "delta_of: unsupported publication shape {}",
+                self.source_name()
+            ));
+        }
+        Ok(match self {
+            Self::Set(_) | Self::List(..) | Self::Tuple(_) | Self::Struct(..) | Self::Map(..) => {
+                Self::Delta(Box::new(self))
+            }
+            Self::Bool
+            | Self::I64
+            | Self::F64
+            | Self::Str
+            | Self::Date
+            | Self::Time
+            | Self::DateTime
+            | Self::Duration => self,
+            Self::Delta(_) | Self::Ref(_) | Self::Nullable(_) | Self::Void => unreachable!(),
+        })
+    }
 }

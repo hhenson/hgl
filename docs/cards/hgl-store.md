@@ -8,7 +8,7 @@ nodes beyond an id to wake.
 
 ## May use
 
-`hgl-types`, `hgl-bindings`, `hgl-columns`.
+`hgl-types`, `hgl-bindings`, `hgl-columns`, `hgl-shapes`.
 
 The ordinary global-value facility also uses `hgl-global`, independently of
 time-series columns. Store re-exports its typed `Global<T>` handle.
@@ -279,10 +279,10 @@ Ordinary globals also support finite required-field nominal structs via
 `GlobalValue` markers (re-exported with `ValueSlot` and `ValueColumns` from the typed
 storage representation). `bind_global`, `global_get` and `global_set` use
 `T: GlobalValue`, with owning payload `T::Value`; all scalar callers are unchanged.
-`prepare_global` takes `OrdinaryType`. `global_borrow(Global<T>)` checks the single
+`prepare_global` takes `OrdinaryType`. `global_state().borrow(Global<T>)` checks the single
 root presence and returns `ValueSlot<T>` without copying the entry.
-`global_read(ValueSlot<T>)` returns an independently owned `T::Value`;
-`global_write(ValueSlot<T>, &T::Value)` retains fully before replacing a borrowed
+`global_state().read(ValueSlot<T>)` returns an independently owned `T::Value`;
+`global_state().write(ValueSlot<T>, &T::Value)` retains fully before replacing a borrowed
 root or projected required field. Slots stay internal to the generated lexical
 access discipline. No runtime borrow registry or per-hook schema inspection.
 
@@ -292,3 +292,11 @@ for list operations and owner configuration/extraction. `GlobalState`, `List`,
 for generated native value code. Ordinary ValueColumns use a reusable typed arena;
 temporal Columns and endpoint storage remain separate. The compiler restricts
 hook calls to already-prepared typed accesses.
+
+Prepared shape input/output tokens from hgl-shapes can be converted to scalar
+handles without repeating type checks. `prepared_input<T>(Input<T>) -> In<T>`
+and `prepared_output<T>(Output<T>) -> Out<T>` preserve the static shape proof.
+`add_prepared_output(owner, kind, children)` attaches statically allocated fixed
+children. `get_or_create_with(dict,key,now,wake,create)` uses a compile-time chosen
+child factory only when no live/restorable child exists. Existing dynamic
+construction entry points remain available; no payload dispatch is introduced.

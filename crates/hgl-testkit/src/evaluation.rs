@@ -41,6 +41,32 @@ pub fn compare<T: PartialEq + std::fmt::Debug>(
     expected: &[Option<T>],
     observed: &Observation<T>,
 ) -> Result<(), String> {
+    compare_values(expected, observed, PartialEq::eq, |wanted, actual| {
+        format!("expected {wanted:?}, observed {actual:?}")
+    })
+}
+
+/// Compare sparse payloads using the statically selected publication shape.
+pub fn compare_by<T>(
+    expected: &[Option<T>],
+    observed: &Observation<T>,
+    equivalent: impl Fn(&T, &T) -> bool,
+) -> Result<(), String> {
+    compare_values(expected, observed, equivalent, |wanted, actual| {
+        format!(
+            "expected presence {}, observed presence {}: payload or presence differs",
+            wanted.is_some(),
+            actual.is_some()
+        )
+    })
+}
+
+fn compare_values<T>(
+    expected: &[Option<T>],
+    observed: &Observation<T>,
+    equivalent: impl Fn(&T, &T) -> bool,
+    describe: impl Fn(Option<&T>, Option<&T>) -> String,
+) -> Result<(), String> {
     let mut ticks = observed.ticks.iter().peekable();
     for (cycle, wanted) in expected.iter().take(observed.length).enumerate() {
         let actual = if ticks.peek().is_some_and(|(i, _)| *i == cycle) {
@@ -48,9 +74,14 @@ pub fn compare<T: PartialEq + std::fmt::Debug>(
         } else {
             None
         };
-        if wanted.as_ref() != actual {
+        if !match (wanted.as_ref(), actual) {
+            (Some(a), Some(b)) => equivalent(a, b),
+            (None, None) => true,
+            _ => false,
+        } {
             return Err(format!(
-                "cycle {cycle}: expected {wanted:?}, observed {actual:?}"
+                "cycle {cycle}: {}",
+                describe(wanted.as_ref(), actual)
             ));
         }
     }

@@ -1,0 +1,21 @@
+module structural_effects
+struct Pair { left:i64
+right:i64 }
+struct Deep { pair:Pair
+tail:i64 }
+struct TimedValue<T> { time:datetime
+value:T }
+native const fn mark(value:i64)->i64 throws
+native const fn mark(value:i64)->i64 throws {}
+fn source()->Deep {
+ yield 4us:delta<Deep>(tail:mark(1),pair:delta<Pair>(right:mark(2),left:mark(3)))
+ yield 1us:delta<Deep>(pair:delta<Pair>(right:mark(4)))
+}
+fn record(value:Deep) {
+ inject global_state,clock
+ start {let values:list<TimedValue<delta_of(Deep)>> =[]
+ set(global_state,"effects",values)}
+ when {var values:list<TimedValue<delta_of(Deep)>> =get(global_state,"effects")
+ push(values,TimedValue(time:clock.evaluation_time,value:delta_value(value)))}
+}
+export fn main() {record(source())}

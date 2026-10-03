@@ -1,5 +1,5 @@
 //! Direct ordinary evaluation of checked IR without runtime capabilities.
-use hgl_rust_ir::{Kind, Statement, Value};
+use hgl_rust_ir::{DeltaEntry, Kind, Statement, Value};
 use hgl_source::{Literal, Ty};
 use std::fmt;
 mod operators;
@@ -37,37 +37,9 @@ fn index(value: &Value) -> Result<usize, EvalError> {
     usize::try_from(value).map_err(|_out_of_range| bounds())
 }
 
-/// Whether an expression is already a closed ordinary constant.
+/// Whether an expression is closed independently owned ordinary data.
 pub fn constant(value: &Value) -> bool {
-    match &value.kind {
-        Kind::Literal(_) | Kind::Void => true,
-        Kind::List(items) => items.iter().all(constant),
-        Kind::Construct(fields) => fields.iter().all(|(_, value)| constant(value)),
-        Kind::WiringFailure(_)
-        | Kind::Index(..)
-        | Kind::Length(_)
-        | Kind::Push(..)
-        | Kind::ValueCall(..)
-        | Kind::Configuration(_)
-        | Kind::Field(..)
-        | Kind::GlobalGet(_)
-        | Kind::BorrowedLocal(..)
-        | Kind::GlobalSet(..)
-        | Kind::IsPresent(_)
-        | Kind::Present(_)
-        | Kind::Wire(_)
-        | Kind::Input(..)
-        | Kind::Cache(_)
-        | Kind::Local(_)
-        | Kind::MutableLocal(_)
-        | Kind::Native(..)
-        | Kind::Binary(..)
-        | Kind::Unary(..)
-        | Kind::Query(..)
-        | Kind::Output
-        | Kind::Capability
-        | Kind::GeneratorLocal(_) => false,
-    }
+    value.closed()
 }
 
 /// Lexical owning locals for one ordinary evaluation context.
@@ -83,6 +55,7 @@ impl Evaluator {
     /// Evaluate a checked expression to a closed, independently owned value.
     pub fn value(&mut self, value: &Value) -> Result<Value, EvalError> {
         let kind = match &value.kind {
+            Kind::Delta(parts) => self.delta(parts)?,
             Kind::WiringFailure(message) => return Err(EvalError::Operation(message.clone())),
             Kind::Literal(_) | Kind::Void => return Ok(value.clone()),
             Kind::List(items) => {
@@ -137,6 +110,7 @@ impl Evaluator {
             | Kind::GlobalSet(..)
             | Kind::IsPresent(_)
             | Kind::Present(_)
+            | Kind::ObservedLocal(_)
             | Kind::GeneratorLocal(_)
             | Kind::Wire(_)
             | Kind::Input(..)
@@ -249,6 +223,21 @@ impl Evaluator {
         items.push(item);
         Ok(())
     }
+    fn delta(&mut self, parts: &[DeltaEntry]) -> Result<Kind, EvalError> {
+        Ok(Kind::Delta(
+            parts
+                .iter()
+                .map(|part| {
+                    Ok(match part {
+                        DeltaEntry::Child(key, value) => {
+                            DeltaEntry::Child(*key, self.value(value)?)
+                        }
+                        DeltaEntry::Add(_) | DeltaEntry::Remove(_) => part.clone(),
+                    })
+                })
+                .collect::<Result<_, EvalError>>()?,
+        ))
+    }
     fn path(&mut self, value: &Value, path: &mut Vec<Projection>) -> Result<usize, EvalError> {
         match &value.kind {
             Kind::WiringFailure(message) => Err(EvalError::Operation(message.clone())),
@@ -263,7 +252,9 @@ impl Evaluator {
                 path.push(Projection::Index(index(&self.value(offset)?)?));
                 Ok(id)
             }
-            Kind::List(_)
+            Kind::Delta(_)
+            | Kind::ObservedLocal(_)
+            | Kind::List(_)
             | Kind::Length(_)
             | Kind::Push(..)
             | Kind::ValueCall(..)

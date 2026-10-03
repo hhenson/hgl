@@ -1,6 +1,11 @@
 use crate::index::{Decl, Library, Role, Signature};
 use crate::syntax::{Cursor, Expr, Literal, Stmt, Ty};
 use hgl_body_check::runtime_body;
+use hgl_endpoint_check::{
+    capability_function, capability_payload, clock_property, endpoint_call, endpoint_metadata,
+    injected_clock, require_payload, set_call,
+};
+use hgl_flow_check::{facts, handler_facts, merge_facts, terminates};
 use hgl_rust::{Kind, Native, Node, Plan, Statement, Value};
 use hgl_value_bind::{bind, method_arguments, order_arguments, resolve_type};
 use hgl_value_check::{field, ordinary, writable};
@@ -159,6 +164,71 @@ impl Checker {
         Ok(value)
     }
 
+    fn constant_size(&mut self, module: &str, source: &str, env: &Env) -> Result<Literal, String> {
+        let tokens = hgl_source::lex(source)?;
+        let mut cursor = Cursor::new(&tokens);
+        let expr = cursor.expr()?;
+        if !cursor.at("") {
+            return Err("invalid list-size expression".into());
+        }
+        let value = self.expression(module, &expr, env, false)?;
+        let value = self
+            .wiring
+            .value(&value)
+            .map_err(|e| format!("constant list size: {e}"))?;
+        let Kind::Literal(value) = value.kind else {
+            return Err("list size requires a constant scalar".into());
+        };
+        Ok(value)
+    }
+    fn type_sizes(&mut self, module: &str, name: &str, env: &Env) -> Result<String, String> {
+        for (owner, expr) in hgl_struct_check::schema_sizes(&self.library, module, name)? {
+            let Literal::Int(size) = self.constant_size(&owner, &expr, &Env::new())? else {
+                return Err("list size requires a constant i64".into());
+            };
+            if size < 0 {
+                return Err("list size must be nonnegative or unbounded".into());
+            }
+            self.library.type_sizes.insert((owner, expr), size);
+        }
+        hgl_type_sizes::normalize(name, &mut |source| self.constant_size(module, source, env))
+    }
+    fn signature_sizes(
+        &mut self,
+        module: &str,
+        mut signature: Signature,
+        args: &[(Option<String>, Value)],
+    ) -> Result<Signature, String> {
+        let names = signature
+            .parameters
+            .iter()
+            .map(|p| p.name.as_str())
+            .collect::<Vec<_>>();
+        let supplied = order_arguments(&names, args)?;
+        let env = signature
+            .parameters
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| p.constant)
+            .filter_map(|(id, p)| {
+                supplied
+                    .get(&id)
+                    .cloned()
+                    .or_else(|| {
+                        p.default
+                            .as_ref()?
+                            .fixed()
+                            .map(|v| Value::new(v.ty(), Kind::Literal(v)))
+                    })
+                    .map(|v| (p.name.clone(), v))
+            })
+            .collect::<Env>();
+        for parameter in &mut signature.parameters {
+            parameter.ty = self.type_sizes(module, &parameter.ty, &env)?;
+        }
+        signature.result = self.type_sizes(module, &signature.result, &env)?;
+        Ok(signature)
+    }
     fn direct_call(
         &mut self,
         id: usize,
@@ -175,7 +245,16 @@ impl Checker {
             .iter()
             .zip(&args)
             .enumerate()
-            .map(|(id, (p, v))| (p.name.clone(), Value::new(v.ty.clone(), Kind::Local(id))))
+            .map(|(id, (p, v))| {
+                (
+                    p.name.clone(),
+                    if p.constant {
+                        v.clone()
+                    } else {
+                        Value::new(v.ty.clone(), Kind::Local(id))
+                    },
+                )
+            })
             .collect();
         let previous_types = std::mem::replace(&mut self.types, types);
         let runtime = match self.value_context {
@@ -245,7 +324,7 @@ impl Checker {
             .ok()
     }
     fn select(
-        &self,
+        &mut self,
         module: &str,
         name: &str,
         args: &[(Option<String>, Value)],
@@ -253,7 +332,7 @@ impl Checker {
     ) -> Result<Selection, String> {
         let mut candidates = Vec::new();
         let mut errors = Vec::new();
-        for (id, decl) in self.library.declarations.iter().enumerate() {
+        for (id, decl) in self.library.declarations.clone().iter().enumerate() {
             if decl.module != module
                 || decl.name != name
                 || matches!(decl.role, Role::Implementation | Role::Test | Role::Struct)
@@ -271,7 +350,10 @@ impl Checker {
             {
                 continue;
             }
-            let signature = match decl.signature() {
+            let signature = match decl
+                .signature()
+                .and_then(|s| self.signature_sizes(module, s, args))
+            {
                 Ok(s) => s,
                 Err(e) => {
                     errors.push(e);
@@ -294,9 +376,9 @@ impl Checker {
                 }
             };
             if signature.body.iter().any(|token| token.text == "yield")
-                && resolve_type(&signature.result, &declared).is_some_and(|ty| !scalar(&ty))
+                && resolve_type(&signature.result, &declared).is_some_and(|ty| !ty.publication())
             {
-                errors.push("generator requires a declared scalar output type".into());
+                errors.push("generator requires a declared publication output type".into());
                 continue;
             }
             match bind(
@@ -322,7 +404,7 @@ impl Checker {
         Ok(candidates.remove(0))
     }
     fn implementation(
-        &self,
+        &mut self,
         declaration: &Decl,
         signature: &Signature,
         values: &[Value],
@@ -332,21 +414,24 @@ impl Checker {
         let module = declaration.module.as_str();
         let name = declaration.name.as_str();
         let mut implementations = Vec::new();
-        for (candidate, implementation) in self.library.declarations.iter().enumerate() {
+        for (candidate, implementation) in self.library.declarations.clone().iter().enumerate() {
             if implementation.module != module
                 || implementation.name != name
                 || implementation.role != Role::Implementation
             {
                 continue;
             }
-            let Ok(sig) = implementation.signature() else {
-                continue;
-            };
             let positional = values
                 .iter()
                 .cloned()
                 .map(|v| (None, v))
                 .collect::<Vec<_>>();
+            let Ok(sig) = implementation
+                .signature()
+                .and_then(|s| self.signature_sizes(module, s, &positional))
+            else {
+                continue;
+            };
             let Ok(declared) =
                 hgl_value_bind::signature_types(&self.library, module, &sig, &positional)
             else {
@@ -369,20 +454,16 @@ impl Checker {
             {
                 continue;
             }
-            if !sig.generics.is_empty() {
-                let instance = sig
-                    .generics
-                    .iter()
-                    .filter_map(|g| inferred.get(g).map(|t| t.name().to_owned()))
-                    .collect::<Vec<_>>();
-                if !self.library.instances.iter().any(|(m, n, args)| {
-                    m == module
-                        && n == name
-                        && args.len() == instance.len()
-                        && args.iter().zip(&instance).all(|(a, b)| a == "_" || a == b)
-                }) {
-                    continue;
-                }
+            if !sig.generics.is_empty()
+                && !hgl_value_bind::instantiated(
+                    &self.library,
+                    module,
+                    name,
+                    &sig.generics,
+                    &inferred,
+                )
+            {
+                continue;
             }
             implementations.push((candidate, sig, inferred));
         }
@@ -394,7 +475,12 @@ impl Checker {
         }
         Ok(implementations.remove(0))
     }
-    fn requirement(&self, module: &str, sig: &Signature, inferred: &BTreeMap<String, Ty>) -> bool {
+    fn requirement(
+        &mut self,
+        module: &str,
+        sig: &Signature,
+        inferred: &BTreeMap<String, Ty>,
+    ) -> bool {
         if let Some((required, args, target)) = &sig.requirement {
             let args = args
                 .iter()
@@ -622,8 +708,8 @@ impl Checker {
         env: &mut Env,
         mut node: Node,
     ) -> Result<Node, String> {
-        if !scalar(&node.result) {
-            return Err("generator requires a declared scalar output type".into());
+        if !node.result.publication() {
+            return Err("generator requires a declared publication output type".into());
         }
         let (services, body) = hgl_body_check::generator_body(c)?;
         for service in services {
@@ -816,12 +902,13 @@ impl Checker {
     ) -> Result<Value, String> {
         let ty = annotation
             .map(|name| {
-                resolve_type(name, &self.types).map_or_else(
+                let name = self.type_sizes(module, name, env)?;
+                resolve_type(&name, &self.types).map_or_else(
                     || {
                         hgl_value_types::substitute(
                             &self.library,
                             module,
-                            name,
+                            &name,
                             &self.types,
                             &mut BTreeSet::new(),
                         )
@@ -904,6 +991,43 @@ impl Checker {
         self.globals.push((key.clone(), ty.clone()));
         Ok(index)
     }
+    pub(crate) fn harness_expression(
+        &mut self,
+        module: &str,
+        expr: &Expr,
+        expected: &Ty,
+    ) -> Result<Value, String> {
+        let Expr::Tuple(cells) = expr else {
+            return self.expected_expression(module, expr, &Env::new(), false, Some(expected));
+        };
+        let Ty::Delta(origin) = expected else {
+            return Err("tuple shorthand requires an exact tuple publication shape".into());
+        };
+        let Ty::Tuple(children) = origin.as_ref() else {
+            return Err("tuple shorthand requires an exact tuple publication shape".into());
+        };
+        if children.len() != cells.len() {
+            return Err("tuple shorthand arity mismatch".into());
+        }
+        let mut entries = Vec::new();
+        for (index, (child, expr)) in children.iter().zip(cells).enumerate() {
+            if let Some(expr) = expr {
+                let ty = child.clone().delta()?;
+                let mut value = self.harness_expression(module, expr, &ty)?;
+                if ty == Ty::F64 && value.ty == Ty::I64 {
+                    value = Value::new(Ty::F64, Kind::Unary("float".into(), Box::new(value)));
+                }
+                if value.ty != ty {
+                    return Err("tuple shorthand child type mismatch".into());
+                }
+                entries.push(hgl_rust::DeltaEntry::Child(
+                    i64::try_from(index).map_err(|e| e.to_string())?,
+                    value,
+                ));
+            }
+        }
+        Ok(Value::new(expected.clone(), Kind::Delta(entries)))
+    }
     fn expected_expression(
         &mut self,
         module: &str,
@@ -985,21 +1109,7 @@ impl Checker {
                 }
                 Statement::Exit
             }
-            Stmt::Return(expr) => {
-                if self.generator && self.value_context == ValueContext::Outside {
-                    return Err("generator return cannot carry a value; use yield".into());
-                }
-                let v = self.expected_expression(module, expr, env, true, Some(result))?;
-                if &v.ty != result || matches!(result, Ty::Void | Ty::Set(_)) {
-                    return Err("node return type mismatch".into());
-                }
-                require_payload(&v)?;
-                if self.value_context == ValueContext::Outside {
-                    Statement::Return(v)
-                } else {
-                    Statement::Yield(v)
-                }
-            }
+            Stmt::Return(expr) => self.return_statement(module, expr, env, result)?,
             Stmt::Call(expr) => {
                 let value = self.expression(module, expr, env, true)?;
                 require_payload(&value)?;
@@ -1035,6 +1145,33 @@ impl Checker {
             }
         })
     }
+    fn return_statement(
+        &mut self,
+        module: &str,
+        expr: &Expr,
+        env: &Env,
+        result: &Ty,
+    ) -> Result<Statement, String> {
+        if self.generator && self.value_context == ValueContext::Outside {
+            return Err("generator return cannot carry a value; use yield".into());
+        }
+        let expected =
+            if self.value_context == ValueContext::Outside && !matches!(result, Ty::Ref(_)) {
+                result.clone().delta()?
+            } else {
+                result.clone()
+            };
+        let v = self.expected_expression(module, expr, env, true, Some(&expected))?;
+        if v.ty != expected || *result == Ty::Void {
+            return Err("node return type mismatch".into());
+        }
+        require_payload(&v)?;
+        Ok(if self.value_context == ValueContext::Outside {
+            Statement::Return(v)
+        } else {
+            Statement::Yield(v)
+        })
+    }
     fn timed_yield(
         &mut self,
         module: &str,
@@ -1049,9 +1186,10 @@ impl Checker {
         if !matches!(time.ty, Ty::Duration | Ty::DateTime) {
             return Err("yield time requires datetime or duration".into());
         }
-        let payload = self.expected_expression(module, payload, env, true, Some(result))?;
+        let expected = result.clone().delta()?;
+        let payload = self.expected_expression(module, payload, env, true, Some(&expected))?;
         require_payload(&payload)?;
-        if payload.ty != *result {
+        if payload.ty != expected {
             return Err("yield payload type mismatch".into());
         }
         Ok(Statement::TimedYield(time, payload))
@@ -1134,8 +1272,13 @@ impl Checker {
         {
             return Err("assignment requires writable var, state, cache or out".into());
         }
-        let value = self.expected_expression(module, expr, env, true, Some(&target.ty))?;
-        if target.ty != value.ty || !ordinary(&target.ty) {
+        let expected = if matches!(target.kind, Kind::Output) {
+            target.ty.clone().delta()?
+        } else {
+            target.ty.clone()
+        };
+        let value = self.expected_expression(module, expr, env, true, Some(&expected))?;
+        if expected != value.ty || !ordinary(&expected) {
             return Err("assignment type mismatch".into());
         }
         require_payload(&value)?;
@@ -1176,6 +1319,10 @@ impl Checker {
         runtime: bool,
     ) -> Result<Value, String> {
         match expr {
+            Expr::Tuple(_) => {
+                Err("tuple shorthand requires a contextual harness publication position".into())
+            }
+            Expr::Sparse(_) => Err("sparse entries require a delta constructor context".into()),
             Expr::Null => Err("null requires a contextual nullable comparison".into()),
             Expr::Property(receiver, name) => {
                 if injected_clock(receiver, env) {
@@ -1266,7 +1413,7 @@ impl Checker {
             if receiver == "logger" && name == "info" {
                 return self.log_info(&values);
             }
-            return capability_function(receiver, name, &values, env, self.phase);
+            return capability_function(receiver, name, &values, env, self.phase == Phase::Stop);
         }
         if name == "delta_value" {
             return self.delta_value(module, args, env, runtime);
@@ -1341,8 +1488,8 @@ impl Checker {
                 "delta_value requires a temporal input endpoint; signal is not admitted".into(),
             );
         };
-        if !scalar(&value.ty) {
-            return Err("delta_value: structural delta contract is not admitted".into());
+        if !value.ty.publication() {
+            return Err("delta_value: unsupported publication shape".into());
         }
         if !["valid", "modified"]
             .iter()
@@ -1353,7 +1500,7 @@ impl Checker {
             );
         }
         Ok(Value::new(
-            value.ty.clone(),
+            value.ty.clone().delta()?,
             Kind::Query("delta_value".into(), vec![value]),
         ))
     }
@@ -1365,6 +1512,14 @@ impl Checker {
         runtime: bool,
         expected: Option<&Ty>,
     ) -> Result<Value, String> {
+        let name = self.type_sizes(module, name, env)?;
+        let name = name.as_str();
+        if let Some(origin) = name
+            .strip_prefix("delta<")
+            .and_then(|name| name.strip_suffix('>'))
+        {
+            return self.delta_constructor(module, (origin, args), env, runtime, expected);
+        }
         let mut check = hgl_struct_check::Constructor::new(
             &self.library,
             module,
@@ -1380,6 +1535,53 @@ impl Checker {
             check.checked(&self.library, index, value)?;
         }
         check.finish(&self.library)
+    }
+    fn delta_constructor(
+        &mut self,
+        module: &str,
+        (origin, args): (&str, &[(Option<String>, Expr)]),
+        env: &Env,
+        runtime: bool,
+        expected: Option<&Ty>,
+    ) -> Result<Value, String> {
+        let origin = hgl_value_types::substitute(
+            &self.library,
+            module,
+            origin,
+            &self.types,
+            &mut BTreeSet::new(),
+        )?;
+        let ty = origin.clone().delta()?;
+        if expected.is_some_and(|expected| *expected != ty) {
+            return Err("delta originating shape mismatch".into());
+        }
+        let parts = hgl_delta_check::constructor(&origin, args, |expr| {
+            let value = self.expression(module, expr, env, false)?;
+            let value = self
+                .wiring
+                .value(&value)
+                .map_err(|e| format!("delta position requires a constant: {e}"))?;
+            let Kind::Literal(value) = value.kind else {
+                return Err("delta position requires a constant scalar".into());
+            };
+            Ok(value)
+        })?;
+        let mut entries = Vec::new();
+        for part in parts {
+            entries.push(match part {
+                hgl_delta_check::Part::Added(value) => hgl_rust::DeltaEntry::Add(value),
+                hgl_delta_check::Part::Removed(value) => hgl_rust::DeltaEntry::Remove(value),
+                hgl_delta_check::Part::Child(key, ty, expr) => {
+                    let value = self.expected_expression(module, expr, env, runtime, Some(&ty))?;
+                    require_payload(&value)?;
+                    if value.ty != ty {
+                        return Err("delta child type mismatch".into());
+                    }
+                    hgl_rust::DeltaEntry::Child(key, value)
+                }
+            });
+        }
+        Ok(Value::new(ty, Kind::Delta(entries)))
     }
     fn value_call(
         &mut self,
@@ -1486,17 +1688,12 @@ impl Checker {
     }
 }
 
-pub(crate) fn evaluate(
-    library: Library,
+fn select_eval(
+    checker: &Checker,
     module: &str,
     name: &str,
     args: &[(Option<String>, Expr)],
-) -> Result<Plan, String> {
-    let mut checker = Checker {
-        library,
-        test_scope: Some(module.into()),
-        ..Checker::default()
-    };
+) -> Result<(Checker, EvalInputs, Arguments), String> {
     let (owner, item) = checker.identity(module, name);
     let helpers =
         checker.library.declarations.iter().any(|d| {
@@ -1504,7 +1701,7 @@ pub(crate) fn evaluate(
         });
     let mut candidates = Vec::new();
     let mut errors = Vec::new();
-    for decl in &checker.library.declarations {
+    for decl in checker.library.declarations.clone() {
         if decl.module != owner
             || decl.name != item
             || matches!(
@@ -1517,8 +1714,13 @@ pub(crate) fn evaluate(
             continue;
         }
         let signature = decl.signature()?;
-        match eval_arguments(&signature, args) {
-            Ok((plan, values)) => candidates.push((plan, values)),
+        let mut candidate = Checker {
+            library: checker.library.clone(),
+            test_scope: checker.test_scope.clone(),
+            ..Checker::default()
+        };
+        match eval_arguments(&mut candidate, module, &decl.module, &signature, args) {
+            Ok((plan, values)) => candidates.push((candidate, plan, values)),
             Err(error) => errors.push(error),
         }
     }
@@ -1529,8 +1731,25 @@ pub(crate) fn evaluate(
             errors.join("; ")
         ));
     }
-    let (plan, mut values) = candidates.remove(0);
+    Ok(candidates.remove(0))
+}
+
+pub(crate) fn evaluate(
+    library: Library,
+    module: &str,
+    name: &str,
+    args: &[(Option<String>, Expr)],
+) -> Result<Plan, String> {
+    let checker = Checker {
+        library,
+        test_scope: Some(module.into()),
+        ..Checker::default()
+    };
+    let (mut checker, plan, mut values) = select_eval(&checker, module, name, args)?;
     checker.plan.input_length = plan.input_length;
+    if plan.construction_error.is_some() {
+        checker.plan.construction_error = plan.construction_error;
+    }
     for (_, value) in &mut values {
         if let Kind::Wire(input) = value.kind {
             let data = replay_data(&checker.library, &value.ty, &plan.sequences[input])?;
@@ -1540,8 +1759,8 @@ pub(crate) fn evaluate(
     checker.result_hint = None;
     let output = checker.call(module, name, &values, false)?;
     if matches!(output.kind, Kind::Wire(_)) {
-        if !scalar(&output.ty) {
-            return Err("eval currently records scalar outputs".into());
+        if !output.ty.publication() {
+            return Err("eval output is outside the delta publication profile".into());
         }
         let ty = output.ty.clone();
         let key = eval_recording_key(&checker.plan);
@@ -1571,36 +1790,16 @@ pub(crate) fn evaluate(
     Ok(checker.plan)
 }
 
-fn replay_data(library: &Library, ty: &Ty, slots: &[Option<Literal>]) -> Result<Value, String> {
-    let timed = hgl_value_types::resolve(
+fn replay_data(library: &Library, ty: &Ty, slots: &[Option<Value>]) -> Result<Value, String> {
+    let decl = hgl_value_types::declaration(library, "hgraph.std", "TimedValue")?
+        .ok_or("eval requires the ordinary TimedValue declaration")?;
+    let timed = hgl_value_types::specialize(
         library,
-        "hgraph.std",
-        &format!("TimedValue<{}>", ty.source_name()),
+        decl,
+        vec![ty.clone().delta()?],
         &mut BTreeSet::new(),
     )?;
-    let entries = slots
-        .iter()
-        .enumerate()
-        .filter_map(|(i, v)| v.as_ref().map(|v| (i, v)))
-        .map(|(i, v)| {
-            let micros = i64::try_from(i)
-                .map_err(|error| format!("eval timestamp overflow: {error}"))?
-                .checked_add(1)
-                .ok_or("eval timestamp overflow")?;
-            Ok(Value::new(
-                timed.clone(),
-                Kind::Construct(vec![
-                    (
-                        0,
-                        Value::new(Ty::DateTime, Kind::Literal(Literal::DateTime(micros))),
-                    ),
-                    (1, Value::new(ty.clone(), Kind::Literal(v.clone()))),
-                ]),
-            ))
-        })
-        .collect::<Result<Vec<_>, String>>()?;
-    let data = Value::new(Ty::List(Box::new(timed), None), Kind::List(entries));
-    Ok(data)
+    hgl_eval_data::timed(timed, slots)
 }
 
 fn eval_recording_key(plan: &Plan) -> String {
@@ -1619,48 +1818,6 @@ fn eval_recording_key(plan: &Plan) -> String {
     }
 }
 
-fn set_call(
-    name: &str,
-    owner: &str,
-    item: &str,
-    args: Vec<(Option<String>, Value)>,
-) -> Result<Value, String> {
-    let op = if owner == "hgraph.native" { item } else { name };
-    let first = args
-        .first()
-        .ok_or("set operation needs an endpoint")?
-        .1
-        .clone();
-    let Ty::Set(element) = &first.ty else {
-        return Err("set operation needs a set".into());
-    };
-    if !matches!(element.as_ref(), Ty::I64 | Ty::Bool) {
-        return Err("set keys currently require bool or i64".into());
-    }
-    if matches!(op, "upsert" | "discard") && !matches!(first.kind, Kind::Output) {
-        return Err("set mutation requires out".into());
-    }
-    if matches!(op, "bound" | "len" | "contains") && !matches!(first.kind, Kind::Input(..)) {
-        return Err("set observation requires an input".into());
-    }
-    let n = if matches!(op, "bound" | "len") { 1 } else { 2 };
-    if args.len() != n || (n == 2 && args[1].1.ty != **element) {
-        return Err("set argument type mismatch".into());
-    }
-    let ty = match op {
-        "bound" | "contains" => Ty::Bool,
-        "len" => Ty::I64,
-        _ => Ty::Void,
-    };
-    Ok(Value {
-        ty,
-        kind: Kind::Query(
-            format!("set_{op}"),
-            args.into_iter().map(|(_, v)| v).collect(),
-        ),
-    })
-}
-
 fn local(env: &mut Env, name: &str, ty: Ty, next: &mut usize) -> usize {
     let id = *next;
     *next += 1;
@@ -1671,13 +1828,96 @@ fn local(env: &mut Env, name: &str, ty: Ty, next: &mut usize) -> usize {
 #[derive(Default)]
 struct EvalInputs {
     input_length: usize,
-    sequences: Vec<Vec<Option<Literal>>>,
+    sequences: Vec<Vec<Option<Value>>>,
+    construction_error: Option<String>,
+}
+
+fn closed_eval(
+    checker: &mut Checker,
+    module: &str,
+    expr: &Expr,
+    expected: Option<&Ty>,
+) -> Result<Value, String> {
+    let mut value = if let Some(expected) = expected {
+        checker.harness_expression(module, expr, expected)?
+    } else {
+        checker.expression(module, expr, &Env::new(), false)?
+    };
+    if expected == Some(&Ty::F64) && value.ty == Ty::I64 {
+        value = Value::new(Ty::F64, Kind::Unary("float".into(), Box::new(value)));
+    }
+    if let Some(ty) = expected
+        && value.ty != *ty
+    {
+        return Err(format!("expected {}, got {}", ty.name(), value.ty.name()));
+    }
+    checker.wiring_value(&value)
+}
+
+pub(crate) fn expected_values(
+    library: Library,
+    module: &str,
+    ty: &Ty,
+    slots: &[Option<Expr>],
+) -> Result<Vec<Option<Value>>, String> {
+    let mut checker = Checker {
+        library,
+        test_scope: Some(module.into()),
+        ..Checker::default()
+    };
+    let expected = ty.clone().delta()?;
+    let result = slots
+        .iter()
+        .map(|expr| {
+            expr.as_ref()
+                .map(|expr| closed_eval(&mut checker, module, expr, Some(&expected)))
+                .transpose()
+        })
+        .collect();
+    if let Some(error) = checker.plan.construction_error {
+        return Err(error);
+    }
+    result
+}
+
+fn eval_configuration(
+    checker: &mut Checker,
+    module: &str,
+    owner: &str,
+    signature: &Signature,
+    args: &[(Option<String>, Expr)],
+) -> Result<Arguments, String> {
+    let mut values = Vec::new();
+    for (index, (label, expr)) in args.iter().enumerate() {
+        let parameter = if let Some(label) = label {
+            signature.parameters.iter().find(|p| p.name == *label)
+        } else {
+            signature.parameters.get(index)
+        }
+        .ok_or("unknown eval argument")?;
+        if !parameter.constant {
+            continue;
+        }
+        let name = checker.type_sizes(owner, &parameter.ty, &Env::new())?;
+        let hint =
+            hgl_value_types::resolve(&checker.library, owner, &name, &mut BTreeSet::new()).ok();
+        values.push((
+            Some(parameter.name.clone()),
+            closed_eval(checker, module, expr, hint.as_ref())?,
+        ));
+    }
+    Ok(values)
 }
 
 fn eval_arguments(
+    checker: &mut Checker,
+    module: &str,
+    owner: &str,
     signature: &Signature,
     args: &[(Option<String>, Expr)],
 ) -> Result<(EvalInputs, Arguments), String> {
+    let configuration = eval_configuration(checker, module, owner, signature, args)?;
+    let signature = checker.signature_sizes(owner, signature.clone(), &configuration)?;
     let mut plan = EvalInputs::default();
     let mut values = Vec::new();
     for (position, (label, expr)) in args.iter().enumerate() {
@@ -1687,148 +1927,40 @@ fn eval_arguments(
             signature.parameters.get(position)
         }
         .ok_or("unknown eval argument")?;
-        let hint = Ty::parse(&parameter.ty);
+        let type_name = checker.type_sizes(owner, &parameter.ty, &Env::new())?;
+        let hint =
+            hgl_value_types::resolve(&checker.library, owner, &type_name, &mut BTreeSet::new())
+                .ok()
+                .map(|ty| if let Ty::Ref(child) = ty { *child } else { ty });
         let value = if let Expr::Sequence(ticks) = expr {
             if parameter.constant {
                 return Err("const parameter requires a fixed value".into());
             }
-            let mut literals = ticks
-                .iter()
-                .map(|e| {
-                    e.as_ref()
-                        .map(|e| {
-                            e.fixed()
-                                .ok_or("eval elements must be fixed values".to_owned())
-                        })
-                        .transpose()
-                })
-                .collect::<Result<Vec<_>, _>>()?;
-            let ty = hint
-                .or_else(|| literals.iter().flatten().next().map(Literal::ty))
-                .ok_or("cannot infer empty generic sequence")?;
-            coerce_sequence(&mut literals, &ty).map_err(|e| format!("{}: {e}", parameter.name))?;
+            let (ty, slots) = hgl_eval_data::sequence(ticks, hint, |expr, expected| {
+                closed_eval(checker, module, expr, expected)
+            })?;
+            if let Err((index, error)) = hgl_eval_data::validate(&ty, &slots) {
+                plan.construction_error.get_or_insert(format!("eval: input delta outside publication profile: {} at position {index}: {error}", parameter.name));
+            }
             let index = plan.sequences.len();
-            plan.input_length = plan.input_length.max(literals.len());
-            plan.sequences.push(literals);
+            plan.input_length = plan.input_length.max(slots.len());
+            plan.sequences.push(slots);
             Value::new(ty, Kind::Wire(index))
         } else {
             if !parameter.constant {
                 return Err("temporal eval argument requires a sequence".into());
             }
-            let mut value = expr
-                .fixed()
-                .ok_or("const eval argument requires a fixed expression")?;
-            if let Some(ty) = hint {
-                coerce_literal(&mut value, &ty)?;
-            }
-            Value::new(value.ty(), Kind::Literal(value))
+            configuration
+                .iter()
+                .find(|(name, _)| name.as_deref() == Some(parameter.name.as_str()))
+                .map(|(_, value)| value.clone())
+                .ok_or("missing evaluated configuration")?
         };
         values.push((label.clone(), value));
     }
-    bind(signature, &values, false, None, &BTreeMap::new())?;
+    let types = hgl_value_bind::signature_types(&checker.library, owner, &signature, &values)?;
+    bind(&signature, &values, false, None, &types)?;
     Ok((plan, values))
-}
-pub(crate) fn coerce_sequence(values: &mut [Option<Literal>], ty: &Ty) -> Result<(), String> {
-    for value in values.iter_mut().flatten() {
-        coerce_literal(value, ty)?;
-    }
-    Ok(())
-}
-#[expect(
-    clippy::cast_precision_loss,
-    reason = "HGL contextual integer literals in f64 positions use IEEE conversion"
-)]
-fn coerce_literal(value: &mut Literal, ty: &Ty) -> Result<(), String> {
-    if *ty == Ty::F64
-        && let Literal::Int(i) = value
-    {
-        *value = Literal::Float(*i as f64);
-    }
-    if value.ty() != *ty {
-        return Err(format!("expected {}, got {}", ty.name(), value.ty().name()));
-    }
-    Ok(())
-}
-
-fn scalar(ty: &Ty) -> bool {
-    !matches!(
-        ty,
-        Ty::Void | Ty::Ref(_) | Ty::Set(_) | Ty::Nullable(_) | Ty::Struct(..) | Ty::List(..)
-    )
-}
-
-fn endpoint_metadata(name: &str) -> bool {
-    matches!(
-        name,
-        "valid" | "modified" | "last_modified" | "activate" | "passivate"
-    )
-}
-
-fn injected_clock(expr: &Expr, env: &Env) -> bool {
-    matches!(expr, Expr::Name(name) if name == "clock" && !env.get(name).is_some_and(|v| matches!(v.ty, Ty::Struct(..))))
-}
-fn clock_property(receiver: &Expr, name: &str, env: &Env, runtime: bool) -> Result<Value, String> {
-    if !matches!(receiver, Expr::Name(receiver) if receiver == "clock") || !runtime {
-        return Err("clock property requires the direct injected clock in a runtime hook".into());
-    }
-    capability_payload("clock", env)?;
-    match name {
-        "evaluation_time" | "next_cycle_evaluation_time" => Ok(Value::new(
-            Ty::DateTime,
-            Kind::Query(format!("clock.{name}"), Vec::new()),
-        )),
-        "now" => Err("clock.now: wall-clock observations are not supported by this backend".into()),
-        _ => Err(format!("clock: unknown property {name}")),
-    }
-}
-
-fn require_payload(value: &Value) -> Result<(), String> {
-    if matches!(value.kind, Kind::Input(_, true)) {
-        return Err("signal has no ordinary scalar value".into());
-    }
-    if matches!(value.ty, Ty::Nullable(_)) {
-        return Err("nullable replay result requires presence proof before payload use".into());
-    }
-    Ok(())
-}
-fn capability_payload(receiver: &str, env: &Env) -> Result<Ty, String> {
-    env.get(receiver)
-        .filter(|v| matches!(v.kind, Kind::Capability))
-        .map(|v| v.ty.clone())
-        .ok_or_else(|| format!("{receiver}: missing inject {receiver}"))
-}
-
-fn capability_function(
-    receiver: &str,
-    method: &str,
-    args: &Arguments,
-    env: &Env,
-    phase: Phase,
-) -> Result<Value, String> {
-    let name = format!("{method}({receiver})");
-    capability_payload(receiver, env)?;
-    let (parameters, result) = match (receiver, method) {
-        ("alarm", "schedule") if phase != Phase::Stop => (vec![("delay", Ty::Duration)], Ty::Void),
-        ("alarm", "schedule_at") if phase != Phase::Stop => {
-            (vec![("time", Ty::DateTime)], Ty::Void)
-        }
-        _ => {
-            return Err(format!(
-                "{name}: unknown capability operation or forbidden hook phase"
-            ));
-        }
-    };
-    let values = method_arguments(&name, &parameters, args)?;
-    if receiver == "alarm"
-        && method == "schedule"
-        && matches!(values[0].kind, Kind::Literal(Literal::Duration(delay)) if delay < 0)
-    {
-        return Err("negative alarm delay".into());
-    }
-    Ok(Value::new(
-        result,
-        Kind::Query(format!("{receiver}.{method}"), values),
-    ))
 }
 
 fn inject_capability(name: &str, node: &mut Node, env: &mut Env) -> Result<(), String> {
@@ -1846,129 +1978,8 @@ fn inject_capability(name: &str, node: &mut Node, env: &mut Env) -> Result<(), S
     Ok(())
 }
 
-fn endpoint_call(name: &str, args: Arguments, runtime: bool) -> Result<Value, String> {
-    if !runtime
-        || args.is_empty()
-        || args
-            .iter()
-            .any(|(n, v)| n.is_some() || !matches!(v.kind, Kind::Input(..) | Kind::Output))
-    {
-        return Err("endpoint query requires runtime endpoints".into());
-    }
-    if matches!(name, "last_modified" | "activate" | "passivate") && args.len() != 1 {
-        return Err("endpoint operation requires exactly one argument".into());
-    }
-    if matches!(name, "activate" | "passivate")
-        && args.iter().any(|(_, v)| {
-            !matches!(v.kind, Kind::Input(..)) || matches!(v.ty, Ty::Ref(_) | Ty::Set(_))
-        })
-    {
-        return Err("activity requires a scalar input".into());
-    }
-    if args.iter().any(|(_, v)| {
-        matches!(v.kind, Kind::Output) && matches!(v.ty, Ty::Ref(_) | Ty::Set(_) | Ty::Void)
-    }) {
-        return Err("querying structural out is not yet supported".into());
-    }
-    let ty = match name {
-        "last_modified" => Ty::DateTime,
-        "activate" | "passivate" => Ty::Void,
-        _ => Ty::Bool,
-    };
-    Ok(Value::new(
-        ty,
-        Kind::Query(name.to_owned(), args.into_iter().map(|(_, v)| v).collect()),
-    ))
-}
-
-fn terminates(body: &[Statement]) -> bool {
-    body.iter().any(|statement| match statement {
-        Statement::Return(_) | Statement::Yield(_) | Statement::Exit => true,
-        Statement::If(_, yes, no) => terminates(yes) && terminates(no),
-        Statement::Let(..)
-        | Statement::Call(_)
-        | Statement::Var(..)
-        | Statement::Borrow(..)
-        | Statement::Assign(..)
-        | Statement::For(..)
-        | Statement::While(..)
-        | Statement::TimedYield(..) => false,
-    })
-}
-fn facts(
-    value: &Value,
-    truth: bool,
-    incoming: &BTreeSet<(String, usize)>,
-) -> BTreeSet<(String, usize)> {
-    if let Kind::Unary(op, value) = &value.kind
-        && op == "!"
-    {
-        return facts(value, !truth, incoming);
-    }
-    if let Kind::Binary(op, a, b) = &value.kind
-        && matches!(op.as_str(), "&&" | "||")
-    {
-        let short = op == "||";
-        let continuing = facts(b, truth, &facts(a, !short, incoming));
-        return if truth == short {
-            merge_facts(&facts(a, truth, incoming), &continuing)
-        } else {
-            continuing
-        };
-    }
-    let mut result = incoming.clone();
-    if let Kind::IsPresent(value) = &value.kind
-        && let Kind::Local(id) = value.kind
-    {
-        result.insert((if truth { "present" } else { "absent" }.into(), id));
-    }
-    if let Kind::Query(op, args) = &value.kind
-        && truth
-        && (op == "valid" || (op == "modified" && args.len() == 1))
-    {
-        result.extend(args.iter().filter_map(|v| {
-            if let Kind::Input(id, _) = v.kind {
-                Some((op.clone(), id))
-            } else {
-                None
-            }
-        }));
-    }
-    result
-}
-fn merge_facts(
-    a: &BTreeSet<(String, usize)>,
-    b: &BTreeSet<(String, usize)>,
-) -> BTreeSet<(String, usize)> {
-    let reachable = |facts: &BTreeSet<(String, usize)>| {
-        !facts
-            .iter()
-            .any(|(kind, id)| kind == "present" && facts.contains(&("absent".into(), *id)))
-    };
-    if !reachable(a) {
-        return b.clone();
-    }
-    if !reachable(b) {
-        return a.clone();
-    }
-    a.intersection(b).cloned().collect()
-}
-
-fn handler_facts(guard: Option<&Value>, inputs: usize) -> BTreeSet<(String, usize)> {
-    if let Some(guard) = guard {
-        return facts(guard, true, &BTreeSet::new());
-    }
-    let mut facts = (0..inputs)
-        .map(|i| ("valid".into(), i))
-        .collect::<BTreeSet<_>>();
-    if inputs == 1 {
-        facts.insert(("modified".into(), 0));
-    }
-    facts
-}
-
 fn node_guard(node: &Node, expr: Expr) -> Expr {
-    if node.inputs.iter().all(|(_, _, ty)| scalar(ty)) {
+    if node.inputs.iter().all(|(_, _, ty)| ty.publication()) {
         expr.handler_guard(
             &node
                 .inputs

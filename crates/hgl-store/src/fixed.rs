@@ -3,6 +3,35 @@ use crate::{BindError, In, InputId, Kind, Out, OutputId, Reference, Scalar, Stor
 use hgl_types::{EngineTime, NodeId, ScalarType};
 use std::marker::PhantomData;
 impl Store {
+    /// Adapt a statically prepared scalar input, without a repeated type test.
+    pub fn prepared_input<T: Scalar + hgl_shapes::Shape>(input: hgl_shapes::Input<T>) -> In<T> {
+        In {
+            id: input.id(),
+            value_type: PhantomData,
+        }
+    }
+    /// Adapt a prepared scalar output while preserving its generation.
+    pub fn prepared_output<T: Scalar + hgl_shapes::Shape>(output: hgl_shapes::Output<T>) -> Out<T> {
+        Out {
+            id: output.id(),
+            generation: output.generation(),
+            value_type: PhantomData,
+        }
+    }
+    /// Attach statically allocated children to their newly allocated collection.
+    pub fn add_prepared_output(
+        &mut self,
+        owner: NodeId,
+        kind: Kind,
+        children: Vec<OutputId>,
+    ) -> OutputId {
+        let id = self.bindings.add_output(owner, kind, 0).0;
+        for child in children {
+            let result = self.bindings.append_fixed(id, child);
+            debug_assert!(result.is_ok());
+        }
+        id
+    }
     /// Construct an output and its fixed descendants in the current scope.
     pub fn add_shaped_output(&mut self, owner: NodeId, kind: Kind) -> OutputId {
         if let Kind::Ts(t) = kind {
@@ -68,6 +97,26 @@ impl Store {
         now: EngineTime,
         wake: &mut W,
     ) -> OutputId {
+        self.get_or_create_with(dict, key, now, wake, |store, owner| {
+            let child = store
+                .bindings
+                .output(dict)
+                .kind
+                .member()
+                .unwrap_or_else(|| unreachable!("membership output"))
+                .clone();
+            store.add_shaped_output(owner, child)
+        })
+    }
+    /// Allocate a missing member with a statically selected recursive factory.
+    pub fn get_or_create_with<W: Wake>(
+        &mut self,
+        dict: OutputId,
+        key: i64,
+        now: EngineTime,
+        wake: &mut W,
+        create: impl FnOnce(&mut Self, NodeId) -> OutputId,
+    ) -> OutputId {
         self.begin_cycle(now);
         if let Some(id) = self.bindings.child_output(dict, key) {
             return id;
@@ -75,15 +124,7 @@ impl Store {
         let id = self
             .bindings
             .restorable_output(dict, key)
-            .unwrap_or_else(|| {
-                let o = self.bindings.output(dict);
-                let child = o
-                    .kind
-                    .member()
-                    .unwrap_or_else(|| unreachable!("membership output"))
-                    .clone();
-                self.add_shaped_output(o.owner, child)
-            });
+            .unwrap_or_else(|| create(self, self.bindings.output(dict).owner));
         let result = self.bindings.insert(dict, key, id, now, wake);
         debug_assert!(result.is_ok());
         id
