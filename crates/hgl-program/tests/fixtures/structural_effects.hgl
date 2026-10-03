@@ -5,10 +5,14 @@ struct Deep { pair:Pair
 tail:i64 }
 struct TimedValue<T> { time:datetime
 value:T }
+# The test provider records each mark argument and returns it; a chosen call can throw.
+# The trace exposes payload order independently of the completed field layout.
 native const fn mark(value:i64)->i64 throws
 native const fn mark(value:i64)->i64 throws {}
 fn source()->Deep {
+ # Expect 1, 2, 3 once before suspension: written argument order, then the nested pair.
  yield 4us:delta<Deep>(tail:mark(1),pair:delta<Pair>(right:mark(2),left:mark(3)))
+ # Only resuming after the first publication evaluates mark(4).
  yield 1us:delta<Deep>(pair:delta<Pair>(right:mark(4)))
 }
 fn record(value:Deep) {
