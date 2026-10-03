@@ -1,7 +1,7 @@
 # Card: hgl-value-check
 
 Ordinary value authority, borrow provenance and lexical entry-effect checking
-for checked HGL hook IR. Uses only `hgl-source` and `hgl-rust-ir`; budget 400
+for checked HGL hook IR. Uses `hgl-source`, `hgl-rust-ir` and `hgl-library`; budget 400
 source lines. No runtime or third-party dependencies.
 
 Public surface: `ordinary`, `writable`, `field`, `provenance`, `binding`,
@@ -31,3 +31,14 @@ Uncontextualized nonempty ordinary literals are explicitly unsupported: the
 pinned specification describes constant homogeneous list literals but does not
 uniquely define their inferred fixedness. Contextual nonempty literals retain
 their expected exact list type. Harness sequence typing is unchanged.
+
+`prepare_node` initializes a node and converts supplied temporal values to input bindings and
+retains ordinary aggregate const configurations in node metadata. Generator body
+validation traverses while scopes and ordered timed-yield operands. Backend-only
+GeneratorLocal values are never produced by source checking.
+
+`binary_type` defines the admitted scalar binary operand/result table after
+numeric widening. Checked time arithmetic admits datetime plus/minus duration,
+duration plus datetime, datetime minus datetime, and duration plus/minus duration.
+Duration negation is also checked. Scaling, division and date arithmetic remain
+outside this implementation slice; no wrapping behavior is introduced.

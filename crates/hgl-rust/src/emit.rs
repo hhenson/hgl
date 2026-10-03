@@ -1,4 +1,5 @@
 use crate::ir::{Kind, Node, Plan, Value};
+use hgl_rust_generators::Generator;
 use hgl_rust_values::{
     condition_code, global_markers, global_schema, global_type, literal, owned_type, query,
     rust_type, scalar_type, statements,
@@ -6,7 +7,11 @@ use hgl_rust_values::{
 use hgl_source::{Literal, Ty};
 
 fn node(plan: &Plan, n: &Node, index: usize, out: &mut Vec<String>) {
-    out.push(format!("#[derive(Debug)]\nstruct Node{index} {{\n"));
+    let generator = n.generator.as_deref().map(Generator::lower);
+    out.push(format!("struct Node{index} {{\n"));
+    if let Some(generator) = &generator {
+        out.push(generator.fields(&n.result));
+    }
     for (i, (_, ty)) in n.globals.iter().enumerate() {
         out.push(format!(
             "global{i}: hgl_store::Global<{}>,\n",
@@ -44,16 +49,24 @@ fn node(plan: &Plan, n: &Node, index: usize, out: &mut Vec<String>) {
             format!("_output: hgl_store::Out<{}>,\n", rust_type(&n.result))
         });
     }
-    out.push(format!("}}\nimpl hgl_kernel::Node for Node{index} {{\nfn start(&mut self, _ctx: &mut hgl_kernel::Ctx<'_>) -> hgl_kernel::NodeResult {{\n"));
+    out.push(format!("}}\nimpl std::fmt::Debug for Node{index} {{ fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {{ f.debug_struct(\"Node{index}\").finish_non_exhaustive() }} }}\nimpl hgl_kernel::Node for Node{index} {{\nfn start(&mut self, _ctx: &mut hgl_kernel::Ctx<'_>) -> hgl_kernel::NodeResult {{\n"));
     for (i, cache) in n.caches.iter().enumerate() {
         out.push(format!("self.cache{i} = {};\n", literal(cache)));
     }
+    if let Some(generator) = &generator {
+        out.push(generator.start());
+    }
     statements(plan, &n.start, out);
     out.push("Ok(())\n}\nfn eval(&mut self, _ctx: &mut hgl_kernel::Ctx<'_>) -> hgl_kernel::NodeResult {\n" .to_owned());
-    node_eval(plan, n, out);
-    node_build(plan, n, index, out);
+    node_eval(plan, n, generator.as_ref(), out);
+    node_build(plan, n, index, generator.as_ref(), out);
 }
-fn node_eval(plan: &Plan, n: &Node, out: &mut Vec<String>) {
+fn node_eval(plan: &Plan, n: &Node, generator: Option<&Generator>, out: &mut Vec<String>) {
+    if let Some(generator) = generator {
+        out.push(generator.evaluation(plan));
+        out.push("}\n}\n".into());
+        return;
+    }
     let guard = if n.inputs.is_empty() {
         n.alarm.to_string()
     } else {
@@ -72,7 +85,13 @@ fn node_eval(plan: &Plan, n: &Node, out: &mut Vec<String>) {
     statements(plan, &n.stop, out);
     out.push("Ok(())\n}\n}\n".into());
 }
-fn node_build(plan: &Plan, n: &Node, index: usize, out: &mut Vec<String>) {
+fn node_build(
+    plan: &Plan,
+    n: &Node,
+    index: usize,
+    generator: Option<&Generator>,
+    out: &mut Vec<String>,
+) {
     out.push(format!("impl hgl_describe::Buildable for Node{index} {{\nfn node_type() -> hgl_types::NodeType {{\nhgl_types::NodeType {{ name: {:?}, inputs: vec![",format!("{}#{index}",n.name)));
     for (name, _, ty) in &n.inputs {
         out.push(format!("({name:?},{}),", shape(ty)));
@@ -95,6 +114,9 @@ fn node_build(plan: &Plan, n: &Node, index: usize, out: &mut Vec<String>) {
         out.push("valid_inputs: Some(vec![]),\n".into());
     }
     out.push(format!("uses_scheduler: {}, ..hgl_types::NodeType::default() }}\n}}\nfn build(ports: &mut hgl_describe::Ports<'_>) -> Result<Self,hgl_describe::BuildError> {{\nOk(Self {{\n",n.alarm));
+    if let Some(generator) = generator {
+        out.push(generator.initialize());
+    }
     for (i, (key, ty)) in n.globals.iter().enumerate() {
         out.push(format!(
             "global{i}: ports.global::<{}>({key:?})?,\n",

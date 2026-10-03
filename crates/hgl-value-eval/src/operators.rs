@@ -23,7 +23,7 @@ pub(super) fn unary(op: &str, operand: &Value) -> Result<Value, EvalError> {
         ("-", Literal::Float(v)) => Literal::Float(-v),
         ("-", Literal::Duration(v)) => Literal::Duration(
             v.checked_neg()
-                .ok_or_else(|| EvalError::Operation("duration overflow".into()))?,
+                .ok_or_else(|| EvalError::Operation("time arithmetic overflow".into()))?,
         ),
         ("float", Literal::Int(v)) => Literal::Float(as_float(*v)),
         _ => return Err(unsupported("unsupported ordinary unary operation")),
@@ -52,14 +52,16 @@ pub(super) fn binary(op: &str, a: &Value, b: &Value) -> Result<Value, EvalError>
         (Literal::Str(a), Literal::Str(b)) if op == "+" => Literal::Str(format!("{a}{b}")),
         (Literal::Str(a), Literal::Str(b)) => comparison(op, Some(a.cmp(b)))?,
         (Literal::Duration(a), Literal::Duration(b)) if matches!(op, "+" | "-") => {
-            Literal::Duration(
-                if op == "+" {
-                    a.checked_add(*b)
-                } else {
-                    a.checked_sub(*b)
-                }
-                .ok_or_else(|| EvalError::Operation("duration overflow".into()))?,
-            )
+            Literal::Duration(time_arithmetic(op, *a, *b)?)
+        }
+        (Literal::DateTime(a), Literal::Duration(b)) if matches!(op, "+" | "-") => {
+            Literal::DateTime(time_arithmetic(op, *a, *b)?)
+        }
+        (Literal::Duration(a), Literal::DateTime(b)) if op == "+" => {
+            Literal::DateTime(time_arithmetic(op, *a, *b)?)
+        }
+        (Literal::DateTime(a), Literal::DateTime(b)) if op == "-" => {
+            Literal::Duration(time_arithmetic(op, *a, *b)?)
         }
         (Literal::Duration(a), Literal::Duration(b))
         | (Literal::Date(a), Literal::Date(b))
@@ -132,4 +134,13 @@ fn comparison(op: &str, ordering: Option<Ordering>) -> Result<Literal, EvalError
         ">=" => !ordering.is_lt(),
         _ => return Err(unsupported("unsupported ordinary binary operation")),
     }))
+}
+
+fn time_arithmetic(op: &str, a: i64, b: i64) -> Result<i64, EvalError> {
+    let result = if op == "+" {
+        a.checked_add(b)
+    } else {
+        a.checked_sub(b)
+    };
+    result.ok_or_else(|| EvalError::Operation("time arithmetic overflow".into()))
 }

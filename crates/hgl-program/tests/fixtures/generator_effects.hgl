@@ -1,0 +1,42 @@
+module generator_effects
+# The native probe appends each marker to a trace. It can fail one marker
+# so the tests can distinguish operand failure from target-time failure.
+native const fn mark(value:i64)->i64 throws
+native const fn mark(value:i64)->i64 throws {}
+const fn time(value:duration)->duration { let ignored=mark(1)
+return value }
+const fn payload(value:i64)->i64 { let ignored=mark(2)
+return value }
+fn future()->i64 {
+    yield time(2us):payload(7)
+    let resumed=mark(3)
+    yield 1us:resumed
+}
+fn past()->i64 {
+    yield time(-1us):payload(7)
+    let continued=mark(3)
+    yield 0us:continued
+}
+fn duplicate()->i64 {
+    yield time(0us):payload(7)
+    yield time(0us):payload(8)
+    let forbidden=mark(3)
+}
+fn implicit_overflow()->i64 { yield time(9223372036854775807us):payload(7) }
+fn explicit_overflow()->i64 {
+    yield @1970-01-01T00:00:00.000001Z+time(9223372036854775807us):payload(7)
+}
+fn observe(ts:i64) {
+    inject global_state
+    start { set(global_state,"count",0) }
+    when {
+        let count:i64=get(global_state,"count")
+        set(global_state,"count",count+1)
+        set(global_state,"last",delta_value(ts))
+    }
+}
+export fn run_future() { observe(future()) }
+export fn run_past() { observe(past()) }
+export fn run_duplicate() { observe(duplicate()) }
+export fn run_implicit_overflow() { observe(implicit_overflow()) }
+export fn run_explicit_overflow() { observe(explicit_overflow()) }

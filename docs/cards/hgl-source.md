@@ -1,7 +1,7 @@
 # Card: hgl-source
 
 Lexer and body syntax shared by library indexing and graph checking. Uses only
-`hgl-calendar` and `hgl-type-shape`; budget 700 lines. No runtime dependency.
+`hgl-calendar`, `hgl-type-shape` and `hgl-lex`; budget 700 lines. No runtime dependency.
 
 Surface: `Token { text, span }`, `lex(&str) -> Result<Vec<Token>, String>`;
 `Ty` and `Ty::{parse,name}`; `Literal` and `Literal::ty`; `Expr` and
@@ -60,3 +60,10 @@ argument lookahead follows the pinned grammar before resolving the callee;
 comparison parsing remains independent of visible declarations. Source type
 spelling accepts nested multiple generic arguments. Checking rejects unsupported
 argument roles and explicit generic callable application.
+
+Token and lex are re-exported from hgl-lex. `Stmt::TimedYield(time,payload)`
+retains ordered generator operands. `Stmt::While(condition,body)` retains an
+omitted condition as true. `yield` and `while` are reserved identifiers.
+`Cursor::block_contents` parses statements after an already-consumed opening
+brace, for function headers that contain injections. Phase and generator
+admission remain checker responsibilities.

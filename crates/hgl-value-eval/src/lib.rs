@@ -66,7 +66,8 @@ pub fn constant(value: &Value) -> bool {
         | Kind::Unary(..)
         | Kind::Query(..)
         | Kind::Output
-        | Kind::Capability => false,
+        | Kind::Capability
+        | Kind::GeneratorLocal(_) => false,
     }
 }
 
@@ -138,6 +139,7 @@ impl Evaluator {
             | Kind::ReplaySlot(_)
             | Kind::IsPresent(_)
             | Kind::Present(_)
+            | Kind::GeneratorLocal(_)
             | Kind::Wire(_)
             | Kind::Input(..)
             | Kind::Cache(_)
@@ -204,7 +206,11 @@ impl Evaluator {
                 };
                 return self.block(if condition { yes } else { no });
             }
-            Statement::Borrow(..) | Statement::Return(_) | Statement::For(..) => {
+            Statement::Borrow(..)
+            | Statement::Return(_)
+            | Statement::For(..)
+            | Statement::While(..)
+            | Statement::TimedYield(..) => {
                 return Err(unsupported("statement requires runtime evaluation"));
             }
         }
@@ -272,6 +278,7 @@ impl Evaluator {
             | Kind::IsPresent(_)
             | Kind::Present(_)
             | Kind::Literal(_)
+            | Kind::GeneratorLocal(_)
             | Kind::Wire(_)
             | Kind::Input(..)
             | Kind::Cache(_)

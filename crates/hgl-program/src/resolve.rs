@@ -1,5 +1,6 @@
 use crate::index::{Decl, Library, Role, Signature};
 use crate::syntax::{Cursor, Expr, Literal, Stmt, Ty};
+use hgl_body_check::runtime_body;
 use hgl_rust::{Kind, Native, Node, Plan, Statement, Value};
 use hgl_value_bind::{bind, method_arguments, order_arguments, resolve_type};
 use hgl_value_check::{field, ordinary, writable};
@@ -16,13 +17,21 @@ struct Checker {
     phase: Phase,
     types: BTreeMap<String, Ty>,
     runtime_node: bool,
-    direct_value: bool,
+    value_context: ValueContext,
+    generator: bool,
     wiring: hgl_value_eval::Evaluator,
     next_wiring_local: usize,
     global_types: BTreeMap<String, Ty>,
     globals: Vec<(String, Ty)>,
     failed_globals: BTreeSet<usize>,
     facts: BTreeSet<(String, usize)>,
+}
+#[derive(Default, Clone, Copy, PartialEq, Eq)]
+enum ValueContext {
+    #[default]
+    Outside,
+    Constant,
+    Runtime,
 }
 #[derive(Default, Clone, Copy, PartialEq, Eq)]
 enum Phase {
@@ -99,10 +108,18 @@ impl Checker {
             self.document(id);
         }
         if decl.role == Role::Native {
-            return self.native(&decl, &signature, values, result, runtime);
+            return hgl_value_bind::native(
+                &self.library,
+                &decl,
+                &signature,
+                (values, result),
+                runtime,
+                &mut self.plan.natives,
+            );
         }
+        let runtime_body = runtime_body(&signature)?;
         if signature.value_function && values.iter().all(|v| !matches!(v.kind, Kind::Wire(_))) {
-            return self.direct_call(id, &decl, &signature, (values, types, result));
+            return self.direct_call(id, &decl, &signature, (values, types, result), runtime);
         }
         if runtime {
             return Err("temporal calls in runtime handlers are not supported".into());
@@ -120,7 +137,7 @@ impl Checker {
             .collect();
         let previous_types = std::mem::replace(&mut self.types, types);
         let mut cursor = Cursor::new(&signature.body);
-        let value = if signature.value_function || signature.body.iter().any(|t| t.text == "when") {
+        let value = if runtime_body {
             self.runtime_node = !signature.value_function;
             let node = self.node(&decl, &signature, &mut cursor, &mut env, &result)?;
             let index = self.plan.nodes.len();
@@ -148,11 +165,12 @@ impl Checker {
         decl: &Decl,
         signature: &Signature,
         (args, types, result): (Vec<Value>, BTreeMap<String, Ty>, Ty),
+        runtime: bool,
     ) -> Result<Value, String> {
         if !self.active.insert(id) {
             return Err("recursive ordinary value calls are unsupported".into());
         }
-        let mut env = signature
+        let mut env: Env = signature
             .parameters
             .iter()
             .zip(&args)
@@ -160,17 +178,40 @@ impl Checker {
             .map(|(id, (p, v))| (p.name.clone(), Value::new(v.ty.clone(), Kind::Local(id))))
             .collect();
         let previous_types = std::mem::replace(&mut self.types, types);
-        let previous_direct = std::mem::replace(&mut self.direct_value, true);
+        let runtime = match self.value_context {
+            ValueContext::Outside => runtime,
+            ValueContext::Constant => false,
+            ValueContext::Runtime => true,
+        };
+        let previous_context = std::mem::replace(
+            &mut self.value_context,
+            if runtime {
+                ValueContext::Runtime
+            } else {
+                ValueContext::Constant
+            },
+        );
         let previous_runtime = std::mem::replace(&mut self.runtime_node, false);
         let mut cursor = Cursor::new(&signature.body);
-        let body = if cursor.take("=>") {
-            vec![Stmt::Return(cursor.expr()?)]
-        } else {
-            cursor.block()?
-        };
+        let (services, body) = hgl_body_check::ordinary_body(&mut cursor)?;
+        for service in services {
+            if !runtime || !matches!(service.as_str(), "clock" | "logger") {
+                return Err(format!(
+                    "ordinary helper injectable {service} requires a supported runtime service context"
+                ));
+            }
+            if env
+                .insert(service.clone(), Value::new(Ty::Void, Kind::Capability))
+                .is_some()
+            {
+                return Err(format!(
+                    "{service}: injectable conflicts with an existing binding"
+                ));
+            }
+        }
         let body = self.statements(&decl.module, &body, &mut env, &result, &mut args.len())?;
         self.types = previous_types;
-        self.direct_value = previous_direct;
+        self.value_context = previous_context;
         self.runtime_node = previous_runtime;
         self.active.remove(&id);
         if result != Ty::Void && !terminates(&body) {
@@ -252,6 +293,12 @@ impl Checker {
                     continue;
                 }
             };
+            if signature.body.iter().any(|token| token.text == "yield")
+                && resolve_type(&signature.result, &declared).is_some_and(|ty| !scalar(&ty))
+            {
+                errors.push("generator requires a declared scalar output type".into());
+                continue;
+            }
             match bind(
                 &signature,
                 args,
@@ -367,83 +414,6 @@ impl Checker {
         }
         true
     }
-    fn native(
-        &mut self,
-        declaration: &Decl,
-        signature: &Signature,
-        values: Vec<Value>,
-        result: Ty,
-        runtime: bool,
-    ) -> Result<Value, String> {
-        let module = declaration.module.as_str();
-        let name = declaration.name.as_str();
-        if !runtime {
-            return Err("native value calls in composition are not yet supported".into());
-        }
-        let selected = self
-            .library
-            .declarations
-            .iter()
-            .filter(|d| d.module == module && d.name == name && d.role == Role::Native)
-            .filter_map(|d| d.signature().ok())
-            .filter(|s| {
-                s.generics.is_empty()
-                    && s.parameters.len() == signature.parameters.len()
-                    && s.parameters
-                        .iter()
-                        .zip(&signature.parameters)
-                        .all(|(a, b)| a.name == b.name && a.ty == b.ty && a.constant == b.constant)
-                    && s.throws == signature.throws
-                    && s.result == signature.result
-                    && !s.body.is_empty()
-            })
-            .collect::<Vec<_>>();
-        if selected.len() != 1 {
-            return Err(format!(
-                "{module}::{name}: expected one selected native implementation"
-            ));
-        }
-        let mut body = Cursor::new(&selected[0].body);
-        body.need("{")?;
-        body.lines();
-        body.need("}")?;
-        body.lines();
-        if !body.at("") {
-            return Err("unsupported native implementation".into());
-        }
-        let method = format!(
-            "{}_{}",
-            name,
-            values
-                .iter()
-                .map(|v| v.ty.name())
-                .collect::<Vec<_>>()
-                .join("_")
-        );
-        let full_name = format!("{module}::{name}");
-        let native = self
-            .plan
-            .natives
-            .iter()
-            .position(|n| {
-                n.name == full_name
-                    && n.args == values.iter().map(|v| v.ty.clone()).collect::<Vec<_>>()
-            })
-            .unwrap_or(self.plan.natives.len());
-        if native == self.plan.natives.len() {
-            if self.plan.natives.iter().any(|n| n.method == method) {
-                return Err("native Rust binding name collision".into());
-            }
-            self.plan.natives.push(Native {
-                name: full_name,
-                method,
-                throws: signature.throws,
-                args: values.iter().map(|v| v.ty.clone()).collect(),
-                result: result.clone(),
-            });
-        }
-        Ok(Value::new(result, Kind::Native(native, values)))
-    }
     fn wiring_value(&mut self, value: &Value) -> Result<Value, String> {
         match self.wiring.value(value) {
             Ok(value) => Ok(value),
@@ -546,6 +516,10 @@ impl Checker {
                     self.next_wiring_local = next;
                     self.wiring_statement(&checked)?;
                 }
+                Stmt::While(..) => {
+                    return Err("while requires a runtime body, not composition".into());
+                }
+                Stmt::TimedYield(..) => return Err("yield requires a generator source".into()),
                 Stmt::Exit | Stmt::For(..) => return Err("runtime statement in graph".into()),
             }
         }
@@ -585,21 +559,24 @@ impl Checker {
         env: &mut Env,
         result: &Ty,
     ) -> Result<Node, String> {
-        let mut node = Node {
-            name: format!("{}::{}", decl.module, decl.name),
-            inputs: Vec::new(),
-            result: result.clone(),
-            alarm: false,
-            start: Vec::new(),
-            stop: Vec::new(),
-            global_state: false,
-            globals: Vec::new(),
-            configuration: Vec::new(),
-            capability: None,
-            caches: Vec::new(),
-            handlers: Vec::new(),
-        };
-        node_inputs(signature, env, &mut node)?;
+        let generator = signature.body.iter().any(|token| token.text == "yield");
+        if generator
+            && signature
+                .parameters
+                .iter()
+                .any(|parameter| !parameter.constant)
+        {
+            return Err("generator sources cannot have temporal parameters".into());
+        }
+        let mut node = hgl_value_check::prepare_node(
+            signature,
+            env,
+            format!("{}::{}", decl.module, decl.name),
+            result.clone(),
+        )?;
+        if generator {
+            return self.generator_body(decl, c, env, node);
+        }
         if signature.value_function {
             let body = if c.take("=>") {
                 vec![Stmt::Return(c.expr()?)]
@@ -631,6 +608,31 @@ impl Checker {
         if !c.at("") {
             return Err("unsupported node body suffix".into());
         }
+        Ok(node)
+    }
+    fn generator_body(
+        &mut self,
+        decl: &Decl,
+        c: &mut Cursor<'_>,
+        env: &mut Env,
+        mut node: Node,
+    ) -> Result<Node, String> {
+        if !scalar(&node.result) {
+            return Err("generator requires a declared scalar output type".into());
+        }
+        let (services, body) = hgl_body_check::generator_body(c)?;
+        for service in services {
+            inject_capability(&service, &mut node, env)?;
+        }
+        self.generator = true;
+        self.phase = Phase::Evaluation;
+        self.facts.clear();
+        node.generator = Some(self.statements(&decl.module, &body, env, &node.result, &mut 0)?);
+        self.generator = false;
+        self.runtime_node = false;
+        self.facts.clear();
+        node.alarm = true;
+        hgl_value_check::validate(&node)?;
         Ok(node)
     }
     fn hooks(
@@ -983,21 +985,30 @@ impl Checker {
                 Statement::Exit
             }
             Stmt::Return(expr) => {
+                if self.generator && self.value_context == ValueContext::Outside {
+                    return Err("generator return cannot carry a value; use yield".into());
+                }
                 let v = self.expected_expression(module, expr, env, true, Some(result))?;
                 if &v.ty != result || matches!(result, Ty::Void | Ty::Set(_)) {
                     return Err("node return type mismatch".into());
                 }
                 require_payload(&v)?;
-                if self.direct_value {
-                    Statement::Yield(v)
-                } else {
+                if self.value_context == ValueContext::Outside {
                     Statement::Return(v)
+                } else {
+                    Statement::Yield(v)
                 }
             }
             Stmt::Call(expr) => {
                 let value = self.expression(module, expr, env, true)?;
                 require_payload(&value)?;
                 Statement::Call(value)
+            }
+            Stmt::TimedYield(time, payload) => {
+                self.timed_yield(module, (time, payload), env, result)?
+            }
+            Stmt::While(expr, body) => {
+                self.while_statement(module, (expr, body), env, result, next_local)?
             }
             Stmt::For(name, collection, body) => {
                 if !matches!(collection, Expr::Call(name, _) if name == "elements") {
@@ -1022,6 +1033,51 @@ impl Checker {
                 self.conditional(module, (expr, yes, no), env, result, next_local)?
             }
         })
+    }
+    fn timed_yield(
+        &mut self,
+        module: &str,
+        (time, payload): (&Expr, &Expr),
+        env: &Env,
+        result: &Ty,
+    ) -> Result<Statement, String> {
+        if !self.generator || self.value_context != ValueContext::Outside {
+            return Err("yield requires a generator source".into());
+        }
+        let time = self.expression(module, time, env, true)?;
+        if !matches!(time.ty, Ty::Duration | Ty::DateTime) {
+            return Err("yield time requires datetime or duration".into());
+        }
+        let payload = self.expected_expression(module, payload, env, true, Some(result))?;
+        require_payload(&payload)?;
+        if payload.ty != *result {
+            return Err("yield payload type mismatch".into());
+        }
+        Ok(Statement::TimedYield(time, payload))
+    }
+    fn while_statement(
+        &mut self,
+        module: &str,
+        (expr, body): (&Expr, &[Stmt]),
+        env: &Env,
+        result: &Ty,
+        next_local: &mut usize,
+    ) -> Result<Statement, String> {
+        if !self.runtime_node || self.value_context != ValueContext::Outside {
+            return Err(
+                "while requires a runtime body, not composition or const evaluation".into(),
+            );
+        }
+        let condition = self.expression(module, expr, env, true)?;
+        if condition.ty != Ty::Bool {
+            return Err("while condition requires bool".into());
+        }
+        require_payload(&condition)?;
+        let previous = self.facts.clone();
+        self.facts = facts(&condition, true, &self.facts);
+        let body = self.statements(module, body, &mut env.clone(), result, next_local)?;
+        self.facts = previous;
+        Ok(Statement::While(condition, body))
     }
     fn assignment_target(
         &mut self,
@@ -1183,7 +1239,7 @@ impl Checker {
                 let value = self.expression(module, expr, env, runtime)?;
                 require_payload(&value)?;
                 if (op == "!" && value.ty != Ty::Bool)
-                    || (op == "-" && !matches!(value.ty, Ty::I64 | Ty::F64))
+                    || (op == "-" && !matches!(value.ty, Ty::I64 | Ty::F64 | Ty::Duration))
                 {
                     return Err("unary type mismatch".into());
                 }
@@ -1441,29 +1497,7 @@ impl Checker {
         if a.ty == Ty::F64 && b.ty == Ty::I64 {
             b = Value::new(Ty::F64, Kind::Unary("float".into(), Box::new(b)));
         }
-        if a.ty != b.ty {
-            return Err("binary operand type mismatch".into());
-        }
-        let ty = match op {
-            "+" if matches!(a.ty, Ty::Str | Ty::I64 | Ty::F64) => a.ty.clone(),
-            "/" if matches!(a.ty, Ty::I64 | Ty::F64) => Ty::F64,
-            "-" | "*" | "%" if matches!(a.ty, Ty::I64 | Ty::F64) => a.ty.clone(),
-            ">" | "<" | ">=" | "<="
-                if matches!(
-                    a.ty,
-                    Ty::I64 | Ty::F64 | Ty::Date | Ty::DateTime | Ty::Time | Ty::Duration
-                ) =>
-            {
-                Ty::Bool
-            }
-            "==" | "!="
-                if !matches!(a.ty, Ty::Void | Ty::Set(_) | Ty::Struct(..) | Ty::List(..)) =>
-            {
-                Ty::Bool
-            }
-            "&&" | "||" if a.ty == Ty::Bool => Ty::Bool,
-            _ => return Err(format!("unsupported binary operation {op}")),
-        };
+        let ty = hgl_value_check::binary_type(op, &a.ty, &b.ty)?;
         Ok(Value::new(
             ty,
             Kind::Binary(op.to_owned(), Box::new(a), Box::new(b)),
@@ -1582,31 +1616,6 @@ fn set_call(
             args.into_iter().map(|(_, v)| v).collect(),
         ),
     })
-}
-
-fn node_inputs(signature: &Signature, env: &mut Env, node: &mut Node) -> Result<(), String> {
-    for p in &signature.parameters {
-        if p.constant {
-            let value = env.get_mut(&p.name).ok_or("missing configuration")?;
-            if matches!(value.ty, Ty::List(..) | Ty::Struct(..)) {
-                let id = node.configuration.len();
-                node.configuration.push(value.clone());
-                value.kind = Kind::Configuration(id);
-            }
-        } else {
-            let value = env.get_mut(&p.name).ok_or("missing parameter")?;
-            let Kind::Wire(wire) = value.kind else {
-                return Err("temporal parameter requires a port".into());
-            };
-            if value.ty == Ty::Void {
-                return Err("unsupported temporal input type".into());
-            }
-            let input = node.inputs.len();
-            node.inputs.push((p.name.clone(), wire, value.ty.clone()));
-            value.kind = Kind::Input(input, p.ty == "signal");
-        }
-    }
-    Ok(())
 }
 
 fn local(env: &mut Env, name: &str, ty: Ty, next: &mut usize) -> usize {
@@ -1854,7 +1863,9 @@ fn terminates(body: &[Statement]) -> bool {
         | Statement::Var(..)
         | Statement::Borrow(..)
         | Statement::Assign(..)
-        | Statement::For(..) => false,
+        | Statement::For(..)
+        | Statement::While(..)
+        | Statement::TimedYield(..) => false,
     })
 }
 fn facts(

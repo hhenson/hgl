@@ -17,3 +17,7 @@ parameters, concrete empty-list parameter context and node configuration.
 ordinary nominal/list patterns using hgl-value-types before ordinary bind checks.
 Complete ambient type substitutions are retained for generic function bodies;
 concrete nominal results are specialized after parameter inference.
+
+`native` validates an exact selected native implementation, interns its checked
+signature and returns Native value IR. This moves native binding preparation out
+of graph checking; it neither calls providers nor broadens wiring-time effects.

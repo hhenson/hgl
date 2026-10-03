@@ -1,44 +1,10 @@
 //! Checked hook expression and statement emission.
 use hgl_rust_ir::{Kind, Plan, Statement, Value};
+pub use hgl_rust_layouts::{
+    global_markers, global_schema, global_type, owned_type, rust_type, scalar_type,
+};
 use hgl_source::{Literal, Ty};
-mod globals;
-pub use globals::{global_markers, global_schema, global_type};
 
-/// Emit the checked rust type form.
-pub fn rust_type(ty: &Ty) -> &'static str {
-    match ty {
-        Ty::I64 => "i64",
-        Ty::Duration => "hgl_types::EngineDelta",
-        Ty::Date => "hgl_types::Date",
-        Ty::Time => "hgl_types::Time",
-        Ty::DateTime => "hgl_types::EngineTime",
-        Ty::Bool => "bool",
-        Ty::F64 => "f64",
-        Ty::Str => "String",
-        Ty::Void => "()",
-        Ty::Struct(..) | Ty::List(..) | Ty::Nullable(_) => {
-            unreachable!("ordinary aggregate and nullable locals use inferred Rust types")
-        }
-        Ty::Ref(_) => "hgl_store::Reference",
-        Ty::Set(_) => "hgl_store::InputId",
-    }
-}
-/// Emit the checked scalar type form.
-pub fn scalar_type(ty: &Ty) -> &'static str {
-    match ty {
-        Ty::Bool => "Bool",
-        Ty::F64 => "F64",
-        Ty::I64 => "I64",
-        Ty::Str => "Text",
-        Ty::Duration => "Duration",
-        Ty::Date => "Date",
-        Ty::Time => "Time",
-        Ty::DateTime => "DateTime",
-        Ty::Ref(_) | Ty::Set(_) | Ty::Nullable(_) | Ty::Struct(..) | Ty::List(..) | Ty::Void => {
-            unreachable!("checked endpoint type")
-        }
-    }
-}
 /// Emit the checked literal form.
 pub fn literal(value: &Literal) -> String {
     match value {
@@ -96,6 +62,7 @@ fn value(plan: &Plan, v: &Value) -> String {
             "{{ let value = {}; _ctx.global_state().set(self.global{i}, &value)?; }}",
             value(plan, v)
         ),
+        Kind::GeneratorLocal(_) => retained(&place(plan, v), &v.ty),
         Kind::Local(i) | Kind::MutableLocal(i) => retained(&format!("local{i}"), &v.ty),
         Kind::Native(i, args) => format!(
             "<crate::Provider as Native>::{}({}){}",
@@ -107,17 +74,7 @@ fn value(plan: &Plan, v: &Value) -> String {
             if plan.natives[*i].throws { "?" } else { "" }
         ),
         Kind::Binary(op, a, b) => binary(plan, &v.ty, op, a, b),
-        Kind::Unary(op, v) if op == "-" && v.ty == Ty::I64 => {
-            format!("(({}).wrapping_neg())", value(plan, v))
-        }
-        Kind::Unary(op, v) => {
-            let v = value(plan, v);
-            if op == "float" {
-                format!("({v} as f64)")
-            } else {
-                format!("({op}{v})")
-            }
-        }
+        Kind::Unary(op, v) => unary(plan, op, v),
         Kind::Query(op, args) => {
             if op.contains('.') {
                 capability_call(plan, op, args)
@@ -129,6 +86,20 @@ fn value(plan: &Plan, v: &Value) -> String {
         }
         Kind::Output => "_ctx.output_value(self._output).expect(\"valid output\")".into(),
         Kind::Wire(_) | Kind::Void | Kind::Capability => unreachable!("checked runtime value"),
+    }
+}
+fn unary(plan: &Plan, op: &str, operand: &Value) -> String {
+    let value = value(plan, operand);
+    if op == "-" && operand.ty == Ty::I64 {
+        format!("(({value}).wrapping_neg())")
+    } else if op == "-" && operand.ty == Ty::Duration {
+        format!(
+            "hgl_types::EngineDelta::from_micros(({value}).micros().checked_neg().ok_or_else(|| hgl_types::NodeError::new(\"time arithmetic overflow\"))?)"
+        )
+    } else if op == "float" {
+        format!("({value} as f64)")
+    } else {
+        format!("({op}{value})")
     }
 }
 fn construct(plan: &Plan, fields: &[(usize, Value)]) -> String {
@@ -147,6 +118,11 @@ fn construct(plan: &Plan, fields: &[(usize, Value)]) -> String {
     code.concat()
 }
 fn place(plan: &Plan, v: &Value) -> String {
+    if let Kind::GeneratorLocal(id) = v.kind {
+        return format!(
+            "(*self.generator_local{id}.as_ref().expect(\"initialized generator local\"))"
+        );
+    }
     if let Kind::Local(i) | Kind::MutableLocal(i) = &v.kind {
         return format!("local{i}");
     }
@@ -206,6 +182,17 @@ fn binary(plan: &Plan, result: &Ty, op: &str, a: &Value, b: &Value) -> String {
     } else {
         value(plan, b)
     };
+    if matches!(result, Ty::DateTime | Ty::Duration) && matches!(op, "+" | "-") {
+        let operation = if op == "+" {
+            "checked_add"
+        } else {
+            "checked_sub"
+        };
+        return format!(
+            "{{ let lhs = ({a}).micros(); let rhs = ({b}).micros(); {}::from_micros(lhs.{operation}(rhs).ok_or_else(|| hgl_types::NodeError::new(\"time arithmetic overflow\"))?) }}",
+            rust_type(result)
+        );
+    }
     if *result == Ty::I64 && matches!(op, "+" | "-" | "*" | "%") {
         integer_binary(op, &a, &b)
     } else if op == "/" {
@@ -242,6 +229,13 @@ fn integer_binary(op: &str, a: &str, b: &str) -> String {
 pub fn statements(plan: &Plan, body: &[Statement], out: &mut Vec<String>) {
     for statement in body {
         out.push(match statement {
+            Statement::TimedYield(..) => unreachable!("generator yields use resume lowering"),
+            Statement::While(condition, body) => {
+                let mut code = vec![format!("while {} {{\n", condition_code(plan, condition))];
+                statements(plan, body, &mut code);
+                code.push("}\n".into());
+                code.concat()
+            }
             Statement::Yield(v) => format!("return Ok({});\n", value(plan, v)),
             Statement::Exit => "return Ok(());\n".into(),
             Statement::Let(i, v) => format!("let local{i} = {};\n", condition_code(plan, v)),
@@ -286,7 +280,10 @@ fn assignment(plan: &Plan, target: &Value, v: &Value) -> String {
         format!("{{ let publication = {v}; _ctx.set(self._output, publication); }}\n")
     } else if let Kind::Cache(i) = target.kind {
         format!("self.cache{i} = {v};\n")
-    } else if matches!(target.kind, Kind::MutableLocal(_) | Kind::Field(..)) {
+    } else if matches!(
+        target.kind,
+        Kind::MutableLocal(_) | Kind::GeneratorLocal(_) | Kind::Field(..) | Kind::Index(..)
+    ) {
         format!(
             "{{ let replacement = {v}; {} = replacement; }}\n",
             mutable_place(plan, target)
@@ -410,7 +407,9 @@ fn native_argument(plan: &Plan, v: &Value) -> String {
         Kind::Literal(Literal::Str(s)) => format!("{s:?}"),
         Kind::Cache(i) => format!("self.cache{i}.as_str()"),
         Kind::Local(i) | Kind::MutableLocal(i) => format!("local{i}.as_str()"),
-        Kind::Field(..) | Kind::Index(..) => format!("({}).as_str()", place(plan, v)),
+        Kind::Field(..) | Kind::Index(..) | Kind::GeneratorLocal(_) => {
+            format!("({}).as_str()", place(plan, v))
+        }
         Kind::Output => {
             "_ctx.store().output_ref(self._output).expect(\"valid output\").as_str()".into()
         }
@@ -472,6 +471,11 @@ fn borrowed_place(plan: &Plan, value: &Value) -> Option<String> {
 }
 
 fn mutable_place(plan: &Plan, v: &Value) -> String {
+    if let Kind::GeneratorLocal(id) = v.kind {
+        return format!(
+            "(*self.generator_local{id}.as_mut().expect(\"initialized generator local\"))"
+        );
+    }
     if let Kind::Index(parent, index) = &v.kind {
         return format!(
             "(*hgl_store::list_index_mut(&mut ({}), {})?)",
@@ -520,26 +524,6 @@ fn push(plan: &Plan, parent: &Value, item: &Value) -> String {
         global_type(element)
     )
 }
-/// Rust owned representation of a concrete ordinary type.
-pub fn owned_type(ty: &Ty) -> String {
-    if let Ty::List(element, _) = ty {
-        return format!("Vec<{}>", owned_type(element));
-    }
-    if let Ty::Struct(_, fields) = ty {
-        if fields.is_empty() {
-            return "()".into();
-        }
-        return format!(
-            "({},)",
-            fields
-                .iter()
-                .map(|(_, ty)| owned_type(ty))
-                .collect::<Vec<_>>()
-                .join(",")
-        );
-    }
-    rust_type(ty).into()
-}
 fn direct_call(plan: &Plan, result: &Ty, args: &[Value], body: &[Statement]) -> String {
     let mut code = vec!["{ ".into()];
     for (i, arg) in args.iter().enumerate() {
@@ -573,7 +557,7 @@ fn prepare_place(plan: &Plan, target: &Value, setup: &mut Vec<String>) -> String
         ));
         return format!("(*hgl_store::list_index_mut(&mut ({parent}), index{id})?)");
     }
-    place(plan, target)
+    mutable_place(plan, target)
 }
 
 fn length(plan: &Plan, parent: &Value) -> String {

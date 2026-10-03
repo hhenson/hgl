@@ -56,6 +56,8 @@ pub enum Kind {
     Input(usize, bool),
     /// Node cache index.
     Cache(usize),
+    /// Backend-only typed owner hoisted by generator lowering.
+    GeneratorLocal(usize),
     /// Local binding index.
     Local(usize),
     /// Writable owned scalar local binding index.
@@ -88,6 +90,10 @@ pub enum Statement {
     Borrow(usize, Value, bool),
     /// Publish a checked return value.
     Return(Value),
+    /// Timed generator publication: time operand followed by payload operand.
+    TimedYield(Value, Value),
+    /// Checked runtime condition and loop body.
+    While(Value, Vec<Self>),
     /// Return an ordinary value from a direct function invocation.
     Yield(Value),
     /// Evaluate an operation for its effect.
@@ -110,6 +116,8 @@ pub struct Node {
     pub result: Ty,
     /// Whether the node uses the source scheduler capability.
     pub alarm: bool,
+    /// Checked generator source body, separate from ordinary lifecycle hooks.
+    pub generator: Option<Vec<Statement>>,
     /// Checked start-hook statements.
     pub start: Vec<Statement>,
     /// Whether graph construction requires a provisioned run-wide scalar store.

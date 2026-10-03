@@ -91,6 +91,9 @@ pub fn helper_argument(value: &Value) -> Result<(), String> {
 }
 /// Validate hook-local entry lifetimes after configured keys have been unified.
 pub fn validate(node: &Node) -> Result<(), String> {
+    if let Some(body) = &node.generator {
+        block(body, &mut BTreeMap::new())?;
+    }
     block(&node.start, &mut BTreeMap::new())?;
     for (guard, body) in &node.handlers {
         if let Some(guard) = guard {
@@ -130,7 +133,12 @@ fn block(body: &[Statement], live: &mut BTreeMap<usize, bool>) -> Result<(), Str
                 }
                 expression(value, live)?;
             }
-            Statement::For(_, value, body) => {
+            Statement::TimedYield(time, payload) => {
+                expression(time, live)?;
+                helper_argument(payload)?;
+                expression(payload, live)?;
+            }
+            Statement::For(_, value, body) | Statement::While(value, body) => {
                 expression(value, live)?;
                 block(body, &mut live.clone())?;
             }
@@ -205,6 +213,9 @@ fn expression(value: &Value, live: &BTreeMap<usize, bool>) -> Result<(), String>
         | Kind::Output
         | Kind::Capability
         | Kind::Void => {}
+        Kind::GeneratorLocal(_) => {
+            return Err("backend-only generator local in frontend checking".into());
+        }
     }
     Ok(())
 }
@@ -293,4 +304,86 @@ pub fn list_operation(name: &str, args: &[Value]) -> Result<Value, String> {
         Ty::Void,
         Kind::Push(Box::new(receiver.clone()), Box::new(args[1].clone())),
     ))
+}
+
+/// Prepare endpoint bindings and retained ordinary node configurations.
+pub fn prepare_node(
+    signature: &hgl_library::Signature,
+    env: &mut BTreeMap<String, Value>,
+    name: String,
+    result: Ty,
+) -> Result<Node, String> {
+    let mut node = Node {
+        name,
+        inputs: Vec::new(),
+        result,
+        alarm: false,
+        generator: None,
+        start: Vec::new(),
+        stop: Vec::new(),
+        global_state: false,
+        globals: Vec::new(),
+        configuration: Vec::new(),
+        capability: None,
+        caches: Vec::new(),
+        handlers: Vec::new(),
+    };
+
+    for p in &signature.parameters {
+        if p.constant {
+            let value = env.get_mut(&p.name).ok_or("missing configuration")?;
+            if matches!(value.ty, Ty::List(..) | Ty::Struct(..)) {
+                let id = node.configuration.len();
+                node.configuration.push(value.clone());
+                value.kind = Kind::Configuration(id);
+            }
+        } else {
+            let value = env.get_mut(&p.name).ok_or("missing parameter")?;
+            let Kind::Wire(wire) = value.kind else {
+                return Err("temporal parameter requires a port".into());
+            };
+            if value.ty == Ty::Void {
+                return Err("unsupported temporal input type".into());
+            }
+            let input = node.inputs.len();
+            node.inputs.push((p.name.clone(), wire, value.ty.clone()));
+            value.kind = Kind::Input(input, p.ty == "signal");
+        }
+    }
+    Ok(node)
+}
+
+/// Resolve the admitted binary table after any numeric operand widening.
+pub fn binary_type(op: &str, a: &Ty, b: &Ty) -> Result<Ty, String> {
+    match (op, a, b) {
+        ("+" | "-", Ty::DateTime, Ty::Duration) | ("+", Ty::Duration, Ty::DateTime) => {
+            return Ok(Ty::DateTime);
+        }
+        ("-", Ty::DateTime, Ty::DateTime) | ("+" | "-", Ty::Duration, Ty::Duration) => {
+            return Ok(Ty::Duration);
+        }
+        _ => {}
+    }
+    if *a != *b {
+        return Err("binary operand type mismatch".into());
+    }
+    let ty = match op {
+        "+" if matches!(*a, Ty::Str | Ty::I64 | Ty::F64) => a.clone(),
+        "/" if matches!(*a, Ty::I64 | Ty::F64) => Ty::F64,
+        "-" | "*" | "%" if matches!(*a, Ty::I64 | Ty::F64) => a.clone(),
+        ">" | "<" | ">=" | "<="
+            if matches!(
+                *a,
+                Ty::I64 | Ty::F64 | Ty::Date | Ty::DateTime | Ty::Time | Ty::Duration
+            ) =>
+        {
+            Ty::Bool
+        }
+        "==" | "!=" if !matches!(*a, Ty::Void | Ty::Set(_) | Ty::Struct(..) | Ty::List(..)) => {
+            Ty::Bool
+        }
+        "&&" | "||" if *a == Ty::Bool => Ty::Bool,
+        _ => return Err(format!("unsupported binary operation {op}")),
+    };
+    Ok(ty)
 }

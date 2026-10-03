@@ -27,6 +27,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "hgl-body-check"
+version = "0.0.0"
+dependencies = [
+ "hgl-library",
+ "hgl-source",
+]
+
+[[package]]
 name = "hgl-calendar"
 version = "0.0.0"
 dependencies = [
@@ -123,6 +131,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "hgl-lex"
+version = "0.0.0"
+
+[[package]]
 name = "hgl-library"
 version = "0.0.0"
 dependencies = [
@@ -169,6 +181,7 @@ dependencies = [
 name = "hgl-program"
 version = "0.0.0"
 dependencies = [
+ "hgl-body-check",
  "hgl-documentation",
  "hgl-library",
  "hgl-rust",
@@ -195,6 +208,16 @@ dependencies = [
 name = "hgl-rust"
 version = "0.0.0"
 dependencies = [
+ "hgl-rust-generators",
+ "hgl-rust-ir",
+ "hgl-rust-values",
+ "hgl-source",
+]
+
+[[package]]
+name = "hgl-rust-generators"
+version = "0.0.0"
+dependencies = [
  "hgl-rust-ir",
  "hgl-rust-values",
  "hgl-source",
@@ -208,10 +231,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "hgl-rust-layouts"
+version = "0.0.0"
+dependencies = [
+ "hgl-rust-ir",
+ "hgl-source",
+]
+
+[[package]]
 name = "hgl-rust-values"
 version = "0.0.0"
 dependencies = [
  "hgl-rust-ir",
+ "hgl-rust-layouts",
  "hgl-source",
 ]
 
@@ -220,6 +252,7 @@ name = "hgl-source"
 version = "0.0.0"
 dependencies = [
  "hgl-calendar",
+ "hgl-lex",
  "hgl-type-shape",
 ]
 
@@ -301,6 +334,7 @@ dependencies = [
 name = "hgl-value-check"
 version = "0.0.0"
 dependencies = [
+ "hgl-library",
  "hgl-rust-ir",
  "hgl-source",
 ]

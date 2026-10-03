@@ -3,7 +3,7 @@
 Lower a checked, closed graph plan into Rust source for the existing engine.
 This is the Rust backend phase; source linking, inference, diagnostics, handler
 normalization and capability admission belong to `hgl-program`. Uses the
-local `hgl-source`, `hgl-rust-ir` and `hgl-rust-values` crates for shared types and literals. Budget: 700 source lines.
+local `hgl-source`, `hgl-rust-ir`, `hgl-rust-values` and `hgl-rust-generators` crates for shared types and literals. Budget: 700 source lines.
 No third-party dependencies or runtime execution dependencies.
 
 Public surface:
@@ -89,3 +89,9 @@ Ordinary configuration fields use owned Rust representations and are retained
 once during node construction. Construction errors from deterministic wiring
 are returned before graph start. Direct value-function bodies remain local
 fallible calls and do not receive node scheduling.
+
+Generator lifecycle emission delegates to `hgl-rust-generators`: typed local
+storage and pending output are constructed per node, start resets and arms the
+first evaluation, and evaluation executes the checked resume machine. Ordinary
+handlers retain their existing path. Generator selection uses checked IR only,
+never a source operator name or native role.

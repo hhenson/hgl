@@ -21,3 +21,4 @@ hgl-value-types = { path = "../hgl-value-types" }
 hgl-value-bind = { path = "../hgl-value-bind" }
 hgl-value-eval = { path = "../hgl-value-eval" }
 hgl-struct-check = { path = "../hgl-struct-check" }
+hgl-body-check = { path = "../hgl-body-check" }

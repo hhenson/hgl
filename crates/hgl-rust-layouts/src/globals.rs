@@ -39,6 +39,9 @@ pub fn global_markers(plan: &Plan) -> String {
         for value in &node.configuration {
             value_types(value, &mut types);
         }
+        if let Some(body) = &node.generator {
+            statement_types(body, &mut types);
+        }
         statement_types(&node.start, &mut types);
         statement_types(&node.stop, &mut types);
         for (guard, body) in &node.handlers {
@@ -171,11 +174,11 @@ fn statement_types<'a>(
             | Statement::Return(value)
             | Statement::Yield(value)
             | Statement::Call(value) => value_types(value, types),
-            Statement::Assign(target, value) => {
+            Statement::TimedYield(target, value) | Statement::Assign(target, value) => {
                 value_types(target, types);
                 value_types(value, types);
             }
-            Statement::For(_, value, body) => {
+            Statement::While(value, body) | Statement::For(_, value, body) => {
                 value_types(value, types);
                 statement_types(body, types);
             }
@@ -227,6 +230,7 @@ fn value_types<'a>(value: &'a hgl_rust_ir::Value, types: &mut BTreeMap<String, &
         | Kind::Wire(_)
         | Kind::Input(..)
         | Kind::Cache(_)
+        | Kind::GeneratorLocal(_)
         | Kind::Local(_)
         | Kind::MutableLocal(_)
         | Kind::Output

@@ -213,3 +213,26 @@ Ordinary generic required-field constructors use hgl-struct-check. Explicit
 applications and expected-value contexts feed invariant type inference before
 field execution. Concrete specializations use the existing ordinary value,
 configuration and global borrow paths. No new generic callable syntax is admitted.
+
+A timed yield anywhere in a temporal function body classifies it as a generator
+before phase checks. Generators require scalar8 output and const-only parameters;
+clock/logger are the currently admitted explicit capabilities. State/cache,
+lifecycle hooks, output/scheduling injections, for and value-return are rejected.
+Configuration values use the existing retained read-only node configuration.
+Timed yield checks time as duration/datetime and payload against the exact output
+context, then emits the operands in source order. Generator body locals have
+unique lexical IDs across nested branches/loops; backend-owned hoisting preserves
+shadowing and suspension lifetimes. Direct ordinary helper bodies retain their
+separate scopes. Runtime while checks bool, defaults to true, and is rejected in
+composition and const value functions without silently changing their phase.
+
+Source typing admits the scalar datetime/duration add/subtract table and duration
+negation. Written arithmetic inside a yield operand remains inside that operand;
+its checked failure precedes payload evaluation. Implicit duration target
+resolution still occurs only after both timed-yield operands succeed.
+
+Function phase/header admission uses hgl-body-check. Direct ordinary helpers may
+inject the currently supported clock/logger services in runtime context, including
+transitive calls from generators. Their checked effects stay inside ValueCall IR;
+no graph scheduling or extra runtime node is introduced. Wiring/constant service
+execution and other helper injectables remain explicitly unsupported.

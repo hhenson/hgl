@@ -40,3 +40,12 @@ the construction boundary; source checking errors never use that field.
 fails during deterministic wiring. It lets subsequent source statements retain
 normal type checking without manufacturing a successful payload. A plan with
 such a failure emits only the construction failure, not executable node bodies.
+
+`Node::generator` holds an optional source body, mutually exclusive with normal
+lifecycle hooks and handlers. `Statement::TimedYield(time, payload)` evaluates
+time then payload before target resolution; it is distinct from ordinary
+`Yield`. `Statement::While(condition, body)` preserves checked runtime loops.
+Generator body local identifiers are unique across nested lexical blocks.
+`Kind::GeneratorLocal(id)` is backend-only: generator lowering replaces its
+outer lexical local uses with owned node storage, leaving value-call body
+locals lexical. No borrowed global view is admitted into generator storage.

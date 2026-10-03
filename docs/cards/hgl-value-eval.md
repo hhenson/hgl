@@ -34,3 +34,11 @@ can continue after an operation failure. Reading or projecting that typed
 `WiringFailure` repeats its operation failure; it is never a successful constant.
 The frontend's configuration binder recognizes this internal marker only while
 carrying a recorded construction failure.
+
+Runtime while/timed yield and backend-only hoisted generator locals are rejected
+as unsupported evaluator IR; this evaluator never executes source generators.
+
+Datetime/duration add/subtract and duration negation use checked microsecond
+arithmetic. Overflow is an Operation error (`time arithmetic overflow`) at the
+ordinary evaluation phase; the same typed IR fails at runtime before subsequent
+expression evaluation. Integer overflow policy remains unchanged.
