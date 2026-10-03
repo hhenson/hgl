@@ -24,6 +24,8 @@ pub enum Kind {
     Field(Box<Value>, usize),
     /// Read the indexed prepared run-owned scalar entry.
     GlobalGet(usize),
+    /// Lexical aggregate view: local id, prepared entry index, and write authority.
+    BorrowedLocal(usize, usize, bool),
     /// Replace the indexed prepared entry with an owned scalar value.
     GlobalSet(usize, Box<Value>),
     /// Owned nullable replay payload at the checked i64 index.
@@ -68,6 +70,8 @@ pub enum Statement {
     Let(usize, Value),
     /// Writable local binding index and owned initializer.
     Var(usize, Value),
+    /// Bind a lexical aggregate view without retaining an owning copy.
+    Borrow(usize, Value, bool),
     /// Publish a checked return value.
     Return(Value),
     /// Evaluate an operation for its effect.

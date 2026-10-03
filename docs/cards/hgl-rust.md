@@ -3,7 +3,7 @@
 Lower a checked, closed graph plan into Rust source for the existing engine.
 This is the Rust backend phase; source linking, inference, diagnostics, handler
 normalization and capability admission belong to `hgl-program`. Uses the
-local `hgl-source` and `hgl-rust-ir` crates for shared types and literals. Budget: 700 source lines.
+local `hgl-source`, `hgl-rust-ir` and `hgl-rust-values` crates for shared types and literals. Budget: 700 source lines.
 No third-party dependencies or runtime execution dependencies.
 
 Public surface:
@@ -64,7 +64,7 @@ Rust tuples. Field access copies only the selected value, not its parent.
 Assignment addresses the writable local or nested field directly; its owned
 right-hand value is evaluated before replacing the destination. Canonical
 nominal identity remains in the checked IR. Structs are not admitted as ports,
-native arguments, cache entries, global entries or recording containers.
+native arguments, cache entries or recording containers.
 
 Owning local/field retention recursively copies tuple fields, using the scalar
 provider's fallible text copy. Nullable scalar locals retain independent copies
@@ -75,3 +75,12 @@ argument's owned result is retained before the next argument executes.
 Assembly moves the retained temporaries into their declared-field positions.
 Failure stops later arguments without exposing a completed value, following
 `struct-constructor-order.md`. This slice does not admit default fields.
+
+Hook expression and statement emission is delegated to `hgl-rust-values`.
+Required-field aggregate entries emit nominal `GlobalValue` markers whose
+value representations are owned tuples and prepared field layouts are typed
+`ValueSlot` tuples. Entry descriptors retain nominal identity and field schema.
+Aggregate borrow bindings use `global_borrow` once to check presence and bind
+a prepared slot; field projections select slot fields without payload copying.
+Reads at explicit retention boundaries use `global_read`; borrowed field and
+whole-value assignment evaluates its owned RHS before `global_write`.

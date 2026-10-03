@@ -320,3 +320,11 @@ claimed; start rearms the source on each run.
 value access in start, evaluation and stop. They neither resolve keys/types
 nor publish or schedule. Phase and node-error data now comes from hgl-types;
 the existing hgl-kernel exports remain available.
+
+Global methods use `T: GlobalValue`, with `T::Value` as the owning result/argument.
+`Ctx::global_borrow(Global<T>) -> Result<ValueSlot<T>, Box<NodeError>>`,
+`global_read(ValueSlot<T>) -> Result<T::Value, Box<NodeError>>`, and
+`global_write(ValueSlot<T>, &T::Value) -> NodeResult` forward prepared aggregate
+access in all hooks. The compiler admits borrows/projections only for their lexical
+scope and permissions; presence is checked once at the root. A replacement retains
+all fields before any commit. No hook-time borrow registry is added.

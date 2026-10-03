@@ -119,7 +119,7 @@ fn injecting_store_never_uses_a_node_role_or_key_as_the_type() {
 fn const_keys_bind_once_and_known_type_conflicts_fail_checking() {
     let code = check("fn f<T>(input:T,const key:str=\"counter\") { inject global_state\nstart { set(global_state,key,0) }\nwhen { let count:i64=get(global_state,key)\nset(global_state,key,count+1) }\nstop { let count:i64=get(global_state,key) } }").unwrap();
     assert_eq!(code.matches("ports.global::<i64>(\"counter\")").count(), 1);
-    assert!(code.contains("global_entries: vec![(\"counter\", hgl_types::ScalarType::I64)"));
+    assert!(code.contains("global_entries: vec![(\"counter\", hgl_types::ScalarType::I64.into())"));
     for body in [
         "set(global_state,\"key\",1)\nset(global_state,\"key\",false)",
         "set(global_state,\"key\",1)\nlet item:str=get(global_state,\"key\")",

@@ -214,6 +214,20 @@ impl TsType {
     }
 }
 
+/// An exact ordinary entry type, including nominal identity and required fields.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OrdinaryType {
+    /// One of the eight owning primitive values.
+    Scalar(ScalarType),
+    /// Canonical nominal identity and fields in declaration order.
+    Struct(&'static str, Vec<(&'static str, OrdinaryType)>),
+}
+impl From<ScalarType> for OrdinaryType {
+    fn from(value: ScalarType) -> Self {
+        Self::Scalar(value)
+    }
+}
+
 /// What part a node plays in its graph.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum NodeKind {
@@ -258,8 +272,8 @@ pub struct NodeType {
     pub uses_scheduler: bool,
     /// Whether this node requests the run's ordinary shared state.
     pub uses_global_state: bool,
-    /// Const keys and exact scalar types prepared before the root starts.
-    pub global_entries: Vec<(&'static str, ScalarType)>,
+    /// Const keys and exact ordinary types prepared before the root starts.
+    pub global_entries: Vec<(&'static str, OrdinaryType)>,
     /// Whether the node is scheduled for the start time when it starts.
     pub schedule_on_start: bool,
 }
@@ -309,9 +323,9 @@ impl NodeType {
     }
 }
 
-/// What every hook returns. The error is boxed so that success, the only
-/// outcome on the per-tick path, is one word.
-pub type NodeResult = Result<(), Box<NodeError>>;
+/// Shared translated errors for hooks and typed capability operations. The
+/// default unit hook result occupies one word because its error is boxed.
+pub type NodeResult<T = ()> = Result<T, Box<NodeError>>;
 
 /// Which hook was running.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

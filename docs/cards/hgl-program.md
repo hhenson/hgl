@@ -2,7 +2,7 @@
 
 Check closed HGL graphs and tests against source libraries; delegate checked
 plans to `hgl-rust` for Rust emission. Uses `hgl-source`, `hgl-library`,
-`hgl-documentation`, `hgl-rust`. Budget: 2200 source lines. No third-party
+`hgl-documentation`, `hgl-rust`, `hgl-value-check`. Budget: 2200 source lines. No third-party
 dependencies. Source linking, type/phase/proof checks and eval wiring stay here;
 checked backend IR and Rust generation belong to `hgl-rust`.
 
@@ -110,13 +110,13 @@ requires wall-clock support absent from this backend and is diagnosed explicitly
 Scheduling remains limited to start/evaluation hooks; capability access from
 ordinary value helpers remains outside this profile.
 
-Scalar `global_state` is an ordinary run-wide keyed facility, admitted in
+Ordinary `global_state` is an ordinary run-wide keyed facility, admitted in
 start/evaluation/stop without temporal shape or source/sink role constraints.
-Get uses an ordinary concrete scalar expected type, never a key spelling or
+Get uses an ordinary concrete expected type, never a key spelling or
 an enclosing temporal shape; unconstrained reads are diagnosed. Annotated
-locals resolve selected generic bindings. Set takes ordinary scalar payloads;
-capabilities, endpoint references, signals, aggregates and nullable values do
-not enter this scalar profile. Stop bodies use checked ordinary statements;
+locals resolve selected generic bindings. Set takes ordinary scalar or required-field
+struct payloads; capabilities, endpoint references, signals and nullable values
+do not enter this profile. Stop bodies use checked ordinary statements;
 input/output publication and evaluation-only operations remain unavailable.
 No new replay or recording representation follows from this facility.
 
@@ -124,7 +124,7 @@ Global-state keys currently admit string literals and resolved const string
 parameters. General const expressions (including literal concatenation) and
 hook-local keys are not evaluated as keys by this backend; diagnostics identify
 that subset limitation. Temporal keys are unsupported by the source profile. Equal
-keys have one exact scalar type throughout the statically assembled plan; known
+keys have one exact ordinary type throughout the statically assembled plan; known
 conflicts are checking errors. Per-node typed entry requirements are emitted for
 construction preflight; binding does not initialize an entry. Direct annotated
 initializers, returns, assignments and conditions supply get expected types;
@@ -137,7 +137,7 @@ scopes preserve each binding identity across shadowing. Scalar assignments
 retain their exact type; local `+=` uses existing addition typing (i64, f64,
 str), while cache increments retain their i64 profile. Primitive global get
 initializes an owned local, so local mutation never implicitly writes the entry.
-Uninitialized locals, aggregate borrows and general value-helper runtime calls
+Uninitialized locals and general value-helper runtime calls
 remain outside this backend subset. No value-type qualifier is introduced.
 
 Runtime hook locals admit nongeneric ordinary structs with required primitive
@@ -147,7 +147,7 @@ and assignment copy independently (value-mutability, VAL-17). `var` admits
 whole-value and nested field replacement; `let` is recursively read-only.
 Primitive field `+=` uses existing addition typing. Field projections retain
 the root's write authority. Unsupported optional/default/generic/recursive
-schemas and aggregate global entries are diagnosed; no list operations or
+schemas are diagnosed; no list operations or
 aggregate temporal ports/helper parameters follow from this local slice.
 
 Acceptance: source fixtures executed as emitted Rust through lifecycle hooks;
@@ -164,3 +164,17 @@ All eight primitive field types are covered by source eval assertions.
 The checked constructor preserves supplied source order and declared-field
 indices after validating the entire call (`struct-constructor-order.md`).
 Backend assembly must not reorder or reexecute its argument expressions.
+
+Typed ordinary struct global gets bind lexical views: `let` is recursively
+read-only and `var` is exclusive write-through access. Borrow provenance
+survives readonly aliases and aggregate projections, while primitive fields
+produce owned values. Exclusive aliases, readonly upgrades and helper escapes
+are rejected. `hgl-value-check` checks overlapping entry effects over lexical
+blocks after const keys resolve; shadowing does not end a borrow. Distinct
+branches and completed blocks release their borrows. No runtime borrow registry
+is emitted. Constructor, set and already-owning assignment retain independent
+values; assigning through a borrowed var updates its entry after RHS retention.
+
+Acceptance includes configured equal const keys, nested aliases and projections,
+read/write conflicts, self-replacement, retained copy independence, missing
+aggregate entries and failed replacement preserving the previous value.

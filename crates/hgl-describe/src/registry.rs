@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 
 use hgl_kernel::Node;
-use hgl_store::{Global, In, InputId, Out, OutputId, Scalar, Store};
+use hgl_store::{Global, GlobalValue, In, InputId, Out, OutputId, Scalar, Store};
 use hgl_types::{NodeId, NodeType, TsType};
 
 use crate::{BuildError, ChildDescription, NodeDescription};
@@ -84,13 +84,13 @@ pub struct Ports<'a> {
 
 impl Ports<'_> {
     /// Bind a declared global entry once, before this node can run a hook.
-    pub fn global<T: Scalar>(&mut self, key: &str) -> Result<Global<T>, BuildError> {
+    pub fn global<T: GlobalValue>(&mut self, key: &str) -> Result<Global<T>, BuildError> {
         let invalid = |what| BuildError::InvalidNodeType {
             node: self.node_type.name,
             what,
         };
         if !self.node_type.uses_global_state
-            || !self.node_type.global_entries.contains(&(key, T::TYPE))
+            || !self.node_type.global_entries.contains(&(key, T::schema()))
         {
             return Err(invalid(format!(
                 "global_state: undeclared key/type {key:?}"

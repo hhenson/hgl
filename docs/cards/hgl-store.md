@@ -274,3 +274,14 @@ owned values when a caller needs ownership; numeric reads remain copies.
 source identity without subscribing to value ticks. Generation checks prevent
 retired members from reappearing after slot reuse. `get_or_create_shaped`
 also admits sets, using boolean occupancy children.
+
+Ordinary globals also support finite required-field nominal structs via
+`GlobalValue` markers (re-exported with `ValueSlot` and `Columns` from the typed
+storage representation). `bind_global`, `global_get` and `global_set` use
+`T: GlobalValue`, with owning payload `T::Value`; all scalar callers are unchanged.
+`prepare_global` takes `OrdinaryType`. `global_borrow(Global<T>)` checks the single
+root presence and returns `ValueSlot<T>` without copying the entry.
+`global_read(ValueSlot<T>)` returns an independently owned `T::Value`;
+`global_write(ValueSlot<T>, &T::Value)` retains fully before replacing a borrowed
+root or projected required field. Slots stay internal to the generated lexical
+access discipline. No runtime borrow registry or per-hook schema inspection.

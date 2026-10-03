@@ -1,6 +1,9 @@
 //! What a node can reach while one of its hooks runs.
 
-use hgl_store::{DictOut, Global, In, InputId, Out, OutputId, Reference, Scalar, ScopeId, Store};
+use hgl_store::{
+    DictOut, Global, GlobalValue, In, InputId, Out, OutputId, Reference, Scalar, ScopeId, Store,
+    ValueSlot,
+};
 use hgl_types::{EngineDelta, EngineTime, NodeId, NodeType};
 
 use crate::schedule::Schedule;
@@ -44,13 +47,33 @@ pub struct Ctx<'a> {
 }
 
 impl Ctx<'_> {
-    /// Read a prepared global scalar in start, evaluation or stop.
-    pub fn global_get<T: Scalar>(&self, handle: Global<T>) -> Result<T, Box<NodeError>> {
+    /// Retain a prepared global value in start, evaluation or stop.
+    pub fn global_get<T: GlobalValue>(&self, handle: Global<T>) -> NodeResult<T::Value> {
         self.store.global_get(handle)
     }
-    /// Replace a prepared global scalar without publishing or scheduling.
-    pub fn global_set<T: Scalar>(&mut self, handle: Global<T>, value: &T) -> NodeResult {
+    /// Replace a prepared global value without publishing or scheduling.
+    pub fn global_set<T: GlobalValue>(
+        &mut self,
+        handle: Global<T>,
+        value: &T::Value,
+    ) -> NodeResult {
         self.store.global_set(handle, value)
+    }
+    /// Borrow a present aggregate without copying its payload.
+    pub fn global_borrow<T: GlobalValue>(&self, handle: Global<T>) -> NodeResult<ValueSlot<T>> {
+        self.store.global_borrow(handle)
+    }
+    /// Retain a typed projection as an independent ordinary value.
+    pub fn global_read<T: GlobalValue>(&self, slot: ValueSlot<T>) -> NodeResult<T::Value> {
+        self.store.global_read(slot)
+    }
+    /// Replace through an authorized borrow after retaining the full right-hand side.
+    pub fn global_write<T: GlobalValue>(
+        &mut self,
+        slot: ValueSlot<T>,
+        value: &T::Value,
+    ) -> NodeResult {
+        self.store.global_write(slot, value)
     }
     /// The input's value. The input must be valid: one the node requires is;
     /// any other is asked first.

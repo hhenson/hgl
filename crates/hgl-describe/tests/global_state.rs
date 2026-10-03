@@ -26,7 +26,7 @@ impl Buildable for Counter {
         NodeType {
             name: "counter",
             uses_global_state: true,
-            global_entries: vec![("count", ScalarType::I64)],
+            global_entries: vec![("count", ScalarType::I64.into())],
             schedule_on_start: true,
             ..NodeType::default()
         }
@@ -50,7 +50,7 @@ impl Buildable for Reader {
         NodeType {
             name: "reader",
             uses_global_state: true,
-            global_entries: vec![("count", ScalarType::Bool)],
+            global_entries: vec![("count", ScalarType::Bool.into())],
             ..NodeType::default()
         }
     }
@@ -247,4 +247,100 @@ fn native_constructor_cannot_request_an_undeclared_key() {
         &mut store,
         "undeclared key/type",
     );
+}
+
+struct Point;
+impl hgl_store::GlobalValue for Point {
+    type Value = (i64,);
+    type Slots = hgl_store::ValueSlot<i64>;
+    fn schema() -> hgl_types::OrdinaryType {
+        hgl_types::OrdinaryType::Struct("test::Point", vec![("x", ScalarType::I64.into())])
+    }
+    fn slots(layout: &mut &[usize]) -> Self::Slots {
+        hgl_store::ValueSlot::bind(layout)
+    }
+    fn retain(value: &Self::Value) -> Result<Self::Value, Box<hgl_types::NodeError>> {
+        Ok(*value)
+    }
+    fn read(
+        columns: &hgl_store::Columns,
+        slots: Self::Slots,
+    ) -> Result<Self::Value, Box<hgl_types::NodeError>> {
+        Ok((slots.read(columns)?,))
+    }
+    fn commit(columns: &mut hgl_store::Columns, slots: Self::Slots, value: Self::Value) {
+        slots.commit(columns, value.0);
+    }
+}
+struct Aggregate(Global<Point>);
+impl Node for Aggregate {
+    fn start(&mut self, ctx: &mut Ctx<'_>) -> NodeResult {
+        let root = ctx.global_borrow(self.0)?;
+        ctx.global_write(root.fields(), &(ctx.global_read(root.fields())? + 1))
+    }
+    fn eval(&mut self, ctx: &mut Ctx<'_>) -> NodeResult {
+        let root = ctx.global_borrow(self.0)?;
+        ctx.global_write(root.fields(), &(ctx.global_read(root.fields())? + 2))
+    }
+    fn stop(&mut self, ctx: &mut Ctx<'_>) -> NodeResult {
+        let root = ctx.global_borrow(self.0)?;
+        ctx.global_write(root, &(ctx.global_read(root.fields())? + 3,))
+    }
+}
+impl Buildable for Aggregate {
+    fn node_type() -> NodeType {
+        NodeType {
+            name: "aggregate",
+            uses_global_state: true,
+            global_entries: vec![("count", <Point as hgl_store::GlobalValue>::schema())],
+            schedule_on_start: true,
+            ..NodeType::default()
+        }
+    }
+    fn build(ports: &mut Ports<'_>) -> Result<Self, BuildError> {
+        Ok(Self(ports.global("count")?))
+    }
+}
+
+#[test]
+fn aggregate_borrows_in_all_hook_phases_reach_the_run_owned_entry() {
+    let mut registry = registry().unwrap();
+    registry.register::<Aggregate>().unwrap();
+    let mut store = Store::new();
+    store.provision_global_state();
+    let entry = store.bind_global::<Point>("count").unwrap();
+    store.global_set(entry, &(10,)).unwrap();
+    let mut graph = instantiate(
+        &graph(&registry, &["aggregate", "aggregate"]).unwrap(),
+        &registry,
+        &mut store,
+    )
+    .unwrap();
+    graph.start(&mut store, EngineTime::MIN_START).unwrap();
+    graph.evaluate(&mut store, EngineTime::MIN_START).unwrap();
+    graph.stop(&mut store, EngineTime::MIN_START).unwrap();
+    assert_eq!(store.global_get(entry).unwrap(), (22,));
+}
+
+#[test]
+fn aggregate_nested_preflight_rejects_scalar_and_nominal_seed_conflicts() {
+    let mut registry = registry().unwrap();
+    registry.register::<Aggregate>().unwrap();
+    let description = nested(&registry, "aggregate", true).unwrap();
+    for ty in [
+        ScalarType::I64.into(),
+        hgl_types::OrdinaryType::Struct("test::Different", vec![("x", ScalarType::I64.into())]),
+    ] {
+        let mut store = Store::new();
+        store.provision_global_state();
+        store.prepare_global("count", ty).unwrap();
+        construction_error(&description, &registry, &mut store, "type conflict");
+    }
+    let mut store = Store::new();
+    store.provision_global_state();
+    let description = graph(&registry, &["aggregate"]).unwrap();
+    let mut graph = instantiate(&description, &registry, &mut store).unwrap();
+    let error = graph.start(&mut store, EngineTime::MIN_START).unwrap_err();
+    assert_eq!(error.phase, Phase::Start);
+    assert!(error.message.contains("missing value") && error.message.contains("count"));
 }

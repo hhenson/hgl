@@ -1,0 +1,169 @@
+module aggregate_globals
+struct Box {
+    amount: i64
+    text: str
+}
+struct Envelope {
+    inner: Box
+}
+struct Wide {
+    flag: bool
+    amount: i64
+    real: f64
+    text: str
+    day: date
+    daytime: time
+    instant: datetime
+    elapsed: duration
+    extra1: i64
+    extra2: i64
+    extra3: i64
+    extra4: i64
+    extra5: i64
+}
+native const fn observe(amount: i64, text: str) -> i64
+native const fn observe(amount: i64, text: str) -> i64 {}
+fn source() -> i64 {
+    inject alarm
+    start { schedule(alarm, 0us) }
+    when { return 7 }
+}
+fn exercise(value: i64) {
+    inject global_state
+    start {
+        var original = Box(amount: 1, text: "initial")
+        set(global_state, "box", original)
+        original.amount = 100
+        original.text = "changed source"
+        set(global_state, "scalar", 4)
+        set(global_state, "wide", Wide(flag: false, amount: 1, real: 1.25, text: "wide", day: @2026-10-03, daytime: @12:34:56, instant: @2026-10-03T12:34:56Z, elapsed: 5s, extra1: 1, extra2: 2, extra3: 3, extra4: 4, extra5: 5))
+        var box: Box = get(global_state, "box")
+        box.amount += 1
+        set(global_state, "start", box.amount)
+        set(global_state, "start_text", box.text)
+    }
+    when {
+        var owned = Box(amount: 0, text: "empty")
+        var outer = Envelope(inner: owned)
+        if true {
+            let box: Box = get(global_state, "box")
+            let alias = box
+            owned = alias
+            outer.inner = box
+            set(global_state, "retained", box)
+            let wrapped = Envelope(inner: box)
+            set(global_state, "wrapped", wrapped)
+        }
+        if true {
+            var box: Box = get(global_state, "box")
+            let primitive = box.amount
+            box.amount += value
+            box.text = "edited"
+            box = Box(amount: box.amount + 1, text: box.text + " whole")
+            box.amount += 1
+            set(global_state, "primitive", primitive)
+            set(global_state, "live", box.amount)
+            set(global_state, "live_text", box.text)
+            set(global_state, "native_fields", observe(box.amount, box.text))
+            let retained = Envelope(inner: box)
+            box.amount += 1
+            set(global_state, "constructor_copy", retained.inner.amount)
+        }
+        set(global_state, "owned", owned.amount)
+        set(global_state, "owned_text", owned.text)
+        set(global_state, "field_owned", outer.inner.amount)
+        set(global_state, "field_owned_text", outer.inner.text)
+        if true {
+            let saved: Box = get(global_state, "retained")
+            let wrapped: Envelope = get(global_state, "wrapped")
+            let child = wrapped.inner
+            let again: Box = get(global_state, "retained")
+            set(global_state, "retained_amount", saved.amount + again.amount)
+            set(global_state, "retained_text", saved.text)
+            set(global_state, "wrapped_amount", child.amount)
+        }
+        if true {
+            var wrapped: Envelope = get(global_state, "wrapped")
+            wrapped.inner = Box(amount: wrapped.inner.amount + 1, text: wrapped.inner.text)
+            wrapped = Envelope(inner: wrapped.inner)
+            wrapped.inner.amount += 1
+            set(global_state, "nested_replaced", wrapped.inner.amount)
+            set(global_state, "nested_replaced_text", wrapped.inner.text)
+        }
+        if true {
+            var first: Box = get(global_state, "box")
+            var second: Box = get(global_state, "retained")
+            first.amount += 1
+            second.amount += 10
+        }
+        if value == 7 {
+            var branch: Box = get(global_state, "box")
+            branch.amount += 1
+        } else {
+            var branch: Box = get(global_state, "box")
+            branch.amount += 100
+        }
+        if true {
+            let observed: Box = get(global_state, "box")
+            set(global_state, "before_replace", observed.amount)
+        }
+        set(global_state, "box", Box(amount: 30, text: "after scopes"))
+        var scalar: i64 = get(global_state, "scalar")
+        scalar += 100
+        set(global_state, "scalar_local", scalar)
+        var wide: Wide = get(global_state, "wide")
+        wide.flag = true
+        wide.amount += 1
+        wide.real += 0.25
+        wide.text += " edited"
+        wide.day = @2026-10-04
+        wide.daytime = @12:34:57
+        wide.instant = @2026-10-03T12:34:57Z
+        wide.elapsed = 6s
+        wide.extra5 += 1
+        set(global_state, "wide_valid", wide.flag && wide.amount == 2 && wide.real == 1.5 && wide.text == "wide edited" && wide.day == @2026-10-04 && wide.daytime == @12:34:57 && wide.instant == @2026-10-03T12:34:57Z && wide.elapsed == 6s && wide.extra1 + wide.extra2 + wide.extra3 + wide.extra4 + wide.extra5 == 16)
+    }
+    stop {
+        var box: Box = get(global_state, "box")
+        box.amount += 1
+        set(global_state, "stop", box.amount)
+        set(global_state, "stop_text", box.text)
+        let scalar: i64 = get(global_state, "scalar")
+        set(global_state, "scalar_stored", scalar)
+    }
+}
+fn cumulative(value: i64) -> i64 {
+    inject global_state
+    start { set(global_state, "cumulative", Box(amount: 0, text: "sum")) }
+    when {
+        var box: Box = get(global_state, "cumulative")
+        box.amount += value
+        return box.amount
+    }
+}
+fn failed_replacement(value: i64, const replace_with_set: bool) {
+    inject global_state
+    start { set(global_state, "failure", Box(amount: 20, text: "preserved")) }
+    when {
+        if replace_with_set {
+            set(global_state, "failure", Box(amount: 1 % (value - value), text: "lost"))
+        } else {
+            var box: Box = get(global_state, "failure")
+            box.amount += 2
+            box = Box(amount: 1 % (value - value), text: "lost")
+        }
+        set(global_state, "after_failure", true)
+    }
+    stop {
+        let box: Box = get(global_state, "failure")
+        set(global_state, "failure_amount", box.amount)
+        set(global_state, "failure_text", box.text)
+    }
+}
+export fn main() { exercise(source()) }
+export fn fail_assign() { failed_replacement(source(), false) }
+export fn fail_set() { failed_replacement(source(), true) }
+test aggregate_global_values {
+    assert eval(cumulative, [1, 2, _, 3]) == [1, 3, _, 6]
+    assert eval(cumulative, [4, 5]) == [4, 9]
+}
