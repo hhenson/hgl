@@ -139,3 +139,28 @@ str), while cache increments retain their i64 profile. Primitive global get
 initializes an owned local, so local mutation never implicitly writes the entry.
 Uninitialized locals, aggregate borrows and general value-helper runtime calls
 remain outside this backend subset. No value-type qualifier is introduced.
+
+Runtime hook locals admit nongeneric ordinary structs with required primitive
+or nested struct fields. Constructors require every field once by name and
+check exact nominal types. Owning local initialization, constructor retention,
+and assignment copy independently (value-mutability, VAL-17). `var` admits
+whole-value and nested field replacement; `let` is recursively read-only.
+Primitive field `+=` uses existing addition typing. Field projections retain
+the root's write authority. Unsupported optional/default/generic/recursive
+schemas and aggregate global entries are diagnosed; no list operations or
+aggregate temporal ports/helper parameters follow from this local slice.
+
+Acceptance: source fixtures executed as emitted Rust through lifecycle hooks;
+nested text/value copy independence, mutable field/whole replacement, branch
+shadowing, rejected readonly writes, missing/duplicate/wrong-type fields and
+nominal mismatch. Existing scalar source and global-state tests remain green.
+
+Imported structs preserve qualified identity and declared layouts. Local names
+precede imports; cross-module access requires export, and selected exported
+layouts reject unexported reachable struct fields (ADR 0013). Declaration
+checks remain lazy in this executable subset: unused schemas are not certified.
+All eight primitive field types are covered by source eval assertions.
+
+The checked constructor preserves supplied source order and declared-field
+indices after validating the entire call (`struct-constructor-order.md`).
+Backend assembly must not reorder or reexecute its argument expressions.

@@ -125,6 +125,7 @@ fn check_expected(
             crate::syntax::Ty::Set(_)
                 | crate::syntax::Ty::Ref(_)
                 | crate::syntax::Ty::Nullable(_)
+                | crate::syntax::Ty::Struct(..)
                 | crate::syntax::Ty::Void
         ) {
             return Err("eval currently records scalar outputs".into());

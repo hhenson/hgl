@@ -128,7 +128,7 @@ impl Checker {
         for (id, decl) in self.library.declarations.iter().enumerate() {
             if decl.module != module
                 || decl.name != name
-                || matches!(decl.role, Role::Implementation | Role::Test)
+                || matches!(decl.role, Role::Implementation | Role::Test | Role::Struct)
             {
                 continue;
             }
@@ -648,13 +648,104 @@ impl Checker {
         runtime: bool,
     ) -> Result<Value, String> {
         let ty = annotation
-            .map(|name| resolve_type(name, &self.types).ok_or("unresolved local type"))
+            .map(|name| {
+                resolve_type(name, &self.types).map_or_else(
+                    || self.ordinary_type(module, name, &mut BTreeSet::new()),
+                    Ok,
+                )
+            })
             .transpose()?;
         let value = self.expected_expression(module, expr, env, runtime, ty.as_ref())?;
+        if !matches!(value.ty, Ty::Nullable(_)) {
+            require_payload(&value)?;
+        }
         if ty.as_ref().is_some_and(|ty| *ty != value.ty) {
             return Err("local initializer type mismatch".into());
         }
         Ok(value)
+    }
+    fn struct_declaration(&self, module: &str, name: &str) -> Result<Option<&Decl>, String> {
+        let local = !name.contains("::")
+            && self
+                .library
+                .declarations
+                .iter()
+                .any(|d| d.module == module && d.name == name && d.role == Role::Struct);
+        let (owner, item) = if local {
+            (module.into(), name.into())
+        } else {
+            self.identity(module, name)
+        };
+        let mut found = self
+            .library
+            .declarations
+            .iter()
+            .filter(|d| d.module == owner && d.name == item && d.role == Role::Struct);
+        let declaration = found.next();
+        if found.next().is_some() {
+            return Err(format!("duplicate struct {owner}::{item}"));
+        }
+        if let Some(decl) = declaration {
+            if decl.module != module && !exported(decl) {
+                return Err(format!(
+                    "{}::{}: struct is not exported",
+                    decl.module, decl.name
+                ));
+            }
+            if let Some((alias, _)) = name.split_once("::")
+                && !self
+                    .library
+                    .imports
+                    .contains_key(&(module.into(), alias.into()))
+            {
+                return Err(format!(
+                    "struct qualification requires an imported module alias {alias}"
+                ));
+            }
+        }
+        Ok(declaration)
+    }
+    fn ordinary_type(
+        &self,
+        module: &str,
+        name: &str,
+        active: &mut BTreeSet<String>,
+    ) -> Result<Ty, String> {
+        if let Some(ty) = Ty::parse(name) {
+            return Ok(ty);
+        }
+        let decl = self
+            .struct_declaration(module, name)?
+            .ok_or_else(|| format!("unresolved ordinary type {name}"))?;
+        let identity = format!("{}::{}", decl.module, decl.name);
+        if !active.insert(identity.clone()) {
+            return Err("recursive ordinary structs are not supported".into());
+        }
+        let mut fields = Vec::new();
+        for (name, ty) in decl.required_fields()? {
+            let ty = self.ordinary_type(&decl.module, &ty, active)?;
+            if !ordinary(&ty) {
+                return Err(
+                    "ordinary struct fields require primitives or required-field structs".into(),
+                );
+            }
+            if exported(decl)
+                && let Ty::Struct(identity, _) = &ty
+                && !self.library.declarations.iter().any(|d| {
+                    d.role == Role::Struct
+                        && format!("{}::{}", d.module, d.name) == *identity
+                        && exported(d)
+                })
+            {
+                return Err(format!(
+                    "{}::{}: exported struct reaches unexported {identity}",
+                    decl.module, decl.name
+                ));
+            }
+            fields.push((name, ty));
+        }
+        active.remove(&identity);
+        Ok(Ty::Struct(identity, fields))
     }
     fn global_operation(&mut self, operation: &str, args: &Arguments) -> Result<Value, String> {
         if operation == "get" {
@@ -668,6 +759,9 @@ impl Checker {
         let ordered = order_arguments(&["key", "value"], args)?;
         let key = ordered.get(&0).ok_or("global_state: missing key")?;
         let value = ordered.get(&1).ok_or("global_state: missing value")?;
+        if matches!(value.ty, Ty::Struct(..)) {
+            return Err("global_state: ordinary aggregate storage and borrowing are not supported by this backend".into());
+        }
         if key.ty != Ty::Str || !scalar(&value.ty) || matches!(value.kind, Kind::Input(_, true)) {
             return Err("global_state: set requires a str key and an ordinary scalar value".into());
         }
@@ -711,6 +805,9 @@ impl Checker {
                 return Err("global_state: requires a runtime hook".into());
             }
             capability_payload("global_state", env)?;
+            if expected.is_some_and(|ty| matches!(ty, Ty::Struct(..))) {
+                return Err("global_state: ordinary aggregate storage and borrowing are not supported by this backend".into());
+            }
             let ty = expected
                 .filter(|ty| scalar(ty))
                 .ok_or("global_state: get requires a concrete scalar expected type")?;
@@ -743,8 +840,10 @@ impl Checker {
                 }
                 let id = local(env, name, value.ty.clone(), next_local);
                 if matches!(statement, Stmt::Var(..)) {
-                    if !scalar(&value.ty) {
-                        return Err("mutable locals currently require an ordinary scalar".into());
+                    if !ordinary(&value.ty) {
+                        return Err(
+                            "mutable locals currently require an ordinary scalar or struct".into(),
+                        );
                     }
                     env.insert(
                         name.clone(),
@@ -766,6 +865,7 @@ impl Checker {
                 if &v.ty != result || matches!(result, Ty::Void | Ty::Set(_)) {
                     return Err("node return type mismatch".into());
                 }
+                require_payload(&v)?;
                 Statement::Return(v)
             }
             Stmt::Call(expr) => {
@@ -804,8 +904,7 @@ impl Checker {
         expr: &Expr,
         env: &Env,
     ) -> Result<Statement, String> {
-        let name = assignment_name(target)?;
-        let binding = env.get(name).ok_or("unknown assignment target")?;
+        let binding = assignment_target(module, target, env)?;
         if matches!(binding.kind, Kind::Cache(_)) {
             let value = self.expression(module, expr, env, true)?;
             if binding.ty != Ty::I64 || value.ty != Ty::I64 {
@@ -815,9 +914,9 @@ impl Checker {
                 Ty::I64,
                 Kind::Binary("+".into(), Box::new(binding.clone()), Box::new(value)),
             );
-            return Ok(Statement::Assign(binding.clone(), sum));
+            return Ok(Statement::Assign(binding, sum));
         }
-        if !matches!(binding.kind, Kind::MutableLocal(_)) {
+        if !writable(&binding) {
             return Err("increment requires a cache variable or writable var".into());
         }
         let sum = Expr::Binary("+".into(), Box::new(target.clone()), Box::new(expr.clone()));
@@ -830,20 +929,17 @@ impl Checker {
         expr: &Expr,
         env: &Env,
     ) -> Result<Statement, String> {
-        let name = assignment_name(target)?;
-        let target = env.get(name).ok_or("unknown assignment target")?.clone();
+        let target = assignment_target(module, target, env)?;
         if (self.phase != Phase::Evaluation && matches!(target.kind, Kind::Output))
-            || !matches!(
-                target.kind,
-                Kind::Output | Kind::Cache(_) | Kind::MutableLocal(_)
-            )
+            || !(matches!(target.kind, Kind::Output | Kind::Cache(_)) || writable(&target))
         {
             return Err("assignment requires writable var, state, cache or out".into());
         }
         let value = self.expected_expression(module, expr, env, true, Some(&target.ty))?;
-        if target.ty != value.ty || !scalar(&target.ty) {
+        if target.ty != value.ty || !ordinary(&target.ty) {
             return Err("assignment type mismatch".into());
         }
+        require_payload(&value)?;
         Ok(Statement::Assign(target, value))
     }
     fn conditional(
@@ -858,6 +954,7 @@ impl Checker {
         if condition.ty != Ty::Bool {
             return Err("condition requires bool".into());
         }
+        require_payload(&condition)?;
         let previous = self.facts.clone();
         self.facts = facts(&condition, true, &self.facts);
         let yes = self.statements(module, yes, &mut env.clone(), result, next_local)?;
@@ -881,7 +978,13 @@ impl Checker {
     ) -> Result<Value, String> {
         match expr {
             Expr::Null => Err("null requires a contextual nullable comparison".into()),
-            Expr::Property(receiver, name) => clock_property(receiver, name, env, runtime),
+            Expr::Property(receiver, name) => {
+                if injected_clock(receiver, env) {
+                    return clock_property(receiver, name, env, runtime);
+                }
+                let parent = self.expression(module, receiver, env, runtime)?;
+                field(parent, name)
+            }
             Expr::Index(receiver, index) => {
                 if !matches!(receiver.as_ref(), Expr::Name(name) if name == "replay_input")
                     || !runtime
@@ -931,6 +1034,7 @@ impl Checker {
             }
             Expr::Unary(op, expr) => {
                 let value = self.expression(module, expr, env, runtime)?;
+                require_payload(&value)?;
                 if (op == "!" && value.ty != Ty::Bool)
                     || (op == "-" && !matches!(value.ty, Ty::I64 | Ty::F64))
                 {
@@ -980,35 +1084,7 @@ impl Checker {
             return capability_function(receiver, name, &values, env, self.phase);
         }
         if name == "delta_value" {
-            if !runtime
-                || !self.runtime_node
-                || self.phase != Phase::Evaluation
-                || args.len() != 1
-                || args[0].0.is_some()
-            {
-                return Err("delta_value requires one runtime input endpoint in evaluation".into());
-            }
-            let value = self.expression(module, &args[0].1, env, runtime)?;
-            let Kind::Input(id, false) = value.kind else {
-                return Err(
-                    "delta_value requires a temporal input endpoint; signal is not admitted".into(),
-                );
-            };
-            if !scalar(&value.ty) {
-                return Err("delta_value: structural delta contract is not admitted".into());
-            }
-            if !["valid", "modified"]
-                .iter()
-                .all(|q| self.facts.contains(&(q.to_string(), id)))
-            {
-                return Err(
-                    "delta_value requires proof that its endpoint is valid and modified".into(),
-                );
-            }
-            return Ok(Value::new(
-                value.ty.clone(),
-                Kind::Query("delta_value".into(), vec![value]),
-            ));
+            return self.delta_value(module, args, env, runtime);
         }
         if name == "elements" {
             if args.len() != 2 || !matches!(&args[1].1,Expr::Name(n) if n=="added") {
@@ -1020,15 +1096,98 @@ impl Checker {
             }
             return Ok(collection);
         }
+        if self.struct_declaration(module, name)?.is_some() {
+            return self.constructor(module, name, args, env, runtime);
+        }
         let args = args
             .iter()
             .map(|(n, v)| {
                 let value = self.expression(module, v, env, runtime)?;
-                require_payload(&value)?;
+                if !endpoint_metadata(name) {
+                    require_payload(&value)?;
+                }
                 Ok((n.clone(), value))
             })
             .collect::<Result<Vec<_>, String>>()?;
         self.value_call(module, name, args, runtime)
+    }
+    fn delta_value(
+        &mut self,
+        module: &str,
+        args: &[(Option<String>, Expr)],
+        env: &Env,
+        runtime: bool,
+    ) -> Result<Value, String> {
+        if !runtime
+            || !self.runtime_node
+            || self.phase != Phase::Evaluation
+            || args.len() != 1
+            || args[0].0.is_some()
+        {
+            return Err("delta_value requires one runtime input endpoint in evaluation".into());
+        }
+        let value = self.expression(module, &args[0].1, env, runtime)?;
+        let Kind::Input(id, false) = value.kind else {
+            return Err(
+                "delta_value requires a temporal input endpoint; signal is not admitted".into(),
+            );
+        };
+        if !scalar(&value.ty) {
+            return Err("delta_value: structural delta contract is not admitted".into());
+        }
+        if !["valid", "modified"]
+            .iter()
+            .all(|q| self.facts.contains(&(q.to_string(), id)))
+        {
+            return Err(
+                "delta_value requires proof that its endpoint is valid and modified".into(),
+            );
+        }
+        Ok(Value::new(
+            value.ty.clone(),
+            Kind::Query("delta_value".into(), vec![value]),
+        ))
+    }
+    fn constructor(
+        &mut self,
+        module: &str,
+        name: &str,
+        args: &[(Option<String>, Expr)],
+        env: &Env,
+        runtime: bool,
+    ) -> Result<Value, String> {
+        if !runtime {
+            return Err("ordinary struct construction currently requires a runtime hook".into());
+        }
+        let ty = self.ordinary_type(module, name, &mut BTreeSet::new())?;
+        let Ty::Struct(_, fields) = &ty else {
+            unreachable!("resolved struct")
+        };
+        let mut seen = BTreeSet::new();
+        let mut values = Vec::new();
+        for (name, expr) in args {
+            let name = name
+                .as_ref()
+                .ok_or("struct construction requires named fields")?;
+            let (index, (_, expected)) = fields
+                .iter()
+                .enumerate()
+                .find(|(_, (field, _))| field == name)
+                .ok_or_else(|| format!("unknown argument {name}"))?;
+            if !seen.insert(index) {
+                return Err(format!("duplicate struct field {name}"));
+            }
+            let value = self.expected_expression(module, expr, env, true, Some(expected))?;
+            require_payload(&value)?;
+            if value.ty != *expected {
+                return Err(format!("{name}: missing or wrong-type argument"));
+            }
+            values.push((index, value));
+        }
+        if values.len() != fields.len() {
+            return Err("struct construction: missing or wrong-type argument".into());
+        }
+        Ok(Value::new(ty, Kind::Construct(values)))
     }
     fn value_call(
         &mut self,
@@ -1145,7 +1304,7 @@ impl Checker {
             {
                 Ty::Bool
             }
-            "==" | "!=" if !matches!(a.ty, Ty::Void | Ty::Set(_)) => Ty::Bool,
+            "==" | "!=" if !matches!(a.ty, Ty::Void | Ty::Set(_) | Ty::Struct(..)) => Ty::Bool,
             "&&" | "||" if a.ty == Ty::Bool => Ty::Bool,
             _ => return Err(format!("unsupported binary operation {op}")),
         };
@@ -1221,6 +1380,9 @@ fn bind(
 }
 
 fn supported_type(ty: &Ty) -> Result<(), String> {
+    if matches!(ty, Ty::Struct(..)) {
+        return Err("ordinary structs currently require hook-local values, not temporal ports or helper arguments".into());
+    }
     if let Ty::Set(child) = ty
         && !matches!(**child, Ty::Bool | Ty::I64)
     {
@@ -1307,7 +1469,10 @@ pub(crate) fn evaluate(
     for decl in &checker.library.declarations {
         if decl.module != owner
             || decl.name != item
-            || matches!(decl.role, Role::Implementation | Role::Test | Role::Native)
+            || matches!(
+                decl.role,
+                Role::Implementation | Role::Test | Role::Native | Role::Struct
+            )
             || (decl.test_only && owner != module)
             || (helpers && owner == module && !decl.test_only)
         {
@@ -1508,7 +1673,10 @@ fn coerce_literal(value: &mut Literal, ty: &Ty) -> Result<(), String> {
 }
 
 fn scalar(ty: &Ty) -> bool {
-    !matches!(ty, Ty::Void | Ty::Ref(_) | Ty::Set(_) | Ty::Nullable(_))
+    !matches!(
+        ty,
+        Ty::Void | Ty::Ref(_) | Ty::Set(_) | Ty::Nullable(_) | Ty::Struct(..)
+    )
 }
 fn method_arguments(
     name: &str,
@@ -1548,11 +1716,32 @@ fn order_arguments(
     Ok(supplied)
 }
 
-fn assignment_name(target: &Expr) -> Result<&str, String> {
+fn endpoint_metadata(name: &str) -> bool {
+    matches!(
+        name,
+        "valid" | "modified" | "last_modified" | "activate" | "passivate"
+    )
+}
+fn exported(decl: &Decl) -> bool {
+    decl.tokens
+        .first()
+        .is_some_and(|token| token.text == "export")
+}
+fn injected_clock(expr: &Expr, env: &Env) -> bool {
+    matches!(expr, Expr::Name(name) if name == "clock" && !env.get(name).is_some_and(|v| matches!(v.ty, Ty::Struct(..))))
+}
+fn assignment_target(module: &str, target: &Expr, env: &Env) -> Result<Value, String> {
     match target {
-        Expr::Name(name) => Ok(name),
-        Expr::Property(..) => {
-            Err("property assignment is not admitted; clock properties are read-only".into())
+        Expr::Name(name) => env
+            .get(name)
+            .cloned()
+            .ok_or("unknown assignment target".into()),
+        Expr::Property(parent, name) => {
+            if injected_clock(parent, env) {
+                return Err("clock properties are read-only".into());
+            }
+            let parent = assignment_target(module, parent, env)?;
+            field(parent, name)
         }
         Expr::Null
         | Expr::Index(..)
@@ -1560,8 +1749,30 @@ fn assignment_name(target: &Expr) -> Result<&str, String> {
         | Expr::Literal(_)
         | Expr::Unary(..)
         | Expr::Call(..)
-        | Expr::Binary(..) => Err("assignment requires a named variable".into()),
+        | Expr::Binary(..) => Err(format!(
+            "{module}: assignment requires a writable variable or struct field"
+        )),
     }
+}
+fn ordinary(ty: &Ty) -> bool {
+    scalar(ty) || matches!(ty, Ty::Struct(..))
+}
+fn writable(value: &Value) -> bool {
+    if let Kind::Field(parent, _) = &value.kind {
+        return writable(parent);
+    }
+    matches!(value.kind, Kind::MutableLocal(_))
+}
+fn field(parent: Value, name: &str) -> Result<Value, String> {
+    let Ty::Struct(_, fields) = &parent.ty else {
+        return Err("field access requires an ordinary struct or direct injected clock".into());
+    };
+    let (index, (_, ty)) = fields
+        .iter()
+        .enumerate()
+        .find(|(_, (field, _))| field == name)
+        .ok_or_else(|| format!("unknown struct field {name}"))?;
+    Ok(Value::new(ty.clone(), Kind::Field(Box::new(parent), index)))
 }
 fn clock_property(receiver: &Expr, name: &str, env: &Env, runtime: bool) -> Result<Value, String> {
     if !matches!(receiver, Expr::Name(receiver) if receiver == "clock") || !runtime {
@@ -1579,6 +1790,9 @@ fn clock_property(receiver: &Expr, name: &str, env: &Env, runtime: bool) -> Resu
 }
 
 fn require_payload(value: &Value) -> Result<(), String> {
+    if matches!(value.kind, Kind::Input(_, true)) {
+        return Err("signal has no ordinary scalar value".into());
+    }
     if matches!(value.ty, Ty::Nullable(_)) {
         return Err("nullable replay result requires presence proof before payload use".into());
     }

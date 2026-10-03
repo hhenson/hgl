@@ -1,0 +1,147 @@
+module ordinary_structs
+struct Box {
+    amount: i64
+    text: str
+}
+struct Envelope {
+    inner: Box
+    tag: str
+}
+fn source() -> i64 {
+    inject alarm
+    start { schedule(alarm, 0us) }
+    when { return 7 }
+}
+fn exercise(value: i64) {
+    inject global_state
+    start {
+        var box: Box = Box(text: "start", amount: 1)
+        box.amount += 1
+        set(global_state, "start", box.amount)
+        let captured = Box(amount: get(global_state, "start"), text: "captured")
+        set(global_state, "constructor_get", captured.amount)
+    }
+    when {
+        var source: Box = Box(amount: value, text: "original")
+        let frozen = source
+        var copy = source
+        copy.amount = 8
+        copy.text += " changed"
+        var envelope: Envelope = Envelope(tag: "outer", inner: source)
+        source.amount = 9
+        source.text = "new"
+        set(global_state, "frozen", frozen.amount)
+        set(global_state, "frozen_text", frozen.text)
+        set(global_state, "copy", copy.amount)
+        set(global_state, "copy_text", copy.text)
+        set(global_state, "retained", envelope.inner.amount)
+        set(global_state, "retained_text", envelope.inner.text)
+        var nested_copy = envelope
+        nested_copy.inner.amount += 5
+        nested_copy.inner.text = "nested"
+        set(global_state, "nested_original", envelope.inner.amount)
+        set(global_state, "nested_copy", nested_copy.inner.amount)
+        set(global_state, "nested_original_text", envelope.inner.text)
+        envelope.inner = source
+        source.amount = 100
+        source.text = "later"
+        set(global_state, "field_retained", envelope.inner.amount)
+        set(global_state, "field_retained_text", envelope.inner.text)
+        envelope.inner = Box(amount: envelope.inner.amount + 1, text: envelope.inner.text)
+        set(global_state, "self_field", envelope.inner.amount)
+        source = Box(amount: source.amount + 1, text: source.text)
+        set(global_state, "self_whole", source.amount)
+        source = copy
+        copy.amount = 200
+        copy.text = "last"
+        set(global_state, "whole_retained", source.amount)
+        set(global_state, "whole_retained_text", source.text)
+        if true {
+            var source = Box(amount: 300, text: "shadow")
+            source.amount += 1
+            set(global_state, "shadow", source.amount)
+        }
+        set(global_state, "after_shadow", source.amount)
+        let child = envelope.inner
+        envelope.inner.amount = 400
+        envelope.inner.text = "edited"
+        set(global_state, "child_copy", child.amount)
+        set(global_state, "child_text", child.text)
+        set(global_state, "temporary_field", Box(amount: 42, text: "temporary").amount)
+    }
+    stop {
+        var box = Box(amount: 2, text: "stop")
+        box = Box(amount: 3, text: box.text)
+        set(global_state, "stop", box.amount)
+    }
+}
+export fn main() { exercise(source()) }
+
+fn constructor_fields(value: i64) -> i64 {
+    when {
+        let box = Box(text: "named", amount: value)
+        return box.amount
+    }
+}
+fn independent_copies(value: i64) -> i64 {
+    when {
+        var original = Box(amount: value, text: "saved")
+        let frozen = original
+        var copy = original
+        copy.amount += 10
+        original.amount += 20
+        return frozen.amount * 10000 + copy.amount * 100 + original.amount
+    }
+}
+fn nested_copies(value: str) -> str {
+    when {
+        var box = Box(amount: 1, text: value)
+        var outer = Envelope(inner: box, tag: "outer")
+        let frozen = outer
+        var copy = outer
+        box.text = "source"
+        outer.inner.text = "outer"
+        copy.inner.text = "copy"
+        return frozen.inner.text + ":" + outer.inner.text + ":" + copy.inner.text
+    }
+}
+fn replacements(value: i64) -> i64 {
+    when {
+        var box = Box(amount: value, text: "source")
+        var outer = Envelope(inner: box, tag: "outer")
+        box = Box(amount: box.amount + 1, text: box.text)
+        outer.inner = box
+        box.amount += 10
+        outer.inner = Box(amount: outer.inner.amount + 1, text: outer.inner.text)
+        return box.amount * 100 + outer.inner.amount
+    }
+}
+test ordinary_struct_ownership {
+    assert eval(constructor_fields, [1, _, 3]) == [1, _, 3]
+    assert eval(independent_copies, [1, 2]) == [11121, 21222]
+    assert eval(nested_copies, ["first", "second"]) == ["first:outer:copy", "second:outer:copy"]
+    assert eval(replacements, [1, 2]) == [1203, 1304]
+}
+
+struct Primitives {
+    flag: bool
+    integer: i64
+    real: f64
+    text: str
+    day: date
+    daytime: time
+    instant: datetime
+    elapsed: duration
+}
+fn primitive_fields(value: i64) -> bool {
+    when {
+        var all = Primitives(flag: false, integer: value, real: 1.25, text: "all", day: @2026-10-03, daytime: @12:34:56, instant: @2026-10-03T12:34:56Z, elapsed: 5s)
+        let saved = all
+        all.flag = true
+        all.real += 0.25
+        return !saved.flag && all.flag && saved.integer == value && saved.real == 1.25 && all.real == 1.5 && saved.text == "all" && saved.day == @2026-10-03 && saved.daytime == @12:34:56 && saved.instant == @2026-10-03T12:34:56Z && saved.elapsed == 5s
+    }
+}
+test ordinary_primitive_fields {
+    assert eval(primitive_fields, [1, 2]) == [true, true]
+}

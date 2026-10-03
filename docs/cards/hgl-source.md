@@ -41,3 +41,8 @@ whether the selected field is writable; no new writable field domain is admitted
 `Stmt::{Let,Var}` carry an optional source type annotation alongside their
 name and initializer. Annotation resolution and initializer compatibility are
 frontend checks; a typed local supplies ordinary expected-value context.
+
+`Ty::Struct(String, Vec<(String, Ty)>)` is a resolved finite ordinary struct:
+qualified nominal identity plus declared field names and types. It is created
+by the frontend, not `Ty::parse`; generic/optional/recursive schemas remain
+outside this executable subset.

@@ -362,6 +362,7 @@ fn nullable_images(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
         ("if item != null && item >= 0 { return item }", "i64", "[0,_,12]", "[0,_,12]"),
         ("if item == null || item < 0 {} else { return item }", "i64", "[0,_,12]", "[0,_,12]"),
         ("let alias = item\nif item != null && alias != null { return item + alias }", "i64", "[10,_,12]", "[20,_,24]"),
+        ("let alias = item\nif item != null && alias != null { return item + alias }", "str", "[\"\",_,\"a\"]", "[\"\",_,\"aa\"]"),
         ("let alias = item\nif item == null || alias == null { return }\nreturn item + alias", "i64", "[10,_,12]", "[20,_,24]"),
         ("if item == null { return }\nreturn item", "i64", "[10,_,12]", "[10,_,12]"),
         ("if item == null { if current >= 0 { return } else { return } }\nreturn item", "i64", "[10,_,12]", "[10,_,12]"),
