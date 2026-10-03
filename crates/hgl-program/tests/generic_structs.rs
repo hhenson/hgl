@@ -210,12 +210,7 @@ fn unsupported_generic_field_forms_are_explicitly_rejected() {
         (
             "struct Box<T> { value:T =null }",
             "let item=Box<i64>(value:1)",
-            "default",
-        ),
-        (
-            "struct Box<T> { value:T =1 }",
-            "let item=Box<i64>(value:1)",
-            "default",
+            "optionality",
         ),
         (
             "struct Base<T> { value:T }\nstruct Child<T>:Base<T> { extra:i64 }",
@@ -234,6 +229,25 @@ fn unsupported_generic_field_forms_are_explicitly_rejected() {
             error.contains(expected),
             "{types}: expected {expected:?}, got {error:?}"
         );
+    }
+}
+
+#[test]
+fn generic_field_defaults_follow_explicit_and_contextual_specialization() {
+    for body in [
+        "let item=Box<i64>(value:2)",
+        "let item=Box<i64>()",
+        "let item:Box<i64> =Box()",
+        "let item=Box(value:2)",
+    ] {
+        let result = compile(
+            &[(
+                "defaults.hgl".into(),
+                source("struct Box<T> { value:T =1 }", body),
+            )],
+            "main",
+        );
+        assert!(result.is_ok(), "{body}: {result:?}");
     }
 }
 

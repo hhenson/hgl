@@ -170,10 +170,17 @@ pub fn specialize(
         return Err("recursive ordinary structs are not supported".into());
     }
     let mut fields = Vec::new();
-    for (name, ty) in schema.fields {
+    for (index, (name, ty)) in schema.fields.into_iter().enumerate() {
         let ty = substitute(library, &decl.module, &ty, &bindings, active)?;
         if !ordinary(&ty) && !ty.publication() {
             return Err("ordinary struct fields require ordinary value types".into());
+        }
+        if schema
+            .defaults
+            .iter()
+            .any(|(field, value)| *field == index && value.ty() != ty)
+        {
+            return Err(format!("struct field {name}: default type mismatch"));
         }
         fields.push((name, ty));
     }

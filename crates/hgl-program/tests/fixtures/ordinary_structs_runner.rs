@@ -43,6 +43,8 @@ fn constructor_order() {
         } else {
             result.unwrap();
             assert_eq!(TRACE.load(std::sync::atomic::Ordering::SeqCst), 21436587);
+            let fallback = store.bind_global::<String>("fallback").unwrap();
+            assert_eq!(store.global_get(fallback).unwrap(), "default");
             for (key, expected) in [("pair", 12), ("nested", 5634), ("projected", 7)] {
                 let handle = store.bind_global::<i64>(key).unwrap();
                 assert_eq!(store.global_get(handle).unwrap(), expected);

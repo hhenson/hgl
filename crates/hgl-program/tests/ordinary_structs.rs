@@ -71,11 +71,6 @@ fn unsupported_struct_schemas_are_diagnosed() {
             "complete type arguments",
         ),
         (
-            "struct Box { amount:i64=1 }",
-            "let box=Box(amount:1)",
-            "defaults",
-        ),
-        (
             "struct Box { amount:i64=null }",
             "let box=Box(amount:1)",
             "optionality",
@@ -103,6 +98,48 @@ fn unsupported_struct_schemas_are_diagnosed() {
     ] {
         let actual = checked(types, body).unwrap_err();
         assert!(actual.contains(error), "{types}: {actual}");
+    }
+}
+
+#[test]
+fn fixed_struct_defaults_are_checked_even_when_fields_are_supplied() {
+    for (types, body, error) in [
+        (
+            "struct Box { amount:i64=true }",
+            "let box=Box(amount:1)",
+            "default type mismatch",
+        ),
+        (
+            "struct Box { amount:i64=9223372036854775807+1 }",
+            "let box=Box()",
+            "fixed scalar",
+        ),
+        (
+            "struct Box { amount:i64=unknown() }",
+            "let box=Box()",
+            "fixed scalar",
+        ),
+        (
+            "struct Box<T> { amount:T=1 }",
+            "let box=Box<bool>(amount:true)",
+            "default type mismatch",
+        ),
+        (
+            "struct Box<T> { amount:T=1 }",
+            "let box=Box()",
+            "unresolved struct type parameter",
+        ),
+        (
+            "struct Box { amount:i64=1\nrequired:bool }",
+            "let box=Box()",
+            "missing or wrong-type",
+        ),
+    ] {
+        let actual = checked(types, body).unwrap_err();
+        assert!(actual.contains(error), "{types}: {actual}");
+    }
+    for body in ["let box=Box(amount:1)", "let box=Box()"] {
+        assert!(checked("struct Box { amount:i64=1 }", body).is_ok());
     }
 }
 

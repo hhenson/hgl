@@ -131,7 +131,7 @@ check exact nominal types. Owning local initialization, constructor retention,
 and assignment copy independently (value-mutability, VAL-17). `var` admits
 whole-value and nested field replacement; `let` is recursively read-only.
 Primitive field `+=` uses existing addition typing. Field projections retain
-the root's write authority. Unsupported optional/default/const-generic/recursive
+the root's write authority. Unsupported optional/const-generic/recursive
 schemas are diagnosed. Aggregate temporal ports remain outside this slice.
 
 Acceptance: source fixtures executed as emitted Rust through lifecycle hooks;
@@ -268,3 +268,9 @@ the selected graph with an operation failure.
 
 Ordinary return expressions in composition are evaluated before a void result is
 discarded, preserving construction failures and ordinary effects.
+
+Finite nonrecursive nominal fields admit non-null fixed scalar defaults. Complete
+ordinary constructors retain supplied fields in written order, then omitted
+defaults in declaration order. Sparse deltas never apply those defaults. Generic
+specialization checks default types; unsupported non-fixed expressions and null
+optionality remain explicit diagnostics.
