@@ -32,7 +32,6 @@ fn rewrite(value: &mut Value) {
         Kind::Length(value)
         | Kind::Field(value, _)
         | Kind::GlobalSet(_, value)
-        | Kind::ReplaySlot(value)
         | Kind::IsPresent(value)
         | Kind::Present(value)
         | Kind::Unary(_, value) => rewrite(value),

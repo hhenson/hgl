@@ -49,3 +49,7 @@ Generator body local identifiers are unique across nested lexical blocks.
 `Kind::GeneratorLocal(id)` is backend-only: generator lowering replaces its
 outer lexical local uses with owned node storage, leaving value-call body
 locals lexical. No borrowed global view is admitted into generator storage.
+
+Plan recording metadata carries its ordinary key and exact retained list type.
+The eval run owner reads that prepared entry after stop; no node-private capture
+buffer is needed. Source replay configuration consists of ordinary value data.

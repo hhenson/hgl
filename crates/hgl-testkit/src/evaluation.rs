@@ -14,6 +14,9 @@ pub fn observe<T>(
     ticks: Vec<(EngineTime, T)>,
     input_length: usize,
 ) -> Result<Observation<T>, String> {
+    if ticks.windows(2).any(|pair| pair[0].0 >= pair[1].0) {
+        return Err("eval recording timestamps did not advance".into());
+    }
     let ticks = ticks
         .into_iter()
         .map(|(time, value)| {

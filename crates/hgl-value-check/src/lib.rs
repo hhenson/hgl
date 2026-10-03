@@ -197,7 +197,6 @@ fn expression(value: &Value, live: &BTreeMap<usize, bool>) -> Result<(), String>
         }
         Kind::Length(value)
         | Kind::Field(value, _)
-        | Kind::ReplaySlot(value)
         | Kind::IsPresent(value)
         | Kind::Present(value)
         | Kind::Unary(_, value) => expression(value, live)?,
@@ -324,7 +323,6 @@ pub fn prepare_node(
         global_state: false,
         globals: Vec::new(),
         configuration: Vec::new(),
-        capability: None,
         caches: Vec::new(),
         handlers: Vec::new(),
     };

@@ -1,43 +1,63 @@
-//! Checking acceptance for nullable replay slots, independent of execution traces.
-use hgl_program::compile_tests;
-
-const READ: &str = "let item = replay_input[current]\n        if item != null {\n            return item\n        }";
+//! Flow-fact checker tests use typed nullable IR inputs; source storage admission is separate.
+use super::*;
 
 fn sources(body: &str, ty: &str, slots: &str) -> Vec<(String, String)> {
-    let implementation =
-        include_str!("../../../external/hgraph_std/hgl/hgraph/impl/replay_record.hgl");
-    assert!(
-        implementation.contains(READ),
-        "standard replay read changed"
-    );
     vec![
-        (
-            "example.hgl".into(),
-            format!(
-                "module example\nfn id(value: {ty}) -> {ty} {{ when {{ return delta_value(value) }} }}\ntest check {{ eval(id, value: {slots}) }}"
-            ),
-        ),
-        (
-            "replay_record.hgl".into(),
-            include_str!("../../../external/hgraph_std/hgl/hgraph/replay_record.hgl").into(),
-        ),
-        (
-            "replay_record_impl.hgl".into(),
-            implementation.replace(READ, body),
-        ),
+        ("type".into(), ty.into()),
+        ("slots".into(), slots.into()),
+        ("body".into(), format!("when {{{body}}}\n}}")),
     ]
 }
-
+fn compile_tests(sources: &[(String, String)]) -> Result<(), String> {
+    let ty = Ty::parse(&sources[0].1).unwrap();
+    let library = crate::index::load(&[(
+        "flow.hgl".into(),
+        "module flow\nfn probe()->i64 {when {}}".into(),
+    )])?;
+    let declaration = library.declarations[0].clone();
+    let signature = declaration.signature()?;
+    let mut checker = Checker {
+        library,
+        runtime_node: true,
+        ..Checker::default()
+    };
+    let mut env = Env::new();
+    env.insert(
+        "replay_input".into(),
+        Value::new(
+            Ty::List(Box::new(Ty::Nullable(Box::new(ty.clone()))), None),
+            Kind::Configuration(0),
+        ),
+    );
+    env.insert(
+        "current".into(),
+        Value::new(Ty::I64, Kind::Literal(Literal::Int(0))),
+    );
+    env.insert("index".into(), Value::new(Ty::I64, Kind::Cache(0)));
+    env.insert("out".into(), Value::new(ty.clone(), Kind::Output));
+    for name in ["alarm", "clock"] {
+        env.insert(name.into(), Value::new(Ty::Void, Kind::Capability));
+    }
+    let mut node =
+        hgl_value_check::prepare_node(&signature, &mut Env::new(), "flow::probe".into(), ty)?;
+    let tokens = hgl_source::lex(&sources[2].1)?;
+    checker.hooks(
+        &declaration,
+        &mut Cursor::new(&tokens),
+        &env,
+        &mut node,
+        &mut 0,
+    )
+}
 fn accepts(body: &str) {
-    let result = compile_tests(&sources(body, "i64", "[1, _, 2]"));
+    let result = compile_tests(&sources(body, "i64", "[1,_,2]"));
     assert!(result.is_ok(), "expected acceptance: {body}\n{result:?}");
 }
-
 fn rejects(body: &str, diagnostic: &str) {
-    let result = compile_tests(&sources(body, "i64", "[1, _, 2]"));
+    let result = compile_tests(&sources(body, "i64", "[1,_,2]"));
     assert!(
-        matches!(&result, Err(error) if error.contains(diagnostic)),
-        "expected rejection containing {diagnostic:?}: {body}\n{result:?}"
+        matches!(&result,Err(error) if error.contains(diagnostic)),
+        "expected {diagnostic:?}: {body}\n{result:?}"
     );
 }
 
@@ -240,15 +260,11 @@ fn indexing_requires_i64_and_the_evaluation_phase() {
             "index requires i64",
         );
     }
-    let mut input = sources(READ, "i64", "[1, _, 2]");
-    input[2].1 = input[2].1.replace(
-        "if len(replay_input) > 0",
-        "let forbidden = replay_input[0]\nif len(replay_input) > 0",
-    );
-    let result = compile_tests(&input);
+    let source = "module phase\nfn probe()->i64 {inject replay_input\nstart{let x=replay_input[0]}\nwhen{return 1}}\nexport fn main(){probe()}";
+    let error = crate::compile(&[("phase.hgl".into(), source.into())], "main").unwrap_err();
     assert!(
-        matches!(&result, Err(error) if error.contains("in evaluation")),
-        "{result:?}"
+        error.contains("unsupported injectable replay_input"),
+        "{error}"
     );
 }
 

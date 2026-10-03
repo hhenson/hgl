@@ -347,8 +347,13 @@ impl Checker {
                 .cloned()
                 .map(|v| (None, v))
                 .collect::<Vec<_>>();
+            let Ok(declared) =
+                hgl_value_bind::signature_types(&self.library, module, &sig, &positional)
+            else {
+                continue;
+            };
             let Ok((_, inferred, output)) =
-                bind(&sig, &positional, runtime, Some(result), &BTreeMap::new())
+                bind(&sig, &positional, runtime, Some(result), &declared)
             else {
                 continue;
             };
@@ -730,8 +735,7 @@ impl Checker {
         while c.take("inject") {
             loop {
                 match c.name()?.as_str() {
-                    name @ ("alarm" | "clock" | "logger" | "global_state" | "replay_input"
-                    | "capture") => {
+                    name @ ("alarm" | "clock" | "logger" | "global_state") => {
                         inject_capability(name, node, env)?;
                     }
                     "out" => {
@@ -749,9 +753,6 @@ impl Checker {
             return Err("alarm is admitted only on sources".into());
         }
         self.initializers(decl, c, env, node)?;
-        if matches!(&node.capability, Some((name, _)) if name == "replay_input") && !node.alarm {
-            return Err("replay_input: source requires alarm".into());
-        }
         Ok(())
     }
     fn initializers(
@@ -1184,29 +1185,9 @@ impl Checker {
                 field(parent, name)
             }
             Expr::Index(receiver, index) => {
-                if !matches!(receiver.as_ref(), Expr::Name(name) if name == "replay_input") {
-                    let parent = self.expression(module, receiver, env, runtime)?;
-                    let index = self.expression(module, index, env, runtime)?;
-                    return hgl_value_check::indexed(parent, index);
-                }
-                if !matches!(receiver.as_ref(), Expr::Name(name) if name == "replay_input")
-                    || !runtime
-                    || !self.runtime_node
-                    || self.phase != Phase::Evaluation
-                {
-                    return Err(
-                        "replay_input: indexing requires the injected source in evaluation".into(),
-                    );
-                }
-                let payload = capability_payload("replay_input", env)?;
+                let parent = self.expression(module, receiver, env, runtime)?;
                 let index = self.expression(module, index, env, runtime)?;
-                if index.ty != Ty::I64 {
-                    return Err("replay_input: index requires i64".into());
-                }
-                Ok(Value::new(
-                    Ty::Nullable(Box::new(payload)),
-                    Kind::ReplaySlot(Box::new(index)),
-                ))
+                hgl_value_check::indexed(parent, index)
             }
             Expr::Sequence(elements) => hgl_value_check::list_literal(elements, None),
             Expr::Literal(l) => Ok(Value::new(l.ty(), Kind::Literal(l.clone()))),
@@ -1552,15 +1533,8 @@ pub(crate) fn evaluate(
     checker.plan.input_length = plan.input_length;
     for (_, value) in &mut values {
         if let Kind::Wire(input) = value.kind {
-            checker.result_hint = Some(value.ty.clone());
-            *value = checker.call("hgraph.std", "replay", &[], false)?;
-            let Kind::Wire(node) = value.kind else {
-                return Err("replay requires a temporal result".into());
-            };
-            checker
-                .plan
-                .replay_inputs
-                .push((node, plan.replay_inputs[input].1.clone()));
+            let data = replay_data(&checker.library, &value.ty, &plan.sequences[input])?;
+            *value = checker.call("hgraph.std", "replay", &[(None, data)], false)?;
         }
     }
     checker.result_hint = None;
@@ -1570,10 +1544,79 @@ pub(crate) fn evaluate(
             return Err("eval currently records scalar outputs".into());
         }
         let ty = output.ty.clone();
-        checker.call("hgraph.std", "record", &[(None, output)], false)?;
-        checker.plan.output = Some((checker.plan.nodes.len() - 1, ty));
+        let key = eval_recording_key(&checker.plan);
+        checker.call(
+            "hgraph.std",
+            "record",
+            &[
+                (None, output),
+                (
+                    None,
+                    Value::new(Ty::Str, Kind::Literal(Literal::Str(key.clone()))),
+                ),
+            ],
+            false,
+        )?;
+        let record = checker.plan.nodes.len() - 1;
+        let recording = checker.plan.nodes[record]
+            .globals
+            .iter()
+            .find(|(name, _)| name == &key)
+            .ok_or("record must prepare its ordinary recording entry")?
+            .1
+            .clone();
+        checker.plan.recording = Some((key, recording));
+        checker.plan.output = Some((record, ty));
     }
     Ok(checker.plan)
+}
+
+fn replay_data(library: &Library, ty: &Ty, slots: &[Option<Literal>]) -> Result<Value, String> {
+    let timed = hgl_value_types::resolve(
+        library,
+        "hgraph.std",
+        &format!("TimedValue<{}>", ty.source_name()),
+        &mut BTreeSet::new(),
+    )?;
+    let entries = slots
+        .iter()
+        .enumerate()
+        .filter_map(|(i, v)| v.as_ref().map(|v| (i, v)))
+        .map(|(i, v)| {
+            let micros = i64::try_from(i)
+                .map_err(|error| format!("eval timestamp overflow: {error}"))?
+                .checked_add(1)
+                .ok_or("eval timestamp overflow")?;
+            Ok(Value::new(
+                timed.clone(),
+                Kind::Construct(vec![
+                    (
+                        0,
+                        Value::new(Ty::DateTime, Kind::Literal(Literal::DateTime(micros))),
+                    ),
+                    (1, Value::new(ty.clone(), Kind::Literal(v.clone()))),
+                ]),
+            ))
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    let data = Value::new(Ty::List(Box::new(timed), None), Kind::List(entries));
+    Ok(data)
+}
+
+fn eval_recording_key(plan: &Plan) -> String {
+    let used = plan
+        .nodes
+        .iter()
+        .flat_map(|node| node.globals.iter().map(|(key, _)| key))
+        .collect::<BTreeSet<_>>();
+    let mut index = 0;
+    loop {
+        let key = format!("eval.recording.{index}");
+        if !used.contains(&key) {
+            return key;
+        }
+        index += 1;
+    }
 }
 
 fn set_call(
@@ -1625,11 +1668,17 @@ fn local(env: &mut Env, name: &str, ty: Ty, next: &mut usize) -> usize {
     id
 }
 
+#[derive(Default)]
+struct EvalInputs {
+    input_length: usize,
+    sequences: Vec<Vec<Option<Literal>>>,
+}
+
 fn eval_arguments(
     signature: &Signature,
     args: &[(Option<String>, Expr)],
-) -> Result<(Plan, Arguments), String> {
-    let mut plan = Plan::default();
+) -> Result<(EvalInputs, Arguments), String> {
+    let mut plan = EvalInputs::default();
     let mut values = Vec::new();
     for (position, (label, expr)) in args.iter().enumerate() {
         let parameter = if let Some(label) = label {
@@ -1658,9 +1707,9 @@ fn eval_arguments(
                 .or_else(|| literals.iter().flatten().next().map(Literal::ty))
                 .ok_or("cannot infer empty generic sequence")?;
             coerce_sequence(&mut literals, &ty).map_err(|e| format!("{}: {e}", parameter.name))?;
-            let index = plan.replay_inputs.len();
+            let index = plan.sequences.len();
             plan.input_length = plan.input_length.max(literals.len());
-            plan.replay_inputs.push((index, literals));
+            plan.sequences.push(literals);
             Value::new(ty, Kind::Wire(index))
         } else {
             if !parameter.constant {
@@ -1757,13 +1806,8 @@ fn capability_function(
     phase: Phase,
 ) -> Result<Value, String> {
     let name = format!("{method}({receiver})");
-    let payload = capability_payload(receiver, env)?;
+    capability_payload(receiver, env)?;
     let (parameters, result) = match (receiver, method) {
-        ("replay_input", "len") if phase != Phase::Stop => (vec![], Ty::I64),
-        ("capture", "begin") if phase == Phase::Start => (vec![], Ty::Void),
-        ("capture", "append") if phase == Phase::Evaluation => {
-            (vec![("time", Ty::DateTime), ("delta", payload)], Ty::Void)
-        }
         ("alarm", "schedule") if phase != Phase::Stop => (vec![("delay", Ty::Duration)], Ty::Void),
         ("alarm", "schedule_at") if phase != Phase::Stop => {
             (vec![("time", Ty::DateTime)], Ty::Void)
@@ -1788,24 +1832,7 @@ fn capability_function(
 }
 
 fn inject_capability(name: &str, node: &mut Node, env: &mut Env) -> Result<(), String> {
-    let ty = match name {
-        "replay_input" if node.inputs.is_empty() && scalar(&node.result) => node.result.clone(),
-        "capture"
-            if node.result == Ty::Void
-                && node.inputs.len() == 1
-                && scalar(&node.inputs[0].2)
-                && !env.values().any(|v| matches!(v.kind, Kind::Input(_, true))) =>
-        {
-            node.inputs[0].2.clone()
-        }
-        "alarm" | "clock" | "logger" | "global_state" => Ty::Void,
-        _ => return Err(format!("{name}: unsupported node shape or scalar type")),
-    };
-    if matches!(name, "replay_input" | "capture")
-        && node.capability.replace((name.into(), ty.clone())).is_some()
-    {
-        return Err(format!("{name}: only one storage capability is admitted"));
-    }
+    let ty = Ty::Void;
     node.alarm |= name == "alarm";
     node.global_state |= name == "global_state";
     if env
@@ -1953,3 +1980,11 @@ fn node_guard(node: &Node, expr: Expr) -> Expr {
         expr
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/support/nullable.rs"]
+mod nullable_tests;
+
+#[cfg(test)]
+#[path = "../tests/support/eval_composition.rs"]
+mod eval_composition_tests;

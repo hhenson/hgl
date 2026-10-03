@@ -36,7 +36,6 @@ fn value(plan: &Plan, v: &Value) -> String {
                 retained(&place(plan, v), &v.ty)
             }
         }
-        Kind::ReplaySlot(index) => format!("self.replay_input.get({})?", value(plan, index)),
         Kind::IsPresent(v) => presence(plan, v),
         Kind::Present(v) => format!(
             "({}).expect(\"checked present replay slot\")",
@@ -423,7 +422,6 @@ fn native_argument(plan: &Plan, v: &Value) -> String {
         | Kind::BorrowedLocal(..)
         | Kind::GlobalGet(_)
         | Kind::GlobalSet(..)
-        | Kind::ReplaySlot(_)
         | Kind::IsPresent(_)
         | Kind::Present(_)
         | Kind::Literal(_)
@@ -440,12 +438,6 @@ fn native_argument(plan: &Plan, v: &Value) -> String {
 fn capability_call(plan: &Plan, op: &str, args: &[Value]) -> String {
     let args = args.iter().map(|v| value(plan, v)).collect::<Vec<_>>();
     match op {
-        "replay_input.len" => "self.replay_input.length()".into(),
-        "capture.begin" => "self.capture.begin()?".into(),
-        "capture.append" => format!(
-            "self.capture.append({}, &({}), _ctx.evaluation_time())?",
-            args[0], args[1]
-        ),
         "clock.evaluation_time" => "_ctx.evaluation_time()".into(),
         "clock.next_cycle_evaluation_time" => "_ctx.next_cycle_evaluation_time()".into(),
         "alarm.schedule" => format!("_ctx.alarm_in({})?", args[0]),

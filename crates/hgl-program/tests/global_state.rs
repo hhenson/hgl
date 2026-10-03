@@ -185,8 +185,11 @@ fn requirements_belong_to_selected_nodes_and_exact_keys() {
 }
 
 #[test]
-fn adding_stop_hooks_does_not_expand_legacy_replay_phases() {
+fn stop_hooks_do_not_admit_removed_replay_injectable() {
     let source = "module phases\nfn replay()->i64 { inject replay_input,alarm\nstart { schedule(alarm,0s) }\nwhen { return 1 }\nstop { let count=len(replay_input) } }\nexport fn main()->i64 { return replay() }";
     let error = compile(&[("phases.hgl".into(), source.into())], "main").unwrap_err();
-    assert!(error.contains("forbidden hook phase"), "{error}");
+    assert!(
+        error.contains("unsupported injectable replay_input"),
+        "{error}"
+    );
 }

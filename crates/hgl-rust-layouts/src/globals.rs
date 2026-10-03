@@ -218,7 +218,6 @@ fn value_types<'a>(value: &'a hgl_rust_ir::Value, types: &mut BTreeMap<String, &
         Kind::Length(v)
         | Kind::Field(v, _)
         | Kind::GlobalSet(_, v)
-        | Kind::ReplaySlot(v)
         | Kind::IsPresent(v)
         | Kind::Present(v)
         | Kind::Unary(_, v) => value_types(v, types),

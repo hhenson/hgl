@@ -42,8 +42,6 @@ pub enum Kind {
     BorrowedLocal(usize, usize, bool),
     /// Replace the indexed prepared entry with an owned scalar value.
     GlobalSet(usize, Box<Value>),
-    /// Owned nullable replay payload at the checked i64 index.
-    ReplaySlot(Box<Value>),
     /// Nullable presence test.
     IsPresent(Box<Value>),
     /// Payload extraction justified by frontend presence facts.
@@ -128,8 +126,6 @@ pub struct Node {
     pub configuration: Vec<Value>,
     /// Checked stop-hook statements.
     pub stop: Vec<Statement>,
-    /// Optional admitted buffer capability name and scalar payload type.
-    pub capability: Option<(String, Ty)>,
     /// Cache initializers, indexed by cache expressions.
     pub caches: Vec<Literal>,
     /// Ordered handlers; absent guards use the existing input guard.
@@ -162,8 +158,8 @@ pub struct Plan {
     pub docs: Vec<String>,
     /// Eval capture node index and observed scalar type, if any.
     pub output: Option<(usize, Ty)>,
+    /// Ordinary recording key and exact retained list type, bound before start.
+    pub recording: Option<(String, Ty)>,
     /// Dense eval input length, independent of expected output.
     pub input_length: usize,
-    /// Replay node indices and their configured dense input slots.
-    pub replay_inputs: Vec<(usize, Vec<Option<Literal>>)>,
 }

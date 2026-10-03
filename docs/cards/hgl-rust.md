@@ -11,9 +11,9 @@ Public surface:
 - `Value { ty, kind }`, `Value::new(Ty, Kind)`; `Kind::{Literal, Wire, Input,
   Cache, Local, MutableLocal, Native, Binary, Unary, Query, Output, Capability, Void}`.
 - `Statement::{Let, Var, Return, Call, Assign, For, If}`.
-- `Node { name, inputs, result, alarm, start, capability, caches, handlers }`.
+- `Node { name, inputs, result, alarm, start, caches, handlers }`.
 - `Native { name, method, throws, args, result }`.
-- `Plan { nodes, natives, docs, output, input_length, replay_inputs }`.
+- `Plan { nodes, natives, docs, output, recording, input_length }`.
 - `emit(&Plan) -> String` and
   `emit_test_body(&Plan, Option<&[Option<Literal>]>) -> String`.
 
@@ -38,12 +38,10 @@ compiler eval regressions and the pinned standard suite; existing program tests
 compile and execute emitted Rust in debug/release. No HGL behavior changes or
 structural delta admission are part of this phase extraction.
 
-`Kind::{ReplaySlot,IsPresent,Present}` represents a checked nullable replay
-read, its presence test and an extraction justified by frontend flow facts.
-`Statement::Exit` ends an evaluation without publication. Nullable values are
-owned Rust options; indexing uses the fallible provider read, keeping bounds
-errors distinct from absent slots. Capability operations use receiver-first
-source spelling; internal runtime method calls do not create source aliases.
+`Kind::{IsPresent,Present}` retains contextual presence-test and extraction IR.
+`Statement::Exit` ends an evaluation without publication. Ordinary list reads
+are checked and fallible. Capability operations use receiver-first source
+spelling; internal runtime method calls do not create source aliases.
 
 `Node { global_state, globals, stop, .. }` records a run-wide shared-store requirement
 and checked stop-hook statements. The `globals` key/type pairs describe prepared entries; `Kind::GlobalGet` and
@@ -95,3 +93,8 @@ storage and pending output are constructed per node, start resets and arms the
 first evaluation, and evaluation executes the checked resume machine. Ordinary
 handlers retain their existing path. Generator selection uses checked IR only,
 never a source operator name or native role.
+
+Eval prepares its typed ordinary recording binding before graph start and reads
+an independent owned list after stop. It converts timed scalar entries to the
+existing dense observation comparison while retaining the separate input horizon.
+It does not inspect a recorder node's private storage or inject replay data.

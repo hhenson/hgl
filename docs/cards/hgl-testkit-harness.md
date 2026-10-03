@@ -98,3 +98,7 @@ not allocate. Comparison work is bounded by supplied expectations. Buffers are
 test instrumentation, not benchmark timing code. General timed/structural test
 results remain pending. The separate corpus/twin Replay/Record API above retains
 its existing contract.
+
+Conversion of a retained ordinary recording validates strictly increasing
+publication timestamps before dense comparison. A malformed duplicate entry is
+an error even if the first entry would match the expected value.

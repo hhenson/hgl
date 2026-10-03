@@ -44,45 +44,33 @@ HGL owns guards, scheduling, state and formatting composition. Rust implements
 only the selected native scalar signatures. Selected source docs remain in
 emitted comments. No operator name lookup occurs on ticks.
 
-Acceptance: the pinned standard library's 83 tests/132 evaluations,
+Acceptance: the pinned standard library tests and evaluations,
 plus empty/silent/equal ticks, delayed output, fresh state, helper isolation,
 wrong values/lengths and propagated node errors. `cargo xtask ci` runs these in
 debug and release. The original const/debug graph regressions remain.
 
-Node-scoped `replay_input` and `capture` are non-value capabilities. The first
-requires a scalar source; the second an outputless sink with one scalar input.
-They cannot escape or appear in value/composition bodies. The checker enforces
-ADR0016's exact operation names, positional/named arguments, result types and
-start/evaluation phases. Start hooks use ordinary checked statements, native
-calls, conditions and scalar cache access. Clock reads and source alarm calls
-are lowered through the existing context; temporal input/output access and
-return publication are rejected in start.
-
-Each eval plan binds replay literals to one checked source and its capture to
-one checked sink. Generated constructors own fresh typed storage per graph
-instance. The graph instance is the run identity; no externally supplied buffer
-or identity can cross that boundary. Typed fields enforce role/payload, a unique
-capture field enforces one writer, and provider construction validates input
-length/time. Unconfigured capability nodes fail construction before any start.
-Binding does not call begin: only the record operator's HGL start hook begins capture.
-After stop, generated code transfers owned capture ticks, drops the graph and
-passes the ticks to testkit observation/comparison. It adds no runtime recorder.
+Replay and record receive ordinary const values and keys. Their HGL bodies
+use generator scheduling and prepared global-state entries. Eval retains dense
+input lengths separately from present timed data and obtains an independently
+owned recording after stop. Each graph owns its ordinary run storage.
+Start hooks use ordinary checked statements, native calls, conditions and cache
+access; temporal input reads and return publication remain rejected there.
 
 `delta_value(input)` checks the concrete instance of the endpoint-derived delta
 relationship. The admitted eight scalars have delta type equal to scalar type;
 structural delta lowering is not yet implemented and those instances are diagnosed.
 Formal `signal` parameters retain their signal identity even when the producer
-has a scalar payload; they are excluded from both delta access and capture binding.
+has a scalar payload; they are excluded from delta access and recording.
 Only runtime evaluation can read delta metadata. Endpoint identity and proof of
 both valid and modified are required; copied payloads/consts are rejected.
 Handler and local short-circuit/conditional facts establish those guarantees.
 `delta(input)` is not an accessor intrinsic; `delta<T>(...)` is a constructor.
 
-Acceptance also includes mutated source operator bodies proving execution of the
-selected HGL handlers, missing-binding construction failure before start, native
-start failure, capability operation/phase/type/escape errors, translated buffer
-errors through generated nodes, generic delta forwarding and endpoint-specific
-proof checks. No runtime control flow is selected by replay/record operator name.
+Acceptance also includes changed source operator bodies proving execution of
+selected HGL statements, ordinary list bounds/missing-entry errors, native start
+failure, removed bespoke injectable rejection, generic delta forwarding and
+endpoint-specific proof checks. No runtime control flow is selected by
+replay/record operator name.
 
 Implicit handler-selector normalization is applied to the scalar-input profile.
 Existing structural guard emission is retained: applying scalar normalization to
@@ -93,14 +81,9 @@ that normalization/runtime integration remain outside this completed profile.
 Capability actions and non-clock queries use receiver-first prelude calls
 with a direct injected name as the first positional argument; remaining arguments use ordinary
 positional/named binding. Dotted capability methods are not aliases. Replay
-uses `len(replay_input)` and evaluation-only `replay_input[index]`. Its contextual
-nullable result can enter immutable inferred locals but cannot escape into
-mutable locals, state/cache, ordinary calls or output without presence proof.
-Null comparisons refine the particular local on both branches, through negation
-and short-circuit evaluation. Continuing paths intersect their guarantees;
-a terminating branch contributes no continuing path. Unrefined copies require
-their own guard. Bare runtime return terminates without publishing; `return null`
-is not a no-output operation. Scalar endpoint `delta_value` proofs remain separate.
+uses ordinary list length/indexing; every stored timed entry is present.
+Bare runtime return terminates without publishing; `return null` is not a
+no-output operation. Scalar endpoint `delta_value` proofs remain separate.
 
 Clock observations use read-only properties of the direct injected clock:
 `clock.evaluation_time` and `clock.next_cycle_evaluation_time` produce owned
@@ -108,8 +91,9 @@ Clock observations use read-only properties of the direct injected clock:
 read value. Property invocation, free-function clock aliases, property writes,
 unknown properties and non-capability receivers are rejected. `clock.now`
 requires wall-clock support absent from this backend and is diagnosed explicitly.
-Scheduling remains limited to start/evaluation hooks; capability access from
-ordinary value helpers remains outside this profile.
+Scheduling remains limited to start/evaluation hooks. Ordinary helpers called
+at runtime may request clock/logger services; deterministic wiring service
+execution remains outside this backend profile.
 
 Ordinary `global_state` is an ordinary run-wide keyed facility, admitted in
 start/evaluation/stop without temporal shape or source/sink role constraints.
@@ -236,3 +220,17 @@ inject the currently supported clock/logger services in runtime context, includi
 transitive calls from generators. Their checked effects stay inside ValueCall IR;
 no graph scheduling or extra runtime node is introduced. Wiring/constant service
 execution and other helper injectables remain explicitly unsupported.
+
+Eval configures ordinary replay values as `list<TimedValue<T>>`: only present
+scalar inputs become absolute timed entries and the dense horizon stays on the
+plan. It invokes the normal source replay and record operators, supplies the
+recorder's ordinary const key, and binds that exact typed recording before start.
+Nested ordinary generic parameter inference applies equally to operator
+signatures and their implementations. Replay/record-specific injectable names
+are no longer admitted by source checking.
+
+Recorder keys are selected before start against all resolved source requirements,
+including unexecuted branches and regardless of type. The current eval entry
+creates a fresh store and has no supplied seed or dynamic nested-graph interface;
+those source APIs are not implied. Selection adds no reserved string namespace
+or per-tick key comparisons. Ordinary caller-selected keys keep normal sharing.

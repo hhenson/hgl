@@ -21,17 +21,6 @@ fn node(plan: &Plan, n: &Node, index: usize, out: &mut Vec<String>) {
     for (id, value) in n.configuration.iter().enumerate() {
         out.push(format!("configuration{id}: {},\n", owned_type(&value.ty)));
     }
-    if let Some((name, ty)) = &n.capability {
-        out.push(format!(
-            "{name}: hgl_std_native::eval_buffers::{}<{}>,\n",
-            if name == "replay_input" {
-                "ReplayInput"
-            } else {
-                "Capture"
-            },
-            rust_type(ty)
-        ));
-    }
     for (i, (_, _, ty)) in n.inputs.iter().enumerate() {
         out.push(if matches!(ty, Ty::Ref(_) | Ty::Set(_)) {
             format!("input{i}: hgl_store::InputId,\n")
@@ -125,18 +114,6 @@ fn node_build(
     }
     for (id, value) in n.configuration.iter().enumerate() {
         out.push(format!("configuration{id}: (|| -> Result<{}, Box<hgl_types::NodeError>> {{ Ok({}) }})().map_err(|e| hgl_describe::BuildError::InvalidNodeType {{ node: {:?}, what: e.message }})?,\n", owned_type(&value.ty), condition_code(plan, value), n.name));
-    }
-    if let Some((name, _)) = &n.capability {
-        let configured = if name == "replay_input" {
-            plan.replay_inputs.iter().find(|(id, _)| *id == index).map(|(_, slots)| format!("hgl_std_native::eval_buffers::ReplayInput::new(vec![{}], hgl_types::EngineTime::MIN_START).map_err(|e| hgl_describe::BuildError::InvalidNodeType {{ node: {:?}.into(), what: e.message }})?", sequence(slots), n.name))
-        } else {
-            plan.output
-                .as_ref()
-                .filter(|(id, _)| *id == index)
-                .map(|_| "hgl_std_native::eval_buffers::Capture::new()".into())
-        };
-        let configured = configured.unwrap_or_else(|| format!("return Err(hgl_describe::BuildError::InvalidNodeType {{ node: {:?}.into(), what: {:?}.into() }})", n.name, format!("{name}: missing configured binding")));
-        out.push(format!("{name}: {configured},\n"));
     }
     for (i, (name, _, ty)) in n.inputs.iter().enumerate() {
         out.push(format!(
@@ -260,10 +237,16 @@ pub fn emit_test_body(plan: &Plan, expected: Option<&[Option<Literal>]>) -> Stri
         out.push("}\n".into());
     }
     out.push("pub fn test()->Result<(),String> {\nlet mut registry=hgl_describe::Registry::new();\nregister(&mut registry).map_err(|e|format!(\"{e:?}\"))?;\nlet graph=main(&registry).map_err(|e|format!(\"{e:?}\"))?;\n".into());
-    out.push("let mut store=hgl_store::Store::new();\nstore.provision_global_state();\nlet mut built=hgl_describe::instantiate_complete(&graph,&registry,&mut store).map_err(|e|format!(\"{e:?}\"))?;\nhgl_kernel::run_simulation(&mut built.graph,&mut store,&hgl_kernel::RunConfig { start_time:hgl_types::EngineTime::MIN_START,end_time:hgl_types::EngineTime::MAX_END }).map_err(|e|format!(\"{e:?}\"))?;\n".into());
-    if let Some((record, _)) = &plan.output {
-        let identity = format!("{}#{record}", plan.nodes[*record].name);
-        out.push(format!("let record=u32::try_from(graph.nodes.iter().position(|n|n.implementation=={identity:?}).ok_or(\"missing eval record\")?).map_err(|e|e.to_string())?;\nlet ticks=built.graph.node_mut::<Node{record}>(hgl_types::NodeId(record)).ok_or(\"missing eval record\")?.capture.take_ticks().map_err(|e|e.message)?;\ndrop(built);\nlet _observed=hgl_testkit::evaluation::observe(ticks,{})?;\n", plan.input_length));
+    out.push("let mut store=hgl_store::Store::new();\nstore.provision_global_state();\nlet mut built=hgl_describe::instantiate_complete(&graph,&registry,&mut store).map_err(|e|format!(\"{e:?}\"))?;\n".into());
+    if let Some((key, ty)) = &plan.recording {
+        out.push(format!(
+            "let recording=store.bind_global::<{}>({key:?}).map_err(|e|format!(\"{{e:?}}\"))?;\n",
+            global_type(ty)
+        ));
+    }
+    out.push("hgl_kernel::run_simulation(&mut built.graph,&mut store,&hgl_kernel::RunConfig { start_time:hgl_types::EngineTime::MIN_START,end_time:hgl_types::EngineTime::MAX_END }).map_err(|e|format!(\"{e:?}\"))?;\n".into());
+    if plan.output.is_some() {
+        out.push(format!("let ticks=store.global_get(recording).map_err(|e|e.message)?.into_iter().collect();\ndrop(built);\nlet _observed=hgl_testkit::evaluation::observe(ticks,{})?;\n", plan.input_length));
         if let Some(expected) = expected {
             out.push(format!(
                 "hgl_testkit::evaluation::compare(&[{}],&_observed)?;\n",
