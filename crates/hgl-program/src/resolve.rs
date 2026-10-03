@@ -600,6 +600,9 @@ impl Checker {
                         return Err("statements after return".into());
                     }
                     output = self.expression(module, expr, env, false)?;
+                    if !matches!(output.kind, Kind::Wire(_) | Kind::Void) {
+                        self.wiring_value(&output)?;
+                    }
                 }
                 Stmt::Add(..) | Stmt::Assign(..) | Stmt::If(..) => {
                     let mut next = self.next_wiring_local;
@@ -1793,12 +1796,7 @@ pub(crate) fn evaluate(
 fn replay_data(library: &Library, ty: &Ty, slots: &[Option<Value>]) -> Result<Value, String> {
     let decl = hgl_value_types::declaration(library, "hgraph.std", "TimedValue")?
         .ok_or("eval requires the ordinary TimedValue declaration")?;
-    let timed = hgl_value_types::specialize(
-        library,
-        decl,
-        vec![ty.clone().delta()?],
-        &mut BTreeSet::new(),
-    )?;
+    let timed = hgl_value_types::specialize(library, decl, vec![ty.clone()], &mut BTreeSet::new())?;
     hgl_eval_data::timed(timed, slots)
 }
 

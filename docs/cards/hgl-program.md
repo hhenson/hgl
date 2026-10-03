@@ -233,7 +233,7 @@ owns the unchanged guard proof analysis, now shared across admitted publication
 shapes. Neither complete held structural values nor structural-delta inspection,
 comparison or temporal payload endpoints are admitted by this extension.
 
-Eval configures ordinary replay values as `list<TimedValue<delta_of(T)>>`: only
+Eval configures ordinary replay values as `list<TimedValue<T>>`: only
 present input deltas become absolute timed entries and the dense horizon stays on the
 plan. It invokes the normal source replay and record operators, supplies the
 recorder's ordinary const key, and binds that exact typed recording before start.
@@ -265,3 +265,6 @@ Eval signature candidates use independent checking/evaluation state; only the
 selected candidate contributes configuration failures, documentation, and type
 normalization caches to graph construction. Rejected candidates cannot poison
 the selected graph with an operation failure.
+
+Ordinary return expressions in composition are evaluated before a void result is
+discarded, preserving construction failures and ordinary effects.

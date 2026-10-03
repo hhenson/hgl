@@ -272,7 +272,7 @@ pub fn signature_types(
         } else if matches!(
             value.ty,
             Ty::Struct(..) | Ty::List(..) | Ty::Delta(_) | Ty::Map(..) | Ty::Tuple(_)
-        ) || parameter.ty.starts_with("delta_of(")
+        ) || hgl_source::delta_argument(&parameter.ty).is_some()
         {
             hgl_value_types::unify(
                 library,

@@ -125,15 +125,16 @@ pub fn endpoint_call(name: &str, args: Arguments, runtime: bool) -> Result<Value
         return Err("endpoint operation requires exactly one argument".into());
     }
     if matches!(name, "activate" | "passivate")
-        && args.iter().any(|(_, v)| {
-            !matches!(v.kind, Kind::Input(..)) || matches!(v.ty, Ty::Ref(_) | Ty::Set(_))
-        })
+        && args
+            .iter()
+            .any(|(_, v)| !matches!(v.kind, Kind::Input(..)) || !scalar(&v.ty))
     {
         return Err("activity requires a scalar input".into());
     }
-    if args.iter().any(|(_, v)| {
-        matches!(v.kind, Kind::Output) && matches!(v.ty, Ty::Ref(_) | Ty::Set(_) | Ty::Void)
-    }) {
+    if args
+        .iter()
+        .any(|(_, v)| matches!(v.kind, Kind::Output) && !scalar(&v.ty))
+    {
         return Err("querying structural out is not yet supported".into());
     }
     let ty = match name {

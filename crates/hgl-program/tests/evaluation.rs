@@ -303,7 +303,7 @@ _ => panic!("unknown test image") } }
 }
 fn check_images(binary: &Path) -> Result<(), Box<dyn std::error::Error>> {
     for (name, success, message) in [
-        ("standard", true, "100 tests, 170 evaluations, 0 failures"),
+        ("standard", true, "101 tests, 171 evaluations, 0 failures"),
         ("source_operators", true, "0 failures"),
         ("nullable", true, "0 failures"),
         ("recording_keys", true, "0 failures"),
@@ -369,7 +369,7 @@ fn nullable_images(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
         let mut sources = source(&format!(
             "fn id(x:{ty})->{ty} {{ when {{ return delta_value(x) }} }}\ntest guarded {{ assert eval(id,{input}) == {expected} }}"
         ));
-        sources[2].1 = format!("module hgraph.std part replay_record_impl\nimpl fn replay<T>(const values:list<TimedValue<delta_of(T)>>)->T {{ inject replay_input,alarm\nwhen {{let current=0\nlet item=replay_input[current]\n{body}}}}}\ninstantiate replay<{ty}>");
+        sources[2].1 = format!("module hgraph.std part replay_record_impl\nimpl fn replay<T>(const values:list<TimedValue<T>>)->T {{ inject replay_input,alarm\nwhen {{let current=0\nlet item=replay_input[current]\n{body}}}}}\ninstantiate replay<{ty}>");
         let Err(error)=compile_tests(&sources) else {return Err("replay requires ordinary present entries".into());};
         assert!(error.contains("unsupported injectable replay_input"),"{body}: {error}");
         let present_body=body.replace("replay_input[current]","delta_value(x)")
@@ -514,8 +514,8 @@ fn capability_failure_images(dir: &Path) -> Result<(), Box<dyn std::error::Error
         ),
         (
             "duplicate_time",
-            "push(recording, TimedValue<delta_of(T)>(\n            time: clock.evaluation_time,\n            value: delta_value(ts)\n        ))",
-            "let entry=TimedValue<delta_of(T)>(time:clock.evaluation_time,value:delta_value(ts))\npush(recording,entry)\npush(recording,entry)",
+            "push(recording, TimedValue<T>(\n            time: clock.evaluation_time,\n            value: delta_value(ts)\n        ))",
+            "let entry=TimedValue<T>(time:clock.evaluation_time,value:delta_value(ts))\npush(recording,entry)\npush(recording,entry)",
             "[1]",
             "[1]",
         ),

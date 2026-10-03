@@ -41,7 +41,33 @@ fn configured(const values:list<Sample>,const bucket:Bucket) {
         set(global_state,"config_nested_copy",nested.values[0].amount)
     }
 }
+const fn remainder(lhs:f64,rhs:f64)->f64 => lhs % rhs
+fn float_source(const amount:f64)->f64 {
+ inject alarm
+ start {schedule(alarm,0us)}
+ when {return amount}
+}
+fn runtime_remainder(lhs:f64,const rhs:f64)->f64 {
+ when {return remainder(lhs,rhs)}
+}
+fn observe_float(amount:f64,const key:str) {
+ inject global_state
+ when {set(global_state,key,amount)}
+}
 export fn main() {
+    # Wiring and hook evaluation must agree, including signed zero and extreme divisors.
+    observe_float(float_source(remainder(-7.0,3.0)),"mod_wiring_negative")
+    observe_float(runtime_remainder(float_source(-7.0),3.0),"mod_runtime_negative")
+    observe_float(float_source(remainder(7.0,-3.0)),"mod_wiring_negative_divisor")
+    observe_float(runtime_remainder(float_source(7.0),-3.0),"mod_runtime_negative_divisor")
+    observe_float(float_source(remainder(6.0,-3.0)),"mod_wiring_negative_zero")
+    observe_float(runtime_remainder(float_source(6.0),-3.0),"mod_runtime_negative_zero")
+    observe_float(float_source(remainder(-6.0,3.0)),"mod_wiring_positive_zero")
+    observe_float(runtime_remainder(float_source(-6.0),3.0),"mod_runtime_positive_zero")
+    observe_float(float_source(remainder(1.0,(1e308 * 2.0))),"mod_wiring_infinity")
+    observe_float(runtime_remainder(float_source(1.0),(1e308 * 2.0)),"mod_runtime_infinity")
+    observe_float(float_source(remainder(1.0,1e-308)),"mod_wiring_tiny")
+    observe_float(runtime_remainder(float_source(1.0),1e-308),"mod_runtime_tiny")
     var samples:list<Sample> =[]
     push(samples,Sample(amount:7))
     let bucket=Bucket(values:samples)

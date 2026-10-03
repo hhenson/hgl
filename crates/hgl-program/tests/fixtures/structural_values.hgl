@@ -1,18 +1,18 @@
 module structural_values
 struct TimedValue<T> { time:datetime
-value:T }
+value:delta<T> }
 struct Quote { bid:i64
 ask:str }
 fn record<T>(value:T,const key:str) {
  inject global_state,clock
  start {
- let initial:list<TimedValue<delta_of(T)>> =[]
+ let initial:list<TimedValue<T>> =[]
  set(global_state,key,initial)
  }
  when {
  let observed=delta_value(value)
  let alias=observed
- var samples:list<TimedValue<delta_of(T)>> =get(global_state,key)
+ var samples:list<TimedValue<T>> =get(global_state,key)
  push(samples,TimedValue(time:clock.evaluation_time,value:alias))
  }
 }

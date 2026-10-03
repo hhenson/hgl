@@ -4,7 +4,7 @@ right:i64 }
 struct Deep { pair:Pair
 tail:i64 }
 struct TimedValue<T> { time:datetime
-value:T }
+value:delta<T> }
 # The test provider records each mark argument and returns it; a chosen call can throw.
 # The trace exposes payload order independently of the completed field layout.
 native const fn mark(value:i64)->i64 throws
@@ -17,9 +17,9 @@ fn source()->Deep {
 }
 fn record(value:Deep) {
  inject global_state,clock
- start {let values:list<TimedValue<delta_of(Deep)>> =[]
+ start {let values:list<TimedValue<Deep>> =[]
  set(global_state,"effects",values)}
- when {var values:list<TimedValue<delta_of(Deep)>> =get(global_state,"effects")
+ when {var values:list<TimedValue<Deep>> =get(global_state,"effects")
  push(values,TimedValue(time:clock.evaluation_time,value:delta_value(value)))}
 }
 export fn main() {record(source())}

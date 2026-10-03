@@ -14,6 +14,7 @@ pub fn literal(value: &Literal) -> String {
         Literal::Time(i) => format!("hgl_types::Time({i})"),
         Literal::DateTime(i) => format!("hgl_types::EngineTime::from_micros({i})"),
         Literal::Bool(b) => b.to_string(),
+        Literal::Float(f) if !f.is_finite() => format!("f64::from_bits({})", f.to_bits()),
         Literal::Float(f) => format!("{f:?}_f64"),
         Literal::Str(s) => format!("{s:?}.to_owned()"),
     }
@@ -199,6 +200,10 @@ fn binary(plan: &Plan, result: &Ty, op: &str, a: &Value, b: &Value) -> String {
     } else if op == "/" {
         format!(
             "{{ let lhs = ({a}) as f64; let rhs = ({b}) as f64; if rhs == 0.0 {{ return Err(hgl_kernel::NodeError::new(\"division by zero\")); }} lhs / rhs }}"
+        )
+    } else if op == "%" && *result == Ty::F64 {
+        format!(
+            "{{ let lhs: f64 = {a}; let rhs: f64 = {b}; if rhs == 0.0 {{ return Err(hgl_kernel::NodeError::new(\"division by zero\")); }} let rem = lhs % rhs; if rem == 0.0 {{ 0.0_f64.copysign(rhs) }} else if (rem < 0.0) != (rhs < 0.0) {{ rem + rhs }} else {{ rem }} }}"
         )
     } else if op == "+" && *result == Ty::Str {
         format!("format!(\"{{}}{{}}\", {a}, {b})")

@@ -12,17 +12,17 @@ fn data_helpers_empty_retention_and_generic_inverse() {
     check(
         r"
 struct TimedValue<T> { time:datetime
-value:T }
-operator replay<T>(const values:list<TimedValue<delta_of(T)>>)->T
-impl fn replay<T>(const values:list<TimedValue<delta_of(T)>>)->T {
+value:delta<T> }
+operator replay<T>(const values:list<TimedValue<T>>)->T
+impl fn replay<T>(const values:list<TimedValue<T>>)->T {
  var index=0
  while index<len(values) { yield values[index].time:values[index].value
  index+=1 }
 }
 instantiate replay<map<i64,i64>>
-const fn values()->list<TimedValue<delta_of(map<i64,i64>)>> {
- var values:list<TimedValue<delta_of(map<i64,i64>)>> = []
- var data:delta_of(map<i64,i64>)=delta<map<i64,i64>>()
+const fn values()->list<TimedValue<map<i64,i64>>> {
+ var values:list<TimedValue<map<i64,i64>>> = []
+ var data:delta<map<i64,i64>> =delta<map<i64,i64>>()
  push(values,TimedValue(time:@1970-01-01T00:00:00.000001Z,value:data))
  data=delta<map<i64,i64>>(upsert:[1:2])
  return values
@@ -44,7 +44,7 @@ fn source()->map<i64,tuple<list<Quote,2>,set<bool>>> {
 fn pass<T>(value:T)->T {
  inject global_state, out
  when {
- let observed:delta_of(T)=delta_value(value)
+ let observed:delta<T> =delta_value(value)
  let alias=observed
  let owner=Held(value:alias)
  var copy=owner
@@ -61,7 +61,7 @@ fn main()->map<i64,tuple<list<Quote,2>,set<bool>>> => pass(source())
 fn observation_authority_and_no_delta_inspection() {
     for (body, error) in [
         (
-            "var d:delta_of(map<i64,i64>)=delta_value(value)",
+            "var d:delta<map<i64,i64>> =delta_value(value)",
             "observation cannot initialize writable",
         ),
         (
@@ -81,7 +81,7 @@ fn observation_authority_and_no_delta_inspection() {
     ] {
         let source = format!(
             r"
-const fn helper(value:delta_of(map<i64,i64>))->i64 => 1
+const fn helper(value:delta<map<i64,i64>>)->i64 => 1
 fn source()->map<i64,i64> {{ yield 0us:delta<map<i64,i64>>(upsert:[1:2]) }}
 fn target(value:map<i64,i64>)->map<i64,i64> {{ inject out
 when {{ {body} }} }}
@@ -114,8 +114,8 @@ fn constant_size_expressions_share_exact_type_identity() {
 const fn size(value:i64)->i64 => value*2+1
 struct Quote { value:list<i64,size(1)> }
 fn source(const count:i64)->list<i64,count*2+1> {
- let quote:delta_of(Quote)=delta<Quote>(value:delta<list<i64,1+2>>(items:[0:1]))
- let data:delta_of(list<i64,size(count)>)=delta<list<i64,count*2+1>>(items:[count*2:1])
+ let quote:delta<Quote> =delta<Quote>(value:delta<list<i64,1+2>>(items:[0:1]))
+ let data:delta<list<i64,size(count)>> =delta<list<i64,count*2+1>>(items:[count*2:1])
  yield 0us:data
 }
 fn forward(value:list<i64,5>)->list<i64,(2+3)> { when { return delta_value(value) } }
@@ -178,7 +178,7 @@ fn generic_delta_origins_require_exact_arguments_and_sizes() {
         ("list<i64,2>", "list<i64,3>"),
     ] {
         let source = format!(
-            "struct A<T> {{value:i64}}\nstruct B<T> {{value:i64}}\nconst fn same<T>(first:delta_of(T),second:delta_of(T))->i64 => 1\nfn main() {{let value=same(delta<{first}>(),delta<{second}>())}}"
+            "struct A<T> {{value:i64}}\nstruct B<T> {{value:i64}}\nconst fn same<T>(first:delta<T>,second:delta<T>)->i64 => 1\nfn main() {{let value=same(delta<{first}>(),delta<{second}>())}}"
         );
         let error = check(&source).unwrap_err();
         assert!(

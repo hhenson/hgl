@@ -235,6 +235,11 @@ fn needs_context(library: &Library, module: &str, expr: &Expr) -> bool {
                     .iter()
                     .any(|parameter| !evidence.contains(parameter.as_str()));
             }
+            if name == "get"
+                && matches!(args.first(), Some((None, Expr::Name(receiver))) if receiver == "global_state")
+            {
+                return true;
+            }
             args.iter()
                 .any(|(_, expr)| needs_context(library, module, expr))
         }

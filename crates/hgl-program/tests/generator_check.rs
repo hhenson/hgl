@@ -59,6 +59,19 @@ fn generator_context_rejects_each_forbidden_construct() {
         ("when {yield 0us:1}", "does not admit when"),
         ("start {}\nyield 0us:1", "does not admit start"),
         ("stop {}\nyield 0us:1", "does not admit stop"),
+        (
+            "if true {state x:i64=1\nyield 0us:x}",
+            "does not admit state",
+        ),
+        (
+            "while true {cache x:i64=1\nyield 0us:x}",
+            "does not admit cache",
+        ),
+        ("if true {start {}\nyield 0us:1}", "does not admit start"),
+        (
+            "while true {when true {yield 0us:1}}",
+            "does not admit when",
+        ),
         ("inject out\nyield 0us:1", "injectable out"),
         ("inject alarm\nyield 0us:1", "injectable alarm"),
         ("inject scheduler\nyield 0us:1", "injectable scheduler"),

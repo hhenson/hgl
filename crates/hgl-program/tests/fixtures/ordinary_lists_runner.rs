@@ -65,6 +65,12 @@ fn ordinary_phases() {
     for (key, expected) in [("wiring", 23), ("constant", 24), ("contextual_parameter", 0), ("parameter_copy", 1), ("value_body", 25), ("config_source",13), ("config_copy",99), ("config_nested",7), ("config_nested_copy",88)] {
         integer(&mut store, key, expected);
     }
+    for (name, expected) in [("negative",2.0_f64), ("negative_divisor",-2.0), ("negative_zero",-0.0), ("positive_zero",0.0), ("infinity",1.0), ("tiny",1.0 % 1e-308)] {
+        for phase in ["wiring", "runtime"] {
+            let entry=store.bind_global::<f64>(&format!("mod_{phase}_{name}")).unwrap();
+            assert_eq!(store.global_get(entry).unwrap().to_bits(),expected.to_bits(),"{phase} {name}");
+        }
+    }
 }
 fn main() {
     lifecycle();

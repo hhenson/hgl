@@ -14,3 +14,10 @@ Acceptance: existing set, clock, signal, metadata and delta proof regressions.
 operations against injected identity, exact argument types and hook phase.
 Only a boolean stopping flag crosses this independent checker boundary; graph
 phase management remains in the compiler. Depends also on hgl-value-bind.
+
+Input activation/passivation and own-output metadata are admitted only for the
+eight scalar endpoint types. All non-scalar shapes are rejected before emission;
+new structural publication shapes do not implicitly extend these operations.
+Structural input valid/modified/last_modified observations remain admitted.
+Acceptance includes all fixed-list/map/tuple/nominal shapes for these boundaries,
+plus the existing scalar operation and structural input observation paths.

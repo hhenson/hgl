@@ -102,7 +102,7 @@ impl Ty {
             Self::List(..) => "list",
             Self::Map(..) => "map",
             Self::Tuple(..) => "tuple",
-            Self::Delta(..) => "delta_of",
+            Self::Delta(..) => "delta",
         }
     }
     /// Parse a concrete admitted type spelling.
@@ -180,7 +180,7 @@ impl Ty {
     pub fn source_name(&self) -> String {
         match self {
             Self::Struct(identity, _) => identity.source_name(),
-            Self::Delta(origin) => format!("delta_of({})", origin.source_name()),
+            Self::Delta(origin) => format!("delta<{}>", origin.source_name()),
             Self::Tuple(children) => format!(
                 "tuple<{}>",
                 children
@@ -245,7 +245,12 @@ pub fn application(name: &str) -> Option<(&str, Vec<&str>)> {
 
 /// Recognize the contextual type relationship without consuming nested applications.
 pub fn delta_argument(name: &str) -> Option<&str> {
-    name.strip_prefix("delta_of(")?.strip_suffix(')')
+    let (base, arguments) = application(name)?;
+    if base == "delta" && arguments.len() == 1 && !arguments[0].is_empty() {
+        Some(arguments[0])
+    } else {
+        None
+    }
 }
 impl Ty {
     /// Whether this exact type belongs to the finite publication profile.
@@ -275,7 +280,7 @@ impl Ty {
     pub fn delta(self) -> Result<Self, String> {
         if !self.publication() {
             return Err(format!(
-                "delta_of: unsupported publication shape {}",
+                "delta: unsupported publication shape {}",
                 self.source_name()
             ));
         }

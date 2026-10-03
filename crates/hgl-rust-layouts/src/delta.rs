@@ -41,10 +41,7 @@ pub fn delta_storage(origin: &Ty) -> Ty {
         | Ty::Void => unreachable!("checked structural delta origin"),
     };
     // A NUL cannot occur in an HGL declaration name; synthetic identities cannot alias user structs.
-    Ty::Struct(
-        format!("\0delta_of({})", origin.source_name()).into(),
-        fields,
-    )
+    Ty::Struct(format!("\0delta<{}>", origin.source_name()).into(), fields)
 }
 
 /// Ordinary publication payload of an admitted temporal shape.

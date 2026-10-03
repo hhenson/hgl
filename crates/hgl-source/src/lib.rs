@@ -164,12 +164,7 @@ impl<'a> Cursor<'a> {
             name.push_str("::");
             name.push_str(&self.name()?);
         }
-        if name == "delta_of" && self.take("(") {
-            self.lines();
-            name = format!("delta_of({})", self.type_name()?);
-            self.lines();
-            self.need(")")?;
-        } else if self.at("<") {
+        if self.at("<") {
             name.push_str(&self.type_arguments()?);
             if name.starts_with("ref<ref<") {
                 return Err("explicit ref<ref<T>> is not valid".into());

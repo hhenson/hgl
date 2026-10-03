@@ -34,7 +34,7 @@ Type parameters are distinct; const parameters, defaults, optional fields,
 inheritance and unsupported constraints are diagnosed explicitly.
 
 Explicit instantiate arguments preserve complete nested type syntax (including
-contextual delta_of); wildcard `_` remains a retained generic argument. The
+contextual delta<T>); wildcard `_` remains a retained generic argument. The
 binder resolves their declaration-owned canonical identity before matching an
 implementation, never comparing only a scalar/shape display name.
 

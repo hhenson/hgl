@@ -43,6 +43,25 @@ fn explicit_inferred_and_contextual_arguments_form_complete_specializations() {
 }
 
 #[test]
+fn contextual_global_get_uses_sibling_constructor_evidence() {
+    for body in [
+        "let item=Same(first:get(global_state,\"entry\"),second:1)\nlet exact:Same<i64> =item",
+        "let item=Same(second:1,first:get(global_state,\"entry\"))\nlet exact:Same<i64> =item",
+        "let item=Same(first:Same(first:get(global_state,\"entry\"),second:1),second:Same(first:2,second:3))\nlet exact:Same<Same<i64>> =item",
+    ] {
+        let result = checked(body);
+        assert!(result.is_ok(), "{body}: {result:?}");
+    }
+    let error =
+        checked("let item=Same(first:get(global_state,\"a\"),second:get(global_state,\"b\"))")
+            .expect_err("contextual reads alone do not supply a type");
+    assert!(
+        error.contains("requires a concrete scalar expected type"),
+        "{error}"
+    );
+}
+
+#[test]
 fn incompatible_or_incomplete_generic_arguments_have_meaningful_diagnostics() {
     let mut failures = Vec::new();
     for (body, expected) in [
@@ -234,6 +253,28 @@ fn generic_struct_values_configurations_and_globals_execute_in_both_profiles()
     fs::create_dir_all(directory.join("src"))?;
     let program = compile(&[("generic_structs.hgl".into(), FIXTURE.into())], "main")?;
     fs::write(directory.join("src/graph.rs"), emit_rust(&program))?;
+    for (module, fields) in [
+        (
+            "get_first",
+            "first:get(global_state,\"missing\"),second:mark(1)",
+        ),
+        (
+            "get_last",
+            "second:mark(1),first:get(global_state,\"missing\")",
+        ),
+    ] {
+        let types = format!(
+            "{TYPES}\nnative const fn mark(value:i64)->i64 throws\nnative const fn mark(value:i64)->i64 throws {{}}"
+        );
+        let code = format!(
+            "module generic_structs\n{types}\nfn exercise() {{inject global_state,alarm\nstart {{schedule(alarm,0us)}}\nwhen {{let item=Same({fields})}}}}\nexport fn main() {{exercise()}}"
+        );
+        let program = compile(&[("contextual_get.hgl".into(), code)], "main")?;
+        fs::write(
+            directory.join(format!("src/{module}.rs")),
+            emit_rust(&program),
+        )?;
+    }
     fs::write(
         directory.join("src/main.rs"),
         include_str!("fixtures/generic_structs_runner.rs"),

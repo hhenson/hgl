@@ -21,9 +21,9 @@ generic family to a private local argument does not export that argument. `unify
 against checked types without covariance or changing list fixedness.
 
 Publication type resolution also handles positional tuples, maps, sets and
-contextual delta_of. Nominal temporal schemas preserve the same declaring
+contextual delta<T>. Nominal temporal schemas preserve the same declaring
 identity and argument invariance as ordinary schemas. Generic unification
-inverts delta_of: structural delta origins and scalar reduced forms bind the
+inverts delta<T>: structural delta origins and scalar reduced forms bind the
 exact originating T, including nested TimedValue/list patterns. Formation
 rejects unsupported concrete origins after substitution; unresolved generic
 patterns remain source spellings until a concrete specialization is selected.

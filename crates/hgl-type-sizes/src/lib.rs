@@ -7,7 +7,7 @@ pub fn normalize(
     evaluate: &mut impl FnMut(&str) -> Result<Literal, String>,
 ) -> Result<String, String> {
     if let Some(origin) = delta_argument(name) {
-        return Ok(format!("delta_of({})", normalize(origin, evaluate)?));
+        return Ok(format!("delta<{}>", normalize(origin, evaluate)?));
     }
     let Some((base, args)) = application(name) else {
         return Ok(name.into());

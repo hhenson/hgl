@@ -1,24 +1,59 @@
 //! Source function phase and service-header admission.
 use hgl_library::Signature;
-use hgl_source::{Cursor, Stmt};
+use hgl_source::{Cursor, Stmt, Token};
 
 /// Classify node-only constructs without evaluating the body.
 pub fn runtime_body(signature: &Signature) -> Result<bool, String> {
+    let constructs = statement_constructs(&signature.body);
     if signature.value_function
-        && signature
-            .body
+        && constructs
             .iter()
-            .any(|token| matches!(token.text.as_str(), "yield" | "while"))
+            .any(|word| matches!(*word, "yield" | "while"))
     {
         return Err("yield/while require a runtime body, not a const value function".into());
     }
     Ok(signature.value_function
-        || signature.body.iter().any(|token| {
+        || constructs.iter().any(|word| {
             matches!(
-                token.text.as_str(),
+                *word,
                 "state" | "cache" | "inject" | "start" | "when" | "stop" | "yield"
             )
         }))
+}
+
+fn statement_constructs(tokens: &[Token]) -> Vec<&str> {
+    let mut constructs = Vec::new();
+    let mut delimiters = 0;
+    let mut boundary = true;
+    for (index, token) in tokens.iter().enumerate() {
+        let word = token.text.as_str();
+        if delimiters == 0 && boundary && is_construct(tokens, index) {
+            constructs.push(word);
+        }
+        match word {
+            "(" | "[" => delimiters += 1,
+            ")" | "]" => delimiters -= 1,
+            _ => {}
+        }
+        boundary = matches!(word, "{" | "}" | "\n");
+    }
+    constructs
+}
+
+fn is_construct(tokens: &[Token], index: usize) -> bool {
+    let mut cursor = Cursor {
+        tokens,
+        pos: index + 1,
+    };
+    match tokens[index].text.as_str() {
+        "yield" | "while" => true,
+        "start" | "stop" => cursor.at("{"),
+        "when" => cursor.at("{") || (cursor.expr().is_ok() && cursor.at("{")),
+        "state" | "cache" => cursor.name().is_ok() && cursor.at(":"),
+        "for" => cursor.name().is_ok() && cursor.at("in"),
+        "inject" => cursor.name().is_ok(),
+        _ => false,
+    }
 }
 
 /// Parse an ordinary body, retaining its function-level service declarations.
@@ -59,15 +94,12 @@ pub fn ordinary_body(cursor: &mut Cursor<'_>) -> Result<(Vec<String>, Vec<Stmt>)
 }
 /// Admit generator syntax before ordinary operand and lexical checking.
 pub fn generator_body(cursor: &mut Cursor<'_>) -> Result<(Vec<String>, Vec<Stmt>), String> {
-    if let Some(token) = cursor.tokens.iter().find(|token| {
-        matches!(
-            token.text.as_str(),
-            "state" | "cache" | "start" | "stop" | "when" | "for"
-        )
-    }) {
+    if let Some(word) = statement_constructs(cursor.tokens)
+        .into_iter()
+        .find(|word| matches!(*word, "state" | "cache" | "start" | "stop" | "when" | "for"))
+    {
         return Err(format!(
-            "generator does not admit {}; use while for iteration",
-            token.text
+            "generator does not admit {word}; use while for iteration"
         ));
     }
     if !cursor.at("{") {
@@ -80,4 +112,38 @@ pub fn generator_body(cursor: &mut Cursor<'_>) -> Result<(Vec<String>, Vec<Stmt>
         }
     }
     Ok((services, body))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::statement_constructs;
+    use hgl_source::lex;
+
+    #[test]
+    fn classification_does_not_replace_identifier_admission() {
+        // Reserved-name rejection is the parser's responsibility, not phase selection.
+        for word in ["state", "cache", "start", "stop", "when", "inject", "for"] {
+            for body in [
+                format!("{{let {word}=1}}"),
+                format!("{{Thing(\n{word}:1\n)}}"),
+                format!("{{{word}(1)}}"),
+                format!("{{let value=object.{word}}}"),
+            ] {
+                let tokens = lex(&body).unwrap();
+                assert!(statement_constructs(&tokens).is_empty(), "{body}");
+            }
+        }
+    }
+
+    #[test]
+    fn nested_statement_constructs_keep_their_source_order() {
+        let tokens = lex("{inject clock\nstate x:i64=1\ncache y:i64=2\nstart {}\nwhen (true) {while true {yield 0us:x}}\nstop {}\nfor item in items {}}")
+            .unwrap();
+        assert_eq!(
+            statement_constructs(&tokens),
+            [
+                "inject", "state", "cache", "start", "when", "while", "yield", "stop", "for"
+            ]
+        );
+    }
 }

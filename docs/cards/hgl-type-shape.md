@@ -20,5 +20,5 @@ scalar8/bool-i64-set/fixed-list/tuple/nominal/i64-key-map profile.
 `Ty::delta` validates that profile and reduces scalar origins to themselves;
 structural origins retain their complete exact shape. Delta is never itself a
 temporal publication shape. `delta_argument` recognizes only the contextual
-outer `delta_of(type)` spelling. These rules derive from spec60a2d7e
+outer `delta<type>` spelling. These rules derive from spec321ba4b
 ordinary-delta-types and contextual-collection-deltas.

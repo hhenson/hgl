@@ -9,7 +9,7 @@ fn inverse_delta_matching_inside_empty_recording_shape() {
     let actual = resolve(
         &library,
         "test",
-        "list<TimedValue<delta_of(map<i64,Quote<f64>>)>>",
+        "list<TimedValue<delta<map<i64,Quote<f64>>>>>",
         &mut BTreeSet::new(),
     )
     .unwrap();
@@ -17,7 +17,7 @@ fn inverse_delta_matching_inside_empty_recording_shape() {
     unify(
         &library,
         "test",
-        "list<TimedValue<delta_of(T)>>",
+        "list<TimedValue<delta<T>>>",
         &actual,
         &["T".into()],
         &mut bindings,
@@ -28,7 +28,7 @@ fn inverse_delta_matching_inside_empty_recording_shape() {
         substitute(
             &library,
             "test",
-            "delta_of(T)",
+            "delta<T>",
             &bindings,
             &mut BTreeSet::new()
         )
@@ -39,7 +39,7 @@ fn inverse_delta_matching_inside_empty_recording_shape() {
         unify(
             &library,
             "test",
-            "delta_of(T)",
+            "delta<T>",
             &Ty::I64,
             &["T".into()],
             &mut bindings
@@ -58,16 +58,32 @@ fn scalar_inverse_is_exact_and_nominal_identity_survives() {
     unify(
         &library,
         "test",
-        "delta_of(T)",
+        "delta<T>",
         &Ty::Str,
         &["T".into()],
         &mut bindings,
     )
     .unwrap();
     assert_eq!(bindings["T"], Ty::Str);
-    let a = resolve(&library, "test", "delta_of(A<i64>)", &mut BTreeSet::new()).unwrap();
-    let b = resolve(&library, "test", "delta_of(B<i64>)", &mut BTreeSet::new()).unwrap();
-    let c = resolve(&library, "test", "delta_of(A<str>)", &mut BTreeSet::new()).unwrap();
+    let a = resolve(&library, "test", "delta<A<i64>>", &mut BTreeSet::new()).unwrap();
+    let b = resolve(&library, "test", "delta<B<i64>>", &mut BTreeSet::new()).unwrap();
+    let c = resolve(&library, "test", "delta<A<str>>", &mut BTreeSet::new()).unwrap();
     assert_ne!(a, b);
     assert_ne!(a, c);
+}
+
+#[test]
+fn legacy_type_marker_is_not_an_alias_inside_generic_arguments() {
+    let library = load(&[(
+        "types.hgl".into(),
+        "module test\nstruct Box<T>{value:T}".into(),
+    )])
+    .unwrap();
+    for source in ["delta_of(i64)", "list<delta_of(i64)>", "Box<delta_of(i64)>"] {
+        let error = resolve(&library, "test", source, &mut BTreeSet::new()).unwrap_err();
+        assert!(
+            error.contains("unresolved ordinary type delta_of(i64)"),
+            "{source}: {error}"
+        );
+    }
 }

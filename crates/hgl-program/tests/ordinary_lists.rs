@@ -295,14 +295,43 @@ fn bounds_and_presence(dir: &Path) -> Result<String, Box<dyn std::error::Error>>
             "let mut registry=Registry::new();\n{name}::register(&mut registry).unwrap();\nlet description={name}::main(&registry).unwrap();\nlet mut store=Store::new();\nstore.provision_global_state();\nlet mut built=instantiate_complete(&description,&registry,&mut store).unwrap();\nassert!(run_simulation(&mut built.graph,&mut store,&config()).is_err(),\"{name}\");"
         )?;
     }
-    let source = "module wiring_bounds\nconst fn fail()->i64 {let values:list<i64> =[]\nreturn values[0]}\nexport fn main() {let value=fail()}";
-    let plan = compile(&[("wiring_bounds.hgl".into(), source.into())], "main")?;
-    fs::write(dir.join("src/wiring_bounds.rs"), emit_rust(&plan))?;
-    writeln!(modules, "mod wiring_bounds;")?;
-    writeln!(
-        calls,
-        "let mut registry=Registry::new(); wiring_bounds::register(&mut registry).unwrap(); let error=wiring_bounds::main(&registry).unwrap_err(); assert!(format!(\"{{error:?}}\").contains(\"ordinary list index out of bounds\"));"
-    )?;
+    for (name, body) in [
+        ("wiring_bounds", "let value=fail()"),
+        ("returned_bounds", "return fail()"),
+    ] {
+        let source = format!(
+            "module {name}\nconst fn fail()->i64 {{let values:list<i64> =[]\nreturn values[0]}}\nexport fn main() {{{body}}}"
+        );
+        let plan = compile(&[(format!("{name}.hgl"), source)], "main")?;
+        fs::write(dir.join(format!("src/{name}.rs")), emit_rust(&plan))?;
+        writeln!(modules, "mod {name};")?;
+        writeln!(
+            calls,
+            "let mut registry=Registry::new(); {name}::register(&mut registry).unwrap(); let error={name}::main(&registry).unwrap_err(); assert!(format!(\"{{error:?}}\").contains(\"ordinary list index out of bounds\"));"
+        )?;
+    }
+    for (name, body) in [
+        ("wiring_mod_zero", "return remainder(1.0,0.0)"),
+        ("runtime_mod_zero", "node()"),
+    ] {
+        let source = format!(
+            "module {name}\nconst fn remainder(lhs:f64,rhs:f64)->f64 => lhs % rhs\nfn node() {{inject alarm\nstart {{schedule(alarm,0us)}}\nwhen {{let failed=remainder(1.0,0.0)}}}}\nexport fn main() {{{body}}}"
+        );
+        let plan = compile(&[(format!("{name}.hgl"), source)], "main")?;
+        fs::write(dir.join(format!("src/{name}.rs")), emit_rust(&plan))?;
+        writeln!(modules, "mod {name};")?;
+        if name == "wiring_mod_zero" {
+            writeln!(
+                calls,
+                "let mut registry=Registry::new(); {name}::register(&mut registry).unwrap(); let error={name}::main(&registry).unwrap_err(); assert!(format!(\"{{error:?}}\").contains(\"division by zero\"));"
+            )?;
+        } else {
+            writeln!(
+                calls,
+                "let mut registry=Registry::new(); {name}::register(&mut registry).unwrap(); let description={name}::main(&registry).unwrap(); let mut store=Store::new(); let mut built=instantiate_complete(&description,&registry,&mut store).unwrap(); let error=run_simulation(&mut built.graph,&mut store,&config()).unwrap_err(); assert!(format!(\"{{error:?}}\").contains(\"division by zero\"));"
+            )?;
+        }
+    }
     Ok(format!("{modules}\nfn bounds_and_presence() {{ {calls} }}"))
 }
 

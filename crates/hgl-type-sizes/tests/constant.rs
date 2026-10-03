@@ -4,11 +4,11 @@ use hgl_type_sizes::{literal, normalize};
 fn canonical_sizes_and_errors() {
     assert_eq!(
         normalize(
-            "delta_of(map<i64,tuple<list<i64,2*3-1>,list<str,unbounded>>>)",
+            "delta<map<i64,tuple<list<i64,2*3-1>,list<str,unbounded>>>>",
             &mut literal
         )
         .unwrap(),
-        "delta_of(map<i64,tuple<list<i64,5>,list<str>>>)"
+        "delta<map<i64,tuple<list<i64,5>,list<str>>>>"
     );
     for (source, fragment) in [
         ("list<i64,1.0>", "constant i64"),

@@ -210,7 +210,7 @@ pub fn unify(
             actual
         };
         if actual_origin.clone().delta()? != *actual {
-            return Err("delta_of originating shape mismatch".into());
+            return Err("delta originating shape mismatch".into());
         }
         return unify(library, module, origin, actual_origin, generics, bindings);
     }

@@ -24,7 +24,7 @@ of graph checking; it neither calls providers nor broadens wiring-time effects.
 
 Exact recursive publication shapes are admitted at temporal boundaries;
 structural Delta values are not temporal shapes. Signature inference recognizes
-inverse delta_of relationships recursively through ordinary lists/nominal
+inverse delta<T> relationships recursively through ordinary lists/nominal
 arguments before binding the selected operator. No payload-content inference
 or result-only structural inference is introduced.
 

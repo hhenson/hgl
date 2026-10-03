@@ -15,6 +15,9 @@ field must be named, unique and declared; all required fields must be present.
 Checked Construct IR preserves written argument order and declared field indices;
 checking never executes field values. Context-dependent fields are checked only
 once their concrete expected types are available.
+In particular, `get(global_state, ...)` supplies no independent type evidence;
+concrete sibling fields may supply its expected type without changing runtime
+argument order.
 
 Acceptance: explicit/inferred/contextual and nested constructors, constraints,
 written field order, repeated argument conflicts, and read-only borrowing/copies.

@@ -68,9 +68,10 @@ omitted condition as true. `yield` and `while` are reserved identifiers.
 brace, for function headers that contain injections. Phase and generator
 admission remain checker responsibilities.
 
-Contextual `delta_of(type)` is accepted in type positions without reserving
-its value-level name. `Expr::Sparse` retains ordered constant-key/payload
-syntax only inside delta constructor arguments; ordinary list and harness
+Contextual `delta<type>` is accepted in type positions without reserving
+its value-level name; the same marker followed by arguments is a constructor.
+No parenthesized type-marker alias is accepted. `Expr::Sparse` retains ordered
+constant-key/payload syntax only inside delta constructor arguments; ordinary list and harness
 sequence parsing does not admit sparse entries. Constructor shape, names,
 constant positions and payload compatibility remain checker obligations.
 
