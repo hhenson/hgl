@@ -1,0 +1,100 @@
+module generators
+struct TimedValue<T> { time:datetime
+value:T }
+fn consume(tick:i64) { when {} }
+fn events<T>(const values:list<TimedValue<T>>)->T {
+    var index=0
+    while index<len(values) {
+        yield values[index].time:values[index].value
+        index+=1
+    }
+}
+const fn two<T>(value:T)->list<TimedValue<T>> {
+    var values:list<TimedValue<T>> =[]
+    push(values,TimedValue<T>(time:@1970-01-01T00:00:00.000001Z,value:value))
+    push(values,TimedValue<T>(time:@1970-01-01T00:00:00.000003Z,value:value))
+    return values
+}
+fn nested()->i64 {
+    var i=0
+    while i<2 {
+        var j=0
+        while j<2 {
+            if j==0 { yield 1us:i*10+j }
+            else { yield 2us:i*10+j }
+            j+=1
+        }
+        i+=1
+    }
+}
+fn drive_nested(tick:i64)->i64 { consume(tick)
+nested() }
+fn past()->i64 {
+    yield @1969-01-01T00:00:00Z:9
+    yield @1970-01-01T00:00:00Z:8
+    yield 0us:2
+}
+fn drive_past(tick:i64)->i64 { consume(tick)
+past() }
+fn empty(tick:i64)->i64 {
+    consume(tick)
+    let values:list<TimedValue<i64>> =[]
+    events(values)
+}
+fn shadow()->i64 {
+    var value=4
+    if true { var value=7
+yield 0us:value
+value+=1
+yield 1us:value }
+    yield 1us:value
+}
+fn drive_shadow(tick:i64)->i64 { consume(tick)
+shadow() }
+fn drive_flag(tick:i64)->bool {consume(tick)
+events(two(false))}
+test flag {assert eval(drive_flag,[1,1,1,1,1]) == [false,_,false,_,_]}
+fn drive_integer(tick:i64)->i64 {consume(tick)
+events(two(0))}
+test integer {assert eval(drive_integer,[1,1,1,1,1]) == [0,_,0,_,_]}
+fn drive_real(tick:i64)->f64 {consume(tick)
+events(two(0.0))}
+test real {assert eval(drive_real,[1,1,1,1,1]) == [0.0,_,0.0,_,_]}
+fn drive_text(tick:i64)->str {consume(tick)
+events(two(""))}
+test text {assert eval(drive_text,[1,1,1,1,1]) == ["",_,"",_,_]}
+fn drive_day(tick:i64)->date {consume(tick)
+events(two(@2026-10-03))}
+test day {assert eval(drive_day,[1,1,1,1,1]) == [@2026-10-03,_,@2026-10-03,_,_]}
+fn drive_time(tick:i64)->time {consume(tick)
+events(two(@12:34:56))}
+test time {assert eval(drive_time,[1,1,1,1,1]) == [@12:34:56,_,@12:34:56,_,_]}
+fn drive_instant(tick:i64)->datetime {consume(tick)
+events(two(@2026-10-03T12:34:56Z))}
+test instant {assert eval(drive_instant,[1,1,1,1,1]) == [@2026-10-03T12:34:56Z,_,@2026-10-03T12:34:56Z,_,_]}
+fn drive_elapsed(tick:i64)->duration {consume(tick)
+events(two(3us))}
+test elapsed {assert eval(drive_elapsed,[1,1,1,1,1]) == [3us,_,3us,_,_]}
+test continuation {
+    assert eval(drive_nested,[1,1,1,1,1,1,1,1]) == [_,0,_,1,10,_,11,_]
+    assert eval(drive_past,[1,1]) == [2,_]
+    assert eval(empty,[1,1]) == [_,_]
+    assert eval(drive_shadow,[1,1,1,1]) == [7,8,4,_]
+}
+
+fn arithmetic()->i64 {
+    let first=1us
+    let second=2us
+    let negative=-first
+    yield @1970-01-01T00:00:00Z+negative:99
+    yield first+second:1
+    yield @1970-01-01T00:00:00.000006Z-first:2
+    let difference=@1970-01-01T00:00:00.000007Z-@1970-01-01T00:00:00.000006Z
+    yield difference:3
+    yield first+@1970-01-01T00:00:00.000006Z:4
+}
+fn drive_arithmetic(tick:i64)->i64 {consume(tick)
+arithmetic()}
+test temporal_arithmetic {
+    assert eval(drive_arithmetic,[1,1,1,1,1,1,1,1]) == [_,_,_,1,2,3,4,_]
+}

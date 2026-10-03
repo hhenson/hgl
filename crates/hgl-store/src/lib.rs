@@ -18,7 +18,10 @@
 
 use std::marker::PhantomData;
 
-pub use hgl_global::{Global, GlobalValue, ValueSlot};
+pub use hgl_global::{
+    Capacity, Global, GlobalState, GlobalValue, Layouts, List, ValueColumns, ValueSlot, list_index,
+    list_index_mut, list_len, list_push,
+};
 use hgl_types::{EngineTime, NodeId, ScalarType, ScalarValue};
 use hgl_types::{NodeError, NodeResult};
 
@@ -28,6 +31,7 @@ pub use hgl_bindings::{BindError, InputId, OutputId, Reference, ScopeId, Wake};
 pub use hgl_columns::Columns;
 pub use hgl_columns::Scalar;
 mod fixed;
+pub use hgl_shapes as shapes;
 
 /// A node's handle to its own `TS<T>` output. Eight bytes.
 #[derive(Debug, Clone)]
@@ -69,7 +73,7 @@ impl<T: Scalar> In<T> {
 pub struct Store {
     columns: Columns,
     bindings: Bindings,
-    globals: hgl_global::GlobalState,
+    globals: GlobalState,
 }
 
 /// A dictionary with i64 keys and scalar children.
@@ -98,6 +102,10 @@ impl<T: Scalar> DictIn<T> {
 }
 
 impl Store {
+    /// Access the run-owned ordinary capability, independently of temporal storage.
+    pub fn global_state(&mut self) -> &mut GlobalState {
+        &mut self.globals
+    }
     /// Provision this run's ordinary state, independently of temporal endpoints.
     pub fn provision_global_state(&mut self) {
         self.globals.provision();
@@ -128,28 +136,6 @@ impl Store {
         value: &T::Value,
     ) -> NodeResult {
         self.globals.set(handle, value)
-    }
-    /// Borrow a present root without copying its payload.
-    pub fn global_borrow<T: GlobalValue>(
-        &self,
-        handle: Global<T>,
-    ) -> Result<ValueSlot<T>, Box<NodeError>> {
-        self.globals.borrow(handle)
-    }
-    /// Read a prepared projection as an independently owned value.
-    pub fn global_read<T: GlobalValue>(
-        &self,
-        slot: ValueSlot<T>,
-    ) -> Result<T::Value, Box<NodeError>> {
-        self.globals.read(slot)
-    }
-    /// Retain a replacement fully before modifying a borrowed root or projection.
-    pub fn global_write<T: GlobalValue>(
-        &mut self,
-        slot: ValueSlot<T>,
-        value: &T::Value,
-    ) -> NodeResult {
-        self.globals.write(slot, value)
     }
     /// An empty run.
     pub fn new() -> Self {

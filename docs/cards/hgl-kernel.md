@@ -315,16 +315,15 @@ earliest pending request; `schedule_in` continues to replace its request.
 Both use the existing per-node wake queue. No checkpoint/recovery support is
 claimed; start rearms the source on each run.
 
-`Ctx::global_get<T: Scalar>(Global<T>) -> Result<T, Box<NodeError>>` and
-`global_set<T: Scalar>(Global<T>, &T) -> NodeResult` forward prepared ordinary
-value access in start, evaluation and stop. They neither resolve keys/types
-nor publish or schedule. Phase and node-error data now comes from hgl-types;
-the existing hgl-kernel exports remain available.
+`Ctx::global_state() -> &mut GlobalState` exposes the run's ordinary capability
+in start, evaluation and stop. The compiler emits only prepared typed operations
+on this hook path: get/set/borrow/read/write and list len/index/push. It emits no
+key binding, schema inspection, provisioning or owner extraction by name inside
+hooks. The accessor replaces individual Ctx global forwarding methods.
+GlobalState and its typed operations belong to hgl-global; Ctx does not duplicate
+the capability's growing surface. The compiler checks lexical permissions and
+lifetimes; runtime presence belongs to the single prepared root.
 
-Global methods use `T: GlobalValue`, with `T::Value` as the owning result/argument.
-`Ctx::global_borrow(Global<T>) -> Result<ValueSlot<T>, Box<NodeError>>`,
-`global_read(ValueSlot<T>) -> Result<T::Value, Box<NodeError>>`, and
-`global_write(ValueSlot<T>, &T::Value) -> NodeResult` forward prepared aggregate
-access in all hooks. The compiler admits borrows/projections only for their lexical
-scope and permissions; presence is checked once at the root. A replacement retains
-all fields before any commit. No hook-time borrow registry is added.
+`Ctx::get_or_create_with(dict,key,create)` exposes the store's prepared child
+factory under the existing writing-owner and evaluation-phase checks. The
+factory receives Store and NodeId and runs only on fresh member allocation.

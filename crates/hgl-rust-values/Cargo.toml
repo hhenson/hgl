@@ -12,5 +12,7 @@ line-budget = 800
 workspace = true
 
 [dependencies]
+hgl-rust-deltas = { path = "../hgl-rust-deltas" }
 hgl-source = { path = "../hgl-source" }
 hgl-rust-ir = { path = "../hgl-rust-ir" }
+hgl-rust-layouts = { path = "../hgl-rust-layouts" }

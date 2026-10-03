@@ -87,43 +87,43 @@ fn capabilities_and_delta_metadata_are_checked_at_their_call_sites() {
         ),
         (
             "fn f(x:i64) { inject capture\nwhen { let local=capture\nbegin(local) } }",
-            "cannot escape",
+            "unsupported injectable capture",
         ),
         (
             "fn f(x: i64) -> i64 { when { return replay_input[0] } }",
-            "missing inject replay_input",
+            "unknown value replay_input",
         ),
         (
             "fn f(x: i64) -> i64 { inject replay_input\nwhen { return x } }",
-            "unsupported node shape",
+            "unsupported injectable replay_input",
         ),
         (
             "fn f(x: i64) -> i64 { inject capture\nwhen { return x } }",
-            "unsupported node shape",
+            "unsupported injectable capture",
         ),
         (
             "fn f(x: i64) { inject capture, clock\nstart { append(capture, clock.evaluation_time, 1) }\nwhen {} }",
-            "forbidden hook phase",
+            "unsupported injectable capture",
         ),
         (
             "fn f(x: i64) { inject capture\nwhen { begin(capture) } }",
-            "forbidden hook phase",
+            "unsupported injectable capture",
         ),
         (
             "fn f(x: i64) { inject capture\nstart { begin(capture) }\nwhen { append(capture, last_modified(x), true) } }",
-            "wrong-type argument",
+            "unsupported injectable capture",
         ),
         (
             "fn f(x: i64) { inject capture\nwhen { let escaped = capture } }",
-            "cannot escape",
+            "unsupported injectable capture",
         ),
         (
             "fn f(x: i64) { inject capture\nwhen { missing(capture) } }",
-            "unknown capability operation",
+            "unsupported injectable capture",
         ),
         (
             "fn f(x: i64) { inject capture\nstart { let y = x }\nwhen {} }",
-            "start cannot access",
+            "unsupported injectable capture",
         ),
     ] {
         assert_bad_definition(definition, diagnostic);
@@ -212,7 +212,7 @@ fn scalar_producers_do_not_erase_formal_signal_admission() {
         ));
         let error = compile_tests(&input).unwrap_err();
         assert!(
-            error.contains("capture: unsupported node shape or scalar type"),
+            error.contains("unsupported injectable capture"),
             "{ty}: {error}"
         );
     }
@@ -225,7 +225,7 @@ fn type_domains_and_library_provisioning_are_explicit() {
     let input = "module example\nfn id(x:i64)->i64 { when { return x } }\ntest t { eval(id,[1]) }";
     let error = compile_tests(&[("example.hgl".into(), input.into())]).unwrap_err();
     assert!(
-        error.contains("hgraph.std::replay: expected one matching declaration"),
+        error.contains("eval requires the ordinary TimedValue declaration"),
         "{error}"
     );
     let error = compile_tests(&source(
@@ -271,7 +271,9 @@ fn actual_stdlib_and_harness_regressions_run_on_rust() -> Result<(), Box<dyn std
     failure_images(&dir)?;
     capability_failure_images(&dir)?;
     source_operator_image(&dir)?;
+    replay_order_failure_image(&dir)?;
     nullable_images(&dir)?;
+    recording_key_image(&dir)?;
     global_images(&dir)?;
     manifest(&root, &dir)?;
     fs::write(
@@ -281,12 +283,14 @@ struct Provider;
 mod native { pub use hgl_std_native::*; }
 mod integer_zero; mod float_zero; mod late_output; mod modulo_zero;
 mod bounds; mod past_end; mod repeated_begin; mod append_unbegun; mod duplicate_time; mod wrong_time;
-mod source_operators; mod missing_binding; mod start_failure; mod nullable;
-mod globals; mod globals_missing;
+mod source_operators; mod start_failure; mod nullable; mod replay_order_failure;
+mod globals; mod globals_missing; mod recording_keys;
 mod standard; mod regression; mod wrong; mod long; mod short; mod throwing;
 fn main() { match std::env::args().nth(1).as_deref() {
 Some("bounds") => bounds::main(), Some("past_end") => past_end::main(), Some("repeated_begin") => repeated_begin::main(), Some("append_unbegun") => append_unbegun::main(), Some("duplicate_time") => duplicate_time::main(), Some("wrong_time") => wrong_time::main(),
-Some("nullable") => nullable::main(), Some("source_operators") => source_operators::main(), Some("missing_binding") => missing_binding::main(), Some("start_failure") => start_failure::main(),
+Some("nullable") => nullable::main(), Some("source_operators") => source_operators::main(), Some("start_failure") => start_failure::main(),
+Some("recording_keys") => recording_keys::main(),
+Some("replay_order_failure") => replay_order_failure::main(),
 Some("globals") => globals::main(), Some("globals_missing") => globals_missing::main(),
 Some("modulo_zero") => modulo_zero::main(), Some("integer_zero") => integer_zero::main(), Some("float_zero") => float_zero::main(), Some("late_output") => late_output::main(),
 Some("throwing") => throwing::main(), Some("standard") => standard::main(), Some("regression") => regression::main(),
@@ -301,30 +305,27 @@ _ => panic!("unknown test image") } }
 }
 fn check_images(binary: &Path) -> Result<(), Box<dyn std::error::Error>> {
     for (name, success, message) in [
-        ("standard", true, "83 tests, 132 evaluations, 0 failures"),
+        ("standard", true, "101 tests, 171 evaluations, 0 failures"),
         ("source_operators", true, "0 failures"),
+        (
+            "replay_order_failure",
+            false,
+            "generator yield times must strictly increase",
+        ),
         ("nullable", true, "0 failures"),
+        ("recording_keys", true, "0 failures"),
         ("globals", true, "9 tests, 17 evaluations, 0 failures"),
         ("globals_missing", false, "global_state: missing value"),
-        ("bounds", false, "replay_input: index out of range"),
-        ("past_end", false, "replay_input: index out of range"),
-        ("repeated_begin", false, "capture: already begun"),
-        ("append_unbegun", false, "capture: not begun"),
+        ("bounds", false, "out of bounds"),
+        ("past_end", false, "out of bounds"),
+        ("repeated_begin", true, "0 failures"),
+        ("append_unbegun", false, "global_state: missing value"),
         (
             "duplicate_time",
             false,
-            "capture: timestamp did not advance",
+            "eval recording timestamps did not advance",
         ),
-        (
-            "wrong_time",
-            false,
-            "capture: timestamp is not evaluation time",
-        ),
-        (
-            "missing_binding",
-            false,
-            "capture: missing configured binding",
-        ),
+        ("wrong_time", false, "cycle 0"),
         ("start_failure", false, "deliberate start failure"),
         ("regression", true, "0 failures"),
         ("wrong", false, "cycle 0"),
@@ -375,13 +376,15 @@ fn nullable_images(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
         let mut sources = source(&format!(
             "fn id(x:{ty})->{ty} {{ when {{ return delta_value(x) }} }}\ntest guarded {{ assert eval(id,{input}) == {expected} }}"
         ));
-        let original = "if item != null {\n            return item\n        }";
-        assert!(sources[2].1.contains(original));
-        sources[2].1 = sources[2].1.replace(original, body)
-            .replace("schedule(alarm, 0s)", "schedule(alarm, delay: 0s)")
-            .replace("append(capture, last_modified(ts), delta_value(ts))", "append(capture, delta: delta_value(ts), time: last_modified(ts))");
-        let generated = emit_tests(&compile_tests(&sources)?);
-        assert!(!generated.contains("clone()).is_some()"));
+        sources[2].1 = format!("module hgraph.std part replay_record_impl\nimpl fn replay<T>(const values:list<TimedValue<T>>)->T {{ inject replay_input,alarm\nwhen {{let current=0\nlet item=replay_input[current]\n{body}}}}}\ninstantiate replay<{ty}>");
+        let Err(error)=compile_tests(&sources) else {return Err("replay requires ordinary present entries".into());};
+        assert!(error.contains("unsupported injectable replay_input"),"{body}: {error}");
+        let present_body=body.replace("replay_input[current]","delta_value(x)")
+            .replace("item != null","true").replace("null != item","true")
+            .replace("item == null","false").replace("null == item","false")
+            .replace("alias != null","true").replace("alias == null","false");
+        let ordinary=source(&format!("fn id(x:{ty})->{ty} {{when {{let current=0\nlet item=delta_value(x)\n{present_body}}}}}\ntest present {{assert eval(id,{input}) == {expected}}}"));
+        let generated=emit_tests(&compile_tests(&ordinary)?);
         writeln!(modules, "mod case{i} {{ {} }}", generated.replace("fn main() {", "pub fn main() {"))?;
         writeln!(calls, "case{i}::main();")?;
     }
@@ -396,14 +399,38 @@ fn source_operator_image(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     );
     operators[2].1 = operators[2]
         .1
-        .replace("return item", "return item + 100")
-        .replace("delta_value(ts))", "delta_value(ts) + 10)");
+        .replace(
+            "yield values[index].time: values[index].value",
+            "yield values[index].time: values[index].value + 100",
+        )
+        .replace("value: delta_value(ts)", "value: delta_value(ts) + 10");
     let generated = emit_tests(&compile_tests(&operators)?);
     assert!(generated.contains("hgraph.std::replay"));
-    assert!(generated.contains("self.replay_input.get"));
-    assert!(generated.contains("self.capture.append"));
+    assert!(generated.contains("generator_pending"));
+    assert!(generated.contains("list_push"));
+    assert!(!generated.contains("self.replay_input") && !generated.contains("self.capture"));
     assert!(!generated.contains("match self.next"));
     module(dir, "source_operators", &generated)?;
+    Ok(())
+}
+
+fn replay_order_failure_image(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let fixture =
+        include_str!("../../../external/hgraph_std/hgl/hgraph/tests/ordinary_replay_values.hgl");
+    assert!(fixture.contains("eval(ordinary_replay_increasing, tick:"));
+    let mut sources = source("");
+    sources.push((
+        "replay_order.hgl".into(),
+        fixture.replace(
+            "eval(ordinary_replay_increasing, tick:",
+            "eval(ordinary_replay_descending, tick:",
+        ),
+    ));
+    module(
+        dir,
+        "replay_order_failure",
+        &emit_tests(&compile_tests(&sources)?),
+    )?;
     Ok(())
 }
 
@@ -471,11 +498,10 @@ fn failure_images(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let missing = source(
         "native const fn raise_error(message:str) throws\nnative const fn raise_error(message:str) throws {}\nfn sink(x:i64) { inject capture\nstart { raise_error(\"start must not run\") }\nwhen {} }\ntest fails { eval(sink,[1]) }",
     );
-    module(
-        dir,
-        "missing_binding",
-        &emit_tests(&compile_tests(&missing)?),
-    )?;
+    let Err(error) = compile_tests(&missing) else {
+        return Err("removed capture injectable must fail before start".into());
+    };
+    assert!(error.contains("unsupported injectable capture"), "{error}");
     let start = source(
         "native const fn raise_error(message:str) throws\nnative const fn raise_error(message:str) throws {}\nfn sink(x:i64) { start { if true { raise_error(\"deliberate start failure\") } }\nwhen {} }\ntest fails { eval(sink,[]) }",
     );
@@ -484,42 +510,55 @@ fn failure_images(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn capability_failure_images(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    let append = "append(capture, last_modified(ts), delta_value(ts))";
-    for (name, from, to, input) in [
-        ("bounds", "replay_input[current]", "replay_input[-1]", "[1]"),
+    for (name, from, to, input, expected) in [
+        (
+            "bounds",
+            "values[index].value",
+            "values[-1].value",
+            "[1]",
+            "[1]",
+        ),
         (
             "past_end",
-            "replay_input[current]",
-            "replay_input[len(replay_input)]",
+            "values[index].value",
+            "values[len(values)].value",
+            "[_,1]",
             "[_,1]",
         ),
         (
             "repeated_begin",
-            "begin(capture)",
-            "begin(capture)\n begin(capture)",
+            "set(global_state, key, initial)",
+            "set(global_state, key, initial)\nset(global_state, key, initial)",
+            "[]",
             "[]",
         ),
-        ("append_unbegun", "begin(capture)", "let unused = 0", "[1]"),
+        (
+            "append_unbegun",
+            "set(global_state, key, initial)",
+            "let unused=initial",
+            "[1]",
+            "[1]",
+        ),
         (
             "duplicate_time",
-            append,
-            "append(capture, last_modified(ts), delta_value(ts))\nappend(capture, last_modified(ts), delta_value(ts))",
+            "push(recording, TimedValue<T>(\n            time: clock.evaluation_time,\n            value: delta_value(ts)\n        ))",
+            "let entry=TimedValue<T>(time:clock.evaluation_time,value:delta_value(ts))\npush(recording,entry)\npush(recording,entry)",
+            "[1]",
             "[1]",
         ),
         (
             "wrong_time",
-            "last_modified(ts)",
-            "clock.next_cycle_evaluation_time",
+            "time: clock.evaluation_time",
+            "time: clock.next_cycle_evaluation_time",
+            "[1]",
             "[1]",
         ),
     ] {
         let mut sources = source(&format!(
-            "fn id(x:i64)->i64 {{ when {{ return delta_value(x) }} }}\ntest fails {{ eval(id,{input}) }}"
+            "fn id(x:i64)->i64 {{when {{return delta_value(x)}}}}\ntest fails {{assert eval(id,{input}) == {expected}}}"
         ));
-        sources[2].1 = sources[2]
-            .1
-            .replace(from, to)
-            .replace("inject capture", "inject capture, clock");
+        assert!(sources[2].1.contains(from));
+        sources[2].1 = sources[2].1.replace(from, to);
         module(dir, name, &emit_tests(&compile_tests(&sources)?))?;
     }
     Ok(())
@@ -790,3 +829,14 @@ test text_values { assert eval(text_state, ["a", _, "b"]) == ["a", _, "b"]
     assert eval(text_dedup, ["a", "a", _, "b"]) == ["a", _, _, "b"] }
 
 "#;
+
+fn recording_key_image(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let collision = source(include_str!("fixtures/eval_recording_keys.hgl"));
+    module(
+        dir,
+        "recording_keys",
+        &emit_tests(&compile_tests(&collision)?),
+    )?;
+
+    Ok(())
+}

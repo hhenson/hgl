@@ -1,8 +1,7 @@
 //! What a node can reach while one of its hooks runs.
 
 use hgl_store::{
-    DictOut, Global, GlobalValue, In, InputId, Out, OutputId, Reference, Scalar, ScopeId, Store,
-    ValueSlot,
+    DictOut, GlobalState, In, InputId, Out, OutputId, Reference, Scalar, ScopeId, Store,
 };
 use hgl_types::{EngineDelta, EngineTime, NodeId, NodeType};
 
@@ -47,33 +46,9 @@ pub struct Ctx<'a> {
 }
 
 impl Ctx<'_> {
-    /// Retain a prepared global value in start, evaluation or stop.
-    pub fn global_get<T: GlobalValue>(&self, handle: Global<T>) -> NodeResult<T::Value> {
-        self.store.global_get(handle)
-    }
-    /// Replace a prepared global value without publishing or scheduling.
-    pub fn global_set<T: GlobalValue>(
-        &mut self,
-        handle: Global<T>,
-        value: &T::Value,
-    ) -> NodeResult {
-        self.store.global_set(handle, value)
-    }
-    /// Borrow a present aggregate without copying its payload.
-    pub fn global_borrow<T: GlobalValue>(&self, handle: Global<T>) -> NodeResult<ValueSlot<T>> {
-        self.store.global_borrow(handle)
-    }
-    /// Retain a typed projection as an independent ordinary value.
-    pub fn global_read<T: GlobalValue>(&self, slot: ValueSlot<T>) -> NodeResult<T::Value> {
-        self.store.global_read(slot)
-    }
-    /// Replace through an authorized borrow after retaining the full right-hand side.
-    pub fn global_write<T: GlobalValue>(
-        &mut self,
-        slot: ValueSlot<T>,
-        value: &T::Value,
-    ) -> NodeResult {
-        self.store.global_write(slot, value)
+    /// Prepared ordinary capability operations, without hook-time key or type binding.
+    pub fn global_state(&mut self) -> &mut GlobalState {
+        self.store.global_state()
     }
     /// The input's value. The input must be valid: one the node requires is;
     /// any other is asked first.
@@ -245,6 +220,17 @@ impl Ctx<'_> {
         self.writes(dict);
         self.store
             .get_or_create_shaped(dict, key, self.now, self.schedule)
+    }
+    /// Create a missing member using its statically prepared allocation factory.
+    pub fn get_or_create_with(
+        &mut self,
+        dict: OutputId,
+        key: i64,
+        create: impl FnOnce(&mut Store, NodeId) -> OutputId,
+    ) -> OutputId {
+        self.writes(dict);
+        self.store
+            .get_or_create_with(dict, key, self.now, self.schedule, create)
     }
     /// Attach a compound child graph output without copying it.
     pub fn attach_shaped(&mut self, dict: OutputId, key: i64, child: Reference) -> NodeResult {

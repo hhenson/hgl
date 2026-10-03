@@ -1,0 +1,65 @@
+module structural_values
+struct TimedValue<T> { time:datetime
+value:delta<T> }
+struct Quote { bid:i64
+ask:str }
+fn record<T>(value:T,const key:str) {
+ inject global_state,clock
+ start {
+ let initial:list<TimedValue<T>> =[]
+ set(global_state,key,initial)
+ }
+ when {
+ let observed=delta_value(value)
+ let alias=observed
+ var samples:list<TimedValue<T>> =get(global_state,key)
+ push(samples,TimedValue(time:clock.evaluation_time,value:alias))
+ }
+}
+fn pass<T>(value:T)->T {when {return delta_value(value)}}
+fn fixed()->list<i64,3> {
+ yield 0us:delta<list<i64,3>>(items:[2:30,0:10])
+ yield 1us:delta<list<i64,3>>(items:[0:10])
+ yield 1us:delta<list<i64,3>>(items:[1:20])
+}
+fn tupled()->tuple<i64,str> {
+ yield 0us:delta<tuple<i64,str>>(items:[1:"first",0:1])
+ yield 1us:delta<tuple<i64,str>>(items:[0:1])
+}
+fn quoted()->Quote {
+ yield 0us:delta<Quote>(ask:"original",bid:4)
+ yield 1us:delta<Quote>(bid:5)
+ yield 1us:delta<Quote>(ask:"")
+}
+fn membership()->set<bool> {
+ yield 0us:delta<set<bool>>(added:[false,true])
+ yield 1us:delta<set<bool>>(removed:[false])
+ yield 1us:delta<set<bool>>(added:[false],removed:[true])
+}
+fn nested()->map<i64,tuple<list<Quote,2>,set<bool>>> {
+ yield 0us:delta<map<i64,tuple<list<Quote,2>,set<bool>>>>(upsert:[7:delta<tuple<list<Quote,2>,set<bool>>>(items:[1:delta<set<bool>>(added:[false]),0:delta<list<Quote,2>>(items:[1:delta<Quote>(bid:1)])])])
+ yield 1us:delta<map<i64,tuple<list<Quote,2>,set<bool>>>>(upsert:[7:delta<tuple<list<Quote,2>,set<bool>>>(items:[0:delta<list<Quote,2>>(items:[1:delta<Quote>(ask:"later")])])])
+ yield 1us:delta<map<i64,tuple<list<Quote,2>,set<bool>>>>(remove:[7])
+}
+fn scalar8()->tuple<bool,i64,f64,str,date,time,datetime,duration> {
+ yield 0us:delta<tuple<bool,i64,f64,str,date,time,datetime,duration>>(items:[0:false,1:0,2:0.0,3:"",4:@1970-01-01,5:@00:00:00,6:@1970-01-01T00:00:00Z,7:0us])
+ yield 1us:delta<tuple<bool,i64,f64,str,date,time,datetime,duration>>(items:[7:0us,6:@1970-01-01T00:00:00Z,5:@00:00:00,4:@1970-01-01,3:"",2:0.0,1:0,0:false])
+}
+fn repeated()->Quote {inject alarm,out
+start {schedule(alarm,0us)}
+when {out=delta<Quote>(bid:1)
+out=delta<Quote>(bid:2)
+return delta<Quote>(ask:"paired")}}
+fn empty_store() {inject global_state
+start {set(global_state,"empty",delta<list<i64,0>>())}
+when {}}
+export fn main() {
+ empty_store()
+ record(pass(repeated()),"repeated")
+ record(pass(fixed()),"fixed")
+ record(pass(tupled()),"tupled")
+ record(pass(quoted()),"quoted")
+ record(pass(membership()),"membership")
+ record(pass(nested()),"nested")
+ record(pass(scalar8()),"scalar8")
+}

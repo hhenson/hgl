@@ -3,7 +3,7 @@
 Lower a checked, closed graph plan into Rust source for the existing engine.
 This is the Rust backend phase; source linking, inference, diagnostics, handler
 normalization and capability admission belong to `hgl-program`. Uses the
-local `hgl-source`, `hgl-rust-ir` and `hgl-rust-values` crates for shared types and literals. Budget: 700 source lines.
+local `hgl-source`, `hgl-rust-ir`, `hgl-rust-values` and `hgl-rust-generators` crates for shared types and literals. Budget: 700 source lines.
 No third-party dependencies or runtime execution dependencies.
 
 Public surface:
@@ -11,9 +11,9 @@ Public surface:
 - `Value { ty, kind }`, `Value::new(Ty, Kind)`; `Kind::{Literal, Wire, Input,
   Cache, Local, MutableLocal, Native, Binary, Unary, Query, Output, Capability, Void}`.
 - `Statement::{Let, Var, Return, Call, Assign, For, If}`.
-- `Node { name, inputs, result, alarm, start, capability, caches, handlers }`.
+- `Node { name, inputs, result, alarm, start, caches, handlers }`.
 - `Native { name, method, throws, args, result }`.
-- `Plan { nodes, natives, docs, output, input_length, replay_inputs }`.
+- `Plan { nodes, natives, docs, output, recording, input_length }`.
 - `emit(&Plan) -> String` and
   `emit_test_body(&Plan, Option<&[Option<Literal>]>) -> String`.
 
@@ -38,12 +38,10 @@ compiler eval regressions and the pinned standard suite; existing program tests
 compile and execute emitted Rust in debug/release. No HGL behavior changes or
 structural delta admission are part of this phase extraction.
 
-`Kind::{ReplaySlot,IsPresent,Present}` represents a checked nullable replay
-read, its presence test and an extraction justified by frontend flow facts.
-`Statement::Exit` ends an evaluation without publication. Nullable values are
-owned Rust options; indexing uses the fallible provider read, keeping bounds
-errors distinct from absent slots. Capability operations use receiver-first
-source spelling; internal runtime method calls do not create source aliases.
+`Kind::{IsPresent,Present}` retains contextual presence-test and extraction IR.
+`Statement::Exit` ends an evaluation without publication. Ordinary list reads
+are checked and fallible. Capability operations use receiver-first source
+spelling; internal runtime method calls do not create source aliases.
 
 `Node { global_state, globals, stop, .. }` records a run-wide shared-store requirement
 and checked stop-hook statements. The `globals` key/type pairs describe prepared entries; `Kind::GlobalGet` and
@@ -80,7 +78,31 @@ Hook expression and statement emission is delegated to `hgl-rust-values`.
 Required-field aggregate entries emit nominal `GlobalValue` markers whose
 value representations are owned tuples and prepared field layouts are typed
 `ValueSlot` tuples. Entry descriptors retain nominal identity and field schema.
-Aggregate borrow bindings use `global_borrow` once to check presence and bind
+Aggregate borrow bindings use `global_state().borrow` once to check presence and bind
 a prepared slot; field projections select slot fields without payload copying.
-Reads at explicit retention boundaries use `global_read`; borrowed field and
-whole-value assignment evaluates its owned RHS before `global_write`.
+Reads at explicit retention boundaries use `global_state().read`; borrowed field and
+whole-value assignment evaluates its owned RHS before `global_state().write`.
+
+Ordinary configuration fields use owned Rust representations and are retained
+once during node construction. Construction errors from deterministic wiring
+are returned before graph start. Direct value-function bodies remain local
+fallible calls and do not receive node scheduling.
+
+Generator lifecycle emission delegates to `hgl-rust-generators`: typed local
+storage and pending output are constructed per node, start resets and arms the
+first evaluation, and evaluation executes the checked resume machine. Ordinary
+handlers retain their existing path. Generator selection uses checked IR only,
+never a source operator name or native role.
+
+Structural ports store prepared hgl-shapes tokens, validated at node build.
+Generated delta shape application/extraction is emitted by hgl-rust-deltas.
+
+Eval prepares its typed ordinary recording binding before graph start and reads
+an independent owned list after stop. It converts timed scalar entries to the
+existing dense observation comparison while retaining the separate input horizon.
+It does not inspect a recorder node's private storage or inject replay data.
+
+`emit_test_body(plan, expected: Option<&[Option<Value>]>)` materializes checked
+closed expected values after stop and uses shape-specific sparse comparison.
+Recorded construction errors return before generating references to absent
+node/layout declarations. Expected emission is a fallible owning boundary.

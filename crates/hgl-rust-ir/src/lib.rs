@@ -18,6 +18,24 @@ impl Value {
 /// Checked expressions and frontend-only binding markers.
 #[derive(Debug, Clone)]
 pub enum Kind {
+    /// Ordered sparse constructor parts with exact originating type in Value.ty.
+    Delta(Vec<DeltaEntry>),
+    /// Evaluation-local readonly publication observation, without ownership.
+    ObservedLocal(usize),
+    /// Typed unavailable result after a recorded wiring operation failure.
+    WiringFailure(String),
+    /// Independently owned ordinary list construction.
+    List(Vec<Value>),
+    /// Ordinary indexed projection preserving its parent's authority.
+    Index(Box<Value>, Box<Value>),
+    /// Ordinary list length observation.
+    Length(Box<Value>),
+    /// Retain and append to writable unbounded list access.
+    Push(Box<Value>, Box<Value>),
+    /// Direct ordinary invocation, with readonly arguments and lexical body.
+    ValueCall(Vec<Value>, Vec<Statement>),
+    /// Readonly prepared ordinary node configuration.
+    Configuration(usize),
     /// Supplied struct arguments in source order, paired with declared field indices.
     Construct(Vec<(usize, Value)>),
     /// A field of an ordinary struct, addressed by its checked index.
@@ -28,8 +46,6 @@ pub enum Kind {
     BorrowedLocal(usize, usize, bool),
     /// Replace the indexed prepared entry with an owned scalar value.
     GlobalSet(usize, Box<Value>),
-    /// Owned nullable replay payload at the checked i64 index.
-    ReplaySlot(Box<Value>),
     /// Nullable presence test.
     IsPresent(Box<Value>),
     /// Payload extraction justified by frontend presence facts.
@@ -42,6 +58,8 @@ pub enum Kind {
     Input(usize, bool),
     /// Node cache index.
     Cache(usize),
+    /// Backend-only typed owner hoisted by generator lowering.
+    GeneratorLocal(usize),
     /// Local binding index.
     Local(usize),
     /// Writable owned scalar local binding index.
@@ -61,8 +79,18 @@ pub enum Kind {
     /// Absence of a payload; cannot be emitted as a payload.
     Void,
 }
+/// One constructor component in written evaluation order.
+#[derive(Debug, Clone)]
+pub enum DeltaEntry {
+    /// Constant set member addition.
+    Add(Literal),
+    /// Constant set member or map key removal.
+    Remove(Literal),
+    /// Constant field/position/key and its exact child publication payload.
+    Child(i64, Value),
+}
 /// Checked statements in a node lifecycle hook or handler.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Statement {
     /// End evaluation without publishing a value.
     Exit,
@@ -74,6 +102,12 @@ pub enum Statement {
     Borrow(usize, Value, bool),
     /// Publish a checked return value.
     Return(Value),
+    /// Timed generator publication: time operand followed by payload operand.
+    TimedYield(Value, Value),
+    /// Checked runtime condition and loop body.
+    While(Value, Vec<Self>),
+    /// Return an ordinary value from a direct function invocation.
+    Yield(Value),
     /// Evaluate an operation for its effect.
     Call(Value),
     /// Assign a checked value to its target.
@@ -94,16 +128,18 @@ pub struct Node {
     pub result: Ty,
     /// Whether the node uses the source scheduler capability.
     pub alarm: bool,
+    /// Checked generator source body, separate from ordinary lifecycle hooks.
+    pub generator: Option<Vec<Statement>>,
     /// Checked start-hook statements.
     pub start: Vec<Statement>,
     /// Whether graph construction requires a provisioned run-wide scalar store.
     pub global_state: bool,
     /// Const key and exact scalar type for each prepared node access.
     pub globals: Vec<(String, Ty)>,
+    /// Independently retained ordinary configuration initialized before hooks.
+    pub configuration: Vec<Value>,
     /// Checked stop-hook statements.
     pub stop: Vec<Statement>,
-    /// Optional admitted buffer capability name and scalar payload type.
-    pub capability: Option<(String, Ty)>,
     /// Cache initializers, indexed by cache expressions.
     pub caches: Vec<Literal>,
     /// Ordered handlers; absent guards use the existing input guard.
@@ -126,6 +162,8 @@ pub struct Native {
 /// A closed graph with all source checks and eval wiring complete.
 #[derive(Debug, Default)]
 pub struct Plan {
+    /// Deterministic wiring operation failure reported during construction.
+    pub construction_error: Option<String>,
     /// Nodes in construction order, addressed by index.
     pub nodes: Vec<Node>,
     /// Selected native signatures, addressed by index.
@@ -134,8 +172,48 @@ pub struct Plan {
     pub docs: Vec<String>,
     /// Eval capture node index and observed scalar type, if any.
     pub output: Option<(usize, Ty)>,
+    /// Ordinary recording key and exact retained list type, bound before start.
+    pub recording: Option<(String, Ty)>,
     /// Dense eval input length, independent of expected output.
     pub input_length: usize,
-    /// Replay node indices and their configured dense input slots.
-    pub replay_inputs: Vec<(usize, Vec<Option<Literal>>)>,
+}
+
+impl Value {
+    /// Whether an expression is already a closed ordinary constant.
+    pub fn closed(&self) -> bool {
+        match &self.kind {
+            Kind::Delta(parts) => parts.iter().all(|part| match part {
+                DeltaEntry::Child(_, value) => value.closed(),
+                DeltaEntry::Add(_) | DeltaEntry::Remove(_) => true,
+            }),
+            Kind::Literal(_) | Kind::Void => true,
+            Kind::List(items) => items.iter().all(Value::closed),
+            Kind::Construct(fields) => fields.iter().all(|(_, value)| value.closed()),
+            Kind::WiringFailure(_)
+            | Kind::Index(..)
+            | Kind::Length(_)
+            | Kind::Push(..)
+            | Kind::ValueCall(..)
+            | Kind::Configuration(_)
+            | Kind::Field(..)
+            | Kind::GlobalGet(_)
+            | Kind::BorrowedLocal(..)
+            | Kind::GlobalSet(..)
+            | Kind::IsPresent(_)
+            | Kind::Present(_)
+            | Kind::Wire(_)
+            | Kind::Input(..)
+            | Kind::Cache(_)
+            | Kind::ObservedLocal(_)
+            | Kind::Local(_)
+            | Kind::MutableLocal(_)
+            | Kind::Native(..)
+            | Kind::Binary(..)
+            | Kind::Unary(..)
+            | Kind::Query(..)
+            | Kind::Output
+            | Kind::Capability
+            | Kind::GeneratorLocal(_) => false,
+        }
+    }
 }

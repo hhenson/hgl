@@ -1,0 +1,16 @@
+[package]
+name = "hgl-struct-check"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+[package.metadata.hgl]
+line-budget = 450
+[lints]
+workspace = true
+[dependencies]
+hgl-source = { path = "../hgl-source" }
+hgl-library = { path = "../hgl-library" }
+hgl-value-types = { path = "../hgl-value-types" }
+hgl-rust-ir = { path = "../hgl-rust-ir" }
+hgl-type-sizes = { path = "../hgl-type-sizes" }

@@ -66,3 +66,8 @@ shape validation and BuildError translation remain here.
 `T::schema()` against the exact declared ordinary requirement. Recursive preflight
 reconciles complete nominal identities/required field types against host seeds,
 including unexecuted child templates, before any constructor or start hook runs.
+
+List requirements use exact recursive element types and optional fixed lengths.
+Preflight reconciles them across root nodes, child templates and owner bindings;
+a list type conflict fails before constructors/start, like nominal conflicts.
+Native host payload length validation occurs at retention before any replacement.

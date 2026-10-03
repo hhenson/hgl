@@ -1,11 +1,11 @@
 # Card: hgl-value-check
 
 Ordinary value authority, borrow provenance and lexical entry-effect checking
-for checked HGL hook IR. Uses only `hgl-source` and `hgl-rust-ir`; budget 400
+for checked HGL hook IR. Uses `hgl-source`, `hgl-rust-ir` and `hgl-library`; budget 400
 source lines. No runtime or third-party dependencies.
 
 Public surface: `ordinary`, `writable`, `field`, `provenance`, `binding`,
-`helper_argument`, `validate`. The frontend resolves names, types and const
+`helper_argument`, `validate`, `list_literal`, `indexed`, `list_operation`. The frontend resolves names, types and const
 keys first, then uses these checks before emitting a plan.
 
 `binding` preserves aggregate get provenance and enforces alias permissions;
@@ -19,3 +19,33 @@ cannot retain live aggregate view authority. No runtime registry is introduced.
 Acceptance: aggregate global source checking and executed fixtures in
 `hgl-program`, including disjoint scopes, const-key aliases, recursive
 readonly authority, exclusive aliases and explicit retention boundaries.
+
+Ordinary list literal checking requires homogeneous constant elements and exact
+contextual fixedness; empty literals need concrete context. Indexed aggregate
+projections inherit root authority/provenance. Primitive projection and length
+results are owning scalar observations. Push checks unboundedness, writable
+receiver authority and exact item type, then supplies an explicit retaining
+operation to the backend. Indexed replacement is outside this contract.
+
+Uncontextualized nonempty ordinary literals are explicitly unsupported: the
+pinned specification describes constant homogeneous list literals but does not
+uniquely define their inferred fixedness. Contextual nonempty literals retain
+their expected exact list type. Harness sequence typing is unchanged.
+
+`prepare_node` initializes a node and converts supplied temporal values to input bindings and
+retains ordinary aggregate const configurations in node metadata. Generator body
+validation traverses while scopes and ordered timed-yield operands. Backend-only
+GeneratorLocal values are never produced by source checking.
+
+`binary_type` defines the admitted scalar binary operand/result table after
+numeric widening. Checked time arithmetic admits datetime plus/minus duration,
+duration plus datetime, datetime minus datetime, and duration plus/minus duration.
+Duration negation is also checked. Scaling, division and date arithmetic remain
+outside this implementation slice; no wrapping behavior is introduced.
+
+Access classification is delegated/re-exported from hgl-value-access, including
+`observed`. Typed Delta globals retain lexical aggregate borrowing. Ordinary
+constructor/list/global/owning assignment and matching delta publication are
+explicit retention boundaries; helper returns/calls cannot escape observations.
+Ordered delta children are traversed for entry effects without weakening borrow
+conflict checks. Delta binary comparison and field/index inspection are rejected.

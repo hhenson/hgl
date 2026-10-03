@@ -1,0 +1,33 @@
+use hgraph.std::{TimedValue}
+fn retained_source(value:i64)->i64 {
+    inject global_state,clock
+    start {
+        let empty:list<TimedValue<i64>> =[]
+        set(global_state,"eval.recording.0",empty)
+    }
+    when {
+        var own:list<TimedValue<i64>> =[]
+        push(own,TimedValue(time:clock.evaluation_time,value:999))
+        set(global_state,"eval.recording.0",own)
+        if false {let absent:i64=get(global_state,"eval.recording.1")}
+        let mine:list<TimedValue<i64>> =get(global_state,"eval.recording.0")
+        return delta_value(value)+mine[0].value-999
+    }
+    stop {
+        let empty:list<TimedValue<i64>> =[]
+        set(global_state,"eval.recording.0",empty)
+    }
+}
+fn other_type(value:i64)->i64 {
+    inject global_state
+    start {set(global_state,"eval.recording.0",true)}
+    when {return delta_value(value)}
+    stop {set(global_state,"eval.recording.0",false)}
+}
+test independent_recording {
+    assert eval(retained_source,[1,2,_,3,_]) == [1,2,_,3,_]
+    assert eval(retained_source,[8]) == [8]
+    assert eval(retained_source,[_,_]) == [_,_]
+    assert eval(retained_source,[]) == []
+    assert eval(other_type,[1,2]) == [1,2]
+}

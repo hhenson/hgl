@@ -1,0 +1,70 @@
+module generator_effects
+# The native probe appends each marker to a trace. It can fail one marker
+# so the tests can distinguish operand failure from target-time failure.
+native const fn mark(value:i64)->i64 throws
+native const fn mark(value:i64)->i64 throws {}
+const fn time(value:duration)->duration { let ignored=mark(1)
+return value }
+const fn payload(value:i64)->i64 { let ignored=mark(2)
+return value }
+const fn absolute(value:datetime)->datetime { let ignored=mark(1)
+return value }
+fn future()->i64 {
+    yield time(2us):payload(7)
+    let resumed=mark(3)
+    yield 1us:resumed
+}
+fn past()->i64 {
+    yield absolute(@1969-01-01T00:00:00Z):payload(7)
+    let continued=mark(3)
+    yield 0us:continued
+}
+fn relative(const delay:duration)->i64 {
+    yield time(delay):payload(-1)
+    let continued=mark(3)
+}
+fn resumed(const delay:duration)->i64 {
+    yield time(2us):payload(7)
+    yield time(delay):payload(8)
+    let continued=mark(3)
+}
+fn ordered(const first:datetime,const second:datetime)->i64 {
+    yield absolute(first):payload(7)
+    yield absolute(second):payload(8)
+    let continued=mark(3)
+    yield 0us:continued
+}
+fn duplicate()->i64 {
+    yield time(0us):payload(7)
+    yield time(0us):payload(8)
+    let forbidden=mark(3)
+}
+fn implicit_overflow()->i64 { yield time(9223372036854775807us):payload(7) }
+fn explicit_overflow()->i64 {
+    yield @1970-01-01T00:00:00.000001Z+time(9223372036854775807us):payload(7)
+}
+fn observe(ts:i64) {
+    inject global_state
+    start { set(global_state,"count",0) }
+    when {
+        let count:i64=get(global_state,"count")
+        set(global_state,"count",count+1)
+        set(global_state,"last",delta_value(ts))
+    }
+}
+export fn run_future() { observe(future()) }
+export fn run_past() { observe(past()) }
+export fn run_duplicate() { observe(duplicate()) }
+export fn run_implicit_overflow() { observe(implicit_overflow()) }
+export fn run_explicit_overflow() { observe(explicit_overflow()) }
+export fn run_negative() { observe(relative(-1us)) }
+export fn run_negative_min() { observe(relative(-9223372036854775807us-1us)) }
+export fn run_zero() { observe(relative(0us)) }
+export fn run_resumed_negative() { observe(resumed(-1us)) }
+export fn run_resumed_zero() { observe(resumed(0us)) }
+export fn run_resumed_positive() { observe(resumed(1us)) }
+export fn run_past_equal() { observe(ordered(@1969-01-02T00:00:00Z,@1969-01-02T00:00:00Z)) }
+export fn run_past_decreasing() { observe(ordered(@1969-01-02T00:00:00Z,@1969-01-01T00:00:00Z)) }
+export fn run_past_increasing() { observe(ordered(@1969-01-01T00:00:00Z,@1969-01-02T00:00:00Z)) }
+export fn run_future_equal() { observe(ordered(@1970-01-01T00:00:00.000003Z,@1970-01-01T00:00:00.000003Z)) }
+export fn run_future_decreasing() { observe(ordered(@1970-01-01T00:00:00.000003Z,@1970-01-01T00:00:00.000002Z)) }

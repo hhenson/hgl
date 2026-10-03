@@ -1,7 +1,7 @@
 # Card: hgl-source
 
 Lexer and body syntax shared by library indexing and graph checking. Uses only
-`hgl-calendar`; budget 700 lines. No runtime dependency.
+`hgl-calendar`, `hgl-type-shape` and `hgl-lex`; budget 700 lines. No runtime dependency.
 
 Surface: `Token { text, span }`, `lex(&str) -> Result<Vec<Token>, String>`;
 `Ty` and `Ty::{parse,name}`; `Literal` and `Literal::ty`; `Expr` and
@@ -42,7 +42,40 @@ whether the selected field is writable; no new writable field domain is admitted
 name and initializer. Annotation resolution and initializer compatibility are
 frontend checks; a typed local supplies ordinary expected-value context.
 
-`Ty::Struct(String, Vec<(String, Ty)>)` is a resolved finite ordinary struct:
+`Ty::Struct(Nominal, Vec<(String, Ty)>)` is a resolved finite ordinary struct:
 qualified nominal identity plus declared field names and types. It is created
-by the frontend, not `Ty::parse`; generic/optional/recursive schemas remain
+by the frontend, not `Ty::parse`; optional/recursive schemas remain
 outside this executable subset.
+
+`Ty::List(element, fixed_size)` preserves ordinary element type and optional
+exact size. The parser accepts explicit `unbounded` as the same identity as
+omitted size; numeric sizes fit nonnegative i64. `Ty::list_parts` splits the
+outer list arguments without losing nested list/struct spellings. Existing
+`Expr::Sequence` and `Expr::Index` are contextual ordinary list syntax as well
+as their separate harness/replay uses; admission belongs to the checker.
+
+Ty and Nominal are re-exported from hgl-type-shape. `Expr::Applied` retains an
+explicit struct constructor application separately from ordinary calls. Generic
+argument lookahead follows the pinned grammar before resolving the callee;
+comparison parsing remains independent of visible declarations. Source type
+spelling accepts nested multiple generic arguments. Checking rejects unsupported
+argument roles and explicit generic callable application.
+
+Token and lex are re-exported from hgl-lex. `Stmt::TimedYield(time,payload)`
+retains ordered generator operands. `Stmt::While(condition,body)` retains an
+omitted condition as true. `yield` and `while` are reserved identifiers.
+`Cursor::block_contents` parses statements after an already-consumed opening
+brace, for function headers that contain injections. Phase and generator
+admission remain checker responsibilities.
+
+Contextual `delta<type>` is accepted in type positions without reserving
+its value-level name; the same marker followed by arguments is a constructor.
+No parenthesized type-marker alias is accepted. `Expr::Sparse` retains ordered
+constant-key/payload syntax only inside delta constructor arguments; ordinary list and harness
+sequence parsing does not admit sparse entries. Constructor shape, names,
+constant positions and payload compatibility remain checker obligations.
+
+`Expr::Tuple` preserves contextual positional harness cells and omissions.
+Grouping has no comma; a one-element tuple has a trailing comma. Source checking
+restricts this shorthand to harness publication positions of an exact tuple
+shape, without admitting ordinary tuple value operations in this backend slice.

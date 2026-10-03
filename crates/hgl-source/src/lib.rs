@@ -1,186 +1,6 @@
 //! Source tokens, expressions and statements shared by HGL compiler stages.
-use std::ops::Range;
-
-#[derive(Debug, Clone)]
-/// One source token, retaining its original byte range.
-pub struct Token {
-    /// Original spelling, with line endings normalized to newline.
-    pub text: String,
-    /// Half-open byte range in the original source.
-    pub span: Range<usize>,
-}
-
-/// Tokenize HGL without interpreting identifiers or discarding documentation.
-pub fn lex(text: &str) -> Result<Vec<Token>, String> {
-    let mut out = Vec::new();
-    let mut pos = 0;
-    while pos < text.len() {
-        let start = pos;
-        let c = text.as_bytes()[pos];
-        pos += 1;
-        match c {
-            b' ' | b'\t' => continue,
-            b'\n' | b'\r' => {
-                if c == b'\r' && text.as_bytes().get(pos) == Some(&b'\n') {
-                    pos += 1;
-                }
-                out.push(Token {
-                    text: "\n".into(),
-                    span: start..pos,
-                });
-                continue;
-            }
-            b'#' => {
-                while pos < text.len() && !matches!(text.as_bytes()[pos], b'\r' | b'\n') {
-                    pos += 1;
-                }
-                continue;
-            }
-            b'/' if text.as_bytes().get(pos) == Some(&b'*') => {
-                let end = text[pos + 1..].find("*/").ok_or("unterminated comment")?;
-                pos += end + 3;
-                if !text[start..pos].starts_with("/**") {
-                    continue;
-                }
-            }
-            b'"' => {
-                let mut closed = false;
-                while pos < text.len() {
-                    let next = text.as_bytes()[pos];
-                    pos += 1;
-                    if next == b'\\' {
-                        pos += usize::from(pos < text.len());
-                    } else if next == b'"' {
-                        closed = true;
-                        break;
-                    }
-                }
-                if !closed {
-                    return Err("unterminated string".into());
-                }
-            }
-            b'0'..=b'9' => {
-                while pos < text.len() {
-                    let next = text.as_bytes()[pos];
-                    if next.is_ascii_alphanumeric()
-                        || next == b'.'
-                        || next == b'_'
-                        || (matches!(next, b'+' | b'-')
-                            && matches!(text.as_bytes()[pos - 1], b'e' | b'E'))
-                    {
-                        pos += 1;
-                    } else {
-                        break;
-                    }
-                }
-            }
-            b'@' => {
-                while pos < text.len()
-                    && (text.as_bytes()[pos].is_ascii_alphanumeric()
-                        || matches!(text.as_bytes()[pos], b'-' | b':' | b'.' | b'+'))
-                {
-                    pos += 1;
-                }
-            }
-            b'a'..=b'z' | b'A'..=b'Z' | b'_' => {
-                while pos < text.len()
-                    && (text.as_bytes()[pos].is_ascii_alphanumeric()
-                        || text.as_bytes()[pos] == b'_')
-                {
-                    pos += 1;
-                }
-            }
-            _ => {
-                pos = start + text[start..].chars().next().map_or(1, char::len_utf8);
-                if pos < text.len()
-                    && matches!(
-                        text.get(start..=pos).unwrap_or(""),
-                        "::" | "->" | "=>" | "+=" | "==" | "!=" | "<=" | ">=" | "&&" | "||"
-                    )
-                {
-                    pos += 1;
-                }
-            }
-        }
-        out.push(Token {
-            text: text[start..pos].into(),
-            span: start..pos,
-        });
-    }
-    Ok(out)
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-/// Types admitted by the executable source compiler.
-pub enum Ty {
-    /// Qualified nominal identity and required ordinary field types.
-    Struct(String, Vec<(String, Self)>),
-    /// Signed integer.
-    I64,
-    /// Binary floating point.
-    F64,
-    /// Boolean.
-    Bool,
-    /// UTF-8 text.
-    Str,
-    /// Microsecond interval.
-    Duration,
-    /// Calendar date.
-    Date,
-    /// Time of day.
-    Time,
-    /// UTC instant.
-    DateTime,
-    /// Reference designation.
-    Ref(Box<Self>),
-    /// Set membership.
-    Set(Box<Self>),
-    /// Contextual nullable expression; not an admitted source annotation.
-    Nullable(Box<Self>),
-    /// No result.
-    Void,
-}
-impl Ty {
-    /// Canonical scalar spelling; constructed types retain their child separately.
-    pub fn name(&self) -> &'static str {
-        match self {
-            Self::I64 => "i64",
-            Self::F64 => "f64",
-            Self::Bool => "bool",
-            Self::Str => "str",
-            Self::Duration => "duration",
-            Self::Date => "date",
-            Self::Time => "time",
-            Self::DateTime => "datetime",
-            Self::Ref(_) => "ref",
-            Self::Set(_) => "set",
-            Self::Nullable(_) => "contextual nullable",
-            Self::Void => "void",
-            Self::Struct(..) => "struct",
-        }
-    }
-    /// Parse a concrete admitted type spelling.
-    pub fn parse(name: &str) -> Option<Self> {
-        if let Some(child) = name.strip_prefix("ref<").and_then(|s| s.strip_suffix('>')) {
-            return Some(Self::Ref(Box::new(Self::parse(child)?)));
-        }
-        if let Some(child) = name.strip_prefix("set<").and_then(|s| s.strip_suffix('>')) {
-            return Some(Self::Set(Box::new(Self::parse(child)?)));
-        }
-        match name {
-            "i64" => Some(Self::I64),
-            "f64" => Some(Self::F64),
-            "bool" => Some(Self::Bool),
-            "str" => Some(Self::Str),
-            "duration" => Some(Self::Duration),
-            "date" => Some(Self::Date),
-            "time" => Some(Self::Time),
-            "datetime" => Some(Self::DateTime),
-            "void" => Some(Self::Void),
-            _ => None,
-        }
-    }
-}
+pub use hgl_lex::{Token, lex};
+pub use hgl_type_shape::{Nominal, Ty, application, delta_argument};
 #[derive(Debug, Clone, PartialEq)]
 /// A fixed scalar value in HGL source.
 pub enum Literal {
@@ -231,10 +51,16 @@ pub enum Expr {
     Name(String),
     /// Dense harness cells; absent cells carry no tick.
     Sequence(Vec<Option<Self>>),
+    /// Ordered sparse delta entries; admitted only in delta constructor arguments.
+    Sparse(Vec<(Self, Self)>),
+    /// Positional harness tuple cells; absent children carry no publication.
+    Tuple(Vec<Option<Self>>),
     /// Unary operator.
     Unary(String, Box<Self>),
     /// Callable name and positional or named arguments.
     Call(String, Vec<(Option<String>, Self)>),
+    /// Explicit struct application and supplied named fields.
+    Applied(String, Vec<(Option<String>, Self)>),
     /// Binary operator.
     Binary(String, Box<Self>, Box<Self>),
 }
@@ -255,6 +81,10 @@ pub enum Stmt {
     Add(Expr, Expr),
     /// Assignment to state, cache or out.
     Assign(Expr, Expr),
+    /// Ordered timed source publication operands.
+    TimedYield(Expr, Expr),
+    /// Runtime conditional loop; omitted source condition is true.
+    While(Expr, Vec<Self>),
     /// Collection iteration.
     For(String, Expr, Vec<Self>),
     /// Conditional branches.
@@ -315,6 +145,9 @@ impl<'a> Cursor<'a> {
     /// Require an identifier spelling.
     pub fn name(&mut self) -> Result<String, String> {
         let name = self.consume()?;
+        if matches!(name.as_str(), "while" | "yield") {
+            return Err(format!("{name} is a reserved word"));
+        }
         if !name
             .bytes()
             .enumerate()
@@ -331,17 +164,83 @@ impl<'a> Cursor<'a> {
             name.push_str("::");
             name.push_str(&self.name()?);
         }
-        if self.take("<") {
-            let child = self.type_name()?;
-            if name == "ref" && child.starts_with("ref<") {
+        if self.at("<") {
+            name.push_str(&self.type_arguments()?);
+            if name.starts_with("ref<ref<") {
                 return Err("explicit ref<ref<T>> is not valid".into());
             }
-            name.push('<');
-            name.push_str(&child);
-            self.need(">")?;
-            name.push('>');
         }
         Ok(name)
+    }
+    fn type_arguments(&mut self) -> Result<String, String> {
+        self.need("<")?;
+        let mut text = String::from("<");
+        let mut depth = 1;
+        let mut parentheses = 0;
+        while depth > 0 {
+            let token = self.consume()?;
+            if token == "(" {
+                parentheses += 1;
+            }
+            if token == ")" {
+                parentheses -= 1;
+            }
+            if token == "<" && parentheses == 0 {
+                depth += 1;
+            }
+            if token == ">" && parentheses == 0 {
+                depth -= 1;
+            }
+            if token != "\n" {
+                text.push_str(&token);
+            }
+        }
+        Ok(text)
+    }
+    fn applied_constructor(&self) -> bool {
+        if !self.at("<") {
+            return false;
+        }
+        let mut depth = 0;
+        let mut parentheses = 0;
+        let mut previous = "";
+        for (index, token) in self.tokens.iter().enumerate().skip(self.pos) {
+            let text = token.text.as_str();
+            if parentheses > 0 {
+                if text == "(" {
+                    parentheses += 1;
+                }
+                if text == ")" {
+                    parentheses -= 1;
+                }
+                previous = text;
+                continue;
+            }
+            match text {
+                "<" => depth += 1,
+                ">" => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return self.tokens.get(index + 1).is_some_and(|t| t.text == "(");
+                    }
+                }
+                "(" => parentheses = 1,
+                "\n" => {
+                    let next = self.tokens[index + 1..].iter().find(|t| t.text != "\n");
+                    if !matches!(previous, "<" | ",")
+                        && !next.is_some_and(|t| matches!(t.text.as_str(), ">" | ","))
+                    {
+                        return false;
+                    }
+                    continue;
+                }
+                "," | "::" | "+" | "-" | "*" | "/" | "%" => {}
+                other if generic_token(other) => {}
+                _ => return false,
+            }
+            previous = text;
+        }
+        false
     }
     /// Parse an expression using operator precedence.
     pub fn expr(&mut self) -> Result<Expr, String> {
@@ -409,11 +308,7 @@ impl<'a> Cursor<'a> {
             return Ok(Expr::Sequence(values));
         }
         if self.take("(") {
-            self.lines();
-            let value = self.expr()?;
-            self.lines();
-            self.need(")")?;
-            return Ok(value);
+            return self.parenthesized();
         }
         if self.take("!") {
             return Ok(Expr::Unary("!".into(), Box::new(self.atom()?)));
@@ -437,13 +332,54 @@ impl<'a> Cursor<'a> {
             return string_literal(&text);
         }
         let mut name = text;
-        if self.at("::") {
+        while self.at("::") {
             name.push_str(&self.consume()?);
             name.push_str(&self.name()?);
+        }
+        let applied = self.applied_constructor();
+        if applied {
+            name.push_str(&self.type_arguments()?);
         }
         if !self.take("(") {
             return Ok(Expr::Name(name));
         }
+        let args = self.call_arguments(applied && name.starts_with("delta<"))?;
+        Ok(if applied {
+            Expr::Applied(name, args)
+        } else {
+            Expr::Call(name, args)
+        })
+    }
+    fn parenthesized(&mut self) -> Result<Expr, String> {
+        self.lines();
+        let first = if self.take("_") {
+            None
+        } else {
+            Some(self.expr()?)
+        };
+        self.lines();
+        if !self.take(",") {
+            self.need(")")?;
+            return first.ok_or("absent tuple child requires a tuple comma".into());
+        }
+        let mut values = vec![first];
+        self.lines();
+        while !self.take(")") {
+            values.push(if self.take("_") {
+                None
+            } else {
+                Some(self.expr()?)
+            });
+            self.lines();
+            if !self.take(",") {
+                self.need(")")?;
+                break;
+            }
+            self.lines();
+        }
+        Ok(Expr::Tuple(values))
+    }
+    fn call_arguments(&mut self, delta: bool) -> Result<Vec<(Option<String>, Expr)>, String> {
         let mut args = Vec::new();
         self.lines();
         while !self.at(")") {
@@ -454,7 +390,12 @@ impl<'a> Cursor<'a> {
             } else {
                 None
             };
-            args.push((named, self.expr()?));
+            let value = if delta && self.take("[") {
+                self.delta_entries()?
+            } else {
+                self.expr()?
+            };
+            args.push((named, value));
             self.lines();
             if !self.take(",") {
                 break;
@@ -462,7 +403,43 @@ impl<'a> Cursor<'a> {
             self.lines();
         }
         self.need(")")?;
-        Ok(Expr::Call(name, args))
+        Ok(args)
+    }
+    fn delta_entries(&mut self) -> Result<Expr, String> {
+        self.lines();
+        if self.take("]") {
+            return Ok(Expr::Sequence(Vec::new()));
+        }
+        let first = self.expr()?;
+        let sparse = self.take(":");
+        let mut entries = Vec::new();
+        let mut values = Vec::new();
+        if sparse {
+            entries.push((first, self.expr()?));
+        } else {
+            values.push(Some(first));
+        }
+        self.lines();
+        while self.take(",") {
+            self.lines();
+            if self.at("]") {
+                break;
+            }
+            let value = self.expr()?;
+            if sparse {
+                self.need(":")?;
+                entries.push((value, self.expr()?));
+            } else {
+                values.push(Some(value));
+            }
+            self.lines();
+        }
+        self.need("]")?;
+        Ok(if sparse {
+            Expr::Sparse(entries)
+        } else {
+            Expr::Sequence(values)
+        })
     }
     fn else_body(&mut self) -> Result<Vec<Stmt>, String> {
         if !self.take("if") {
@@ -481,6 +458,10 @@ impl<'a> Cursor<'a> {
     /// Parse a brace-delimited statement block.
     pub fn block(&mut self) -> Result<Vec<Stmt>, String> {
         self.need("{")?;
+        self.block_contents()
+    }
+    /// Parse a block after its opening brace has already been consumed.
+    pub fn block_contents(&mut self) -> Result<Vec<Stmt>, String> {
         self.lines();
         let mut out = Vec::new();
         while !self.take("}") {
@@ -492,6 +473,20 @@ impl<'a> Cursor<'a> {
                 out.push(Stmt::For(name, collection, body));
                 self.lines();
                 continue;
+            } else if self.take("while") {
+                let condition = if self.at("{") {
+                    Expr::Literal(Literal::Bool(true))
+                } else {
+                    self.expr()?
+                };
+                let body = self.block()?;
+                out.push(Stmt::While(condition, body));
+                self.lines();
+                continue;
+            } else if self.take("yield") {
+                let time = self.expr()?;
+                self.need(":")?;
+                Stmt::TimedYield(time, self.expr()?)
             } else if self.at("let") || self.at("var") {
                 let mutable = self.consume()? == "var";
                 let name = self.name()?;
@@ -591,7 +586,10 @@ impl Expr {
             | Self::Index(..)
             | Self::Name(_)
             | Self::Call(..)
-            | Self::Sequence(_) => None,
+            | Self::Applied(..)
+            | Self::Sequence(_)
+            | Self::Sparse(_)
+            | Self::Tuple(_) => None,
         }
     }
 }
@@ -688,8 +686,48 @@ fn expand_selectors(expr: Expr, inputs: &[(Option<String>, Expr)]) -> (Expr, u8)
         | Expr::Literal(_)
         | Expr::Name(_)
         | Expr::Sequence(_)
+        | Expr::Sparse(_)
+        | Expr::Tuple(_)
         | Expr::Unary(..)
         | Expr::Call(..)
+        | Expr::Applied(..)
         | Expr::Binary(..)) => (other, 0),
     }
+}
+
+fn generic_token(text: &str) -> bool {
+    if matches!(
+        text,
+        "fn" | "struct"
+            | "abstract"
+            | "module"
+            | "use"
+            | "as"
+            | "export"
+            | "native"
+            | "const"
+            | "let"
+            | "var"
+            | "return"
+            | "if"
+            | "else"
+            | "for"
+            | "in"
+            | "requires"
+            | "operator"
+            | "impl"
+            | "test"
+            | "when"
+            | "start"
+            | "stop"
+            | "throws"
+    ) {
+        return false;
+    }
+    text.starts_with('"')
+        || text.starts_with('@')
+        || text
+            .bytes()
+            .next()
+            .is_some_and(|c| c.is_ascii_alphanumeric() || c == b'_')
 }

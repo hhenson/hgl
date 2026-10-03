@@ -1,4 +1,4 @@
-use crate::syntax::{Cursor, Expr, Literal};
+use crate::syntax::{Cursor, Expr};
 use crate::{emit, index, resolve};
 
 /// Checked source tests. Every assertion holds an independent graph.
@@ -8,7 +8,8 @@ pub struct Suite(Vec<Case>);
 struct Case {
     name: String,
     plan: hgl_rust::Plan,
-    expected: Option<Vec<Option<Literal>>>,
+    expected: Option<Vec<Option<hgl_rust::Value>>>,
+    ordinary: Option<bool>,
 }
 
 /// Check named tests and their module-wide helpers against the source library.
@@ -32,7 +33,12 @@ pub fn compile_tests(sources: &[(String, String)]) -> Result<Suite, String> {
         while !c.take("}") {
             let assertion = c.take("assert");
             let expr = c.expr()?;
-            let (call, mut expected) = if assertion {
+            if assertion && !eval_assertion(&expr) {
+                cases.push(ordinary_case(&library, decl, &name, &expr)?);
+                c.lines();
+                continue;
+            }
+            let (call, expected) = if assertion {
                 let Expr::Binary(op, call, expected) = expr else {
                     return Err(format!("{name}: expected eval comparison"));
                 };
@@ -42,17 +48,7 @@ pub fn compile_tests(sources: &[(String, String)]) -> Result<Suite, String> {
                 let Expr::Sequence(elements) = *expected else {
                     return Err("expected a dense sequence".into());
                 };
-                let expected = elements
-                    .into_iter()
-                    .map(|v| match v {
-                        None => Ok(None),
-                        Some(expr) => expr
-                            .fixed()
-                            .map(Some)
-                            .ok_or("expected fixed sequence value".to_owned()),
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-                (*call, Some(expected))
+                (*call, Some(elements))
             } else {
                 (expr, None)
             };
@@ -70,11 +66,21 @@ pub fn compile_tests(sources: &[(String, String)]) -> Result<Suite, String> {
             }
             let plan = resolve::evaluate(library.clone(), &decl.module, &function, &args)
                 .map_err(|e| format!("{name}: {e}"))?;
-            check_expected(&name, &plan, &mut expected)?;
+            let expected = expected
+                .map(|slots| {
+                    let (_, ty) = plan
+                        .output
+                        .as_ref()
+                        .ok_or("outputless eval cannot be compared")?;
+                    resolve::expected_values(library.clone(), &decl.module, ty, &slots)
+                        .map_err(|e| format!("{name}: expected output: {e}"))
+                })
+                .transpose()?;
             cases.push(Case {
                 name: name.clone(),
                 plan,
                 expected,
+                ordinary: None,
             });
             c.lines();
         }
@@ -89,6 +95,10 @@ pub fn compile_tests(sources: &[(String, String)]) -> Result<Suite, String> {
 pub fn emit_tests(suite: &Suite) -> String {
     let mut out = Vec::<String>::new();
     for (i, case) in suite.0.iter().enumerate() {
+        if let Some(result) = case.ordinary {
+            out.push(format!("mod case{i} {{ pub fn test() -> Result<(), String> {{ if {result} {{ Ok(()) }} else {{ Err(\"ordinary assertion failed\".into()) }} }} }}\n"));
+            continue;
+        }
         out.push(format!("mod case{i} {{\n{}\n", emit::emit(&case.plan)));
         out.push(emit::emit_test_body(&case.plan, case.expected.as_deref()));
         out.push("}\n".into());
@@ -111,29 +121,24 @@ pub fn emit_tests(suite: &Suite) -> String {
     out.concat()
 }
 
-fn check_expected(
+fn eval_assertion(expr: &Expr) -> bool {
+    if let Expr::Binary(_, left, _) = expr {
+        return matches!(left.as_ref(), Expr::Call(name, _) if name == "eval");
+    }
+    false
+}
+
+fn ordinary_case(
+    library: &index::Library,
+    decl: &index::Decl,
     name: &str,
-    plan: &hgl_rust::Plan,
-    expected: &mut Option<Vec<Option<Literal>>>,
-) -> Result<(), String> {
-    if expected.is_some() && plan.output.is_none() {
-        return Err("outputless eval cannot be compared".into());
-    }
-    if let Some((_, ty)) = &plan.output {
-        if matches!(
-            ty,
-            crate::syntax::Ty::Set(_)
-                | crate::syntax::Ty::Ref(_)
-                | crate::syntax::Ty::Nullable(_)
-                | crate::syntax::Ty::Struct(..)
-                | crate::syntax::Ty::Void
-        ) {
-            return Err("eval currently records scalar outputs".into());
-        }
-        if let Some(values) = expected {
-            resolve::coerce_sequence(values, ty)
-                .map_err(|e| format!("{name}: expected output: {e}"))?;
-        }
-    }
-    Ok(())
+    expr: &Expr,
+) -> Result<Case, String> {
+    let ordinary = resolve::assertion(library.clone(), &decl.module, expr)?;
+    Ok(Case {
+        name: name.into(),
+        plan: hgl_rust::Plan::default(),
+        expected: None,
+        ordinary: Some(ordinary),
+    })
 }

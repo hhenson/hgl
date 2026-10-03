@@ -68,7 +68,7 @@ fn unsupported_struct_schemas_are_diagnosed() {
         (
             "struct Box<T> { amount: T }",
             "let box:Box=Box(amount:1)",
-            "nongeneric",
+            "complete type arguments",
         ),
         (
             "struct Box { amount:i64=1 }",

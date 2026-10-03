@@ -6,4 +6,4 @@ mod emit;
 use hgl_rust_ir as ir;
 
 pub use emit::{emit, emit_test_body};
-pub use hgl_rust_ir::{Kind, Native, Node, Plan, Statement, Value};
+pub use hgl_rust_ir::{DeltaEntry, Kind, Native, Node, Plan, Statement, Value};

@@ -15,8 +15,18 @@ fn scalar_get_has_an_ordinary_type_context_in_each_hook() {
     ).unwrap();
     assert!(emitted.contains("uses_global_state: true"));
     assert!(emitted.contains("fn stop("));
-    assert_eq!(emitted.matches("_ctx.global_get(self.global").count(), 3);
-    assert_eq!(emitted.matches("_ctx.global_set(self.global").count(), 3);
+    assert_eq!(
+        emitted
+            .matches("_ctx.global_state().get(self.global")
+            .count(),
+        3
+    );
+    assert_eq!(
+        emitted
+            .matches("_ctx.global_state().set(self.global")
+            .count(),
+        3
+    );
     assert!(!emitted.contains("ReplayInput"));
     assert!(!emitted.contains("Capture"));
 }
@@ -112,7 +122,10 @@ fn injecting_store_never_uses_a_node_role_or_key_as_the_type() {
     assert!(check("fn f(input:i64)->i64 { inject global_state\nwhen { let item=get(global_state,\"i64\")\nreturn item } }").unwrap_err().contains("expected type"));
     assert!(check("fn f(global_state:i64) { when { set(global_state,\"key\",1) } }").is_err());
     let code = check("fn f(input:i64) { inject global_state\nstop { set(global_state,\"last\",0) }\nwhen {}\nstart { set(global_state,\"first\",0) } }").unwrap();
-    assert_eq!(code.matches("_ctx.global_set(self.global").count(), 2);
+    assert_eq!(
+        code.matches("_ctx.global_state().set(self.global").count(),
+        2
+    );
 }
 
 #[test]
@@ -172,8 +185,11 @@ fn requirements_belong_to_selected_nodes_and_exact_keys() {
 }
 
 #[test]
-fn adding_stop_hooks_does_not_expand_legacy_replay_phases() {
+fn stop_hooks_do_not_admit_removed_replay_injectable() {
     let source = "module phases\nfn replay()->i64 { inject replay_input,alarm\nstart { schedule(alarm,0s) }\nwhen { return 1 }\nstop { let count=len(replay_input) } }\nexport fn main()->i64 { return replay() }";
     let error = compile(&[("phases.hgl".into(), source.into())], "main").unwrap_err();
-    assert!(error.contains("forbidden hook phase"), "{error}");
+    assert!(
+        error.contains("unsupported injectable replay_input"),
+        "{error}"
+    );
 }

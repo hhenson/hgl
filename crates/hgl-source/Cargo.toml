@@ -10,3 +10,5 @@ line-budget=700
 workspace=true
 [dependencies]
 hgl-calendar={path="../hgl-calendar"}
+hgl-type-shape={path="../hgl-type-shape"}
+hgl-lex={path="../hgl-lex"}

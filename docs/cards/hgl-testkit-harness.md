@@ -95,6 +95,12 @@ last captured tick, never an expected trace. `evaluation::compare(expected,
 observed)` requires identical lengths and values and reports the first differing
 cycle. `Observation<T>` stores sparse `(cycle,value)` ticks, so silent gaps do
 not allocate. Comparison work is bounded by supplied expectations. Buffers are
-test instrumentation, not benchmark timing code. General timed/structural test
-results remain pending. The separate corpus/twin Replay/Record API above retains
+test instrumentation, not benchmark timing code. `compare_by(expected, observed, equivalent)` compares owned payloads with a
+statically selected shape comparison; it requires no Debug or PartialEq payload
+bound and reports the first differing cycle and presence. Structural comparisons
+ignore sparse entry ordering but preserve exact child presence recursively. The separate corpus/twin Replay/Record API above retains
 its existing contract.
+
+Conversion of a retained ordinary recording validates strictly increasing
+publication timestamps before dense comparison. A malformed duplicate entry is
+an error even if the first entry would match the expected value.
