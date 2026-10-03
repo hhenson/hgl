@@ -1,5 +1,6 @@
 //! Run-owned ordinary values, with names and types resolved before hooks run.
-pub use hgl_global_value::{Columns, GlobalValue, ValueSlot};
+pub use hgl_global_value::{Capacity, GlobalValue, Layouts, ValueColumns, ValueSlot};
+pub use hgl_list::{List, list_index, list_index_mut, list_len, list_push};
 use hgl_types::{NodeError, NodeResult, OrdinaryType};
 use std::{collections::HashMap, fmt::Debug};
 
@@ -30,7 +31,7 @@ pub struct GlobalState {
     entries: HashMap<String, (OrdinaryType, usize, Vec<usize>)>,
     keys: Vec<String>,
     present: Vec<bool>,
-    values: Columns,
+    values: ValueColumns,
 }
 impl GlobalState {
     /// Enable owner-supplied storage, preserving any existing entries.
@@ -66,7 +67,7 @@ impl GlobalState {
         } else {
             let entry = self.keys.len();
             let mut layout = Vec::new();
-            hgl_global_value::allocate(&ty, &mut self.values, &mut layout);
+            hgl_global_value::allocate(&ty, &mut self.values, &mut layout)?;
             self.keys.push(key.to_owned());
             self.present.push(false);
             self.entries.insert(key.to_owned(), (ty, entry, layout));
@@ -97,8 +98,39 @@ impl GlobalState {
     /// Retain the complete replacement before moving any of its leaves.
     pub fn write<T: GlobalValue>(&mut self, slot: ValueSlot<T>, value: &T::Value) -> NodeResult {
         let owned = T::retain(value)?;
-        slot.commit(&mut self.values, owned);
+        let mut capacity = Capacity::default();
+        let mut layouts = Layouts::default();
+        T::prepare(&owned, &mut capacity, &mut layouts)?;
+        self.values.reserve(&capacity)?;
+        slot.commit(&mut self.values, owned, &mut layouts);
         Ok(())
+    }
+    /// Read an ordinary list length through a prepared borrow.
+    pub fn list_len<T: GlobalValue, const N: i64>(
+        &self,
+        slot: ValueSlot<List<T, N>>,
+    ) -> NodeResult<i64> {
+        hgl_list::global_len(&self.values, slot)
+    }
+    /// Project a list element without retaining a copy.
+    pub fn list_index<T: GlobalValue, const N: i64>(
+        &self,
+        slot: ValueSlot<List<T, N>>,
+        index: i64,
+    ) -> NodeResult<ValueSlot<T>> {
+        hgl_list::global_index(&self.values, slot, index)
+    }
+    /// Append an independent item through a prepared writable unbounded-list borrow.
+    pub fn list_push<T: GlobalValue>(
+        &mut self,
+        slot: ValueSlot<List<T>>,
+        item: &T::Value,
+    ) -> NodeResult {
+        hgl_list::global_push(&mut self.values, slot, item)
+    }
+    /// Allocated scalar and list positions, including reusable free positions.
+    pub fn slot_counts(&self) -> (usize, usize) {
+        self.values.slot_counts()
     }
     /// Copy successfully before replacing an entry; no publication or scheduling.
     pub fn set<T: GlobalValue>(&mut self, handle: Global<T>, value: &T::Value) -> NodeResult {

@@ -1,0 +1,218 @@
+//! Bind checked values to concrete ordinary and temporal signatures.
+use hgl_library::Signature;
+use hgl_rust_ir::{Kind, Value};
+use hgl_source::{Expr, Ty};
+use std::collections::{BTreeMap, BTreeSet};
+type Bound = (Vec<Value>, BTreeMap<String, Ty>, Ty);
+type Arguments = Vec<(Option<String>, Value)>;
+/// Check bind at the typed call boundary.
+pub fn bind(
+    signature: &Signature,
+    args: &[(Option<String>, Value)],
+    runtime: bool,
+    hint: Option<&Ty>,
+    declared: &BTreeMap<String, Ty>,
+) -> Result<Bound, String> {
+    let names = signature
+        .parameters
+        .iter()
+        .map(|p| p.name.as_str())
+        .collect::<Vec<_>>();
+    let mut supplied = order_arguments(&names, args)?;
+    let mut types = declared.clone();
+    let mut values = Vec::new();
+    let mut parameter_names = BTreeSet::new();
+    for (index, p) in signature.parameters.iter().enumerate() {
+        if !parameter_names.insert(&p.name) {
+            return Err("duplicate parameter".into());
+        }
+        let value = supplied
+            .remove(&index)
+            .or_else(|| {
+                p.default.as_ref().and_then(|e| {
+                    if let Expr::Literal(l) = e {
+                        Some(Value::new(l.ty(), Kind::Literal(l.clone())))
+                    } else {
+                        None
+                    }
+                })
+            })
+            .ok_or_else(|| format!("missing argument {}", p.name))?;
+        if p.constant && !constant(&value) {
+            return Err("fixed argument requires a wiring-time value".into());
+        }
+        if !runtime
+            && !p.constant
+            && !signature.value_function
+            && !matches!(value.kind, Kind::Wire(_))
+        {
+            return Err("temporal argument requires a port".into());
+        }
+        if runtime && matches!(value.kind, Kind::Wire(_) | Kind::Void) {
+            return Err("native value argument requires a scalar".into());
+        }
+        let value = bind_type(signature, p, value, &mut types)?;
+        values.push(value);
+    }
+    if signature.generics.contains(&signature.result)
+        && !types.contains_key(&signature.result)
+        && let Some(hint) = hint
+    {
+        types.insert(signature.result.clone(), hint.clone());
+    }
+    if let Some((parameter, domain)) = &signature.type_domain
+        && !types
+            .get(parameter)
+            .is_some_and(|ty| domain.iter().any(|t| Ty::parse(t).as_ref() == Some(ty)))
+    {
+        return Err(format!("requires {parameter} in {{{}}}", domain.join(", ")));
+    }
+    let result = resolve_type(&signature.result, &types).ok_or("unresolved result type")?;
+    if !signature.value_function {
+        supported_type(&result)?;
+    }
+    for (parameter, value) in signature.parameters.iter().zip(&values) {
+        if !signature.value_function && !parameter.constant {
+            supported_type(&value.ty)?;
+        }
+    }
+    Ok((values, types, result))
+}
+
+/// Check supported type at the typed call boundary.
+pub fn supported_type(ty: &Ty) -> Result<(), String> {
+    if matches!(ty, Ty::Struct(..) | Ty::List(..)) {
+        return Err("ordinary structs currently require hook-local values, not temporal ports or helper arguments".into());
+    }
+    if let Ty::Set(child) = ty
+        && !matches!(**child, Ty::Bool | Ty::I64)
+    {
+        return Err("Rust set elements currently require bool or i64".into());
+    }
+    if let Ty::Ref(child) = ty {
+        if **child == Ty::Void {
+            return Err("reference requires a temporal type".into());
+        }
+        return supported_type(child);
+    }
+    Ok(())
+}
+
+fn bind_type(
+    signature: &Signature,
+    p: &hgl_library::Parameter,
+    mut value: Value,
+    types: &mut BTreeMap<String, Ty>,
+) -> Result<Value, String> {
+    if !p.constant
+        && p.ty != "signal"
+        && !p.ty.starts_with("ref<")
+        && matches!(value.kind, Kind::Wire(_))
+        && let Ty::Ref(child) = &value.ty
+    {
+        value.ty = *child.clone();
+    }
+    let formal =
+        p.ty.strip_prefix("ref<")
+            .or_else(|| p.ty.strip_prefix("set<"))
+            .and_then(|s| s.strip_suffix('>'))
+            .unwrap_or(&p.ty);
+    let actual = if p.ty.starts_with("ref<") {
+        if let Ty::Ref(child) = &value.ty {
+            child.as_ref()
+        } else {
+            &value.ty
+        }
+    } else if p.ty.starts_with("set<") {
+        if let Ty::Set(child) = &value.ty {
+            child.as_ref()
+        } else {
+            return Err("set argument required".into());
+        }
+    } else {
+        &value.ty
+    };
+    if signature.generics.contains(&formal.to_owned()) {
+        if types
+            .insert(formal.to_owned(), actual.clone())
+            .is_some_and(|old| old != *actual)
+        {
+            return Err("inconsistent generic inference".into());
+        }
+    } else if p.ty != "signal" && resolve_type(formal, types) != Some(actual.clone()) {
+        return Err(format!("type mismatch for {}", p.name));
+    }
+
+    if p.ty.starts_with("ref<") && !matches!(value.ty, Ty::Ref(_)) {
+        value.ty = Ty::Ref(Box::new(value.ty));
+    }
+    Ok(value)
+}
+
+/// Check resolve type at the typed call boundary.
+pub fn resolve_type(name: &str, types: &BTreeMap<String, Ty>) -> Option<Ty> {
+    if let Some(ty) = types.get(name) {
+        return Some(ty.clone());
+    }
+    if let Some(t) = name.strip_prefix("ref<").and_then(|s| s.strip_suffix('>')) {
+        return Some(Ty::Ref(Box::new(resolve_type(t, types)?)));
+    }
+    if let Some(t) = name.strip_prefix("set<").and_then(|s| s.strip_suffix('>')) {
+        return Some(Ty::Set(Box::new(resolve_type(t, types)?)));
+    }
+    if let Some((element, size)) = Ty::list_parts(name) {
+        return Some(Ty::List(Box::new(resolve_type(element, types)?), size));
+    }
+    Ty::parse(name).or_else(|| types.get(name).cloned())
+}
+
+/// Check method arguments at the typed call boundary.
+pub fn method_arguments(
+    name: &str,
+    parameters: &[(&str, Ty)],
+    args: &Arguments,
+) -> Result<Vec<Value>, String> {
+    let names = parameters.iter().map(|(name, _)| *name).collect::<Vec<_>>();
+    let bound = order_arguments(&names, args).map_err(|e| format!("{name}: {e}"))?;
+    if bound.len() != parameters.len() || bound.iter().any(|(i, v)| parameters[*i].1 != v.ty) {
+        return Err(format!("{name}: missing or wrong-type argument"));
+    }
+    Ok(bound.into_values().collect())
+}
+/// Check order arguments at the typed call boundary.
+pub fn order_arguments(
+    parameters: &[&str],
+    args: &[(Option<String>, Value)],
+) -> Result<BTreeMap<usize, Value>, String> {
+    let mut supplied = BTreeMap::new();
+    let mut named = false;
+    for (position, (name, value)) in args.iter().enumerate() {
+        let index = if let Some(name) = name {
+            named = true;
+            parameters
+                .iter()
+                .position(|p| *p == name)
+                .ok_or_else(|| format!("unknown argument {name}"))?
+        } else {
+            if named {
+                return Err("positional argument after named argument".into());
+            }
+            position
+        };
+        if index >= parameters.len() || supplied.insert(index, value.clone()).is_some() {
+            return Err("duplicate or excess argument".into());
+        }
+    }
+    Ok(supplied)
+}
+
+/// Whether a checked value is closed ordinary configuration data.
+pub fn constant(value: &Value) -> bool {
+    if let Kind::Construct(fields) = &value.kind {
+        return fields.iter().all(|(_, v)| constant(v));
+    }
+    if let Kind::List(values) = &value.kind {
+        return values.iter().all(constant);
+    }
+    matches!(value.kind, Kind::Literal(_) | Kind::WiringFailure(_))
+}

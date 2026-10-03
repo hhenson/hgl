@@ -276,7 +276,7 @@ retired members from reappearing after slot reuse. `get_or_create_shaped`
 also admits sets, using boolean occupancy children.
 
 Ordinary globals also support finite required-field nominal structs via
-`GlobalValue` markers (re-exported with `ValueSlot` and `Columns` from the typed
+`GlobalValue` markers (re-exported with `ValueSlot` and `ValueColumns` from the typed
 storage representation). `bind_global`, `global_get` and `global_set` use
 `T: GlobalValue`, with owning payload `T::Value`; all scalar callers are unchanged.
 `prepare_global` takes `OrdinaryType`. `global_borrow(Global<T>)` checks the single
@@ -285,3 +285,10 @@ root presence and returns `ValueSlot<T>` without copying the entry.
 `global_write(ValueSlot<T>, &T::Value)` retains fully before replacing a borrowed
 root or projected required field. Slots stay internal to the generated lexical
 access discipline. No runtime borrow registry or per-hook schema inspection.
+
+`Store::global_state() -> &mut GlobalState` provides the same run-owned capability
+for list operations and owner configuration/extraction. `GlobalState`, `List`,
+`Capacity`, `Layouts`, `ValueColumns`, and the ordinary list helpers are re-exported
+for generated native value code. Ordinary ValueColumns use a reusable typed arena;
+temporal Columns and endpoint storage remain separate. The compiler restricts
+hook calls to already-prepared typed accesses.

@@ -1,7 +1,7 @@
 # Card: hgl-global
 
 Run-owned ordinary values, independent of temporal endpoints. Uses
-`hgl-types` and `hgl-global-value`; initial budget 200 lines. No third-party crates.
+`hgl-types`, `hgl-global-value` and `hgl-list`; initial budget 200 lines. No third-party crates.
 
 `GlobalState` is initially unprovisioned. `provision()` enables one run's
 storage. `bind<T>(key)` and `prepare(key, OrdinaryType)` reconcile keys and exact
@@ -16,7 +16,7 @@ allocation-free claim applies to them. Handles belong to their owning state,
 as Store endpoint handles do; mixing owners is a Rust caller error.
 
 There are no graph roles, scheduling, endpoint publication, sequence operations,
-process-wide registry, or ordinary collection operations. The run owner handles
+process-wide registry, or temporal collection operations. The run owner handles
 configuration/extraction; nodes receive only prepared handles.
 
 Acceptance: all eight scalars; absent versus present false/zero/empty text;
@@ -30,4 +30,15 @@ payload. `read(slot)` obtains owning data only at explicit retention boundaries;
 `get`/`set` preserve the scalar API and additionally support explicit aggregate
 owner extraction/retention. Projection never initializes an absent entry. A single
 root presence covers every required descendant; leaves have no string keys.
-`GlobalValue`, `ValueSlot`, and `Columns` are re-exported for Store integration.
+`GlobalValue`, `ValueSlot`, `ValueColumns`, `Capacity`, `Layouts`, `List`,
+and ordinary `list_len`, `list_index`, `list_index_mut`, `list_push` helpers are re-exported for Store integration.
+
+`list_len<T,N>(ValueSlot<List<T,N>>) -> NodeResult<i64>`,
+`list_index<T,N>(ValueSlot<List<T,N>>, i64) -> NodeResult<ValueSlot<T>>`, and
+`list_push<T>(ValueSlot<List<T>>, &T::Value) -> NodeResult` operate through prepared
+list borrows. `slot_counts()` exposes arena high-water positions for tests.
+Writes retain the complete value, prepare every recursive layout, and reserve
+arena capacity before infallible commit. Failure preserves all logical fields and
+presence; incidental physical capacity growth is permitted. Fixed host-supplied
+payload lengths are checked recursively before commit. Replacement reclaims old
+list descendants; repeated writes do not leak positions.

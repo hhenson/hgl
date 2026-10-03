@@ -177,7 +177,7 @@ fn unproven_payloads_cannot_escape_or_be_used_as_values() {
         ),
         (
             "let item = replay_input[current]\nlet values = [item]",
-            "harness sequences",
+            "ordinary nonempty list literals require constant elements",
         ),
     ] {
         rejects(body, diagnostic);

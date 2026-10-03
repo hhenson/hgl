@@ -1,0 +1,62 @@
+module ordinary_list_phases
+const fn grow(value: i64) -> i64 {
+    var values: list<i64> = []
+    push(values, value)
+    push(values, value + 1)
+    return len(values) * 10 + values[0]
+}
+const fn length(values: list<i64>) -> i64 {
+    return len(values)
+}
+const fn independent_parameter(values: list<i64>) -> i64 {
+    var copy = values
+    push(copy, 7)
+    return len(values) * 10 + len(copy)
+}
+fn source(const value: i64) -> i64 {
+    inject alarm
+    start { schedule(alarm, 0us) }
+    when { return value }
+}
+fn observe(value: i64, const key: str) {
+    inject global_state
+    when { set(global_state, key, value) }
+}
+fn value_body(value: i64) -> i64 {
+    when { return grow(value) }
+}
+struct Sample { amount:i64 }
+struct Bucket { values:list<Sample> }
+fn configured(const values:list<Sample>,const bucket:Bucket) {
+    inject alarm,global_state
+    start { schedule(alarm,0us) }
+    when {
+        var copy=values
+        copy[0].amount=99
+        var nested=bucket
+        nested.values[0].amount=88
+        set(global_state,"config_source",values[0].amount)
+        set(global_state,"config_copy",copy[0].amount)
+        set(global_state,"config_nested",bucket.values[0].amount)
+        set(global_state,"config_nested_copy",nested.values[0].amount)
+    }
+}
+export fn main() {
+    var samples:list<Sample> =[]
+    push(samples,Sample(amount:7))
+    let bucket=Bucket(values:samples)
+    configured(samples,bucket)
+    samples[0].amount=13
+    configured(samples,bucket)
+    var values: list<i64> = []
+    push(values, 3)
+    push(values, values[0])
+    observe(source(len(values) * 10 + values[1]), "wiring")
+    observe(source(grow(4)), "constant")
+    observe(source(length([])), "contextual_parameter")
+    observe(source(independent_parameter([])), "parameter_copy")
+    observe(value_body(source(5)), "value_body")
+}
+test ordinary_list_value_body {
+    assert eval(value_body, [1, 3, _, 4]) == [21, 23, _, 24]
+}

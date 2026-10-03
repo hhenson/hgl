@@ -113,6 +113,8 @@ pub fn lex(text: &str) -> Result<Vec<Token>, String> {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 /// Types admitted by the executable source compiler.
 pub enum Ty {
+    /// Ordinary list element and optional exact fixed length.
+    List(Box<Self>, Option<usize>),
     /// Qualified nominal identity and required ordinary field types.
     Struct(String, Vec<(String, Self)>),
     /// Signed integer.
@@ -157,6 +159,7 @@ impl Ty {
             Self::Nullable(_) => "contextual nullable",
             Self::Void => "void",
             Self::Struct(..) => "struct",
+            Self::List(..) => "list",
         }
     }
     /// Parse a concrete admitted type spelling.
@@ -166,6 +169,9 @@ impl Ty {
         }
         if let Some(child) = name.strip_prefix("set<").and_then(|s| s.strip_suffix('>')) {
             return Some(Self::Set(Box::new(Self::parse(child)?)));
+        }
+        if let Some((element, size)) = Self::list_parts(name) {
+            return Some(Self::List(Box::new(Self::parse(element)?), size));
         }
         match name {
             "i64" => Some(Self::I64),
@@ -179,6 +185,31 @@ impl Ty {
             "void" => Some(Self::Void),
             _ => None,
         }
+    }
+    /// Split an ordinary list spelling, respecting nested type arguments.
+    pub fn list_parts(name: &str) -> Option<(&str, Option<usize>)> {
+        let body = name.strip_prefix("list<")?.strip_suffix('>')?;
+        let mut depth = 0;
+        for (index, ch) in body.char_indices() {
+            if ch == '<' {
+                depth += 1;
+            }
+            if ch == '>' {
+                depth -= 1;
+            }
+            if ch == ',' && depth == 0 {
+                let size = &body[index + 1..];
+                return Some((
+                    &body[..index],
+                    if size == "unbounded" {
+                        None
+                    } else {
+                        Some(usize::try_from(size.parse::<i64>().ok()?).ok()?)
+                    },
+                ));
+            }
+        }
+        Some((body, None))
     }
 }
 #[derive(Debug, Clone, PartialEq)]
@@ -338,6 +369,10 @@ impl<'a> Cursor<'a> {
             }
             name.push('<');
             name.push_str(&child);
+            if self.take(",") {
+                name.push(',');
+                name.push_str(&self.consume()?);
+            }
             self.need(">")?;
             name.push('>');
         }

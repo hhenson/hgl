@@ -1,6 +1,6 @@
 //! ADR 0016 / VAL-17 ordinary struct retention and lexical prepared projections.
 use hgl_alloc_count::{CountingAllocator, count_in};
-use hgl_store::{Columns, GlobalValue, Store, ValueSlot};
+use hgl_store::{Capacity, GlobalValue, Layouts, Store, ValueColumns as Columns, ValueSlot};
 use hgl_types::{NodeError, OrdinaryType};
 
 #[global_allocator]
@@ -11,6 +11,26 @@ struct Inner;
 impl GlobalValue for Inner {
     type Value = (i64, String);
     type Slots = (ValueSlot<i64>, ValueSlot<String>);
+    const WIDTH: usize = 2;
+    fn prepare(value: &Self::Value, capacity: &mut Capacity, layouts: &mut Layouts) -> Result<()> {
+        <i64 as GlobalValue>::prepare(&value.0, capacity, layouts)?;
+        <String as GlobalValue>::prepare(&value.1, capacity, layouts)?;
+        Ok(())
+    }
+    fn install(columns: &mut Columns, value: Self::Value, layouts: &mut Layouts) -> Self::Slots {
+        (
+            ValueSlot::<i64>::install(columns, value.0, layouts),
+            ValueSlot::<String>::install(columns, value.1, layouts),
+        )
+    }
+    fn release(columns: &mut Columns, slots: Self::Slots) {
+        slots.0.release(columns);
+        slots.1.release(columns);
+    }
+    fn flatten(slots: Self::Slots, layout: &mut [usize]) {
+        slots.0.flatten(&mut layout[0..1]);
+        slots.1.flatten(&mut layout[1..2]);
+    }
     fn schema() -> OrdinaryType {
         OrdinaryType::Struct(
             "test::Inner",
@@ -31,15 +51,44 @@ impl GlobalValue for Inner {
     fn read(columns: &Columns, slots: Self::Slots) -> Result<Self::Value> {
         Ok((slots.0.read(columns)?, slots.1.read(columns)?))
     }
-    fn commit(columns: &mut Columns, slots: Self::Slots, value: Self::Value) {
-        slots.0.commit(columns, value.0);
-        slots.1.commit(columns, value.1);
+    fn commit(
+        columns: &mut Columns,
+        slots: Self::Slots,
+        value: Self::Value,
+        layouts: &mut Layouts,
+    ) {
+        slots.0.commit(columns, value.0, layouts);
+        slots.1.commit(columns, value.1, layouts);
     }
 }
 struct Outer;
 impl GlobalValue for Outer {
     type Value = (String, InnerValue, bool);
     type Slots = (ValueSlot<String>, ValueSlot<Inner>, ValueSlot<bool>);
+    const WIDTH: usize = 4;
+    fn prepare(value: &Self::Value, capacity: &mut Capacity, layouts: &mut Layouts) -> Result<()> {
+        <String as GlobalValue>::prepare(&value.0, capacity, layouts)?;
+        <Inner as GlobalValue>::prepare(&value.1, capacity, layouts)?;
+        <bool as GlobalValue>::prepare(&value.2, capacity, layouts)?;
+        Ok(())
+    }
+    fn install(columns: &mut Columns, value: Self::Value, layouts: &mut Layouts) -> Self::Slots {
+        (
+            ValueSlot::<String>::install(columns, value.0, layouts),
+            ValueSlot::<Inner>::install(columns, value.1, layouts),
+            ValueSlot::<bool>::install(columns, value.2, layouts),
+        )
+    }
+    fn release(columns: &mut Columns, slots: Self::Slots) {
+        slots.0.release(columns);
+        slots.1.release(columns);
+        slots.2.release(columns);
+    }
+    fn flatten(slots: Self::Slots, layout: &mut [usize]) {
+        slots.0.flatten(&mut layout[0..1]);
+        slots.1.flatten(&mut layout[1..3]);
+        slots.2.flatten(&mut layout[3..4]);
+    }
     fn schema() -> OrdinaryType {
         OrdinaryType::Struct(
             "test::Outer",
@@ -71,10 +120,15 @@ impl GlobalValue for Outer {
             slots.2.read(columns)?,
         ))
     }
-    fn commit(columns: &mut Columns, slots: Self::Slots, value: Self::Value) {
-        slots.0.commit(columns, value.0);
-        slots.1.commit(columns, value.1);
-        slots.2.commit(columns, value.2);
+    fn commit(
+        columns: &mut Columns,
+        slots: Self::Slots,
+        value: Self::Value,
+        layouts: &mut Layouts,
+    ) {
+        slots.0.commit(columns, value.0, layouts);
+        slots.1.commit(columns, value.1, layouts);
+        slots.2.commit(columns, value.2, layouts);
     }
 }
 type InnerValue = <Inner as GlobalValue>::Value;

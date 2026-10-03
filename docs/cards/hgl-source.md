@@ -46,3 +46,10 @@ frontend checks; a typed local supplies ordinary expected-value context.
 qualified nominal identity plus declared field names and types. It is created
 by the frontend, not `Ty::parse`; generic/optional/recursive schemas remain
 outside this executable subset.
+
+`Ty::List(element, fixed_size)` preserves ordinary element type and optional
+exact size. The parser accepts explicit `unbounded` as the same identity as
+omitted size; numeric sizes fit nonnegative i64. `Ty::list_parts` splits the
+outer list arguments without losing nested list/struct spellings. Existing
+`Expr::Sequence` and `Expr::Index` are contextual ordinary list syntax as well
+as their separate harness/replay uses; admission belongs to the checker.

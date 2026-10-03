@@ -80,7 +80,12 @@ Hook expression and statement emission is delegated to `hgl-rust-values`.
 Required-field aggregate entries emit nominal `GlobalValue` markers whose
 value representations are owned tuples and prepared field layouts are typed
 `ValueSlot` tuples. Entry descriptors retain nominal identity and field schema.
-Aggregate borrow bindings use `global_borrow` once to check presence and bind
+Aggregate borrow bindings use `global_state().borrow` once to check presence and bind
 a prepared slot; field projections select slot fields without payload copying.
-Reads at explicit retention boundaries use `global_read`; borrowed field and
-whole-value assignment evaluates its owned RHS before `global_write`.
+Reads at explicit retention boundaries use `global_state().read`; borrowed field and
+whole-value assignment evaluates its owned RHS before `global_state().write`.
+
+Ordinary configuration fields use owned Rust representations and are retained
+once during node construction. Construction errors from deterministic wiring
+are returned before graph start. Direct value-function bodies remain local
+fallible calls and do not receive node scheduling.

@@ -1,0 +1,227 @@
+module ordinary_lists
+struct Sample {
+    amount: i64
+    text: str
+}
+struct Bucket {
+    values: list<i64>
+}
+fn source() -> i64 {
+    inject alarm
+    start { schedule(alarm, 0us) }
+    when { return 7 }
+}
+fn local_values(value: i64) -> i64 {
+    when {
+        var values: list<i64> = []
+        push(values, value)
+        push(values, 20)
+        push(values, values[0])
+        let first = values[0]
+        return len(values) * 100 + first * 10 + values[2]
+    }
+}
+fn retained_children(value: i64) -> bool {
+    when {
+        var sample = Sample(amount: value, text: "saved")
+        var samples: list<Sample> = []
+        push(samples, sample)
+        sample.amount += 1
+        sample.text = "changed"
+        var child = samples[0]
+        child.amount += 2
+        let frozen = samples
+        var independent = frozen
+        push(independent, sample)
+        independent[0].amount += 3
+        return samples[0].amount == value && samples[0].text == "saved" && sample.amount == value + 1 && child.amount == value + 2 && len(frozen) == 1 && frozen[0].amount == value && len(independent) == 2 && independent[0].amount == value + 3
+    }
+}
+fn nested_values(value: i64) -> bool {
+    when {
+        var child: list<i64> = []
+        push(child, value)
+        var outer: list<list<i64>> = []
+        push(outer, child)
+        push(child, 99)
+        push(outer, outer[0])
+        push(outer[0], 2)
+        var copy = outer[1]
+        push(copy, 3)
+        var bucket = Bucket(values: [])
+        push(bucket.values, 4)
+        var buckets: list<Bucket> = []
+        push(buckets, bucket)
+        push(buckets[0].values, 5)
+        return len(child) == 2 && len(outer) == 2 && len(outer[0]) == 2 && outer[0][1] == 2 && len(outer[1]) == 1 && outer[1][0] == value && len(copy) == 2 && len(bucket.values) == 1 && len(buckets[0].values) == 2 && buckets[0].values[1] == 5
+    }
+}
+fn fixed_values(value: i64) -> bool {
+    when {
+        let empty: list<i64, 0> = []
+        let fixed: list<i64, 2> = [10, 20]
+        var unbounded: list<i64, unbounded> = [1, 2]
+        push(unbounded, value)
+        var reset: list<i64> = [3, 4]
+        reset = []
+        return len(empty) == 0 && len(fixed) == 2 && fixed[0] == 10 && fixed[1] == 20 && len(unbounded) == 3 && unbounded[2] == value && len(reset) == 0
+    }
+}
+fn global_values(value: i64) {
+    inject global_state
+    start {
+        var initial: list<i64> = []
+        push(initial, 1)
+        set(global_state, "values", initial)
+        push(initial, 99)
+        var values: list<i64> = get(global_state, "values")
+        push(values, 2)
+        set(global_state, "start_length", len(values))
+        var child: list<i64> = []
+        push(child, 4)
+        var outer: list<list<i64>> = []
+        push(outer, child)
+        set(global_state, "outer", outer)
+        set(global_state, "bucket", Bucket(values: []))
+    }
+    when {
+        var owned: list<i64> = []
+        if true {
+            let observed: list<i64> = get(global_state, "values")
+            let alias = observed
+            owned = alias
+            set(global_state, "retained", observed)
+        }
+        if true {
+            var values: list<i64> = get(global_state, "values")
+            let first = values[0]
+            let before = len(values)
+            push(values, value)
+            push(values, first)
+            push(values, values[0])
+            set(global_state, "first", first)
+            set(global_state, "before", before)
+            set(global_state, "after", len(values))
+            set(global_state, "last", values[4])
+        }
+        if true {
+            var outer: list<list<i64>> = get(global_state, "outer")
+            push(outer, outer[0])
+            push(outer[0], 5)
+            set(global_state, "nested_first", len(outer[0]))
+            set(global_state, "nested_second", len(outer[1]))
+            var destination: list<i64> = []
+            destination = outer[0]
+            push(outer[0], 6)
+            set(global_state, "indexed_copy", len(destination))
+        }
+        if true {
+            let outer: list<list<i64>> = get(global_state, "outer")
+            let child = outer[1]
+            let alias = child
+            set(global_state, "readonly_child", alias[0])
+        }
+        var bucket: Bucket = get(global_state, "bucket")
+        push(bucket.values, value)
+        set(global_state, "struct_child", bucket.values[0])
+        set(global_state, "owned_length", len(owned))
+        let retained: list<i64> = get(global_state, "retained")
+        set(global_state, "retained_length", len(retained))
+    }
+    stop {
+        var values: list<i64> = get(global_state, "values")
+        push(values, 8)
+        set(global_state, "stop_length", len(values))
+        set(global_state, "stop_last", values[5])
+    }
+}
+fn failed_operation(value: i64, const replacement: bool) {
+    inject global_state
+    start {
+        let initial: list<i64> = [10]
+        set(global_state, "failure", initial)
+    }
+    when {
+        var values: list<i64> = get(global_state, "failure")
+        push(values, 20)
+        if replacement {
+            var outer: list<list<i64>> = []
+            push(outer, values)
+            values = outer[value]
+        } else {
+            push(values, values[value])
+        }
+        set(global_state, "after_failure", true)
+    }
+    stop {
+        let values: list<i64> = get(global_state, "failure")
+        set(global_state, "failure_length", len(values))
+        set(global_state, "failure_first", values[0])
+        set(global_state, "failure_second", values[1])
+    }
+}
+fn cumulative(value: i64) -> i64 {
+    inject global_state
+    start {
+        let initial: list<i64> = []
+        set(global_state, "history", initial)
+    }
+    when {
+        var values: list<i64> = get(global_state, "history")
+        push(values, value)
+        return len(values) * 10 + values[0]
+    }
+}
+fn scalar_elements(value: i64) -> bool {
+    inject global_state
+    when {
+        var flags: list<bool> = []
+        push(flags, false)
+        set(global_state, "flags", flags)
+        var borrowed_flags: list<bool> = get(global_state, "flags")
+        push(borrowed_flags, true)
+        var numbers: list<i64> = []
+        push(numbers, value)
+        set(global_state, "numbers", numbers)
+        let borrowed_numbers: list<i64> = get(global_state, "numbers")
+        var reals: list<f64> = []
+        push(reals, 1.25)
+        set(global_state, "reals", reals)
+        let borrowed_reals: list<f64> = get(global_state, "reals")
+        var texts: list<str> = []
+        push(texts, "saved")
+        set(global_state, "texts", texts)
+        var borrowed_texts: list<str> = get(global_state, "texts")
+        let saved = borrowed_texts[0]
+        push(borrowed_texts, borrowed_texts[0])
+        var days: list<date> = []
+        push(days, @2026-10-03)
+        set(global_state, "days", days)
+        let borrowed_days: list<date> = get(global_state, "days")
+        var times: list<time> = []
+        push(times, @12:34:56)
+        set(global_state, "times", times)
+        let borrowed_times: list<time> = get(global_state, "times")
+        var instants: list<datetime> = []
+        push(instants, @2026-10-03T12:34:56Z)
+        set(global_state, "instants", instants)
+        let borrowed_instants: list<datetime> = get(global_state, "instants")
+        var intervals: list<duration> = []
+        push(intervals, 5s)
+        set(global_state, "intervals", intervals)
+        let borrowed_intervals: list<duration> = get(global_state, "intervals")
+        return !borrowed_flags[0] && borrowed_flags[1] && borrowed_numbers[0] == value && borrowed_reals[0] == 1.25 && saved == "saved" && borrowed_texts[1] == "saved" && borrowed_days[0] == @2026-10-03 && borrowed_times[0] == @12:34:56 && borrowed_instants[0] == @2026-10-03T12:34:56Z && borrowed_intervals[0] == 5s
+    }
+}
+export fn main() { global_values(source()) }
+export fn fail_append() { failed_operation(source(), false) }
+export fn fail_replace() { failed_operation(source(), true) }
+test ordinary_list_observations {
+    assert eval(local_values, [1, 2, _, 3]) == [311, 322, _, 333]
+    assert eval(retained_children, [4, 5]) == [true, true]
+    assert eval(nested_values, [1, 9]) == [true, true]
+    assert eval(fixed_values, [7, 8]) == [true, true]
+    assert eval(cumulative, [1, 2, _, 3]) == [11, 21, _, 31]
+    assert eval(cumulative, [4, 5]) == [14, 24]
+    assert eval(scalar_elements, [1, 2]) == [true, true]
+}

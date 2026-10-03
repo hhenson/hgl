@@ -10,15 +10,15 @@ use hgl_types::{EngineTime, NodeType, ScalarType};
 struct Counter(Global<i64>);
 impl Node for Counter {
     fn start(&mut self, ctx: &mut Ctx<'_>) -> NodeResult {
-        ctx.global_set(self.0, &0)
+        ctx.global_state().set(self.0, &0)
     }
     fn eval(&mut self, ctx: &mut Ctx<'_>) -> NodeResult {
-        let next = ctx.global_get(self.0)? + 1;
-        ctx.global_set(self.0, &next)
+        let next = ctx.global_state().get(self.0)? + 1;
+        ctx.global_state().set(self.0, &next)
     }
     fn stop(&mut self, ctx: &mut Ctx<'_>) -> NodeResult {
-        let next = ctx.global_get(self.0)? + 10;
-        ctx.global_set(self.0, &next)
+        let next = ctx.global_state().get(self.0)? + 10;
+        ctx.global_state().set(self.0, &next)
     }
 }
 impl Buildable for Counter {
@@ -39,7 +39,7 @@ impl Buildable for Counter {
 struct Reader(Global<bool>);
 impl Node for Reader {
     fn start(&mut self, ctx: &mut Ctx<'_>) -> NodeResult {
-        ctx.global_get(self.0).map(|_| ())
+        ctx.global_state().get(self.0).map(|_| ())
     }
     fn eval(&mut self, _: &mut Ctx<'_>) -> NodeResult {
         Ok(())
@@ -253,6 +253,27 @@ struct Point;
 impl hgl_store::GlobalValue for Point {
     type Value = (i64,);
     type Slots = hgl_store::ValueSlot<i64>;
+    const WIDTH: usize = 1;
+    fn prepare(
+        value: &Self::Value,
+        capacity: &mut hgl_store::Capacity,
+        layouts: &mut hgl_store::Layouts,
+    ) -> NodeResult {
+        <i64 as hgl_store::GlobalValue>::prepare(&value.0, capacity, layouts)
+    }
+    fn install(
+        columns: &mut hgl_store::ValueColumns,
+        value: Self::Value,
+        layouts: &mut hgl_store::Layouts,
+    ) -> Self::Slots {
+        hgl_store::ValueSlot::install(columns, value.0, layouts)
+    }
+    fn release(columns: &mut hgl_store::ValueColumns, slots: Self::Slots) {
+        slots.release(columns);
+    }
+    fn flatten(slots: Self::Slots, layout: &mut [usize]) {
+        slots.flatten(layout);
+    }
     fn schema() -> hgl_types::OrdinaryType {
         hgl_types::OrdinaryType::Struct("test::Point", vec![("x", ScalarType::I64.into())])
     }
@@ -263,28 +284,36 @@ impl hgl_store::GlobalValue for Point {
         Ok(*value)
     }
     fn read(
-        columns: &hgl_store::Columns,
+        columns: &hgl_store::ValueColumns,
         slots: Self::Slots,
     ) -> Result<Self::Value, Box<hgl_types::NodeError>> {
         Ok((slots.read(columns)?,))
     }
-    fn commit(columns: &mut hgl_store::Columns, slots: Self::Slots, value: Self::Value) {
-        slots.commit(columns, value.0);
+    fn commit(
+        columns: &mut hgl_store::ValueColumns,
+        slots: Self::Slots,
+        value: Self::Value,
+        layouts: &mut hgl_store::Layouts,
+    ) {
+        slots.commit(columns, value.0, layouts);
     }
 }
 struct Aggregate(Global<Point>);
 impl Node for Aggregate {
     fn start(&mut self, ctx: &mut Ctx<'_>) -> NodeResult {
-        let root = ctx.global_borrow(self.0)?;
-        ctx.global_write(root.fields(), &(ctx.global_read(root.fields())? + 1))
+        let root = ctx.global_state().borrow(self.0)?;
+        let next = ctx.global_state().read(root.fields())? + 1;
+        ctx.global_state().write(root.fields(), &next)
     }
     fn eval(&mut self, ctx: &mut Ctx<'_>) -> NodeResult {
-        let root = ctx.global_borrow(self.0)?;
-        ctx.global_write(root.fields(), &(ctx.global_read(root.fields())? + 2))
+        let root = ctx.global_state().borrow(self.0)?;
+        let next = ctx.global_state().read(root.fields())? + 2;
+        ctx.global_state().write(root.fields(), &next)
     }
     fn stop(&mut self, ctx: &mut Ctx<'_>) -> NodeResult {
-        let root = ctx.global_borrow(self.0)?;
-        ctx.global_write(root, &(ctx.global_read(root.fields())? + 3,))
+        let root = ctx.global_state().borrow(self.0)?;
+        let next = ctx.global_state().read(root.fields())? + 3;
+        ctx.global_state().write(root, &(next,))
     }
 }
 impl Buildable for Aggregate {
@@ -343,4 +372,74 @@ fn aggregate_nested_preflight_rejects_scalar_and_nominal_seed_conflicts() {
     let error = graph.start(&mut store, EngineTime::MIN_START).unwrap_err();
     assert_eq!(error.phase, Phase::Start);
     assert!(error.message.contains("missing value") && error.message.contains("count"));
+}
+
+struct OrdinaryList(Global<hgl_store::List<i64>>);
+impl Node for OrdinaryList {
+    fn start(&mut self, ctx: &mut Ctx<'_>) -> NodeResult {
+        let slot = ctx.global_state().borrow(self.0)?;
+        ctx.global_state().list_push(slot, &2)
+    }
+    fn eval(&mut self, ctx: &mut Ctx<'_>) -> NodeResult {
+        let slot = ctx.global_state().borrow(self.0)?;
+        ctx.global_state().list_push(slot, &3)
+    }
+    fn stop(&mut self, ctx: &mut Ctx<'_>) -> NodeResult {
+        let slot = ctx.global_state().borrow(self.0)?;
+        ctx.global_state().list_push(slot, &4)
+    }
+}
+impl Buildable for OrdinaryList {
+    fn node_type() -> NodeType {
+        NodeType {
+            name: "ordinary_list",
+            uses_global_state: true,
+            global_entries: vec![(
+                "count",
+                <hgl_store::List<i64> as hgl_store::GlobalValue>::schema(),
+            )],
+            schedule_on_start: true,
+            ..NodeType::default()
+        }
+    }
+    fn build(ports: &mut Ports<'_>) -> Result<Self, BuildError> {
+        Ok(Self(ports.global("count")?))
+    }
+}
+
+#[test]
+fn prepared_list_borrow_grows_same_entry_in_every_hook() {
+    let mut registry = registry().unwrap();
+    registry.register::<OrdinaryList>().unwrap();
+    let mut store = Store::new();
+    store.provision_global_state();
+    let entry = store.bind_global::<hgl_store::List<i64>>("count").unwrap();
+    store.global_set(entry, &vec![1]).unwrap();
+    let mut graph = instantiate(
+        &graph(&registry, &["ordinary_list"]).unwrap(),
+        &registry,
+        &mut store,
+    )
+    .unwrap();
+    graph.start(&mut store, EngineTime::MIN_START).unwrap();
+    graph.evaluate(&mut store, EngineTime::MIN_START).unwrap();
+    graph.stop(&mut store, EngineTime::MIN_START).unwrap();
+    assert_eq!(store.global_get(entry).unwrap(), [1, 2, 3, 4]);
+}
+
+#[test]
+fn nested_list_preflight_checks_exact_fixedness_and_element_identity() {
+    let mut registry = registry().unwrap();
+    registry.register::<OrdinaryList>().unwrap();
+    let description = nested(&registry, "ordinary_list", true).unwrap();
+    for ty in [
+        <hgl_store::List<i64, 0> as hgl_store::GlobalValue>::schema(),
+        <hgl_store::List<bool> as hgl_store::GlobalValue>::schema(),
+        <hgl_store::List<hgl_store::List<i64>> as hgl_store::GlobalValue>::schema(),
+    ] {
+        let mut store = Store::new();
+        store.provision_global_state();
+        store.prepare_global("count", ty).unwrap();
+        construction_error(&description, &registry, &mut store, "type conflict");
+    }
 }

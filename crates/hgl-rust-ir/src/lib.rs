@@ -18,6 +18,20 @@ impl Value {
 /// Checked expressions and frontend-only binding markers.
 #[derive(Debug, Clone)]
 pub enum Kind {
+    /// Typed unavailable result after a recorded wiring operation failure.
+    WiringFailure(String),
+    /// Independently owned ordinary list construction.
+    List(Vec<Value>),
+    /// Ordinary indexed projection preserving its parent's authority.
+    Index(Box<Value>, Box<Value>),
+    /// Ordinary list length observation.
+    Length(Box<Value>),
+    /// Retain and append to writable unbounded list access.
+    Push(Box<Value>, Box<Value>),
+    /// Direct ordinary invocation, with readonly arguments and lexical body.
+    ValueCall(Vec<Value>, Vec<Statement>),
+    /// Readonly prepared ordinary node configuration.
+    Configuration(usize),
     /// Supplied struct arguments in source order, paired with declared field indices.
     Construct(Vec<(usize, Value)>),
     /// A field of an ordinary struct, addressed by its checked index.
@@ -62,7 +76,7 @@ pub enum Kind {
     Void,
 }
 /// Checked statements in a node lifecycle hook or handler.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Statement {
     /// End evaluation without publishing a value.
     Exit,
@@ -74,6 +88,8 @@ pub enum Statement {
     Borrow(usize, Value, bool),
     /// Publish a checked return value.
     Return(Value),
+    /// Return an ordinary value from a direct function invocation.
+    Yield(Value),
     /// Evaluate an operation for its effect.
     Call(Value),
     /// Assign a checked value to its target.
@@ -100,6 +116,8 @@ pub struct Node {
     pub global_state: bool,
     /// Const key and exact scalar type for each prepared node access.
     pub globals: Vec<(String, Ty)>,
+    /// Independently retained ordinary configuration initialized before hooks.
+    pub configuration: Vec<Value>,
     /// Checked stop-hook statements.
     pub stop: Vec<Statement>,
     /// Optional admitted buffer capability name and scalar payload type.
@@ -126,6 +144,8 @@ pub struct Native {
 /// A closed graph with all source checks and eval wiring complete.
 #[derive(Debug, Default)]
 pub struct Plan {
+    /// Deterministic wiring operation failure reported during construction.
+    pub construction_error: Option<String>,
     /// Nodes in construction order, addressed by index.
     pub nodes: Vec<Node>,
     /// Selected native signatures, addressed by index.

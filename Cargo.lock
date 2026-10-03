@@ -91,6 +91,15 @@ name = "hgl-global"
 version = "0.0.0"
 dependencies = [
  "hgl-global-value",
+ "hgl-list",
+ "hgl-types",
+]
+
+[[package]]
+name = "hgl-global-arena"
+version = "0.0.0"
+dependencies = [
+ "hgl-columns",
  "hgl-types",
 ]
 
@@ -99,6 +108,7 @@ name = "hgl-global-value"
 version = "0.0.0"
 dependencies = [
  "hgl-columns",
+ "hgl-global-arena",
  "hgl-types",
 ]
 
@@ -117,6 +127,14 @@ name = "hgl-library"
 version = "0.0.0"
 dependencies = [
  "hgl-source",
+]
+
+[[package]]
+name = "hgl-list"
+version = "0.0.0"
+dependencies = [
+ "hgl-global-value",
+ "hgl-types",
 ]
 
 [[package]]
@@ -155,7 +173,10 @@ dependencies = [
  "hgl-library",
  "hgl-rust",
  "hgl-source",
+ "hgl-value-bind",
  "hgl-value-check",
+ "hgl-value-eval",
+ "hgl-value-types",
 ]
 
 [[package]]
@@ -251,11 +272,37 @@ name = "hgl-types"
 version = "0.0.0"
 
 [[package]]
+name = "hgl-value-bind"
+version = "0.0.0"
+dependencies = [
+ "hgl-library",
+ "hgl-rust-ir",
+ "hgl-source",
+]
+
+[[package]]
 name = "hgl-value-check"
 version = "0.0.0"
 dependencies = [
  "hgl-rust-ir",
  "hgl-source",
+]
+
+[[package]]
+name = "hgl-value-eval"
+version = "0.0.0"
+dependencies = [
+ "hgl-rust-ir",
+ "hgl-source",
+]
+
+[[package]]
+name = "hgl-value-types"
+version = "0.0.0"
+dependencies = [
+ "hgl-library",
+ "hgl-source",
+ "hgl-value-check",
 ]
 
 [[package]]

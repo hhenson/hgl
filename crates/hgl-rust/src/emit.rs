@@ -1,7 +1,7 @@
 use crate::ir::{Kind, Node, Plan, Value};
 use hgl_rust_values::{
-    condition_code, global_markers, global_schema, global_type, literal, query, rust_type,
-    scalar_type, statements,
+    condition_code, global_markers, global_schema, global_type, literal, owned_type, query,
+    rust_type, scalar_type, statements,
 };
 use hgl_source::{Literal, Ty};
 
@@ -12,6 +12,9 @@ fn node(plan: &Plan, n: &Node, index: usize, out: &mut Vec<String>) {
             "global{i}: hgl_store::Global<{}>,\n",
             global_type(ty)
         ));
+    }
+    for (id, value) in n.configuration.iter().enumerate() {
+        out.push(format!("configuration{id}: {},\n", owned_type(&value.ty)));
     }
     if let Some((name, ty)) = &n.capability {
         out.push(format!(
@@ -98,6 +101,9 @@ fn node_build(plan: &Plan, n: &Node, index: usize, out: &mut Vec<String>) {
             global_type(ty)
         ));
     }
+    for (id, value) in n.configuration.iter().enumerate() {
+        out.push(format!("configuration{id}: (|| -> Result<{}, Box<hgl_types::NodeError>> {{ Ok({}) }})().map_err(|e| hgl_describe::BuildError::InvalidNodeType {{ node: {:?}, what: e.message }})?,\n", owned_type(&value.ty), condition_code(plan, value), n.name));
+    }
     if let Some((name, _)) = &n.capability {
         let configured = if name == "replay_input" {
             plan.replay_inputs.iter().find(|(id, _)| *id == index).map(|(_, slots)| format!("hgl_std_native::eval_buffers::ReplayInput::new(vec![{}], hgl_types::EngineTime::MIN_START).map_err(|e| hgl_describe::BuildError::InvalidNodeType {{ node: {:?}.into(), what: e.message }})?", sequence(slots), n.name))
@@ -174,6 +180,10 @@ pub fn emit(plan: &Plan) -> String {
     }
     if !plan.natives.is_empty() {
         out.push("}\n".to_owned());
+    }
+    if let Some(error) = &plan.construction_error {
+        out.push(format!("pub fn register(_: &mut hgl_describe::Registry) -> Result<(), hgl_describe::BuildError> {{ Ok(()) }}\npub fn main(_: &hgl_describe::Registry) -> Result<hgl_describe::GraphDescription, hgl_describe::BuildError> {{ Err(hgl_describe::BuildError::InvalidNodeType {{ node: \"hgl.program\", what: {error:?}.into() }}) }}\n"));
+        return out.concat();
     }
     out.push(global_markers(plan));
     for (i, n) in plan.nodes.iter().enumerate() {

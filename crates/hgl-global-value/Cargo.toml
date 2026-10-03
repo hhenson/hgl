@@ -10,6 +10,7 @@ description = "Typed flattened storage representations for ordinary nominal valu
 line-budget = 200
 
 [dependencies]
+hgl-global-arena = { path = "../hgl-global-arena" }
 hgl-types = { path = "../hgl-types" }
 hgl-columns = { path = "../hgl-columns" }
 

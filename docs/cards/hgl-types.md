@@ -163,3 +163,7 @@ access permissions are not part of type identity.
 
 `NodeResult<T = ()>` also names typed capability results with the same translated
 node error; existing hook results retain their unit default.
+
+`OrdinaryType::List(Box<OrdinaryType>, Option<usize>)` includes exact recursive
+element identity and fixed length; None is unbounded. Access authority and current
+runtime length do not change the bound type.

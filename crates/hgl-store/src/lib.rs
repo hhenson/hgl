@@ -18,7 +18,10 @@
 
 use std::marker::PhantomData;
 
-pub use hgl_global::{Global, GlobalValue, ValueSlot};
+pub use hgl_global::{
+    Capacity, Global, GlobalState, GlobalValue, Layouts, List, ValueColumns, ValueSlot, list_index,
+    list_index_mut, list_len, list_push,
+};
 use hgl_types::{EngineTime, NodeId, ScalarType, ScalarValue};
 use hgl_types::{NodeError, NodeResult};
 
@@ -69,7 +72,7 @@ impl<T: Scalar> In<T> {
 pub struct Store {
     columns: Columns,
     bindings: Bindings,
-    globals: hgl_global::GlobalState,
+    globals: GlobalState,
 }
 
 /// A dictionary with i64 keys and scalar children.
@@ -98,6 +101,10 @@ impl<T: Scalar> DictIn<T> {
 }
 
 impl Store {
+    /// Access the run-owned ordinary capability, independently of temporal storage.
+    pub fn global_state(&mut self) -> &mut GlobalState {
+        &mut self.globals
+    }
     /// Provision this run's ordinary state, independently of temporal endpoints.
     pub fn provision_global_state(&mut self) {
         self.globals.provision();

@@ -1,36 +1,57 @@
 # Card: hgl-global-value
 
-Typed representations of ordinary required-field nominal structs whose finite
-fields recursively contain the eight supported scalars. Uses `hgl-types` and
-`hgl-columns`; budget 200 lines. No third-party dependencies or unsafe code.
+Typed representations of ordinary primitives, required-field nominal structs,
+and homogeneous lists. Uses `hgl-types`, `hgl-columns` and `hgl-global-arena`;
+budget 200 lines. No third-party dependencies or unsafe code.
 
 `GlobalValue` names a generated nominal marker's `Value` (ordinary owning Rust
-representation) and Copy `Slots` (typed field handles). Its methods are
-`schema() -> OrdinaryType`, `slots(&mut &[usize]) -> Slots`,
-`retain(&Value) -> Result<Value, Box<NodeError>>`,
-`read(&Columns, Slots) -> Result<Value, Box<NodeError>>`, and
-`commit(&mut Columns, Slots, Value)`. Scalar types implement this trait directly.
-Generated struct implementations delegate retention/read/commit recursively,
-retain all fields before commit, and move each owned field exactly once.
-`Columns` is re-exported for generated implementations.
+representation) and Copy `Slots` (typed field handles). Scalar types implement
+this trait directly. Struct implementations delegate in declaration order.
+`ValueColumns`, `Capacity`, `Layouts` and `ListData` re-export the arena vocabulary.
+
+The trait defines:
+
+- `const WIDTH: usize`: immediate flattened positions, counting each scalar or
+  list descriptor once; list elements have separate layouts.
+- `schema() -> OrdinaryType`: exact nominal/container identity, inspected only
+  during construction.
+- `slots(&mut &[usize]) -> Slots` and `flatten(Slots, &mut [usize])`: reconstruct
+  or serialize typed positions in declaration order, never payloads.
+- `retain(&Value) -> NodeResult<Value>`: independent recursive owning retention.
+- `prepare(&Value, &mut Capacity, &mut Layouts) -> NodeResult`: validate payload
+  constraints, count slot demand, and acquire every list layout buffer.
+- `read(&ValueColumns, Slots) -> NodeResult<Value>`: explicit owning extraction.
+- `commit(&mut ValueColumns, Slots, Value, &mut Layouts)`: infallibly move a fully
+  retained/prepared value into existing root positions.
+- `install(&mut ValueColumns, Value, &mut Layouts) -> Slots`: infallibly install
+  new descendants after all arena and layout capacity has been acquired.
+- `release(&mut ValueColumns, Slots)`: recursively reclaim typed descendants;
+  pre-reserved free pools make release allocation-free.
 
 `ValueSlot<T: GlobalValue>` is an opaque Copy/Debug typed handle with
-`bind(&mut &[usize]) -> Self` for construction, `fields() -> T::Slots` for
-prepared projection, `read(&Columns)` and `commit(&mut Columns, T::Value)`.
-Slots consume the finite schema's scalar positions in declaration order.
-`allocate(&OrdinaryType, &mut Columns, &mut Vec<usize>)` prepares those positions
-before graph start; schema inspection and name/type reconciliation never run
-inside hooks. Marker implementations are compiler/native provider contracts.
+`bind(&mut &[usize]) -> Self`, `install(&mut ValueColumns, T::Value,
+&mut Layouts) -> Self`, `fields() -> T::Slots`, `read(&ValueColumns)`,
+`commit(&mut ValueColumns, T::Value, &mut Layouts)`, `release(&mut ValueColumns)`
+and `flatten(&mut [usize])`. Marker implementations are compiler/native provider
+contracts. Malformed layouts or slots from another owner are caller errors.
+`allocate(&OrdinaryType, &mut ValueColumns, &mut Vec<usize>) -> NodeResult`
+prepares root positions before start, leaving presence to the owning entry.
 
-Rules: ADR 0016 exact nominal entry types and independently retained replacement;
-value-mutability lexical aggregate access and VAL-17 independent ownership.
-Borrow/projection itself copies only handles and never payloads. Required fields
-share the root entry's presence. Strings may allocate when explicitly retained.
-The compiler checks lexical access conflicts, including helper effects.
+Rules: ADR 0016 exact nominal/container types, value-mutability lexical access,
+LIST-RETAIN/ERROR and VAL-17 independent ownership. Borrow/projection copies only
+handles. Retention, preparation and every required capacity acquisition complete
+before any live leaf changes. Physical capacity may grow during a failed
+reservation; logical values and presence remain unchanged. Commit neither copies
+payloads nor allocates. List replacement keeps its descriptor identity and releases
+old descendants through their statically selected marker.
 
-Acceptance lives in hgl-store and hgl-describe: nested primitives, nominal and
-scalar conflicts before start, absent root, borrowed read/write/replacement,
-independent retention and failed retention preserving every previous field.
-Mutants: erase nominal identity; copy payload at borrow; commit first field before
-later retention fails; project a child to the wrong typed slot; replace through a
-borrow without updating the original root.
+No hook-time schema inspection, key lookup, type dispatch, reference counting or
+borrow registry. The compiler checks lexical permission/lifetime conflicts.
+
+Acceptance lives in hgl-store and hgl-describe: nested primitive/struct/list
+projection, exact-type preflight, absence, independent retention, stable root
+replacement, failed retention/reservation preserving every preceding field, no
+borrow allocations, and bounded arena storage under repeated replacement.
+Mutants: erase nominal identity; copy payload at borrow; commit a field before
+later preparation fails; project the wrong slot; detach root on replacement;
+forget typed descendant reclamation.

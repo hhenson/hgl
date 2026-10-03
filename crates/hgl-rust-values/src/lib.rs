@@ -16,7 +16,7 @@ pub fn rust_type(ty: &Ty) -> &'static str {
         Ty::F64 => "f64",
         Ty::Str => "String",
         Ty::Void => "()",
-        Ty::Struct(..) | Ty::Nullable(_) => {
+        Ty::Struct(..) | Ty::List(..) | Ty::Nullable(_) => {
             unreachable!("ordinary aggregate and nullable locals use inferred Rust types")
         }
         Ty::Ref(_) => "hgl_store::Reference",
@@ -34,7 +34,7 @@ pub fn scalar_type(ty: &Ty) -> &'static str {
         Ty::Date => "Date",
         Ty::Time => "Time",
         Ty::DateTime => "DateTime",
-        Ty::Ref(_) | Ty::Set(_) | Ty::Nullable(_) | Ty::Struct(..) | Ty::Void => {
+        Ty::Ref(_) | Ty::Set(_) | Ty::Nullable(_) | Ty::Struct(..) | Ty::List(..) | Ty::Void => {
             unreachable!("checked endpoint type")
         }
     }
@@ -54,10 +54,18 @@ pub fn literal(value: &Literal) -> String {
 }
 fn value(plan: &Plan, v: &Value) -> String {
     match &v.kind {
+        Kind::WiringFailure(message) => {
+            format!("return Err(hgl_types::NodeError::new({message:?}))")
+        }
+        Kind::List(values) => list_value(plan, &v.ty, values),
+        Kind::Length(parent) => length(plan, parent),
+        Kind::Push(parent, item) => push(plan, parent, item),
+        Kind::ValueCall(args, body) => direct_call(plan, &v.ty, args, body),
+        Kind::Configuration(id) => retained(&format!("self.configuration{id}"), &v.ty),
         Kind::Construct(fields) => construct(plan, fields),
-        Kind::Field(..) | Kind::BorrowedLocal(..) => {
-            if let Some(slot) = borrowed_place(v) {
-                format!("_ctx.global_read({slot})?")
+        Kind::Index(..) | Kind::Field(..) | Kind::BorrowedLocal(..) => {
+            if let Some(slot) = borrowed_place(plan, v) {
+                format!("{{ let slot = {slot}; _ctx.global_state().read(slot)? }}")
             } else {
                 retained(&place(plan, v), &v.ty)
             }
@@ -83,9 +91,9 @@ fn value(plan: &Plan, v: &Value) -> String {
                 format!("self.cache{i}")
             }
         }
-        Kind::GlobalGet(i) => format!("_ctx.global_get(self.global{i})?"),
+        Kind::GlobalGet(i) => format!("_ctx.global_state().get(self.global{i})?"),
         Kind::GlobalSet(i, v) => format!(
-            "{{ let value = {}; _ctx.global_set(self.global{i}, &value)?; }}",
+            "{{ let value = {}; _ctx.global_state().set(self.global{i}, &value)?; }}",
             value(plan, v)
         ),
         Kind::Local(i) | Kind::MutableLocal(i) => retained(&format!("local{i}"), &v.ty),
@@ -142,6 +150,16 @@ fn place(plan: &Plan, v: &Value) -> String {
     if let Kind::Local(i) | Kind::MutableLocal(i) = &v.kind {
         return format!("local{i}");
     }
+    if let Kind::Configuration(id) = v.kind {
+        return format!("self.configuration{id}");
+    }
+    if let Kind::Index(parent, index) = &v.kind {
+        return format!(
+            "(*hgl_store::list_index(&({}), {})?)",
+            place(plan, parent),
+            value(plan, index)
+        );
+    }
     if let Kind::Field(parent, index) = &v.kind {
         return format!("({}).{index}", place(plan, parent));
     }
@@ -150,6 +168,12 @@ fn place(plan: &Plan, v: &Value) -> String {
 fn retained(source: &str, ty: &Ty) -> String {
     if matches!(ty, Ty::Nullable(_)) {
         return format!("({source}).as_ref().map(hgl_store::Scalar::try_clone).transpose()?");
+    }
+    if let Ty::List(..) = ty {
+        return format!(
+            "<{} as hgl_store::GlobalValue>::retain(&({source}))?",
+            global_type(ty)
+        );
     }
     if let Ty::Struct(_, fields) = ty {
         let fields = fields
@@ -218,16 +242,20 @@ fn integer_binary(op: &str, a: &str, b: &str) -> String {
 pub fn statements(plan: &Plan, body: &[Statement], out: &mut Vec<String>) {
     for statement in body {
         out.push(match statement {
+            Statement::Yield(v) => format!("return Ok({});\n", value(plan, v)),
             Statement::Exit => "return Ok(());\n".into(),
             Statement::Let(i, v) => format!("let local{i} = {};\n", condition_code(plan, v)),
             Statement::Borrow(i, v, _) => {
                 let source = if let Kind::GlobalGet(entry) = v.kind {
-                    format!("_ctx.global_borrow(self.global{entry})?")
-                } else { borrowed_place(v).unwrap_or_else(|| unreachable!("checked borrowed initializer")) };
+                    format!("_ctx.global_state().borrow(self.global{entry})?")
+                } else { borrowed_place(plan, v).unwrap_or_else(|| unreachable!("checked borrowed initializer")) };
                 format!("let local{i} = {source};\n")
             },
             Statement::Var(i, v) => format!("let mut local{i} = {};\n", condition_code(plan, v)),
-            Statement::Return(v) => if matches!(v.ty,Ty::Ref(_)) {format!("_ctx.set_reference(self._output,{})?;\nreturn Ok(());\n",condition_code(plan,v))} else {format!("_ctx.set(self._output, {});\nreturn Ok(());\n",condition_code(plan,v))},
+            Statement::Return(v) => {
+                let publish = if matches!(v.ty, Ty::Ref(_)) { "_ctx.set_reference(self._output, publication)?;" } else { "_ctx.set(self._output, publication);" };
+                format!("let publication = {};\n{publish}\nreturn Ok(());\n", condition_code(plan, v))
+            },
             Statement::Call(v) => format!("{};\n", condition_code(plan, v)),
             Statement::For(id,collection,body)=> {
                 let Kind::Input(input, _)=collection.kind else {unreachable!("checked collection")};
@@ -249,15 +277,20 @@ pub fn statements(plan: &Plan, body: &[Statement], out: &mut Vec<String>) {
 }
 fn assignment(plan: &Plan, target: &Value, v: &Value) -> String {
     let v = condition_code(plan, v);
-    if let Some(slot) = borrowed_place(target) {
-        return format!("{{ let replacement = {v}; _ctx.global_write({slot}, &replacement)?; }}\n");
+    if let Some(slot) = borrowed_place(plan, target) {
+        return format!(
+            "{{ let replacement = {v}; let slot = {slot}; _ctx.global_state().write(slot, &replacement)?; }}\n"
+        );
     }
     if matches!(target.kind, Kind::Output) {
-        format!("_ctx.set(self._output, {v});\n")
+        format!("{{ let publication = {v}; _ctx.set(self._output, publication); }}\n")
     } else if let Kind::Cache(i) = target.kind {
         format!("self.cache{i} = {v};\n")
     } else if matches!(target.kind, Kind::MutableLocal(_) | Kind::Field(..)) {
-        format!("{} = {v};\n", place(plan, target))
+        format!(
+            "{{ let replacement = {v}; {} = replacement; }}\n",
+            mutable_place(plan, target)
+        )
     } else {
         unreachable!("checked assignment")
     }
@@ -367,7 +400,7 @@ fn native_argument(plan: &Plan, v: &Value) -> String {
     if v.ty != Ty::Str {
         return condition_code(plan, v);
     }
-    if borrowed_place(v).is_some() {
+    if borrowed_place(plan, v).is_some() {
         return format!("&({})", value(plan, v));
     }
     match &v.kind {
@@ -377,11 +410,17 @@ fn native_argument(plan: &Plan, v: &Value) -> String {
         Kind::Literal(Literal::Str(s)) => format!("{s:?}"),
         Kind::Cache(i) => format!("self.cache{i}.as_str()"),
         Kind::Local(i) | Kind::MutableLocal(i) => format!("local{i}.as_str()"),
-        Kind::Field(..) => format!("({}).as_str()", place(plan, v)),
+        Kind::Field(..) | Kind::Index(..) => format!("({}).as_str()", place(plan, v)),
         Kind::Output => {
             "_ctx.store().output_ref(self._output).expect(\"valid output\").as_str()".into()
         }
-        Kind::Construct(_)
+        Kind::WiringFailure(_)
+        | Kind::List(_)
+        | Kind::Length(_)
+        | Kind::Push(..)
+        | Kind::ValueCall(..)
+        | Kind::Configuration(_)
+        | Kind::Construct(_)
         | Kind::BorrowedLocal(..)
         | Kind::GlobalGet(_)
         | Kind::GlobalSet(..)
@@ -419,12 +458,128 @@ fn capability_call(plan: &Plan, op: &str, args: &[Value]) -> String {
     }
 }
 
-fn borrowed_place(value: &Value) -> Option<String> {
+fn borrowed_place(plan: &Plan, value: &Value) -> Option<String> {
     if let Kind::BorrowedLocal(id, _, _) = value.kind {
         return Some(format!("local{id}"));
     }
+    if let Kind::Index(parent, index) = &value.kind {
+        return borrowed_place(plan, parent).map(|parent| format!("{{ let parent = {parent}; let index = {}; _ctx.global_state().list_index(parent, index)? }}", self::value(plan, index)));
+    }
     if let Kind::Field(parent, field) = &value.kind {
-        return borrowed_place(parent).map(|parent| format!("({parent}).fields().{field}"));
+        return borrowed_place(plan, parent).map(|parent| format!("({parent}).fields().{field}"));
     }
     None
+}
+
+fn mutable_place(plan: &Plan, v: &Value) -> String {
+    if let Kind::Index(parent, index) = &v.kind {
+        return format!(
+            "(*hgl_store::list_index_mut(&mut ({}), {})?)",
+            mutable_place(plan, parent),
+            value(plan, index)
+        );
+    }
+    if let Kind::Field(parent, field) = &v.kind {
+        return format!("({}).{field}", mutable_place(plan, parent));
+    }
+    place(plan, v)
+}
+fn list_value(plan: &Plan, ty: &Ty, values: &[Value]) -> String {
+    let Ty::List(element, _) = ty else {
+        unreachable!("checked list")
+    };
+    let mut code = vec![format!(
+        "{{ let mut items: Vec<{}> = Vec::new();",
+        owned_type(element)
+    )];
+    for item in values {
+        code.push(format!(
+            "hgl_store::list_push::<{}>(&mut items, &({}))?;",
+            global_type(element),
+            value(plan, item)
+        ));
+    }
+    code.push("items }".into());
+    code.concat()
+}
+fn push(plan: &Plan, parent: &Value, item: &Value) -> String {
+    let item = value(plan, item);
+    if let Some(slot) = borrowed_place(plan, parent) {
+        return format!(
+            "{{ let slot = {slot}; let item = {item}; _ctx.global_state().list_push(slot, &item)?; }}"
+        );
+    }
+    let Ty::List(element, _) = &parent.ty else {
+        unreachable!("checked push")
+    };
+    let mut setup = Vec::new();
+    let target = prepare_place(plan, parent, &mut setup);
+    format!(
+        "{{ {} let item = {item}; hgl_store::list_push::<{}>(&mut ({target}), &item)?; }}",
+        setup.concat(),
+        global_type(element)
+    )
+}
+/// Rust owned representation of a concrete ordinary type.
+pub fn owned_type(ty: &Ty) -> String {
+    if let Ty::List(element, _) = ty {
+        return format!("Vec<{}>", owned_type(element));
+    }
+    if let Ty::Struct(_, fields) = ty {
+        if fields.is_empty() {
+            return "()".into();
+        }
+        return format!(
+            "({},)",
+            fields
+                .iter()
+                .map(|(_, ty)| owned_type(ty))
+                .collect::<Vec<_>>()
+                .join(",")
+        );
+    }
+    rust_type(ty).into()
+}
+fn direct_call(plan: &Plan, result: &Ty, args: &[Value], body: &[Statement]) -> String {
+    let mut code = vec!["{ ".into()];
+    for (i, arg) in args.iter().enumerate() {
+        code.push(format!("let argument{i} = {};", value(plan, arg)));
+    }
+    code.push(format!(
+        "(|| -> Result<{}, Box<hgl_types::NodeError>> {{",
+        owned_type(result)
+    ));
+    for i in 0..args.len() {
+        code.push(format!("let local{i} = argument{i};"));
+    }
+    statements(plan, body, &mut code);
+    if *result == Ty::Void {
+        code.push("Ok(())".into());
+    }
+    code.push("})()? }".into());
+    code.concat()
+}
+
+fn prepare_place(plan: &Plan, target: &Value, setup: &mut Vec<String>) -> String {
+    if let Kind::Field(parent, field) = &target.kind {
+        return format!("({}).{field}", prepare_place(plan, parent, setup));
+    }
+    if let Kind::Index(parent, index) = &target.kind {
+        let parent = prepare_place(plan, parent, setup);
+        let id = setup.len();
+        setup.push(format!(
+            "let index{id} = {}; hgl_store::list_index(&({parent}), index{id})?;",
+            value(plan, index)
+        ));
+        return format!("(*hgl_store::list_index_mut(&mut ({parent}), index{id})?)");
+    }
+    place(plan, target)
+}
+
+fn length(plan: &Plan, parent: &Value) -> String {
+    if let Some(slot) = borrowed_place(plan, parent) {
+        format!("{{ let slot = {slot}; _ctx.global_state().list_len(slot)? }}")
+    } else {
+        format!("hgl_store::list_len(&({}))?", place(plan, parent))
+    }
 }

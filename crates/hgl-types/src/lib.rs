@@ -221,6 +221,8 @@ pub enum OrdinaryType {
     Scalar(ScalarType),
     /// Canonical nominal identity and fields in declaration order.
     Struct(&'static str, Vec<(&'static str, OrdinaryType)>),
+    /// Homogeneous ordinary elements and an optional exact fixed length.
+    List(Box<OrdinaryType>, Option<usize>),
 }
 impl From<ScalarType> for OrdinaryType {
     fn from(value: ScalarType) -> Self {

@@ -17,3 +17,6 @@ hgl-documentation = { path = "../hgl-documentation" }
 hgl-library = { path = "../hgl-library" }
 hgl-rust = { path = "../hgl-rust" }
 hgl-value-check = { path = "../hgl-value-check" }
+hgl-value-types = { path = "../hgl-value-types" }
+hgl-value-bind = { path = "../hgl-value-bind" }
+hgl-value-eval = { path = "../hgl-value-eval" }

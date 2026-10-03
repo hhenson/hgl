@@ -2,7 +2,8 @@
 
 Check closed HGL graphs and tests against source libraries; delegate checked
 plans to `hgl-rust` for Rust emission. Uses `hgl-source`, `hgl-library`,
-`hgl-documentation`, `hgl-rust`, `hgl-value-check`. Budget: 2200 source lines. No third-party
+`hgl-documentation`, `hgl-rust`, `hgl-value-check`, `hgl-value-types`,
+`hgl-value-bind`, `hgl-value-eval`. Budget: 2200 source lines. No third-party
 dependencies. Source linking, type/phase/proof checks and eval wiring stay here;
 checked backend IR and Rust generation belong to `hgl-rust`.
 
@@ -32,8 +33,8 @@ gets a fresh graph. Length comes from input cells and actual output ticks,
 never the expected sequence. A mismatch or node error fails the executable.
 
 Test helpers have a module-wide scope; production calls cannot see them.
-The current test body accepts direct `assert eval(...) == [...]` and outputless
-`eval(...)` statements. General bool assertions, harness locals, timed input,
+The current test body accepts direct `assert eval(...) == [...]`, outputless
+`eval(...)`, and deterministic ordinary bool assertions. Harness locals, timed input,
 structural delta literals and empty generic sequences remain unsupported.
 Unused library bodies are not advertised as implemented: reachable unsupported
 forms produce diagnostics. This is not the full language checker.
@@ -137,8 +138,7 @@ scopes preserve each binding identity across shadowing. Scalar assignments
 retain their exact type; local `+=` uses existing addition typing (i64, f64,
 str), while cache increments retain their i64 profile. Primitive global get
 initializes an owned local, so local mutation never implicitly writes the entry.
-Uninitialized locals and general value-helper runtime calls
-remain outside this backend subset. No value-type qualifier is introduced.
+Uninitialized locals remain outside this backend subset. No value-type qualifier is introduced.
 
 Runtime hook locals admit nongeneric ordinary structs with required primitive
 or nested struct fields. Constructors require every field once by name and
@@ -147,8 +147,7 @@ and assignment copy independently (value-mutability, VAL-17). `var` admits
 whole-value and nested field replacement; `let` is recursively read-only.
 Primitive field `+=` uses existing addition typing. Field projections retain
 the root's write authority. Unsupported optional/default/generic/recursive
-schemas are diagnosed; no list operations or
-aggregate temporal ports/helper parameters follow from this local slice.
+schemas are diagnosed. Aggregate temporal ports remain outside this slice.
 
 Acceptance: source fixtures executed as emitted Rust through lifecycle hooks;
 nested text/value copy independence, mutable field/whole replacement, branch
@@ -178,3 +177,34 @@ values; assigning through a borrowed var updates its entry after RHS retention.
 Acceptance includes configured equal const keys, nested aliases and projections,
 read/write conflicts, self-replacement, retained copy independence, missing
 aggregate entries and failed replacement preserving the previous value.
+
+Ordinary lists admit exact unbounded/fixed identity, contextual empty literals,
+homogeneous constant nonempty literals, len, checked i64 indexed reads and
+retained end growth. Indexed replacement and runtime-expression list literals
+are rejected. Lists can contain primitive, required-field struct or list values.
+Writable indexed projections admit content operations without creating an alias.
+Borrowed indexed aggregates inherit entry provenance and lexical authority;
+primitive reads are owned. Push evaluates its receiver projection and retains
+its item before mutation, including self-source appends.
+
+Concrete ordinary value functions execute directly: checked ValueCall bodies
+are emitted as fallible lexical calls inside hooks, without scheduling nodes.
+Parameters and prepared ordinary node configuration are recursively readonly.
+Owning locals initialized from them copy independently. Deterministic wiring
+ordinary operations are evaluated by hgl-value-eval; retained list/struct
+configuration is materialized once when a generated node is built. Constant
+assertion operation failures fail checking; wiring operation failures are stored
+on the plan and reported by generated graph construction before any start.
+Unsupported native/capability effects in deterministic wiring remain explicit
+backend diagnostics. This is not a claim of complete effectful construction
+execution or temporal aggregate ports.
+
+Acceptance includes source-executed scalar observations of nested owning and
+global lists, fixedness, readonly aliases, self-source push, indexed field
+mutation, earlier appends after bounds failure, direct ordinary helpers and
+wiring construction, and fresh-run isolation.
+
+Uncontextualized nonempty ordinary literals are explicitly unsupported: the
+pinned specification describes constant homogeneous list literals but does not
+uniquely define their inferred fixedness. Contextual nonempty literals retain
+their expected exact list type. Harness sequence typing is unchanged.

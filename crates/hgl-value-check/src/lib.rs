@@ -5,6 +5,9 @@ use std::collections::BTreeMap;
 
 /// Whether the checked type admits ordinary owning retention.
 pub fn ordinary(ty: &Ty) -> bool {
+    if let Ty::List(element, _) = ty {
+        return ordinary(element);
+    }
     matches!(
         ty,
         Ty::Bool
@@ -20,7 +23,7 @@ pub fn ordinary(ty: &Ty) -> bool {
 }
 /// Whether a checked place carries recursive write authority.
 pub fn writable(value: &Value) -> bool {
-    if let Kind::Field(parent, _) = &value.kind {
+    if let Kind::Field(parent, _) | Kind::Index(parent, _) = &value.kind {
         return writable(parent);
     }
     matches!(
@@ -42,13 +45,13 @@ pub fn field(parent: Value, name: &str) -> Result<Value, String> {
 }
 /// Return the entry and access mode carried by an aggregate view.
 pub fn provenance(value: &Value) -> Option<(usize, bool)> {
-    if !matches!(value.ty, Ty::Struct(..)) {
+    if !matches!(value.ty, Ty::Struct(..) | Ty::List(..)) {
         return None;
     }
     if let Kind::BorrowedLocal(_, entry, writable) = value.kind {
         return Some((entry, writable));
     }
-    if let Kind::Field(parent, _) = &value.kind {
+    if let Kind::Field(parent, _) | Kind::Index(parent, _) = &value.kind {
         return provenance(parent);
     }
     None
@@ -56,7 +59,7 @@ pub fn provenance(value: &Value) -> Option<(usize, bool)> {
 /// Bind an owning value or preserve an explicitly borrowed initializer.
 pub fn binding(id: usize, value: &Value, mutable: bool, annotated: bool) -> Result<Value, String> {
     let kind = if let Kind::GlobalGet(entry) = value.kind
-        && matches!(value.ty, Ty::Struct(..))
+        && matches!(value.ty, Ty::Struct(..) | Ty::List(..))
     {
         if !annotated {
             return Err("aggregate get requires a typed let or var binding".into());
@@ -117,7 +120,7 @@ fn block(body: &[Statement], live: &mut BTreeMap<usize, bool>) -> Result<(), Str
             Statement::Let(_, value) | Statement::Var(_, value) | Statement::Call(value) => {
                 expression(value, live)?;
             }
-            Statement::Return(value) => {
+            Statement::Return(value) | Statement::Yield(value) => {
                 helper_argument(value)?;
                 expression(value, live)?;
             }
@@ -145,13 +148,29 @@ fn expression(value: &Value, live: &BTreeMap<usize, bool>) -> Result<(), String>
     match &value.kind {
         Kind::GlobalGet(entry) => {
             conflict(*entry, false, live)?;
-            if matches!(value.ty, Ty::Struct(..)) {
+            if matches!(value.ty, Ty::Struct(..) | Ty::List(..)) {
                 return Err("aggregate get requires a typed let or var binding".into());
             }
         }
         Kind::GlobalSet(entry, value) => {
             expression(value, live)?;
             conflict(*entry, true, live)?;
+        }
+        Kind::List(values) => {
+            for value in values {
+                expression(value, live)?;
+            }
+        }
+        Kind::ValueCall(args, body) => {
+            for value in args {
+                helper_argument(value)?;
+                expression(value, live)?;
+            }
+            block(body, &mut live.clone())?;
+        }
+        Kind::Index(parent, index) | Kind::Push(parent, index) => {
+            expression(parent, live)?;
+            expression(index, live)?;
         }
         Kind::Construct(fields) => {
             for (_, value) in fields {
@@ -168,15 +187,18 @@ fn expression(value: &Value, live: &BTreeMap<usize, bool>) -> Result<(), String>
             expression(a, live)?;
             expression(b, live)?;
         }
-        Kind::Field(value, _)
+        Kind::Length(value)
+        | Kind::Field(value, _)
         | Kind::ReplaySlot(value)
         | Kind::IsPresent(value)
         | Kind::Present(value)
         | Kind::Unary(_, value) => expression(value, live)?,
-        Kind::BorrowedLocal(..)
+        Kind::WiringFailure(_)
+        | Kind::BorrowedLocal(..)
         | Kind::Literal(_)
         | Kind::Wire(_)
         | Kind::Input(..)
+        | Kind::Configuration(_)
         | Kind::Cache(_)
         | Kind::Local(_)
         | Kind::MutableLocal(_)
@@ -185,4 +207,90 @@ fn expression(value: &Value, live: &BTreeMap<usize, bool>) -> Result<(), String>
         | Kind::Void => {}
     }
     Ok(())
+}
+
+/// Check a constant ordinary list literal under its exact expected type.
+pub fn list_literal(
+    elements: &[Option<hgl_source::Expr>],
+    expected: Option<&Ty>,
+) -> Result<Value, String> {
+    let context = if let Some(Ty::List(element, size)) = expected {
+        Some((element.as_ref(), *size))
+    } else {
+        None
+    };
+    if elements.is_empty() && context.is_none() {
+        return Err("empty list requires an expected concrete list type".into());
+    }
+    let mut values = Vec::new();
+    for expr in elements {
+        let expr = expr
+            .as_ref()
+            .ok_or("ordinary lists cannot contain absent elements")?;
+        let value = if let hgl_source::Expr::Sequence(child) = expr {
+            list_literal(child, context.map(|(element, _)| element))?
+        } else {
+            let fixed = expr
+                .fixed()
+                .ok_or("ordinary nonempty list literals require constant elements")?;
+            Value::new(fixed.ty(), Kind::Literal(fixed))
+        };
+        values.push(value);
+    }
+    let (element, size) = context.ok_or("uncontextualized nonempty ordinary list literal inference is unsupported; expected concrete list type required")?;
+    let element = element.clone();
+    if size.is_some_and(|size| size != values.len()) {
+        return Err("fixed list size mismatch".into());
+    }
+    if !ordinary(&element) || values.iter().any(|v| v.ty != element) {
+        return Err("ordinary list element type mismatch".into());
+    }
+    Ok(Value::new(
+        Ty::List(Box::new(element), size),
+        Kind::List(values),
+    ))
+}
+/// Check an ordinary indexed read without introducing copy or write authority.
+pub fn indexed(parent: Value, index: Value) -> Result<Value, String> {
+    let Ty::List(element, _) = &parent.ty else {
+        return Err("indexing requires an ordinary list".into());
+    };
+    if index.ty != Ty::I64 {
+        return Err("ordinary list index requires i64".into());
+    }
+    Ok(Value::new(
+        *element.clone(),
+        Kind::Index(Box::new(parent), Box::new(index)),
+    ))
+}
+/// Check receiver-first list observation or growth.
+pub fn list_operation(name: &str, args: &[Value]) -> Result<Value, String> {
+    let receiver = args
+        .first()
+        .ok_or("ordinary list operation requires a receiver")?;
+    let Ty::List(element, size) = &receiver.ty else {
+        return Err("ordinary list receiver required".into());
+    };
+    if name == "len" && args.len() == 1 {
+        return Ok(Value::new(
+            Ty::I64,
+            Kind::Length(Box::new(receiver.clone())),
+        ));
+    }
+    if name != "push" || args.len() != 2 {
+        return Err("ordinary list operation argument mismatch".into());
+    }
+    if size.is_some() {
+        return Err("push requires an unbounded ordinary list".into());
+    }
+    if !writable(receiver) {
+        return Err("push requires writable ordinary list access".into());
+    }
+    if args[1].ty != **element {
+        return Err("push ordinary list element type mismatch".into());
+    }
+    Ok(Value::new(
+        Ty::Void,
+        Kind::Push(Box::new(receiver.clone()), Box::new(args[1].clone())),
+    ))
 }

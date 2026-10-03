@@ -15,8 +15,18 @@ fn scalar_get_has_an_ordinary_type_context_in_each_hook() {
     ).unwrap();
     assert!(emitted.contains("uses_global_state: true"));
     assert!(emitted.contains("fn stop("));
-    assert_eq!(emitted.matches("_ctx.global_get(self.global").count(), 3);
-    assert_eq!(emitted.matches("_ctx.global_set(self.global").count(), 3);
+    assert_eq!(
+        emitted
+            .matches("_ctx.global_state().get(self.global")
+            .count(),
+        3
+    );
+    assert_eq!(
+        emitted
+            .matches("_ctx.global_state().set(self.global")
+            .count(),
+        3
+    );
     assert!(!emitted.contains("ReplayInput"));
     assert!(!emitted.contains("Capture"));
 }
@@ -112,7 +122,10 @@ fn injecting_store_never_uses_a_node_role_or_key_as_the_type() {
     assert!(check("fn f(input:i64)->i64 { inject global_state\nwhen { let item=get(global_state,\"i64\")\nreturn item } }").unwrap_err().contains("expected type"));
     assert!(check("fn f(global_state:i64) { when { set(global_state,\"key\",1) } }").is_err());
     let code = check("fn f(input:i64) { inject global_state\nstop { set(global_state,\"last\",0) }\nwhen {}\nstart { set(global_state,\"first\",0) } }").unwrap();
-    assert_eq!(code.matches("_ctx.global_set(self.global").count(), 2);
+    assert_eq!(
+        code.matches("_ctx.global_state().set(self.global").count(),
+        2
+    );
 }
 
 #[test]

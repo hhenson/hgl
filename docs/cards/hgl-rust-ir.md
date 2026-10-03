@@ -26,3 +26,17 @@ view's local identity, prepared entry identity and access authority.
 readonly alias without copying the payload. Aggregate `GlobalGet` appears only
 in this binding form; scalar gets remain owned. `Field` preserves a borrowed
 root's prepared projection. `Node::globals` includes exact ordinary struct types.
+
+`Kind::{List, Index, Length, Push}` carries checked ordinary construction,
+projection, observation and content mutation. `ValueCall(arguments, body)`
+represents direct ordinary execution; `Statement::Yield` returns its value
+without publishing an endpoint. Statements are cloneable so direct bodies can
+be retained in expressions. `Kind::Configuration` reads a readonly retained
+node configuration field, populated by `Node::configuration`.
+`Plan::construction_error` carries a deterministic wiring operation failure to
+the construction boundary; source checking errors never use that field.
+
+`Kind::WiringFailure` carries a typed unavailable result after an operation
+fails during deterministic wiring. It lets subsequent source statements retain
+normal type checking without manufacturing a successful payload. A plan with
+such a failure emits only the construction failure, not executable node bodies.
