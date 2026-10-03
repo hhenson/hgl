@@ -78,7 +78,7 @@ impl Generator {
     /// Emit concrete fields for the resume position, pending scalar and locals.
     pub fn fields(&self, result: &Ty) -> String {
         let mut code = vec![format!(
-            "generator_pc: usize,\ngenerator_pending: Option<{}>,\n",
+            "generator_pc: usize,\ngenerator_previous: Option<hgl_types::EngineTime>,\ngenerator_pending: Option<{}>,\n",
             owned_type(
                 &result
                     .clone()
@@ -97,7 +97,7 @@ impl Generator {
     /// Emit construction values without executing any generator expression.
     pub fn initialize(&self) -> String {
         let mut code = vec![format!(
-            "generator_pc: {},\ngenerator_pending: None,\n",
+            "generator_pc: {},\ngenerator_previous: None,\ngenerator_pending: None,\n",
             self.entry
         )];
         for id in self.locals.keys() {
@@ -115,7 +115,7 @@ impl Generator {
     /// Reset reconstructible storage and request the body's first evaluation.
     pub fn start(&self) -> String {
         format!(
-            "self.generator_pc = {};\nself.generator_pending = None;\n{} _ctx.alarm_in(hgl_types::EngineDelta::from_micros(0))?;\n",
+            "self.generator_pc = {};\nself.generator_previous = None;\nself.generator_pending = None;\n{} _ctx.alarm_in(hgl_types::EngineDelta::from_micros(0))?;\n",
             self.entry,
             self.clear_locals()
         )
@@ -129,10 +129,9 @@ impl Generator {
                 .unwrap_or_else(|_| unreachable!("checked generator result")),
             "publication",
         );
-        let mut code = vec![String::from(
-            "let mut generator_published = false;\nif let Some(publication) = self.generator_pending.take() { _ctx.set(self._output, publication); generator_published = true; }\nloop { match self.generator_pc {\n",
+        let mut code = vec![format!(
+            "if let Some(publication) = self.generator_pending.take() {{ {publication} }}\nloop {{ match self.generator_pc {{\n",
         )];
-        code[0] = code[0].replace("_ctx.set(self._output, publication);", &publication);
         for (id, block) in self.blocks.iter().enumerate() {
             code.push(format!("{id} => {{\n"));
             self.emit_block(plan, block, &mut code);
@@ -167,14 +166,14 @@ impl Generator {
 }
 fn timed_yield(plan: &Plan, time: &Value, payload: &Value, next: usize) -> String {
     let resolution = if time.ty == Ty::Duration {
-        "hgl_types::EngineTime::from_micros(now.micros().checked_add(time.micros()).ok_or_else(|| hgl_types::NodeError::new(\"generator target time overflow\"))?)"
+        "{ if time.micros() < 0 { return Err(hgl_types::NodeError::new(\"generator negative yield duration\")); } hgl_types::EngineTime::from_micros(now.micros().checked_add(time.micros()).ok_or_else(|| hgl_types::NodeError::new(\"generator target time overflow\"))?) }"
     } else {
         assert_eq!(time.ty, Ty::DateTime, "checked generator time operand");
         "time"
     };
     let publish = hgl_rust_deltas::publish(&payload.ty, "payload");
     format!(
-        "let time = {};\nlet payload = {};\nlet now = _ctx.evaluation_time();\nlet target = {resolution};\nif target < now {{ self.generator_pc = {next}; continue; }}\nif target == now {{\nif generator_published {{ return Err(hgl_types::NodeError::new(\"generator duplicate publication time\")); }}\n{publish} generator_published = true; self.generator_pc = {next}; continue;\n}}\nlet delay = target.micros().checked_sub(now.micros()).ok_or_else(|| hgl_types::NodeError::new(\"generator target time difference overflow\"))?;\n_ctx.alarm_in(hgl_types::EngineDelta::from_micros(delay))?;\nself.generator_pending = Some(payload); self.generator_pc = {next}; return Ok(());\n",
+        "let time = {};\nlet payload = {};\nlet now = _ctx.evaluation_time();\nlet target = {resolution};\nif self.generator_previous.is_some_and(|previous| target <= previous) {{ return Err(hgl_types::NodeError::new(\"generator yield times must strictly increase\")); }}\nself.generator_previous = Some(target);\nif target < now {{ self.generator_pc = {next}; continue; }}\nif target == now {{\n{publish} self.generator_pc = {next}; continue;\n}}\nlet delay = target.micros().checked_sub(now.micros()).ok_or_else(|| hgl_types::NodeError::new(\"generator target time difference overflow\"))?;\n_ctx.alarm_in(hgl_types::EngineDelta::from_micros(delay))?;\nself.generator_pending = Some(payload); self.generator_pc = {next}; return Ok(());\n",
         condition_code(plan, time),
         condition_code(plan, payload)
     )

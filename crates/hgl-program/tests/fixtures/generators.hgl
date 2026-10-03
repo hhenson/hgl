@@ -31,7 +31,7 @@ fn drive_nested(tick:i64)->i64 { consume(tick)
 nested() }
 fn past()->i64 {
     yield @1969-01-01T00:00:00Z:9
-    yield -1us:8
+    yield @1970-01-01T00:00:00Z:8
     yield 0us:2
 }
 fn drive_past(tick:i64)->i64 { consume(tick)
@@ -86,7 +86,7 @@ fn arithmetic()->i64 {
     let first=1us
     let second=2us
     let negative=-first
-    yield negative:99
+    yield @1970-01-01T00:00:00Z+negative:99
     yield first+second:1
     yield @1970-01-01T00:00:00.000006Z-first:2
     let difference=@1970-01-01T00:00:00.000007Z-@1970-01-01T00:00:00.000006Z

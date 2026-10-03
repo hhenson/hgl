@@ -84,43 +84,7 @@ fn generator_sources_execute_spec_and_scalar_payloads() -> Result<(), Box<dyn st
 fn effects(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let mut runner = String::from(include_str!("fixtures/generator_effects_runner.rs"));
     let mut calls = String::from("fn main() { evaluations::main();\n");
-    for (name, scenarios) in [
-        (
-            "future",
-            vec![
-                (0, 10, 123, 2, Some(3), None),
-                (0, 3, 12, 0, None, None),
-                (1, 10, 1, 0, None, Some("marker failure")),
-                (2, 10, 12, 0, None, Some("marker failure")),
-            ],
-        ),
-        (
-            "past",
-            vec![
-                (0, 10, 123, 1, Some(3), None),
-                (2, 10, 12, 0, None, Some("marker failure")),
-            ],
-        ),
-        (
-            "duplicate",
-            vec![(
-                0,
-                10,
-                1212,
-                0,
-                None,
-                Some("generator duplicate publication time"),
-            )],
-        ),
-        (
-            "implicit_overflow",
-            vec![(0, 10, 12, 0, None, Some("generator target time overflow"))],
-        ),
-        (
-            "explicit_overflow",
-            vec![(0, 10, 1, 0, None, Some("time arithmetic overflow"))],
-        ),
-    ] {
+    for (name, scenarios) in effect_cases().into_iter().chain(order_cases()) {
         let plan = compile(
             &[(
                 "effects.hgl".into(),
@@ -137,10 +101,10 @@ fn effects(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
             calls,
             "let mut registry=Registry::new(); {name}::register(&mut registry).unwrap(); let description={name}::main(&registry).unwrap();"
         )?;
-        for (fail, end, trace, count, last, error) in scenarios {
+        for (fail, end, trace, count, last, error, held) in scenarios {
             writeln!(
                 calls,
-                "run(&registry,&description,{fail},{end},{trace},{count},{last:?},{error:?});"
+                "for _ in 0..2 {{ run(&registry,&description,{fail},{end},{trace},{count},{last:?},{error:?},{held:?}); }}"
             )?;
         }
     }
@@ -149,4 +113,98 @@ fn effects(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     runner.push_str("}\n");
     fs::write(dir.join("src/main.rs"), runner)?;
     Ok(())
+}
+
+type Scenario = (
+    i64,
+    i64,
+    i64,
+    i64,
+    Option<i64>,
+    Option<&'static str>,
+    Option<i64>,
+);
+const NEGATIVE: Option<&str> = Some("generator negative yield duration");
+const ORDER: Option<&str> = Some("generator yield times must strictly increase");
+
+fn effect_cases() -> Vec<(&'static str, Vec<Scenario>)> {
+    vec![
+        (
+            "future",
+            vec![
+                (0, 10, 123, 2, Some(3), None, Some(3)),
+                (0, 3, 12, 0, None, None, None),
+                (1, 10, 1, 0, None, Some("marker failure"), None),
+                (2, 10, 12, 0, None, Some("marker failure"), None),
+            ],
+        ),
+        (
+            "past",
+            vec![
+                (0, 10, 123, 1, Some(3), None, Some(3)),
+                (2, 10, 12, 0, None, Some("marker failure"), None),
+            ],
+        ),
+        (
+            "negative",
+            vec![
+                (0, 10, 12, 0, None, NEGATIVE, None),
+                (1, 10, 1, 0, None, Some("marker failure"), None),
+                (2, 10, 12, 0, None, Some("marker failure"), None),
+            ],
+        ),
+        ("negative_min", vec![(0, 10, 12, 0, None, NEGATIVE, None)]),
+        ("zero", vec![(0, 10, 123, 1, Some(-1), None, Some(-1))]),
+        (
+            "implicit_overflow",
+            vec![(
+                0,
+                10,
+                12,
+                0,
+                None,
+                Some("generator target time overflow"),
+                None,
+            )],
+        ),
+        (
+            "explicit_overflow",
+            vec![(0, 10, 1, 0, None, Some("time arithmetic overflow"), None)],
+        ),
+    ]
+}
+fn order_cases() -> Vec<(&'static str, Vec<Scenario>)> {
+    vec![
+        ("duplicate", vec![(0, 10, 1212, 0, None, ORDER, Some(7))]),
+        (
+            "past_equal",
+            vec![
+                (0, 10, 1212, 0, None, ORDER, None),
+                (121, 10, 121, 0, None, Some("marker failure"), None),
+                (1212, 10, 1212, 0, None, Some("marker failure"), None),
+            ],
+        ),
+        ("past_decreasing", vec![(0, 10, 1212, 0, None, ORDER, None)]),
+        (
+            "past_increasing",
+            vec![(0, 10, 12123, 1, Some(3), None, Some(3))],
+        ),
+        ("future_equal", vec![(0, 10, 1212, 0, None, ORDER, Some(7))]),
+        (
+            "future_decreasing",
+            vec![(0, 10, 1212, 0, None, ORDER, Some(7))],
+        ),
+        (
+            "resumed_negative",
+            vec![
+                (0, 10, 1212, 0, None, NEGATIVE, Some(7)),
+                (1212, 10, 1212, 0, None, Some("marker failure"), Some(7)),
+            ],
+        ),
+        ("resumed_zero", vec![(0, 10, 1212, 0, None, ORDER, Some(7))]),
+        (
+            "resumed_positive",
+            vec![(0, 10, 12123, 2, Some(8), None, Some(8))],
+        ),
+    ]
 }

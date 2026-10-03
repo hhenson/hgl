@@ -271,6 +271,7 @@ fn actual_stdlib_and_harness_regressions_run_on_rust() -> Result<(), Box<dyn std
     failure_images(&dir)?;
     capability_failure_images(&dir)?;
     source_operator_image(&dir)?;
+    replay_order_failure_image(&dir)?;
     nullable_images(&dir)?;
     recording_key_image(&dir)?;
     global_images(&dir)?;
@@ -282,13 +283,14 @@ struct Provider;
 mod native { pub use hgl_std_native::*; }
 mod integer_zero; mod float_zero; mod late_output; mod modulo_zero;
 mod bounds; mod past_end; mod repeated_begin; mod append_unbegun; mod duplicate_time; mod wrong_time;
-mod source_operators; mod start_failure; mod nullable;
+mod source_operators; mod start_failure; mod nullable; mod replay_order_failure;
 mod globals; mod globals_missing; mod recording_keys;
 mod standard; mod regression; mod wrong; mod long; mod short; mod throwing;
 fn main() { match std::env::args().nth(1).as_deref() {
 Some("bounds") => bounds::main(), Some("past_end") => past_end::main(), Some("repeated_begin") => repeated_begin::main(), Some("append_unbegun") => append_unbegun::main(), Some("duplicate_time") => duplicate_time::main(), Some("wrong_time") => wrong_time::main(),
 Some("nullable") => nullable::main(), Some("source_operators") => source_operators::main(), Some("start_failure") => start_failure::main(),
 Some("recording_keys") => recording_keys::main(),
+Some("replay_order_failure") => replay_order_failure::main(),
 Some("globals") => globals::main(), Some("globals_missing") => globals_missing::main(),
 Some("modulo_zero") => modulo_zero::main(), Some("integer_zero") => integer_zero::main(), Some("float_zero") => float_zero::main(), Some("late_output") => late_output::main(),
 Some("throwing") => throwing::main(), Some("standard") => standard::main(), Some("regression") => regression::main(),
@@ -305,6 +307,11 @@ fn check_images(binary: &Path) -> Result<(), Box<dyn std::error::Error>> {
     for (name, success, message) in [
         ("standard", true, "101 tests, 171 evaluations, 0 failures"),
         ("source_operators", true, "0 failures"),
+        (
+            "replay_order_failure",
+            false,
+            "generator yield times must strictly increase",
+        ),
         ("nullable", true, "0 failures"),
         ("recording_keys", true, "0 failures"),
         ("globals", true, "9 tests, 17 evaluations, 0 failures"),
@@ -404,6 +411,26 @@ fn source_operator_image(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     assert!(!generated.contains("self.replay_input") && !generated.contains("self.capture"));
     assert!(!generated.contains("match self.next"));
     module(dir, "source_operators", &generated)?;
+    Ok(())
+}
+
+fn replay_order_failure_image(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let fixture =
+        include_str!("../../../external/hgraph_std/hgl/hgraph/tests/ordinary_replay_values.hgl");
+    assert!(fixture.contains("eval(ordinary_replay_increasing, tick:"));
+    let mut sources = source("");
+    sources.push((
+        "replay_order.hgl".into(),
+        fixture.replace(
+            "eval(ordinary_replay_increasing, tick:",
+            "eval(ordinary_replay_descending, tick:",
+        ),
+    ));
+    module(
+        dir,
+        "replay_order_failure",
+        &emit_tests(&compile_tests(&sources)?),
+    )?;
     Ok(())
 }
 

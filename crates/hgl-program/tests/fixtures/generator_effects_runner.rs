@@ -9,10 +9,11 @@ static TRACE: AtomicI64=AtomicI64::new(0);
 static FAIL: AtomicI64=AtomicI64::new(0);
 fn mark(value:i64)->Result<i64,Box<hgl_types::NodeError>> {
     TRACE.fetch_update(Ordering::SeqCst,Ordering::SeqCst,|trace|Some(trace*10+value)).unwrap();
-    if FAIL.load(Ordering::SeqCst)==value { return Err(hgl_types::NodeError::new("marker failure")); }
+    let failure=FAIL.load(Ordering::SeqCst);
+    if failure==value || failure==TRACE.load(Ordering::SeqCst) { return Err(hgl_types::NodeError::new("marker failure")); }
     Ok(value)
 }
-fn run(registry: &Registry, description: &hgl_describe::GraphDescription, fail:i64, end:i64, trace:i64, count:i64, last:Option<i64>, error:Option<&str>) {
+fn run(registry: &Registry, description: &hgl_describe::GraphDescription, fail:i64, end:i64, trace:i64, count:i64, last:Option<i64>, error:Option<&str>, held:Option<i64>) {
     TRACE.store(0,Ordering::SeqCst);
     FAIL.store(fail,Ordering::SeqCst);
     let mut store=Store::new();
@@ -24,10 +25,8 @@ fn run(registry: &Registry, description: &hgl_describe::GraphDescription, fail:i
         None=>{result.unwrap();},
     }
     assert_eq!(TRACE.load(Ordering::SeqCst),trace);
-    if error == Some("generator duplicate publication time") {
-        let output=built.outputs[0].unwrap();
-        assert_eq!(store.output_value_erased(output),Some(hgl_types::ScalarValue::I64(7)));
-    }
+    let output=built.outputs[0].unwrap();
+    assert_eq!(store.output_value_erased(output),held.map(hgl_types::ScalarValue::I64));
     let key=store.bind_global::<i64>("count").unwrap();
     assert_eq!(store.global_get(key).unwrap(),count);
     if let Some(value)=last {
