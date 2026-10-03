@@ -1,0 +1,35 @@
+module constructor_order
+struct Pair {
+    left: i64
+    right: i64
+}
+struct Nested {
+    first: Pair
+    second: Pair
+}
+native const fn mark(value: i64) -> i64 throws
+native const fn mark(value: i64) -> i64 throws {}
+fn source() -> i64 {
+    inject alarm
+    start { schedule(alarm, 0us) }
+    when { return 1 }
+}
+fn observe(value: i64, const failing: bool) {
+    inject global_state
+    when {
+        set(global_state, "before", 1)
+        if failing {
+            let incomplete = Pair(right: mark(9), left: mark(1))
+            set(global_state, "after", incomplete.left)
+        } else {
+            let pair = Pair(right: mark(2), left: mark(1))
+            set(global_state, "pair", pair.left * 10 + pair.right)
+            let nested = Nested(second: Pair(right: mark(4), left: mark(3)), first: Pair(right: mark(6), left: mark(5)))
+            set(global_state, "nested", nested.first.left * 1000 + nested.first.right * 100 + nested.second.left * 10 + nested.second.right)
+            let projected = Pair(right: mark(8), left: mark(7)).left
+            set(global_state, "projected", projected)
+        }
+    }
+}
+export fn success() { observe(source(), false) }
+export fn failure() { observe(source(), true) }

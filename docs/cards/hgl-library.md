@@ -21,3 +21,9 @@ selection belong to `hgl-program`; indexing does not execute a body.
 
 Acceptance: unchanged multi-part library; forward helper references across
 contexts; invalid context members; production helper isolation.
+
+`Role::Struct` indexes ordinary struct declarations without treating them as
+functions. `Decl::required_fields() -> Result<Vec<(String, String)>, String>`
+parses the nongeneric required-field subset, preserving source type names for
+frontend resolution. Duplicate fields, defaults, optional fields, inheritance
+and generic declarations are diagnosed when this subset is requested.

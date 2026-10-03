@@ -5,6 +5,8 @@ use std::collections::{BTreeMap, BTreeSet};
 #[derive(Debug, Clone, PartialEq, Eq)]
 /// The declaration role before overload selection.
 pub enum Role {
+    /// Ordinary nominal struct declaration.
+    Struct,
     /// Ordinary or const function.
     Function,
     /// Operator implementation.
@@ -223,6 +225,8 @@ fn load_source(
             } else if d.take("const") {
                 d.need("fn")?;
                 Role::Function
+            } else if d.take("struct") {
+                Role::Struct
             } else if d.take("fn") {
                 Role::Function
             } else {
@@ -262,6 +266,40 @@ fn add_import(
     Ok(())
 }
 impl Decl {
+    /// Parse the nongeneric ordinary struct subset with required fields.
+    pub fn required_fields(&self) -> Result<Vec<(String, String)>, String> {
+        let mut c = Cursor::new(&self.tokens);
+        c.take("export");
+        c.need("struct")?;
+        c.name()?;
+        if !c.take("{") {
+            return Err("ordinary structs currently require nongeneric required fields".into());
+        }
+        let mut fields = Vec::new();
+        c.lines();
+        while !c.take("}") {
+            let name = c.name()?;
+            c.need(":")?;
+            let ty = c.type_name()?;
+            if fields.iter().any(|(field, _)| *field == name) {
+                return Err(format!("duplicate struct field {name}"));
+            }
+            if !c.at("}") && !c.at("\n") {
+                return Err(
+                    "ordinary structs currently require fields without defaults or optionality"
+                        .into(),
+                );
+            }
+            fields.push((name, ty));
+            c.lines();
+        }
+        c.lines();
+        if !c.at("") {
+            return Err("unsupported struct declaration suffix".into());
+        }
+        Ok(fields)
+    }
+
     /// Parse this declaration as a callable signature.
     pub fn signature(&self) -> Result<Signature, String> {
         self.parse_signature().map_err(|e| {

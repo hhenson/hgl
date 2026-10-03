@@ -12,7 +12,9 @@ fn rust_type(ty: &Ty) -> &'static str {
         Ty::F64 => "f64",
         Ty::Str => "String",
         Ty::Void => "()",
-        Ty::Nullable(_) => unreachable!("nullable locals use inferred Rust types"),
+        Ty::Struct(..) | Ty::Nullable(_) => {
+            unreachable!("ordinary aggregate and nullable locals use inferred Rust types")
+        }
         Ty::Ref(_) => "hgl_store::Reference",
         Ty::Set(_) => "hgl_store::InputId",
     }
@@ -27,7 +29,7 @@ fn scalar_type(ty: &Ty) -> &'static str {
         Ty::Date => "Date",
         Ty::Time => "Time",
         Ty::DateTime => "DateTime",
-        Ty::Ref(_) | Ty::Set(_) | Ty::Nullable(_) | Ty::Void => {
+        Ty::Ref(_) | Ty::Set(_) | Ty::Nullable(_) | Ty::Struct(..) | Ty::Void => {
             unreachable!("checked endpoint type")
         }
     }
@@ -46,6 +48,8 @@ fn literal(value: &Literal) -> String {
 }
 fn value(plan: &Plan, v: &Value) -> String {
     match &v.kind {
+        Kind::Construct(fields) => construct(plan, fields),
+        Kind::Field(..) => retained(&place(plan, v), &v.ty),
         Kind::ReplaySlot(index) => format!("self.replay_input.get({})?", value(plan, index)),
         Kind::IsPresent(v) => presence(plan, v),
         Kind::Present(v) => format!(
@@ -72,7 +76,7 @@ fn value(plan: &Plan, v: &Value) -> String {
             "{{ let value = {}; _ctx.global_set(self.global{i}, &value)?; }}",
             value(plan, v)
         ),
-        Kind::Local(i) | Kind::MutableLocal(i) => format!("local{i}.clone()"),
+        Kind::Local(i) | Kind::MutableLocal(i) => retained(&format!("local{i}"), &v.ty),
         Kind::Native(i, args) => format!(
             "<crate::Provider as Native>::{}({}){}",
             plan.natives[*i].method,
@@ -107,6 +111,54 @@ fn value(plan: &Plan, v: &Value) -> String {
         Kind::Wire(_) | Kind::Void | Kind::Capability => unreachable!("checked runtime value"),
     }
 }
+fn construct(plan: &Plan, fields: &[(usize, Value)]) -> String {
+    if fields.is_empty() {
+        return "()".into();
+    }
+    let mut code = vec!["{ ".to_owned()];
+    for (index, argument) in fields {
+        code.push(format!("let field{index} = {}; ", value(plan, argument)));
+    }
+    let fields = (0..fields.len())
+        .map(|index| format!("field{index}"))
+        .collect::<Vec<_>>()
+        .join(",");
+    code.push(format!("({fields},) }}"));
+    code.concat()
+}
+fn place(plan: &Plan, v: &Value) -> String {
+    if let Kind::Local(i) | Kind::MutableLocal(i) = &v.kind {
+        return format!("local{i}");
+    }
+    if let Kind::Field(parent, index) = &v.kind {
+        return format!("({}).{index}", place(plan, parent));
+    }
+    value(plan, v)
+}
+fn retained(source: &str, ty: &Ty) -> String {
+    if matches!(ty, Ty::Nullable(_)) {
+        return format!("({source}).as_ref().map(hgl_store::Scalar::try_clone).transpose()?");
+    }
+    if let Ty::Struct(_, fields) = ty {
+        let fields = fields
+            .iter()
+            .enumerate()
+            .map(|(i, (_, ty))| retained(&format!("source.{i}"), ty))
+            .collect::<Vec<_>>()
+            .join(",");
+        return if fields.is_empty() {
+            format!("{{ let _ = &({source}); () }}")
+        } else {
+            format!("{{ let source = &({source}); ({fields},) }}")
+        };
+    }
+    if *ty == Ty::Str {
+        format!("hgl_store::Scalar::try_clone(&({source}))?")
+    } else {
+        format!("({source})")
+    }
+}
+
 fn binary(plan: &Plan, result: &Ty, op: &str, a: &Value, b: &Value) -> String {
     let a = if a.ty == Ty::Str {
         native_argument(plan, a)
@@ -182,8 +234,8 @@ fn assignment(plan: &Plan, target: &Value, v: &Value) -> String {
         format!("_ctx.set(self._output, {v});\n")
     } else if let Kind::Cache(i) = target.kind {
         format!("self.cache{i} = {v};\n")
-    } else if let Kind::MutableLocal(i) = target.kind {
-        format!("local{i} = {v};\n")
+    } else if matches!(target.kind, Kind::MutableLocal(_) | Kind::Field(..)) {
+        format!("{} = {v};\n", place(plan, target))
     } else {
         unreachable!("checked assignment")
     }
@@ -585,10 +637,12 @@ fn native_argument(plan: &Plan, v: &Value) -> String {
         Kind::Literal(Literal::Str(s)) => format!("{s:?}"),
         Kind::Cache(i) => format!("self.cache{i}.as_str()"),
         Kind::Local(i) | Kind::MutableLocal(i) => format!("local{i}.as_str()"),
+        Kind::Field(..) => format!("({}).as_str()", place(plan, v)),
         Kind::Output => {
             "_ctx.store().output_ref(self._output).expect(\"valid output\").as_str()".into()
         }
-        Kind::GlobalGet(_)
+        Kind::Construct(_)
+        | Kind::GlobalGet(_)
         | Kind::GlobalSet(..)
         | Kind::ReplaySlot(_)
         | Kind::IsPresent(_)

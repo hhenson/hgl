@@ -2,8 +2,8 @@
 
 Lower a checked, closed graph plan into Rust source for the existing engine.
 This is the Rust backend phase; source linking, inference, diagnostics, handler
-normalization and capability admission belong to `hgl-program`. Uses only the
-local `hgl-source` crate for shared types and literals. Budget: 700 source lines.
+normalization and capability admission belong to `hgl-program`. Uses the
+local `hgl-source` and `hgl-rust-ir` crates for shared types and literals. Budget: 700 source lines.
 No third-party dependencies or runtime execution dependencies.
 
 Public surface:
@@ -57,3 +57,21 @@ entry requirements before any start hook.
 Assignments target the checked binding; compound addition lowers through the
 ordinary typed binary expression and assignment paths. Read-only locals remain
 `Local`. Every generated eval provisions its fresh Store before construction.
+
+The checked IR is defined by `hgl-rust-ir` and reexported unchanged here.
+`Kind::{Construct,Field}` lower ordinary required-field struct locals to owned
+Rust tuples. Field access copies only the selected value, not its parent.
+Assignment addresses the writable local or nested field directly; its owned
+right-hand value is evaluated before replacing the destination. Canonical
+nominal identity remains in the checked IR. Structs are not admitted as ports,
+native arguments, cache entries, global entries or recording containers.
+
+Owning local/field retention recursively copies tuple fields, using the scalar
+provider's fallible text copy. Nullable scalar locals retain independent copies
+as before; text payloads use the same fallible copying path.
+
+Ordinary constructor arguments evaluate exactly once in source order; each
+argument's owned result is retained before the next argument executes.
+Assembly moves the retained temporaries into their declared-field positions.
+Failure stops later arguments without exposing a completed value, following
+`struct-constructor-order.md`. This slice does not admit default fields.

@@ -1,3 +1,4 @@
+//! Checked compiler/backend data boundary; source validation belongs to the frontend.
 use hgl_source::{Literal, Ty};
 
 /// A typed expression after frontend resolution.
@@ -17,6 +18,10 @@ impl Value {
 /// Checked expressions and frontend-only binding markers.
 #[derive(Debug, Clone)]
 pub enum Kind {
+    /// Supplied struct arguments in source order, paired with declared field indices.
+    Construct(Vec<(usize, Value)>),
+    /// A field of an ordinary struct, addressed by its checked index.
+    Field(Box<Value>, usize),
     /// Read the indexed prepared run-owned scalar entry.
     GlobalGet(usize),
     /// Replace the indexed prepared entry with an owned scalar value.

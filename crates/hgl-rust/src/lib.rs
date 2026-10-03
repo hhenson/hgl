@@ -3,7 +3,7 @@
 //! The frontend must validate types, indices, method names and execution phases
 //! before constructing this IR. Emission performs no source-language checking.
 mod emit;
-mod ir;
+use hgl_rust_ir as ir;
 
 pub use emit::{emit, emit_test_body};
-pub use ir::{Kind, Native, Node, Plan, Statement, Value};
+pub use hgl_rust_ir::{Kind, Native, Node, Plan, Statement, Value};

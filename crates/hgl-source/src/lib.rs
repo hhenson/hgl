@@ -113,6 +113,8 @@ pub fn lex(text: &str) -> Result<Vec<Token>, String> {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 /// Types admitted by the executable source compiler.
 pub enum Ty {
+    /// Qualified nominal identity and required ordinary field types.
+    Struct(String, Vec<(String, Self)>),
     /// Signed integer.
     I64,
     /// Binary floating point.
@@ -154,6 +156,7 @@ impl Ty {
             Self::Set(_) => "set",
             Self::Nullable(_) => "contextual nullable",
             Self::Void => "void",
+            Self::Struct(..) => "struct",
         }
     }
     /// Parse a concrete admitted type spelling.
@@ -324,6 +327,10 @@ impl<'a> Cursor<'a> {
     /// The literal scalar type.
     pub fn type_name(&mut self) -> Result<String, String> {
         let mut name = self.name()?;
+        while self.take("::") {
+            name.push_str("::");
+            name.push_str(&self.name()?);
+        }
         if self.take("<") {
             let child = self.type_name()?;
             if name == "ref" && child.starts_with("ref<") {
