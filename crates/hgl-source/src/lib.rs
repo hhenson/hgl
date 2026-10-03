@@ -110,108 +110,7 @@ pub fn lex(text: &str) -> Result<Vec<Token>, String> {
     Ok(out)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-/// Types admitted by the executable source compiler.
-pub enum Ty {
-    /// Ordinary list element and optional exact fixed length.
-    List(Box<Self>, Option<usize>),
-    /// Qualified nominal identity and required ordinary field types.
-    Struct(String, Vec<(String, Self)>),
-    /// Signed integer.
-    I64,
-    /// Binary floating point.
-    F64,
-    /// Boolean.
-    Bool,
-    /// UTF-8 text.
-    Str,
-    /// Microsecond interval.
-    Duration,
-    /// Calendar date.
-    Date,
-    /// Time of day.
-    Time,
-    /// UTC instant.
-    DateTime,
-    /// Reference designation.
-    Ref(Box<Self>),
-    /// Set membership.
-    Set(Box<Self>),
-    /// Contextual nullable expression; not an admitted source annotation.
-    Nullable(Box<Self>),
-    /// No result.
-    Void,
-}
-impl Ty {
-    /// Canonical scalar spelling; constructed types retain their child separately.
-    pub fn name(&self) -> &'static str {
-        match self {
-            Self::I64 => "i64",
-            Self::F64 => "f64",
-            Self::Bool => "bool",
-            Self::Str => "str",
-            Self::Duration => "duration",
-            Self::Date => "date",
-            Self::Time => "time",
-            Self::DateTime => "datetime",
-            Self::Ref(_) => "ref",
-            Self::Set(_) => "set",
-            Self::Nullable(_) => "contextual nullable",
-            Self::Void => "void",
-            Self::Struct(..) => "struct",
-            Self::List(..) => "list",
-        }
-    }
-    /// Parse a concrete admitted type spelling.
-    pub fn parse(name: &str) -> Option<Self> {
-        if let Some(child) = name.strip_prefix("ref<").and_then(|s| s.strip_suffix('>')) {
-            return Some(Self::Ref(Box::new(Self::parse(child)?)));
-        }
-        if let Some(child) = name.strip_prefix("set<").and_then(|s| s.strip_suffix('>')) {
-            return Some(Self::Set(Box::new(Self::parse(child)?)));
-        }
-        if let Some((element, size)) = Self::list_parts(name) {
-            return Some(Self::List(Box::new(Self::parse(element)?), size));
-        }
-        match name {
-            "i64" => Some(Self::I64),
-            "f64" => Some(Self::F64),
-            "bool" => Some(Self::Bool),
-            "str" => Some(Self::Str),
-            "duration" => Some(Self::Duration),
-            "date" => Some(Self::Date),
-            "time" => Some(Self::Time),
-            "datetime" => Some(Self::DateTime),
-            "void" => Some(Self::Void),
-            _ => None,
-        }
-    }
-    /// Split an ordinary list spelling, respecting nested type arguments.
-    pub fn list_parts(name: &str) -> Option<(&str, Option<usize>)> {
-        let body = name.strip_prefix("list<")?.strip_suffix('>')?;
-        let mut depth = 0;
-        for (index, ch) in body.char_indices() {
-            if ch == '<' {
-                depth += 1;
-            }
-            if ch == '>' {
-                depth -= 1;
-            }
-            if ch == ',' && depth == 0 {
-                let size = &body[index + 1..];
-                return Some((
-                    &body[..index],
-                    if size == "unbounded" {
-                        None
-                    } else {
-                        Some(usize::try_from(size.parse::<i64>().ok()?).ok()?)
-                    },
-                ));
-            }
-        }
-        Some((body, None))
-    }
-}
+pub use hgl_type_shape::{Nominal, Ty, application};
 #[derive(Debug, Clone, PartialEq)]
 /// A fixed scalar value in HGL source.
 pub enum Literal {
@@ -266,6 +165,8 @@ pub enum Expr {
     Unary(String, Box<Self>),
     /// Callable name and positional or named arguments.
     Call(String, Vec<(Option<String>, Self)>),
+    /// Explicit struct application and supplied named fields.
+    Applied(String, Vec<(Option<String>, Self)>),
     /// Binary operator.
     Binary(String, Box<Self>, Box<Self>),
 }
@@ -362,21 +263,76 @@ impl<'a> Cursor<'a> {
             name.push_str("::");
             name.push_str(&self.name()?);
         }
-        if self.take("<") {
-            let child = self.type_name()?;
-            if name == "ref" && child.starts_with("ref<") {
+        if self.at("<") {
+            name.push_str(&self.type_arguments()?);
+            if name.starts_with("ref<ref<") {
                 return Err("explicit ref<ref<T>> is not valid".into());
             }
-            name.push('<');
-            name.push_str(&child);
-            if self.take(",") {
-                name.push(',');
-                name.push_str(&self.consume()?);
-            }
-            self.need(">")?;
-            name.push('>');
         }
         Ok(name)
+    }
+    fn type_arguments(&mut self) -> Result<String, String> {
+        self.need("<")?;
+        let mut text = String::from("<");
+        let mut depth = 1;
+        while depth > 0 {
+            let token = self.consume()?;
+            if token == "<" {
+                depth += 1;
+            }
+            if token == ">" {
+                depth -= 1;
+            }
+            if token != "\n" {
+                text.push_str(&token);
+            }
+        }
+        Ok(text)
+    }
+    fn applied_constructor(&self) -> bool {
+        if !self.at("<") {
+            return false;
+        }
+        let mut depth = 0;
+        let mut parentheses = 0;
+        let mut previous = "";
+        for (index, token) in self.tokens.iter().enumerate().skip(self.pos) {
+            let text = token.text.as_str();
+            if parentheses > 0 {
+                if text == "(" {
+                    parentheses += 1;
+                }
+                if text == ")" {
+                    parentheses -= 1;
+                }
+                previous = text;
+                continue;
+            }
+            match text {
+                "<" => depth += 1,
+                ">" => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return self.tokens.get(index + 1).is_some_and(|t| t.text == "(");
+                    }
+                }
+                "(" => parentheses = 1,
+                "\n" => {
+                    let next = self.tokens[index + 1..].iter().find(|t| t.text != "\n");
+                    if !matches!(previous, "<" | ",")
+                        && !next.is_some_and(|t| matches!(t.text.as_str(), ">" | ","))
+                    {
+                        return false;
+                    }
+                    continue;
+                }
+                "," | "::" | "+" | "-" | "*" | "/" | "%" => {}
+                other if generic_token(other) => {}
+                _ => return false,
+            }
+            previous = text;
+        }
+        false
     }
     /// Parse an expression using operator precedence.
     pub fn expr(&mut self) -> Result<Expr, String> {
@@ -472,13 +428,25 @@ impl<'a> Cursor<'a> {
             return string_literal(&text);
         }
         let mut name = text;
-        if self.at("::") {
+        while self.at("::") {
             name.push_str(&self.consume()?);
             name.push_str(&self.name()?);
+        }
+        let applied = self.applied_constructor();
+        if applied {
+            name.push_str(&self.type_arguments()?);
         }
         if !self.take("(") {
             return Ok(Expr::Name(name));
         }
+        let args = self.call_arguments()?;
+        Ok(if applied {
+            Expr::Applied(name, args)
+        } else {
+            Expr::Call(name, args)
+        })
+    }
+    fn call_arguments(&mut self) -> Result<Vec<(Option<String>, Expr)>, String> {
         let mut args = Vec::new();
         self.lines();
         while !self.at(")") {
@@ -497,7 +465,7 @@ impl<'a> Cursor<'a> {
             self.lines();
         }
         self.need(")")?;
-        Ok(Expr::Call(name, args))
+        Ok(args)
     }
     fn else_body(&mut self) -> Result<Vec<Stmt>, String> {
         if !self.take("if") {
@@ -626,6 +594,7 @@ impl Expr {
             | Self::Index(..)
             | Self::Name(_)
             | Self::Call(..)
+            | Self::Applied(..)
             | Self::Sequence(_) => None,
         }
     }
@@ -725,6 +694,44 @@ fn expand_selectors(expr: Expr, inputs: &[(Option<String>, Expr)]) -> (Expr, u8)
         | Expr::Sequence(_)
         | Expr::Unary(..)
         | Expr::Call(..)
+        | Expr::Applied(..)
         | Expr::Binary(..)) => (other, 0),
     }
+}
+
+fn generic_token(text: &str) -> bool {
+    if matches!(
+        text,
+        "fn" | "struct"
+            | "abstract"
+            | "module"
+            | "use"
+            | "as"
+            | "export"
+            | "native"
+            | "const"
+            | "let"
+            | "var"
+            | "return"
+            | "if"
+            | "else"
+            | "for"
+            | "in"
+            | "requires"
+            | "operator"
+            | "impl"
+            | "test"
+            | "when"
+            | "start"
+            | "stop"
+            | "throws"
+    ) {
+        return false;
+    }
+    text.starts_with('"')
+        || text.starts_with('@')
+        || text
+            .bytes()
+            .next()
+            .is_some_and(|c| c.is_ascii_alphanumeric() || c == b'_')
 }

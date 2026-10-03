@@ -23,7 +23,12 @@ Acceptance: unchanged multi-part library; forward helper references across
 contexts; invalid context members; production helper isolation.
 
 `Role::Struct` indexes ordinary struct declarations without treating them as
-functions. `Decl::required_fields() -> Result<Vec<(String, String)>, String>`
-parses the nongeneric required-field subset, preserving source type names for
+functions. `Decl::required_struct() -> Result<RequiredStruct, String>`
+parses the required-field subset, preserving source type names for
 frontend resolution. Duplicate fields, defaults, optional fields, inheritance
-and generic declarations are diagnosed when this subset is requested.
+and unsupported generic declarations are diagnosed when this subset is requested.
+
+`RequiredStruct { generics, fields, type_domain }` and `Decl::required_struct`
+retain ordered type parameters and the supported finite type-domain constraint.
+Type parameters are distinct; const parameters, defaults, optional fields,
+inheritance and unsupported constraints are diagnosed explicitly.

@@ -1,0 +1,22 @@
+module generic_struct_conflict
+struct Phantom<T> { amount:i64 }
+fn integer(const key:str) {
+    inject global_state
+    start {
+        set(global_state,"hook_started",true)
+        set(global_state,key,Phantom<i64>(amount:1))
+    }
+    when {}
+}
+fn text(const key:str) {
+    inject global_state
+    start {
+        set(global_state,"hook_started",true)
+        set(global_state,key,Phantom<str>(amount:2))
+    }
+    when {}
+}
+export fn main() {
+    integer("shared")
+    text("shared")
+}

@@ -15,7 +15,7 @@ evaluate and retain supplied arguments in written order before assembling
 declared field order. Prepared aggregate slots represent lexical borrows and
 project without copying parents. Retention reads and writes use typed context
 APIs, with RHS retention completed before replacement. Canonical nominal marker
-identifiers encode the complete qualified name without hash collisions.
+identifiers encode the complete qualified specialization source name without hash collisions.
 
 Acceptance: all existing emitted source executions, aggregate global lifecycle
 fixtures, retention independence, projection writes and failed replacement.

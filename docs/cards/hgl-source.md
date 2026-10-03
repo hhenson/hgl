@@ -1,7 +1,7 @@
 # Card: hgl-source
 
 Lexer and body syntax shared by library indexing and graph checking. Uses only
-`hgl-calendar`; budget 700 lines. No runtime dependency.
+`hgl-calendar` and `hgl-type-shape`; budget 700 lines. No runtime dependency.
 
 Surface: `Token { text, span }`, `lex(&str) -> Result<Vec<Token>, String>`;
 `Ty` and `Ty::{parse,name}`; `Literal` and `Literal::ty`; `Expr` and
@@ -42,9 +42,9 @@ whether the selected field is writable; no new writable field domain is admitted
 name and initializer. Annotation resolution and initializer compatibility are
 frontend checks; a typed local supplies ordinary expected-value context.
 
-`Ty::Struct(String, Vec<(String, Ty)>)` is a resolved finite ordinary struct:
+`Ty::Struct(Nominal, Vec<(String, Ty)>)` is a resolved finite ordinary struct:
 qualified nominal identity plus declared field names and types. It is created
-by the frontend, not `Ty::parse`; generic/optional/recursive schemas remain
+by the frontend, not `Ty::parse`; optional/recursive schemas remain
 outside this executable subset.
 
 `Ty::List(element, fixed_size)` preserves ordinary element type and optional
@@ -53,3 +53,10 @@ omitted size; numeric sizes fit nonnegative i64. `Ty::list_parts` splits the
 outer list arguments without losing nested list/struct spellings. Existing
 `Expr::Sequence` and `Expr::Index` are contextual ordinary list syntax as well
 as their separate harness/replay uses; admission belongs to the checker.
+
+Ty and Nominal are re-exported from hgl-type-shape. `Expr::Applied` retains an
+explicit struct constructor application separately from ordinary calls. Generic
+argument lookahead follows the pinned grammar before resolving the callee;
+comparison parsing remains independent of visible declarations. Source type
+spelling accepts nested multiple generic arguments. Checking rejects unsupported
+argument roles and explicit generic callable application.

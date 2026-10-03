@@ -216,3 +216,58 @@ pub fn constant(value: &Value) -> bool {
     }
     matches!(value.kind, Kind::Literal(_) | Kind::WiringFailure(_))
 }
+
+/// Infer ordinary nested nominal patterns and resolve the selected signature.
+pub fn signature_types(
+    library: &hgl_library::Library,
+    module: &str,
+    signature: &Signature,
+    args: &[(Option<String>, Value)],
+) -> Result<BTreeMap<String, Ty>, String> {
+    let names = signature
+        .parameters
+        .iter()
+        .map(|p| p.name.as_str())
+        .collect::<Vec<_>>();
+    let supplied = order_arguments(&names, args)?;
+    let mut types = BTreeMap::new();
+    for (index, value) in supplied {
+        let parameter = &signature.parameters[index];
+        let formal = parameter
+            .ty
+            .strip_prefix("ref<")
+            .or_else(|| parameter.ty.strip_prefix("set<"))
+            .and_then(|s| s.strip_suffix('>'))
+            .unwrap_or(&parameter.ty);
+        if signature.generics.iter().any(|name| name == formal) {
+            bind_type(signature, parameter, value, &mut types)?;
+        } else if matches!(value.ty, Ty::Struct(..) | Ty::List(..)) {
+            hgl_value_types::unify(
+                library,
+                module,
+                &parameter.ty,
+                &value.ty,
+                &signature.generics,
+                &mut types,
+            )?;
+        }
+    }
+    for name in signature
+        .parameters
+        .iter()
+        .map(|p| &p.ty)
+        .chain(std::iter::once(&signature.result))
+    {
+        if matches!(name.as_str(), "signal" | "void") {
+            continue;
+        }
+        if let Some(ty) = resolve_type(name, &types) {
+            types.insert(name.clone(), ty);
+        } else if let Ok(ty) =
+            hgl_value_types::substitute(library, module, name, &types, &mut BTreeSet::new())
+        {
+            types.insert(name.clone(), ty);
+        }
+    }
+    Ok(types)
+}

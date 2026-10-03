@@ -203,23 +203,6 @@ impl Checker {
         self.ordinary_type(&owner, &parameter.ty, &mut BTreeSet::new())
             .ok()
     }
-    fn signature_types(&self, module: &str, signature: &Signature) -> BTreeMap<String, Ty> {
-        let mut types = BTreeMap::new();
-        for name in signature
-            .parameters
-            .iter()
-            .map(|p| &p.ty)
-            .chain(std::iter::once(&signature.result))
-        {
-            if signature.generics.contains(name) || matches!(name.as_str(), "signal" | "void") {
-                continue;
-            }
-            if let Ok(ty) = self.ordinary_type(module, name, &mut BTreeSet::new()) {
-                types.insert(name.clone(), ty);
-            }
-        }
-        types
-    }
     fn select(
         &self,
         module: &str,
@@ -257,7 +240,18 @@ impl Checker {
             if decl.role == Role::Native && !signature.body.is_empty() {
                 continue;
             }
-            let declared = self.signature_types(&decl.module, &signature);
+            let declared = match hgl_value_bind::signature_types(
+                &self.library,
+                &decl.module,
+                &signature,
+                args,
+            ) {
+                Ok(types) => types,
+                Err(error) => {
+                    errors.push(error);
+                    continue;
+                }
+            };
             match bind(
                 &signature,
                 args,
@@ -820,7 +814,15 @@ impl Checker {
         let ty = annotation
             .map(|name| {
                 resolve_type(name, &self.types).map_or_else(
-                    || self.ordinary_type(module, name, &mut BTreeSet::new()),
+                    || {
+                        hgl_value_types::substitute(
+                            &self.library,
+                            module,
+                            name,
+                            &self.types,
+                            &mut BTreeSet::new(),
+                        )
+                    },
                     Ok,
                 )
             })
@@ -907,6 +909,14 @@ impl Checker {
         runtime: bool,
         expected: Option<&Ty>,
     ) -> Result<Value, String> {
+        if let Expr::Applied(name, args) = expr {
+            return self.constructor(module, (name, args), env, runtime, expected);
+        }
+        if let Expr::Call(name, args) = expr
+            && self.struct_declaration(module, name)?.is_some()
+        {
+            return self.constructor(module, (name, args), env, runtime, expected);
+        }
         if let Expr::Sequence(elements) = expr {
             return hgl_value_check::list_literal(elements, expected);
         }
@@ -1182,6 +1192,7 @@ impl Checker {
                     Kind::Unary(op.clone(), Box::new(value)),
                 ))
             }
+            Expr::Applied(name, args) => self.constructor(module, (name, args), env, runtime, None),
             Expr::Call(name, args) => self.call_expression(module, name, args, env, runtime),
             Expr::Binary(op, a, b) => self.binary(module, op, (a, b), env, runtime),
         }
@@ -1253,7 +1264,7 @@ impl Checker {
             }
         }
         if self.struct_declaration(module, name)?.is_some() {
-            return self.constructor(module, name, args, env, runtime);
+            return self.constructor(module, (name, args), env, runtime, None);
         }
         let args = args
             .iter()
@@ -1312,40 +1323,26 @@ impl Checker {
     fn constructor(
         &mut self,
         module: &str,
-        name: &str,
-        args: &[(Option<String>, Expr)],
+        (name, args): (&str, &[(Option<String>, Expr)]),
         env: &Env,
         runtime: bool,
+        expected: Option<&Ty>,
     ) -> Result<Value, String> {
-        let ty = self.ordinary_type(module, name, &mut BTreeSet::new())?;
-        let Ty::Struct(_, fields) = &ty else {
-            unreachable!("resolved struct")
-        };
-        let mut seen = BTreeSet::new();
-        let mut values = Vec::new();
-        for (name, expr) in args {
-            let name = name
-                .as_ref()
-                .ok_or("struct construction requires named fields")?;
-            let (index, (_, expected)) = fields
-                .iter()
-                .enumerate()
-                .find(|(_, (field, _))| field == name)
-                .ok_or_else(|| format!("unknown argument {name}"))?;
-            if !seen.insert(index) {
-                return Err(format!("duplicate struct field {name}"));
-            }
-            let value = self.expected_expression(module, expr, env, runtime, Some(expected))?;
+        let mut check = hgl_struct_check::Constructor::new(
+            &self.library,
+            module,
+            name,
+            args,
+            expected,
+            &self.types,
+        )?;
+        while let Some((index, hint)) = check.next(&self.library, args)? {
+            let value =
+                self.expected_expression(module, &args[index].1, env, runtime, hint.as_ref())?;
             require_payload(&value)?;
-            if value.ty != *expected {
-                return Err(format!("{name}: missing or wrong-type argument"));
-            }
-            values.push((index, value));
+            check.checked(&self.library, index, value)?;
         }
-        if values.len() != fields.len() {
-            return Err("struct construction: missing or wrong-type argument".into());
-        }
-        Ok(Value::new(ty, Kind::Construct(values)))
+        check.finish(&self.library)
     }
     fn value_call(
         &mut self,

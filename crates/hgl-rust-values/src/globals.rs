@@ -14,6 +14,7 @@ pub fn global_type(ty: &Ty) -> String {
     }
     if let Ty::Struct(name, _) = ty {
         let identity = name
+            .source_name()
             .bytes()
             .map(|byte| format!("{byte:02x}"))
             .collect::<Vec<_>>()
@@ -61,7 +62,7 @@ fn collect<'a>(ty: &'a Ty, types: &mut BTreeMap<String, &'a Ty>) {
         collect(element, types);
     }
     if let Ty::Struct(name, fields) = ty {
-        types.insert(name.clone(), ty);
+        types.insert(name.source_name(), ty);
         for (_, ty) in fields {
             collect(ty, types);
         }
@@ -79,6 +80,7 @@ fn marker(ty: &Ty) -> String {
     let Ty::Struct(identity, fields) = ty else {
         unreachable!("collected structs")
     };
+    let identity = identity.source_name();
     let name = global_type(ty);
     let value = tuple(
         fields

@@ -173,6 +173,7 @@ dependencies = [
  "hgl-library",
  "hgl-rust",
  "hgl-source",
+ "hgl-struct-check",
  "hgl-value-bind",
  "hgl-value-check",
  "hgl-value-eval",
@@ -219,6 +220,7 @@ name = "hgl-source"
 version = "0.0.0"
 dependencies = [
  "hgl-calendar",
+ "hgl-type-shape",
 ]
 
 [[package]]
@@ -256,6 +258,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "hgl-struct-check"
+version = "0.0.0"
+dependencies = [
+ "hgl-library",
+ "hgl-rust-ir",
+ "hgl-source",
+ "hgl-value-types",
+]
+
+[[package]]
 name = "hgl-testkit"
 version = "0.0.0"
 dependencies = [
@@ -268,6 +280,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "hgl-type-shape"
+version = "0.0.0"
+
+[[package]]
 name = "hgl-types"
 version = "0.0.0"
 
@@ -278,6 +294,7 @@ dependencies = [
  "hgl-library",
  "hgl-rust-ir",
  "hgl-source",
+ "hgl-value-types",
 ]
 
 [[package]]

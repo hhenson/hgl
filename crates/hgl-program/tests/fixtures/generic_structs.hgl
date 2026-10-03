@@ -1,0 +1,207 @@
+module generic_structs
+struct TimedValue<T> { time:datetime
+value:T }
+struct Envelope<T> { item:T }
+struct Phantom<T> { amount:i64 }
+struct Pair<A,B> { first:A
+second:B }
+struct Same<T> { first:T
+second:T }
+struct Numeric<T> requires T in {i64,f64} { value:T }
+native const fn mark(value:i64)->i64 throws
+native const fn mark(value:i64)->i64 throws {}
+const fn contextual()->Phantom<str> { return Phantom(amount:3) }
+const fn parameter(value:Phantom<i64>)->i64 { return value.amount }
+const fn record<T>(value:T)->TimedValue<T> {
+    var records:list<TimedValue<T>> =[]
+    push(records,TimedValue<T>(time:@1970-01-01T00:00:00Z,value:value))
+    return records[0]
+}
+const fn payload<T>(value:TimedValue<T>)->T { return value.value }
+const fn list_payload<T>(values:list<TimedValue<T>>)->T { return values[0].value }
+fn publish<T>(const value:T)->T {
+    inject alarm
+    start { schedule(alarm,0us) }
+    when { return value }
+}
+fn capture<T>(ts:T,const key:str,const result:str) {
+    inject global_state,clock
+    start {
+        let initial:list<TimedValue<T>> =[]
+        set(global_state,key,initial)
+    }
+    when {
+        var samples:list<TimedValue<T>> =get(global_state,key)
+        push(samples,TimedValue<T>(time:clock.evaluation_time,value:delta_value(ts)))
+        set(global_state,result,samples[0].value)
+        set(global_state,"capture_count",len(samples))
+        set(global_state,"capture_time",samples[0].time)
+    }
+}
+fn configured(const flag:list<TimedValue<bool>>, const integer:list<TimedValue<i64>>, const real:list<TimedValue<f64>>, const text:list<TimedValue<str>>, const day:list<TimedValue<date>>, const time:list<TimedValue<time>>, const instant:list<TimedValue<datetime>>, const elapsed:list<TimedValue<duration>>) {
+    inject alarm,global_state
+    start { schedule(alarm,0us) }
+    when {
+        set(global_state,"configured_flag",flag[0].value)
+        set(global_state,"entry_flag",flag[0])
+        set(global_state,"list_flag",flag)
+        let entry_flag:TimedValue<bool> =get(global_state,"entry_flag")
+        let list_flag:list<TimedValue<bool>> =get(global_state,"list_flag")
+        set(global_state,"observed_flag",entry_flag.value)
+        set(global_state,"indexed_flag",list_flag[0].value)
+        set(global_state,"helper_flag",payload(flag[0]))
+        set(global_state,"helper_list_flag",list_payload(flag))
+        set(global_state,"configured_integer",integer[0].value)
+        set(global_state,"entry_integer",integer[0])
+        set(global_state,"list_integer",integer)
+        let entry_integer:TimedValue<i64> =get(global_state,"entry_integer")
+        let list_integer:list<TimedValue<i64>> =get(global_state,"list_integer")
+        set(global_state,"observed_integer",entry_integer.value)
+        set(global_state,"indexed_integer",list_integer[0].value)
+        set(global_state,"helper_integer",payload(integer[0]))
+        set(global_state,"helper_list_integer",list_payload(integer))
+        set(global_state,"configured_real",real[0].value)
+        set(global_state,"entry_real",real[0])
+        set(global_state,"list_real",real)
+        let entry_real:TimedValue<f64> =get(global_state,"entry_real")
+        let list_real:list<TimedValue<f64>> =get(global_state,"list_real")
+        set(global_state,"observed_real",entry_real.value)
+        set(global_state,"indexed_real",list_real[0].value)
+        set(global_state,"helper_real",payload(real[0]))
+        set(global_state,"helper_list_real",list_payload(real))
+        set(global_state,"configured_text",text[0].value)
+        set(global_state,"entry_text",text[0])
+        set(global_state,"list_text",text)
+        let entry_text:TimedValue<str> =get(global_state,"entry_text")
+        let list_text:list<TimedValue<str>> =get(global_state,"list_text")
+        set(global_state,"observed_text",entry_text.value)
+        set(global_state,"indexed_text",list_text[0].value)
+        set(global_state,"helper_text",payload(text[0]))
+        set(global_state,"helper_list_text",list_payload(text))
+        set(global_state,"configured_day",day[0].value)
+        set(global_state,"entry_day",day[0])
+        set(global_state,"list_day",day)
+        let entry_day:TimedValue<date> =get(global_state,"entry_day")
+        let list_day:list<TimedValue<date>> =get(global_state,"list_day")
+        set(global_state,"observed_day",entry_day.value)
+        set(global_state,"indexed_day",list_day[0].value)
+        set(global_state,"helper_day",payload(day[0]))
+        set(global_state,"helper_list_day",list_payload(day))
+        set(global_state,"configured_time",time[0].value)
+        set(global_state,"entry_time",time[0])
+        set(global_state,"list_time",time)
+        let entry_time:TimedValue<time> =get(global_state,"entry_time")
+        let list_time:list<TimedValue<time>> =get(global_state,"list_time")
+        set(global_state,"observed_time",entry_time.value)
+        set(global_state,"indexed_time",list_time[0].value)
+        set(global_state,"helper_time",payload(time[0]))
+        set(global_state,"helper_list_time",list_payload(time))
+        set(global_state,"configured_instant",instant[0].value)
+        set(global_state,"entry_instant",instant[0])
+        set(global_state,"list_instant",instant)
+        let entry_instant:TimedValue<datetime> =get(global_state,"entry_instant")
+        let list_instant:list<TimedValue<datetime>> =get(global_state,"list_instant")
+        set(global_state,"observed_instant",entry_instant.value)
+        set(global_state,"indexed_instant",list_instant[0].value)
+        set(global_state,"helper_instant",payload(instant[0]))
+        set(global_state,"helper_list_instant",list_payload(instant))
+        set(global_state,"configured_elapsed",elapsed[0].value)
+        set(global_state,"entry_elapsed",elapsed[0])
+        set(global_state,"list_elapsed",elapsed)
+        let entry_elapsed:TimedValue<duration> =get(global_state,"entry_elapsed")
+        let list_elapsed:list<TimedValue<duration>> =get(global_state,"list_elapsed")
+        set(global_state,"observed_elapsed",entry_elapsed.value)
+        set(global_state,"indexed_elapsed",list_elapsed[0].value)
+        set(global_state,"helper_elapsed",payload(elapsed[0]))
+        set(global_state,"helper_list_elapsed",list_payload(elapsed))
+        var independent=integer
+        independent[0].value=99
+        set(global_state,"configuration_original",integer[0].value)
+        set(global_state,"configuration_independent",independent[0].value)
+    }
+}
+fn ownership() {
+    inject alarm,global_state
+    start {
+        schedule(alarm,0us)
+        var child:list<i64> =[]
+        push(child,1)
+        var original=TimedValue(time:@1970-01-01T00:00:04Z,value:child)
+        let wrapped=Envelope(item:original)
+        set(global_state,"owned_root",original)
+        push(original.value,2)
+        push(child,3)
+        set(global_state,"wrapped_length",len(wrapped.item.value))
+        set(global_state,"original_length",len(original.value))
+        set(global_state,"source_length",len(child))
+        set(global_state,"phantom_i64",Phantom<i64>(amount:1))
+        set(global_state,"phantom_str",Phantom<str>(amount:2))
+    }
+    when {
+        var owning:TimedValue<list<i64>> =TimedValue(time:@1970-01-01T00:00:00Z,value:[])
+        if true {
+            let observed:TimedValue<list<i64>> =get(global_state,"owned_root")
+            let alias=observed
+            owning=alias
+            set(global_state,"borrowed_initial",len(alias.value))
+            set(global_state,"retained_root",alias)
+        }
+        if true {
+            var editable:TimedValue<list<i64>> =get(global_state,"owned_root")
+            push(editable.value,4)
+            editable=TimedValue(time:editable.time,value:editable.value)
+            push(editable.value,5)
+            set(global_state,"borrowed_updated",len(editable.value))
+        }
+        push(owning.value,8)
+        set(global_state,"owning_length",len(owning.value))
+        let retained:TimedValue<list<i64>> =get(global_state,"retained_root")
+        set(global_state,"retained_length",len(retained.value))
+        let pi:Phantom<i64> =get(global_state,"phantom_i64")
+        let ps:Phantom<str> =get(global_state,"phantom_str")
+        set(global_state,"phantom_sum",pi.amount+ps.amount)
+        set(global_state,"contextual_return",contextual().amount)
+        set(global_state,"contextual_parameter",parameter(Phantom(amount:6)))
+        let pair=Pair(first:TimedValue(time:@1970-01-01T00:00:00Z,value:7),second:"pair")
+        let repeated=Same(first:pair.first,second:TimedValue(time:pair.first.time,value:8))
+        set(global_state,"nested_repeated",repeated.first.value+repeated.second.value)
+        set(global_state,"constrained",Numeric(value:9).value)
+        let inferred=Same(second:Phantom(amount:mark(1)),first:Phantom<i64>(amount:mark(2)))
+        let reverse=Same(second:Phantom<i64>(amount:mark(3)),first:Phantom(amount:mark(4)))
+        set(global_state,"inferred_fields",inferred.first.amount*10+inferred.second.amount)
+        set(global_state,"reverse_fields",reverse.first.amount*10+reverse.second.amount)
+    }
+    stop {
+        let final:TimedValue<list<i64>> =get(global_state,"owned_root")
+        set(global_state,"stop_length",len(final.value))
+    }
+}
+export fn main() {
+    var flag:list<TimedValue<bool>> =[]
+    push(flag,record(true))
+    var integer:list<TimedValue<i64>> =[]
+    push(integer,record(7))
+    var real:list<TimedValue<f64>> =[]
+    push(real,record(2.5))
+    var text:list<TimedValue<str>> =[]
+    push(text,record("payload"))
+    var day:list<TimedValue<date>> =[]
+    push(day,record(@1970-01-01))
+    var time:list<TimedValue<time>> =[]
+    push(time,record(@00:00:02))
+    var instant:list<TimedValue<datetime>> =[]
+    push(instant,record(@1970-01-01T00:00:03Z))
+    var elapsed:list<TimedValue<duration>> =[]
+    push(elapsed,record(2us))
+    configured(flag,integer,real,text,day,time,instant,elapsed)
+    integer[0].value=999
+    capture(publish(true),"capture_flag","captured_flag")
+    capture(publish(7),"capture_integer","captured_integer")
+    capture(publish(2.5),"capture_real","captured_real")
+    capture(publish("payload"),"capture_text","captured_text")
+    capture(publish(@1970-01-01),"capture_day","captured_day")
+    capture(publish(@00:00:02),"capture_time_of_day","captured_time")
+    capture(publish(@1970-01-01T00:00:03Z),"capture_instant","captured_instant")
+    capture(publish(2us),"capture_elapsed","captured_elapsed")
+    ownership()
+}

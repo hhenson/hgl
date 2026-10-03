@@ -70,6 +70,16 @@ pub struct Signature {
     /// Native scalar requirement: name, arguments and result.
     pub requirement: Option<(String, Vec<String>, String)>,
 }
+#[derive(Debug, Clone)]
+/// Required-field struct contract before specialization.
+pub struct RequiredStruct {
+    /// Ordered distinct type parameters.
+    pub generics: Vec<String>,
+    /// Declaration-ordered source field types.
+    pub fields: Vec<(String, String)>,
+    /// Supported finite type-domain constraint.
+    pub type_domain: Option<(String, Vec<String>)>,
+}
 #[derive(Debug, Default, Clone)]
 /// Indexed source declarations, imports and explicit instances.
 pub struct Library {
@@ -266,14 +276,49 @@ fn add_import(
     Ok(())
 }
 impl Decl {
-    /// Parse the nongeneric ordinary struct subset with required fields.
-    pub fn required_fields(&self) -> Result<Vec<(String, String)>, String> {
+    /// Parse the finite type-generic required-field struct subset.
+    pub fn required_struct(&self) -> Result<RequiredStruct, String> {
         let mut c = Cursor::new(&self.tokens);
         c.take("export");
         c.need("struct")?;
         c.name()?;
+        let mut generics = Vec::new();
+        if c.take("<") {
+            c.lines();
+            loop {
+                if c.at("const") {
+                    return Err("const-generic structs are not supported".into());
+                }
+                let parameter = c.name()?;
+                if parameter == "_" || generics.contains(&parameter) {
+                    return Err("struct type parameters must be distinct names".into());
+                }
+                generics.push(parameter);
+                c.lines();
+                if c.at("=") {
+                    return Err("generic parameter defaults are not supported".into());
+                }
+                if !c.take(",") {
+                    c.need(">")?;
+                    break;
+                }
+                c.lines();
+            }
+        }
+        c.lines();
+        let type_domain = if c.take("requires") {
+            if c.tokens.get(c.pos + 1).is_none_or(|t| t.text != "in") {
+                return Err("unsupported struct constraint".into());
+            }
+            Some(parse_domain(&mut c, &generics)?)
+        } else {
+            None
+        };
+        c.lines();
         if !c.take("{") {
-            return Err("ordinary structs currently require nongeneric required fields".into());
+            return Err(
+                "ordinary structs currently require required fields without inheritance".into(),
+            );
         }
         let mut fields = Vec::new();
         c.lines();
@@ -297,7 +342,11 @@ impl Decl {
         if !c.at("") {
             return Err("unsupported struct declaration suffix".into());
         }
-        Ok(fields)
+        Ok(RequiredStruct {
+            generics,
+            fields,
+            type_domain,
+        })
     }
 
     /// Parse this declaration as a callable signature.

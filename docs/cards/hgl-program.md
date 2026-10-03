@@ -140,13 +140,13 @@ str), while cache increments retain their i64 profile. Primitive global get
 initializes an owned local, so local mutation never implicitly writes the entry.
 Uninitialized locals remain outside this backend subset. No value-type qualifier is introduced.
 
-Runtime hook locals admit nongeneric ordinary structs with required primitive
-or nested struct fields. Constructors require every field once by name and
+Runtime hook locals admit finite type-generic ordinary structs with required
+primitive, ordinary list or nested struct fields. Constructors require every field once by name and
 check exact nominal types. Owning local initialization, constructor retention,
 and assignment copy independently (value-mutability, VAL-17). `var` admits
 whole-value and nested field replacement; `let` is recursively read-only.
 Primitive field `+=` uses existing addition typing. Field projections retain
-the root's write authority. Unsupported optional/default/generic/recursive
+the root's write authority. Unsupported optional/default/const-generic/recursive
 schemas are diagnosed. Aggregate temporal ports remain outside this slice.
 
 Acceptance: source fixtures executed as emitted Rust through lifecycle hooks;
@@ -208,3 +208,8 @@ Uncontextualized nonempty ordinary literals are explicitly unsupported: the
 pinned specification describes constant homogeneous list literals but does not
 uniquely define their inferred fixedness. Contextual nonempty literals retain
 their expected exact list type. Harness sequence typing is unchanged.
+
+Ordinary generic required-field constructors use hgl-struct-check. Explicit
+applications and expected-value contexts feed invariant type inference before
+field execution. Concrete specializations use the existing ordinary value,
+configuration and global borrow paths. No new generic callable syntax is admitted.
