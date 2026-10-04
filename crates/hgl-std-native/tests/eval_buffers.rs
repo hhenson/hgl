@@ -53,6 +53,17 @@ fn eight_scalar_types_keep_present_equal_ticks() -> Result<()> {
 }
 
 #[test]
+fn owned_temporal_scalars_keep_exact_identity_and_equal_ticks() -> Result<()> {
+    scalar_round_trip(hgl_types::CivilDateTime::from_micros(123_456))?;
+    scalar_round_trip(hgl_types::ZoneId::from_validated_name("US/Eastern".into()))?;
+    scalar_round_trip(hgl_types::ZonedDateTime::from_validated_parts(
+        time(0),
+        hgl_types::ZoneId::from_validated_name("Etc/UTC".into()),
+        0,
+    ))
+}
+
+#[test]
 fn input_bounds_and_absence_never_create_default_values() -> Result<()> {
     let input = ReplayInput::new(vec![Some(0_i64), None], time(1))?;
     for index in [-1, 2, i64::MAX] {

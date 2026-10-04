@@ -1,4 +1,5 @@
 //! Canonical checked source shapes and invariant nominal applications.
+pub use hgl_type_syntax::{application, delta_argument};
 use std::fmt;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -75,6 +76,12 @@ pub enum Ty {
     Time,
     /// UTC instant.
     DateTime,
+    /// Civil wall-clock fields without a zone.
+    CivilDateTime,
+    /// Exact named timezone identity.
+    TimeZone,
+    /// Instant, zone and resolved offset.
+    ZonedDateTime,
     /// Reference designation.
     Ref(Box<Self>),
     /// Set membership.
@@ -96,6 +103,9 @@ impl Ty {
             Self::Date => "date",
             Self::Time => "time",
             Self::DateTime => "datetime",
+            Self::CivilDateTime => "civil_datetime",
+            Self::TimeZone => "timezone",
+            Self::ZonedDateTime => "zoned_datetime",
             Self::Ref(_) => "ref",
             Self::Set(_) => "set",
             Self::Nullable(_) => "contextual nullable",
@@ -150,34 +160,16 @@ impl Ty {
             "date" => Some(Self::Date),
             "time" => Some(Self::Time),
             "datetime" => Some(Self::DateTime),
+            "civil_datetime" => Some(Self::CivilDateTime),
+            "timezone" => Some(Self::TimeZone),
+            "zoned_datetime" => Some(Self::ZonedDateTime),
             "void" => Some(Self::Void),
             _ => None,
         }
     }
     /// Split an ordinary list spelling, respecting nested type arguments.
     pub fn list_parts(name: &str) -> Option<(&str, Option<usize>)> {
-        let body = name.strip_prefix("list<")?.strip_suffix('>')?;
-        let mut depth = 0;
-        for (index, ch) in body.char_indices() {
-            if matches!(ch, '<' | '(') {
-                depth += 1;
-            }
-            if matches!(ch, '>' | ')') {
-                depth -= 1;
-            }
-            if ch == ',' && depth == 0 {
-                let size = &body[index + 1..];
-                return Some((
-                    &body[..index],
-                    if size == "unbounded" {
-                        None
-                    } else {
-                        Some(usize::try_from(size.parse::<i64>().ok()?).ok()?)
-                    },
-                ));
-            }
-        }
-        Some((body, None))
+        hgl_type_syntax::list_parts(name)
     }
     /// Canonical checked HGL source form, including complete nominal arguments.
     pub fn source_name(&self) -> String {
@@ -208,51 +200,11 @@ impl Ty {
             | Self::Date
             | Self::Time
             | Self::DateTime
+            | Self::CivilDateTime
+            | Self::TimeZone
+            | Self::ZonedDateTime
             | Self::Void => self.name().into(),
         }
-    }
-}
-/// Split an outer application without confusing nested argument separators.
-pub fn application(name: &str) -> Option<(&str, Vec<&str>)> {
-    let (origin, body) = name.split_once('<')?;
-    if origin.contains(['(', ')']) {
-        return None;
-    }
-    let body = body.strip_suffix('>')?;
-    let mut depth = 0_i32;
-    let mut parentheses = 0_i32;
-    let mut start = 0;
-    let mut arguments = Vec::new();
-    for (index, ch) in body.char_indices() {
-        match ch {
-            '(' => parentheses += 1,
-            ')' => parentheses -= 1,
-            '<' if parentheses == 0 => depth += 1,
-            '>' if parentheses == 0 => depth -= 1,
-            ',' if depth == 0 && parentheses == 0 => {
-                arguments.push(&body[start..index]);
-                start = index + 1;
-            }
-            _ => {}
-        }
-        if depth < 0 || parentheses < 0 {
-            return None;
-        }
-    }
-    if depth != 0 || parentheses != 0 {
-        return None;
-    }
-    arguments.push(&body[start..]);
-    Some((origin, arguments))
-}
-
-/// Recognize the contextual type relationship without consuming nested applications.
-pub fn delta_argument(name: &str) -> Option<&str> {
-    let (base, arguments) = application(name)?;
-    if base == "delta" && arguments.len() == 1 && !arguments[0].is_empty() {
-        Some(arguments[0])
-    } else {
-        None
     }
 }
 impl Ty {
@@ -266,6 +218,9 @@ impl Ty {
             | Self::Date
             | Self::Time
             | Self::DateTime
+            | Self::CivilDateTime
+            | Self::TimeZone
+            | Self::ZonedDateTime
             | Self::Duration => true,
             Self::Atomic(payload) => payload.atomic_payload(),
             Self::Set(member) => matches!(**member, Self::Bool | Self::I64),
@@ -329,6 +284,9 @@ impl Ty {
                 | Self::Date
                 | Self::Time
                 | Self::DateTime
+                | Self::CivilDateTime
+                | Self::TimeZone
+                | Self::ZonedDateTime
                 | Self::Duration
         )
     }

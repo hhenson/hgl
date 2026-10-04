@@ -155,7 +155,7 @@ fn imported_generic_family_does_not_export_private_application_arguments() {
 }
 
 #[test]
-fn zero_size_lists_retain_data_but_have_no_nonempty_publication() {
+fn zero_size_list_data_checks_before_runtime_publication_validation() {
     for slots in ["[]", "[_,_]"] {
         let source = format!(
             "fn pass(value:list<i64,0>)->list<i64,0> {{when {{return delta_value(value)}}}}\ntest empty {{assert eval(pass,{slots})=={slots}}}"
@@ -164,8 +164,8 @@ fn zero_size_lists_retain_data_but_have_no_nonempty_publication() {
         assert!(!hgl_program::emit_tests(&suite).contains("empty structural publication"));
     }
     let source = "fn pass(value:list<i64,0>)->list<i64,0> {when {return delta_value(value)}}\ntest empty {eval(pass,[delta<list<i64,0>>()])}";
-    let suite = hgl_program::compile_tests(&with_std(source)).unwrap();
-    assert!(hgl_program::emit_tests(&suite).contains("empty structural publication"));
+    // Empty delta data is valid; structural_evaluation checks its rejection before start.
+    hgl_program::compile_tests(&with_std(source)).unwrap();
     let error = check("fn main() {let data=delta<list<i64,0>>(items:[0:1])}").unwrap_err();
     assert!(error.contains("out of bounds"), "{error}");
 }

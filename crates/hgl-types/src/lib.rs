@@ -4,82 +4,13 @@
 //! Shared data only. Successful primitive access needs no allocation; creating
 //! a node-error message can allocate. No graph execution lives here.
 
-/// An instant on the UTC timeline, in microseconds. C++: hgraph's `DateTime`.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct EngineTime(i64);
-
-/// A length of time, in microseconds. C++: hgraph's `TimeDelta`.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct EngineDelta(i64);
-
-impl EngineTime {
-    /// Before every time: the last modified time of something never modified,
-    /// the schedule of a node that is not scheduled. The specification's
-    /// `MIN_DT`. As in hgraph it is the epoch, 1970-01-01T00:00:00Z.
-    pub const NEVER: Self = Self(0);
-
-    /// The earliest a run may start: [`Self::NEVER`] plus one step. `MIN_ST`.
-    pub const MIN_START: Self = Self(Self::NEVER.0 + EngineDelta::STEP.0);
-
-    /// The latest a run may end: [`Self::FOREVER`] minus one step. `MAX_ET`.
-    pub const MAX_END: Self = Self(Self::FOREVER.0 - EngineDelta::STEP.0);
-
-    /// After every time: a graph's next scheduled time when nothing is
-    /// scheduled. `MAX_DT`. As in hgraph it is 2300-01-01T00:00:00Z, which is
-    /// 120,530 days after the epoch.
-    pub const FOREVER: Self = Self(120_530 * 86_400 * 1_000_000);
-
-    /// Unchecked: the range `NEVER..=FOREVER` is kept by `checked_add` and by
-    /// the engine refusing a run configured outside it, not by this
-    /// constructor.
-    pub const fn from_micros(micros: i64) -> Self {
-        Self(micros)
-    }
-
-    /// Microseconds since the epoch.
-    pub const fn micros(self) -> i64 {
-        self.0
-    }
-
-    /// `None` if the result is outside `NEVER..=FOREVER`, or the addition
-    /// overflows. Judged on the result alone: a `self` outside the range may
-    /// come back inside it.
-    pub fn checked_add(self, delta: EngineDelta) -> Option<Self> {
-        let micros = self.0.checked_add(delta.0)?;
-        let sum = Self(micros);
-        if Self::NEVER <= sum && sum <= Self::FOREVER {
-            Some(sum)
-        } else {
-            None
-        }
-    }
-}
-
-impl EngineDelta {
-    /// One microsecond: the smallest gap between two cycles. `MIN_TD`.
-    pub const STEP: Self = Self(1);
-
-    /// A length of that many microseconds; negative is backwards.
-    pub const fn from_micros(micros: i64) -> Self {
-        Self(micros)
-    }
-
-    /// The length in microseconds.
-    pub const fn micros(self) -> i64 {
-        self.0
-    }
-}
+pub use hgl_time_values::{
+    CivilDateTime, Date, EngineDelta, EngineTime, Time, ZoneId, ZonedDateTime,
+};
 
 /// A node's position in its graph's rank order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NodeId(pub u32);
-
-/// A calendar date, as days since the Unix epoch.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Date(pub i64);
-/// A time of day, in microseconds after midnight.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Time(pub i64);
 
 /// The type of one scalar value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -100,6 +31,12 @@ pub enum ScalarType {
     DateTime,
     /// A time interval.
     Duration,
+    /// A zone-free wall-clock value.
+    CivilDateTime,
+    /// An exact named timezone.
+    TimeZone,
+    /// An instant with its exact timezone and offset.
+    ZonedDateTime,
 }
 
 /// A scalar whose type is known only at run time: a node's scalars, a case
@@ -122,6 +59,12 @@ pub enum ScalarValue {
     DateTime(EngineTime),
     /// A time interval.
     Duration(EngineDelta),
+    /// A zone-free wall-clock value.
+    CivilDateTime(CivilDateTime),
+    /// An exact named timezone.
+    TimeZone(ZoneId),
+    /// An instant with its exact timezone and offset.
+    ZonedDateTime(ZonedDateTime),
 }
 
 impl ScalarValue {
@@ -136,6 +79,9 @@ impl ScalarValue {
             Self::Time(_) => ScalarType::Time,
             Self::DateTime(_) => ScalarType::DateTime,
             Self::Duration(_) => ScalarType::Duration,
+            Self::CivilDateTime(_) => ScalarType::CivilDateTime,
+            Self::TimeZone(_) => ScalarType::TimeZone,
+            Self::ZonedDateTime(_) => ScalarType::ZonedDateTime,
         }
     }
 }

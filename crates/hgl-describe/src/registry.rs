@@ -1,7 +1,7 @@
 //! What a node supplies so that it can be built, what it is given while it is
 //! built, and where implementations are found by name.
 
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use hgl_kernel::Node;
 use hgl_store::{Global, GlobalValue, In, InputId, Out, OutputId, Scalar, Store};
@@ -146,12 +146,8 @@ impl Ports<'_> {
     /// Allocate a recursively shaped input declared by this implementation.
     pub fn shaped_input(&mut self, name: &str) -> Result<InputId, BuildError> {
         let label = &self.description.label;
-        let Some(n) = self
-            .node_type
-            .inputs
-            .iter()
-            .position(|(field, _)| *field == name)
-        else {
+        let inputs = &self.node_type.inputs;
+        let Some(n) = inputs.iter().position(|(field, _)| *field == name) else {
             return Err(BuildError::unknown_input(label, name));
         };
         if self.inputs[n].is_some() {
@@ -211,18 +207,17 @@ impl Ports<'_> {
         let mut inputs = Vec::with_capacity(self.inputs.len());
         for (position, (_, declared)) in self.node_type.inputs.iter().enumerate() {
             let active = active(self.node_type, position);
-            let made = self.inputs[position];
-            inputs.push(made.unwrap_or_else(|| {
+            inputs.push(self.inputs[position].unwrap_or_else(|| {
                 self.store
                     .add_shaped_input(self.node, declared.clone(), active)
             }));
         }
-        let output = match (self.output, &self.node_type.output) {
-            (None, Some(declared)) => {
-                Some(self.store.add_shaped_output(self.node, declared.clone()))
-            }
-            (made, _) => made,
-        };
+        let output = self.output.or_else(|| {
+            self.node_type
+                .output
+                .as_ref()
+                .map(|declared| self.store.add_shaped_output(self.node, declared.clone()))
+        });
         (inputs, output)
     }
 }
@@ -230,18 +225,26 @@ impl Ports<'_> {
 /// Whether the input at `position` wakes its node when notified (NOD-4,
 /// GRF-17).
 fn active(node_type: &NodeType, position: usize) -> bool {
-    match &node_type.active_inputs {
-        None => true,
-        Some(active) => active.contains(&position),
-    }
+    node_type
+        .active_inputs
+        .as_ref()
+        .is_none_or(|active| active.contains(&position))
 }
 
 /// What the registry keeps for one implementation.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub(crate) struct Implementation {
     pub(crate) node_type: NodeType,
-    /// `N::build` for its `N`, boxed: one shape for every implementation.
-    pub(crate) build: fn(&mut Ports<'_>) -> Result<Box<dyn Node>, BuildError>,
+    pub(crate) build: Arc<Factory>,
+}
+
+type Factory = dyn Fn(&mut Ports<'_>) -> Result<Box<dyn Node>, BuildError> + Send + Sync;
+impl std::fmt::Debug for Implementation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Implementation")
+            .field("node_type", &self.node_type)
+            .finish_non_exhaustive()
+    }
 }
 
 /// Every implementation a description may name, by the name it is
@@ -261,15 +264,33 @@ impl Registry {
     /// taken, or the node type is not well formed; either way what is
     /// registered stays as it was.
     pub fn register<N: Buildable>(&mut self) -> Result<(), BuildError> {
-        let node_type = N::node_type();
+        self.register_with(N::node_type(), N::build)
+    }
+
+    /// Register a typed construction factory retaining prepared configuration.
+    pub fn register_with<N: Node + 'static>(
+        &mut self,
+        node_type: NodeType,
+        constructor: impl Fn(&mut Ports<'_>) -> Result<N, BuildError> + Send + Sync + 'static,
+    ) -> Result<(), BuildError> {
         let name = node_type.name;
         if self.implementations.contains_key(name) {
             return Err(BuildError::DuplicateImplementation(name));
         }
-        check_node_type(&node_type)?;
+        for kind in node_type
+            .inputs
+            .iter()
+            .map(|(_, kind)| kind)
+            .chain(node_type.output.iter())
+        {
+            hgl_plan::check_shape(kind)?;
+        }
+        node_type
+            .validate_metadata()
+            .map_err(|what| BuildError::InvalidNodeType { node: name, what })?;
         let implementation = Implementation {
             node_type,
-            build: build::<N>,
+            build: Arc::new(move |ports| Ok(Box::new(constructor(ports)?))),
         };
         self.implementations.insert(name, implementation);
         Ok(())
@@ -287,28 +308,6 @@ impl Registry {
             .get(implementation)
             .ok_or_else(|| BuildError::UnknownImplementation(implementation.to_owned()))
     }
-}
-
-fn build<N: Buildable>(ports: &mut Ports<'_>) -> Result<Box<dyn Node>, BuildError> {
-    Ok(Box::new(N::build(ports)?))
-}
-
-/// What a node type must hold for the rest of the crate to trust it, and the
-/// compiler cannot: the positions in `active_inputs` and `valid_inputs` are
-/// inputs it has, and its input names tell its inputs apart.
-fn check_node_type(node_type: &NodeType) -> Result<(), BuildError> {
-    let invalid = |what: String| BuildError::InvalidNodeType {
-        node: node_type.name,
-        what,
-    };
-    for (_, kind) in &node_type.inputs {
-        hgl_plan::check_shape(kind)?;
-    }
-    if let Some(kind) = &node_type.output {
-        hgl_plan::check_shape(kind)?;
-    }
-    node_type.validate_metadata().map_err(invalid)?;
-    Ok(())
 }
 
 impl hgl_plan::Catalog for Registry {

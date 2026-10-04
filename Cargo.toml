@@ -15,6 +15,7 @@ publish = false
 # crates inherit it with `name.workspace = true`. Adding a line to this table
 # is a reviewed decision (see CLAUDE.md), not a convenience.
 [workspace.dependencies]
+jiff = { version = "0.2", features = ["tzdb-bundle-always"] }
 
 # Lints are "warn" so local iteration is not blocked; `cargo xtask ci` and CI
 # run with `-D warnings`, which turns every one of them into an error.

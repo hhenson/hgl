@@ -60,3 +60,11 @@ expected type are checked independently, retaining source evaluation order.
 
 A constant context may retain local expression IR until source-order ordinary
 evaluation closes it. This does not admit nonconstant runtime list literals.
+
+Re-export `hgl-value-constant::context_free(&Value) -> bool`; this purely classifies closed evaluator-supported
+ordinary expressions, including lexical arguments and locals inside ValueCall
+blocks. It rejects external locals, contextual recipes, prepared values,
+providers, native/capability/global/endpoint effects and unsupported or unbounded
+control flow without executing anything. The frontend may then use the ordinary
+evaluator for checking-time diagnostics; short-circuit and branch execution
+remain the evaluator's responsibility. Contextual assertions remain deferred.

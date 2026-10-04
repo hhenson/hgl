@@ -76,6 +76,9 @@ fn key(value: &Literal) -> i64 {
         | Literal::Date(_)
         | Literal::Time(_)
         | Literal::DateTime(_)
+        | Literal::CivilDateTime(_)
+        | Literal::TimeZone(_)
+        | Literal::ZonedDateTime(_)
         | Literal::Duration(_) => unreachable!("checked set member or map key"),
     }
 }
@@ -200,6 +203,21 @@ pub fn statement(cursor: &mut hgl_source::Cursor<'_>) -> Result<hgl_source::Stmt
             Stmt::Let(name, annotation, value)
         });
     }
+    if cursor.take("if") {
+        let condition = cursor.expr()?;
+        let yes = cursor.block()?;
+        cursor.lines();
+        let no = if cursor.take("else") {
+            if cursor.at("if") {
+                vec![statement(cursor)?]
+            } else {
+                cursor.block()?
+            }
+        } else {
+            Vec::new()
+        };
+        return Ok(Stmt::If(condition, yes, no));
+    }
     let target = cursor.expr()?;
     Ok(if cursor.take("=") {
         Stmt::Assign(target, cursor.expr()?)
@@ -269,4 +287,54 @@ pub fn evaluation(expr: Expr, assertion: bool) -> Result<Evaluation, String> {
         arguments,
         expected,
     })
+}
+
+/// Find the declaration parameter for one supplied eval argument.
+pub fn parameter<'a>(
+    signature: &'a hgl_library::Signature,
+    position: usize,
+    label: Option<&str>,
+) -> Result<&'a hgl_library::Parameter, String> {
+    label
+        .map_or_else(
+            || signature.parameters.get(position),
+            |name| signature.parameters.iter().find(|p| p.name == name),
+        )
+        .ok_or_else(|| "unknown eval argument".into())
+}
+
+/// One parsed lexical test operation, without name or type resolution.
+#[derive(Debug)]
+pub enum TestStep {
+    /// Ordinary setup statement.
+    Ordinary(hgl_source::Stmt),
+    /// Ordinary boolean assertion expression.
+    Assert(Expr),
+    /// Eval call with optional dense expected values.
+    Eval(Evaluation),
+}
+/// Parse a test declaration's ordered setup, assertions and eval calls.
+pub fn steps(tokens: &[hgl_source::Token]) -> Result<Vec<TestStep>, String> {
+    let mut cursor = hgl_source::Cursor::new(tokens);
+    cursor.need("test")?;
+    cursor.name()?;
+    cursor.need("{")?;
+    cursor.lines();
+    let mut steps = Vec::new();
+    while !cursor.take("}") {
+        if !cursor.at("assert") && !cursor.at("eval") {
+            steps.push(TestStep::Ordinary(statement(&mut cursor)?));
+        } else {
+            let assertion = cursor.take("assert");
+            let expr = cursor.expr()?;
+            let eval = matches!(&expr,Expr::Binary(_,left,_) if matches!(left.as_ref(),Expr::Call(name,_) if name=="eval"));
+            steps.push(if assertion && !eval {
+                TestStep::Assert(expr)
+            } else {
+                TestStep::Eval(evaluation(expr, assertion)?)
+            });
+        }
+        cursor.lines();
+    }
+    Ok(steps)
 }

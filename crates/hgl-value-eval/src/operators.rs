@@ -39,6 +39,15 @@ fn as_float(value: i64) -> f64 {
 }
 pub(super) fn binary(op: &str, a: &Value, b: &Value) -> Result<Value, EvalError> {
     let (a, b) = (scalar(a)?, scalar(b)?);
+    if a.ty() == b.ty()
+        && matches!(
+            a,
+            Literal::CivilDateTime(_) | Literal::TimeZone(_) | Literal::ZonedDateTime(_)
+        )
+        && matches!(op, "==" | "!=")
+    {
+        return Ok(value(Literal::Bool((a == b) == (op == "=="))));
+    }
     let result = match (a, b) {
         (Literal::Int(a), Literal::Int(b)) => integer(op, *a, *b)?,
         (Literal::Float(a), Literal::Float(b)) => floating(op, *a, *b)?,
@@ -65,6 +74,7 @@ pub(super) fn binary(op: &str, a: &Value, b: &Value) -> Result<Value, EvalError>
         }
         (Literal::Duration(a), Literal::Duration(b))
         | (Literal::Date(a), Literal::Date(b))
+        | (Literal::CivilDateTime(a), Literal::CivilDateTime(b))
         | (Literal::Time(a), Literal::Time(b))
         | (Literal::DateTime(a), Literal::DateTime(b)) => comparison(op, Some(a.cmp(b)))?,
         _ => return Err(unsupported("unsupported ordinary scalar operand types")),

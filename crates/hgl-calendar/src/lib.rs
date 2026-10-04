@@ -1,5 +1,5 @@
 //! Calendar scalar parsing and projections, independent of graph execution.
-use hgl_types::{Date, EngineDelta, EngineTime, Time};
+use hgl_types::{CivilDateTime, Date, EngineDelta, EngineTime, Time};
 /// Microseconds in a day.
 pub const DAY: i64 = 86_400_000_000;
 fn number(s: &str) -> Result<i64, String> {
@@ -14,6 +14,17 @@ fn start(year: i64) -> i64 {
 }
 /// Parse a validated ISO calendar date.
 pub fn date(s: &str) -> Result<Date, String> {
+    if s.len() != 10
+        || !s.bytes().enumerate().all(|(i, c)| {
+            if matches!(i, 4 | 7) {
+                c == b'-'
+            } else {
+                c.is_ascii_digit()
+            }
+        })
+    {
+        return Err("expected YYYY-MM-DD".into());
+    }
     let fields = s.split('-').map(number).collect::<Result<Vec<_>, _>>()?;
     let [year, month, day] = fields.as_slice() else {
         return Err("expected YYYY-MM-DD".into());
@@ -79,6 +90,21 @@ pub fn components(value: Date) -> (i64, i64, i64) {
 }
 /// Parse an ISO time of day with microsecond precision.
 pub fn time(s: &str) -> Result<Time, String> {
+    let (clock, fraction) = s
+        .split_once('.')
+        .map_or((s, None), |(clock, fraction)| (clock, Some(fraction)));
+    if !matches!(clock.len(), 5 | 8)
+        || !clock.bytes().enumerate().all(|(i, c)| {
+            if matches!(i, 2 | 5) {
+                c == b':'
+            } else {
+                c.is_ascii_digit()
+            }
+        })
+        || fraction.is_some_and(|fraction| clock.len() != 8 || fraction.is_empty())
+    {
+        return Err("expected HH:MM[:SS[.ffffff]]".into());
+    }
     let fields = s.split(':').collect::<Vec<_>>();
     if !(2..=3).contains(&fields.len()) {
         return Err("expected HH:MM[:SS]".into());
@@ -110,12 +136,7 @@ pub fn time(s: &str) -> Result<Time, String> {
 }
 /// Parse a UTC datetime literal.
 pub fn datetime(s: &str) -> Result<EngineTime, String> {
-    let (day, clock) = s
-        .strip_suffix('Z')
-        .ok_or("datetime requires Z")?
-        .split_once('T')
-        .ok_or("expected date and time")?;
-    Ok(EngineTime::from_micros(date(day)?.0 * DAY + time(clock)?.0))
+    offset_datetime(s).map(|(instant, _)| instant)
 }
 /// Parse an integral compound duration such as 1h30m.
 pub fn duration(mut s: &str) -> Result<EngineDelta, String> {
@@ -185,4 +206,57 @@ pub fn duration_text(value: EngineDelta) -> String {
             if days.abs() == 1 { "" } else { "s" }
         )
     }
+}
+
+/// Parse local civil fields without interpreting them as an instant.
+pub fn civil_datetime(s: &str) -> Result<CivilDateTime, String> {
+    let (day, clock) = s.split_once('T').ok_or("expected date and time")?;
+    Ok(CivilDateTime::from_micros(
+        date(day)?.0 * DAY + time(clock)?.0,
+    ))
+}
+/// Parse an explicit offset and retain its exact UTC displacement in seconds.
+pub fn offset_datetime(s: &str) -> Result<(EngineTime, i32), String> {
+    let (civil, offset) = if let Some(civil) = s.strip_suffix('Z') {
+        (civil, 0)
+    } else {
+        let (_, clock) = s.split_once('T').ok_or("expected date and time")?;
+        let index = clock
+            .find(['+', '-'])
+            .ok_or("datetime requires Z or an explicit offset")?;
+        let offset = &clock[index..];
+        if !matches!(offset.len(), 3 | 6)
+            || !offset[1..].bytes().enumerate().all(|(i, c)| {
+                if i == 2 {
+                    c == b':'
+                } else {
+                    c.is_ascii_digit()
+                }
+            })
+        {
+            return Err("expected offset +HH[:MM] or -HH[:MM]".into());
+        }
+        let hour = number(&offset[1..3])?;
+        let minute = if offset.len() == 6 {
+            number(&offset[4..])?
+        } else {
+            0
+        };
+        if hour > 23 || minute > 59 {
+            return Err("offset outside 23:59".into());
+        }
+        let seconds = (hour * 3600 + minute * 60) * if offset.starts_with('-') { -1 } else { 1 };
+        (
+            &s[..s.len() - offset.len()],
+            i32::try_from(seconds).map_err(|error| error.to_string())?,
+        )
+    };
+    let micros = civil_datetime(civil)?
+        .micros()
+        .checked_sub(i64::from(offset) * 1_000_000)
+        .ok_or("datetime overflow")?;
+    if !(start(1) * DAY..start(10000) * DAY).contains(&micros) {
+        return Err("datetime UTC value outside years 0001 through 9999".into());
+    }
+    Ok((EngineTime::from_micros(micros), offset))
 }

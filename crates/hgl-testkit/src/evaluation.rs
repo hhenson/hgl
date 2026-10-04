@@ -8,6 +8,13 @@ pub struct Observation<T> {
     ticks: Vec<(usize, T)>,
 }
 
+impl<T> Observation<T> {
+    /// Transfer the logical horizon and sparse owning publications.
+    pub fn into_parts(self) -> (usize, Vec<(usize, T)>) {
+        (self.length, self.ticks)
+    }
+}
+
 /// Convert independently owned capture ticks into a sparse dense observation.
 /// The horizon comes from inputs and actual captures, never expectations.
 pub fn observe<T>(

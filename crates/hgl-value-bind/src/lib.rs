@@ -13,12 +13,7 @@ pub fn bind(
     hint: Option<&Ty>,
     declared: &BTreeMap<String, Ty>,
 ) -> Result<Bound, String> {
-    let names = signature
-        .parameters
-        .iter()
-        .map(|p| p.name.as_str())
-        .collect::<Vec<_>>();
-    let mut supplied = order_arguments(&names, args)?;
+    let mut supplied = order_arguments(&parameter_names(signature), args)?;
     let mut types = declared.clone();
     let mut values = Vec::new();
     let mut parameter_names = BTreeSet::new();
@@ -267,7 +262,10 @@ pub fn constant(value: &Value) -> bool {
     if let Kind::List(values) = &value.kind {
         return values.iter().all(constant);
     }
-    matches!(value.kind, Kind::Literal(_) | Kind::WiringFailure(_))
+    matches!(
+        value.kind,
+        Kind::Prepared(_) | Kind::Literal(_) | Kind::WiringFailure(_)
+    )
 }
 
 /// Infer ordinary nested nominal patterns and resolve the selected signature.
@@ -277,12 +275,7 @@ pub fn signature_types(
     signature: &Signature,
     args: &[(Option<String>, Value)],
 ) -> Result<BTreeMap<String, Ty>, String> {
-    let names = signature
-        .parameters
-        .iter()
-        .map(|p| p.name.as_str())
-        .collect::<Vec<_>>();
-    let supplied = order_arguments(&names, args)?;
+    let supplied = order_arguments(&parameter_names(signature), args)?;
     let mut types = BTreeMap::new();
     for (index, value) in supplied {
         let parameter = &signature.parameters[index];
@@ -442,4 +435,88 @@ pub fn instantiated(
                 })
             })
     })
+}
+
+/// Bind checked run-preparation expressions without evaluating them.
+pub fn bind_prepared(
+    signature: &Signature,
+    args: &[(Option<String>, Value)],
+    runtime: bool,
+    hint: Option<&Ty>,
+    types: &BTreeMap<String, Ty>,
+) -> Result<Bound, String> {
+    let mut args = args.to_vec();
+    let supplied = order_arguments(&parameter_names(signature), &args)?;
+    for (index, parameter) in signature.parameters.iter().enumerate() {
+        if !supplied.contains_key(&index)
+            && let Some(Expr::TemporalLiteral(value)) = &parameter.default
+        {
+            args.push((
+                Some(parameter.name.clone()),
+                Value::new(value.ty(), Kind::TemporalLiteral(value.clone())),
+            ));
+        }
+    }
+    let checked = args
+        .iter()
+        .enumerate()
+        .map(|(id, (name, value))| {
+            (
+                name.clone(),
+                if matches!(value.kind, Kind::Wire(_)) {
+                    value.clone()
+                } else {
+                    Value::new(value.ty.clone(), Kind::Prepared(id))
+                },
+            )
+        })
+        .collect::<Vec<_>>();
+    let (mut values, types, result) = bind(signature, &checked, runtime, hint, types)?;
+    for value in &mut values {
+        if let Kind::Prepared(id) = value.kind {
+            *value = args[id].1.clone();
+        }
+    }
+    Ok((values, types, result))
+}
+
+/// Preserve supplied argument order and map declaration parameters to local slots.
+pub fn ordered_call(
+    signature: &Signature,
+    values: Vec<Value>,
+    supplied: &[(Option<String>, Value)],
+) -> Result<(Vec<Value>, Vec<usize>), String> {
+    let mut order = supplied
+        .iter()
+        .enumerate()
+        .map(|(index, (label, _))| {
+            label
+                .as_ref()
+                .map_or(Some(index), |name| {
+                    signature.parameters.iter().position(|p| p.name == *name)
+                })
+                .ok_or_else(|| "unknown argument".to_owned())
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    for index in 0..values.len() {
+        if !order.contains(&index) {
+            order.push(index);
+        }
+    }
+    let mut mapping = vec![0; values.len()];
+    let mut values = values.into_iter().map(Some).collect::<Vec<_>>();
+    let mut ordered = Vec::new();
+    for (slot, parameter) in order.into_iter().enumerate() {
+        mapping[parameter] = slot;
+        ordered.push(values[parameter].take().ok_or("duplicate argument")?);
+    }
+    Ok((ordered, mapping))
+}
+
+fn parameter_names(signature: &Signature) -> Vec<&str> {
+    signature
+        .parameters
+        .iter()
+        .map(|p| p.name.as_str())
+        .collect()
 }

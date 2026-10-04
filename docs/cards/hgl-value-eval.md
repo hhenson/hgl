@@ -47,3 +47,13 @@ Closed ordinary Delta constructors evaluate each supplied child in source order
 and retain independent IR data. Observation locals are runtime-only and cannot
 be folded as ordinary constant data. Empty sparse data formation is valid and
 performs no publication or fresh-endpoint trace admission.
+
+## Temporal scalar preparation
+
+Add value_with and statement_with, each receiving a mutable materialization
+callback FnMut(&TemporalLiteral) -> Result<Literal, EvalError>. Propagate that
+callback through recursive evaluation and ordinary helper calls in source order.
+EvalError::ContextRequired distinguishes missing construction context. Existing
+value/statement reject contextual recipes with that error; Unsupported remains a
+backend defect, never a request to defer. Constructed Literals never invoke the
+callback again. The existing source-line budget remains unchanged.

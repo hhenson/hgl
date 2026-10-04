@@ -41,3 +41,17 @@ named target, ordered arguments and optional dense expected sequence without
 resolution or evaluation. `Evaluation` has public `function: String`,
 `arguments: Vec<(Option<String>, Expr)>` and
 `expected: Option<Vec<Option<Expr>>>` fields.
+
+May use hgl-library for checked eval argument routing. Expose
+parameter<'a>(signature: &'a hgl_library::Signature, position: usize,
+label: Option<&str>) -> Result<&'a hgl_library::Parameter, String>. It maps an
+already-parsed supplied argument to its declared parameter, reporting unknown
+labels or out-of-range positions. It does not evaluate, bind or reorder values;
+full call compatibility remains the binder's responsibility.
+
+Ordinary setup statement parsing includes existing source if statements, using
+the ordinary block parser and preserving branch order. TestStep::{Ordinary(Stmt),
+Assert(Expr), Eval(Evaluation)} and steps(tokens: &[Token]) ->
+Result<Vec<TestStep>, String> parse a test declaration into ordered source steps
+without resolving names or executing expressions. The frontend then checks each
+step. This owns source harness parsing rather than module candidate selection.

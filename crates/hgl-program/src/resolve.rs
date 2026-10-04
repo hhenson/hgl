@@ -7,7 +7,7 @@ use hgl_endpoint_check::{
 };
 use hgl_flow_check::{facts, handler_facts, merge_facts, terminates};
 use hgl_rust::{Kind, Native, Node, Plan, Statement, Value};
-use hgl_value_bind::{bind, method_arguments, order_arguments, resolve_type};
+use hgl_value_bind::{bind, bind_prepared, method_arguments, order_arguments, resolve_type};
 use hgl_value_check::{field, ordinary, writable};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -19,12 +19,14 @@ struct Checker {
     documented: BTreeSet<usize>,
     test_scope: Option<String>,
     harness_values: Env,
+    static_values: hgl_value_access::StaticValues,
     result_hint: Option<Ty>,
     phase: Phase,
     types: BTreeMap<String, Ty>,
     runtime_node: bool,
     value_context: ValueContext,
     generator: bool,
+    preparing_graph: bool,
     wiring: hgl_value_eval::Evaluator,
     next_wiring_local: usize,
     global_types: BTreeMap<String, Ty>,
@@ -37,6 +39,7 @@ enum ValueContext {
     #[default]
     Outside,
     Constant,
+    Preparation,
     Runtime,
 }
 #[derive(Default, Clone, Copy, PartialEq, Eq)]
@@ -55,10 +58,11 @@ fn test_checker(library: Library, module: &str, values: Env) -> Checker {
         library,
         test_scope: Some(module.into()),
         harness_values: values,
+        value_context: ValueContext::Preparation,
         ..Checker::default()
     }
 }
-pub(crate) fn test_statement(
+pub(crate) fn prepared_statement(
     library: Library,
     module: &str,
     statement: &Stmt,
@@ -66,25 +70,26 @@ pub(crate) fn test_statement(
     next: &mut usize,
 ) -> Result<Statement, String> {
     let mut checker = test_checker(library, module, Env::new());
-    checker.value_context = ValueContext::Constant;
     checker.statement(module, statement, env, &Ty::Void, next)
 }
-pub(crate) fn assertion(
+pub(crate) fn prepared_assertion(
     library: Library,
     module: &str,
     expr: &Expr,
     env: &Env,
-) -> Result<bool, String> {
+) -> Result<Value, String> {
     let mut checker = test_checker(library, module, Env::new());
     let value = checker.expression(module, expr, env, false)?;
-    let value = checker
-        .wiring
-        .value(&value)
-        .map_err(|error| format!("constant evaluation: {error}"))?;
-    let Kind::Literal(Literal::Bool(result)) = value.kind else {
+    if value.ty != Ty::Bool {
         return Err("ordinary assertion requires bool".into());
-    };
-    Ok(result)
+    }
+    if hgl_value_check::context_free(&value) {
+        checker
+            .wiring
+            .value(&value)
+            .map_err(|e| format!("constant evaluation: {e}"))?;
+    }
+    Ok(value)
 }
 pub(crate) fn compile(library: Library, module: &str, entry: &str) -> Result<Plan, String> {
     let mut checker = Checker {
@@ -102,26 +107,21 @@ impl Checker {
         args: &[(Option<String>, Value)],
         runtime: bool,
     ) -> Result<Value, String> {
-        let folded;
-        let args = if runtime {
-            args
-        } else {
-            folded = args
-                .iter()
-                .map(|(name, value)| {
-                    let value = if matches!(value.kind, Kind::Wire(_)) {
-                        value.clone()
-                    } else {
-                        self.wiring_value(value)?
-                    };
-                    Ok((name.clone(), value))
-                })
-                .collect::<Result<Vec<_>, String>>()?;
-            &folded
-        };
+        let values = self.call_values(args, runtime)?;
+        let args = values.as_slice();
         let (module, name) = hgl_value_types::identity(&self.library, module, name);
         let (mut id, mut signature, values, mut types, result) =
             self.select(&module, &name, args, runtime)?;
+        if self.preparing_graph
+            && values
+                .iter()
+                .any(|v| matches!(v.kind, Kind::TemporalLiteral(_)))
+        {
+            return Err(
+                "contextual temporal defaults in composition require unsupported run preparation"
+                    .into(),
+            );
+        }
         let mut decl = self.library.declarations[id].clone();
         self.document(id);
         if decl.role == Role::Operator {
@@ -142,7 +142,7 @@ impl Checker {
         }
         let runtime_body = runtime_body(&signature)?;
         if signature.value_function && values.iter().all(|v| !matches!(v.kind, Kind::Wire(_))) {
-            return self.direct_call(id, &decl, &signature, (values, types, result), runtime);
+            return self.direct_call(id, &signature, (values, types, result), runtime, args);
         }
         if runtime {
             return Err("temporal calls in runtime handlers are not supported".into());
@@ -162,7 +162,9 @@ impl Checker {
         let mut cursor = Cursor::new(&signature.body);
         let value = if runtime_body {
             self.runtime_node = !signature.value_function;
+            let context = std::mem::replace(&mut self.value_context, ValueContext::Outside);
             let node = self.node(&decl, &signature, &mut cursor, &mut env, &result)?;
+            self.value_context = context;
             let index = self.plan.nodes.len();
             self.plan.nodes.push(node);
             Value {
@@ -174,7 +176,10 @@ impl Checker {
                 },
             }
         } else {
-            self.graph(&module, &mut cursor, &mut env, &result)?
+            let previous = std::mem::replace(&mut self.preparing_graph, true);
+            let value = self.graph(&module, &mut cursor, &mut env, &result)?;
+            self.preparing_graph = previous;
+            value
         };
         self.types = previous_types;
         self.active.remove(&id);
@@ -182,6 +187,20 @@ impl Checker {
         Ok(value)
     }
 
+    fn call_values(
+        &mut self,
+        args: &[(Option<String>, Value)],
+        runtime: bool,
+    ) -> Result<Arguments, String> {
+        args.iter().map(|(name, value)| {
+            let prepared = self.value_context == ValueContext::Preparation;
+            let local = matches!(value.kind, Kind::Local(id) | Kind::MutableLocal(id) if id < self.next_wiring_local);
+            let value = if runtime || matches!(value.kind, Kind::Wire(_)) || (prepared && !local) {
+                value.clone()
+            } else { self.wiring_value(value)? };
+            Ok((name.clone(), value))
+        }).collect()
+    }
     fn constant_size(&mut self, module: &str, source: &str, env: &Env) -> Result<Literal, String> {
         let tokens = hgl_source::lex(source)?;
         let mut cursor = Cursor::new(&tokens);
@@ -189,7 +208,11 @@ impl Checker {
         if !cursor.at("") {
             return Err("invalid list-size expression".into());
         }
-        let value = self.expression(module, &expr, env, false)?;
+        let env = env
+            .iter()
+            .map(|(name, value)| (name.clone(), self.static_values.resolve(value).clone()))
+            .collect();
+        let value = self.expression(module, &expr, &env, false)?;
         let value = self
             .wiring
             .value(&value)
@@ -250,44 +273,48 @@ impl Checker {
     fn direct_call(
         &mut self,
         id: usize,
-        decl: &Decl,
         signature: &Signature,
         (args, types, result): (Vec<Value>, BTreeMap<String, Ty>, Ty),
         runtime: bool,
+        supplied: &[(Option<String>, Value)],
     ) -> Result<Value, String> {
+        let decl = self.library.declarations[id].clone();
+        let (args, positions) = hgl_value_bind::ordered_call(signature, args, supplied)?;
         if !self.active.insert(id) {
             return Err("recursive ordinary value calls are unsupported".into());
         }
         let mut env: Env = signature
             .parameters
             .iter()
-            .zip(&args)
-            .enumerate()
-            .map(|(id, (p, v))| {
+            .zip(&positions)
+            .map(|(p, id)| {
+                let v = &args[*id];
                 (
                     p.name.clone(),
-                    if p.constant {
+                    if p.constant && self.value_context != ValueContext::Preparation {
                         v.clone()
                     } else {
-                        Value::new(v.ty.clone(), Kind::Local(id))
+                        Value::new(v.ty.clone(), Kind::Local(*id))
                     },
                 )
             })
             .collect();
+        let constants = self.static_values.arguments(signature, &args, &positions);
+        let previous_constants = std::mem::replace(&mut self.static_values.locals, constants);
         let previous_types = std::mem::replace(&mut self.types, types);
         let runtime = match self.value_context {
             ValueContext::Outside => runtime,
-            ValueContext::Constant => false,
+            ValueContext::Constant | ValueContext::Preparation => false,
             ValueContext::Runtime => true,
         };
-        let previous_context = std::mem::replace(
-            &mut self.value_context,
-            if runtime {
-                ValueContext::Runtime
-            } else {
-                ValueContext::Constant
-            },
-        );
+        let next_context = if self.value_context == ValueContext::Preparation {
+            ValueContext::Preparation
+        } else if runtime {
+            ValueContext::Runtime
+        } else {
+            ValueContext::Constant
+        };
+        let previous_context = std::mem::replace(&mut self.value_context, next_context);
         let previous_runtime = std::mem::replace(&mut self.runtime_node, false);
         let mut cursor = Cursor::new(&signature.body);
         let (services, body) = hgl_body_check::ordinary_body(&mut cursor)?;
@@ -309,6 +336,7 @@ impl Checker {
         let body = self.statements(&decl.module, &body, &mut env, &result, &mut args.len())?;
         self.types = previous_types;
         self.value_context = previous_context;
+        self.static_values.locals = previous_constants;
         self.runtime_node = previous_runtime;
         self.active.remove(&id);
         if result != Ty::Void && !terminates(&body) {
@@ -399,7 +427,12 @@ impl Checker {
                 errors.push("generator requires a declared publication output type".into());
                 continue;
             }
-            match bind(
+            let binder = if self.value_context == ValueContext::Preparation {
+                bind_prepared
+            } else {
+                bind
+            };
+            match binder(
                 &signature,
                 args,
                 runtime || decl.role == Role::Native,
@@ -455,8 +488,13 @@ impl Checker {
             else {
                 continue;
             };
+            let binder = if self.value_context == ValueContext::Preparation {
+                bind_prepared
+            } else {
+                bind
+            };
             let Ok((_, inferred, output)) =
-                bind(&sig, &positional, runtime, Some(result), &declared)
+                binder(&sig, &positional, runtime, Some(result), &declared)
             else {
                 continue;
             };
@@ -531,6 +569,9 @@ impl Checker {
                 Ok(Value::new(value.ty.clone(), Kind::WiringFailure(message)))
             }
             Err(hgl_value_eval::EvalError::Unsupported(message)) => Err(message),
+            Err(hgl_value_eval::EvalError::ContextRequired) => {
+                Err("contextual value requires run preparation".into())
+            }
         }
     }
     fn wiring_statement(&mut self, statement: &Statement) -> Result<(), String> {
@@ -541,6 +582,9 @@ impl Checker {
                 Ok(())
             }
             Err(hgl_value_eval::EvalError::Unsupported(message)) => Err(message),
+            Err(hgl_value_eval::EvalError::ContextRequired) => {
+                Err("contextual value requires run preparation".into())
+            }
         }
     }
     fn wiring_local(
@@ -554,7 +598,9 @@ impl Checker {
         if env.contains_key(name) {
             return Err(format!("duplicate local {name}"));
         }
-        if matches!(value.kind, Kind::Wire(_)) {
+        if matches!(value.kind, Kind::Wire(_))
+            || (!mutable && matches!(value.kind, Kind::Prepared(_)))
+        {
             env.insert(name.into(), value);
             return Ok(());
         }
@@ -687,6 +733,7 @@ impl Checker {
             format!("{}::{}", decl.module, decl.name),
             result.clone(),
         )?;
+        self.static_values.configuration = node.configuration.clone();
         if generator {
             return self.generator_body(decl, c, env, node);
         }
@@ -995,6 +1042,8 @@ impl Checker {
         ))
     }
     fn global_entry(&mut self, key: &Value, ty: &Ty) -> Result<usize, String> {
+        let resolved = self.static_values.resolve(key).clone();
+        let key = &resolved;
         if matches!(key.kind, Kind::WiringFailure(_)) {
             let index = self.globals.len();
             self.globals
@@ -1093,7 +1142,10 @@ impl Checker {
             return hgl_value_check::aggregate(
                 expr,
                 expected,
-                self.value_context == ValueContext::Constant || !runtime,
+                matches!(
+                    self.value_context,
+                    ValueContext::Constant | ValueContext::Preparation
+                ) || !runtime,
                 |expr, expected| self.expected_expression(module, expr, env, runtime, expected),
             );
         }
@@ -1387,6 +1439,8 @@ impl Checker {
             }
             Expr::Sequence(elements) => hgl_value_check::list_literal(elements, None),
             Expr::Literal(l) => Ok(Value::new(l.ty(), Kind::Literal(l.clone()))),
+            Expr::TemporalLiteral(l) if self.value_context == ValueContext::Preparation && !self.preparing_graph => Ok(Value::new(l.ty(), Kind::TemporalLiteral(l.clone()))),
+            Expr::TemporalLiteral(_) => Err("contextual temporal construction requires run preparation; node-hook construction is unsupported".into()),
             Expr::Name(name) => {
                 let value = env
                     .get(name)
@@ -1562,7 +1616,6 @@ impl Checker {
         expected: Option<&Ty>,
     ) -> Result<Value, String> {
         let name = self.type_sizes(module, name, env)?;
-        let name = name.as_str();
         if let Some(origin) = name
             .strip_prefix("delta<")
             .and_then(|name| name.strip_suffix('>'))
@@ -1572,7 +1625,7 @@ impl Checker {
         let mut check = hgl_struct_check::Constructor::new(
             &self.library,
             module,
-            name,
+            &name,
             args,
             expected,
             &self.types,
@@ -1583,7 +1636,16 @@ impl Checker {
             require_payload(&value)?;
             check.checked(&self.library, index, value)?;
         }
-        check.finish(&self.library)
+        let value = check.finish(&self.library)?;
+        if (self.value_context != ValueContext::Preparation || self.preparing_graph)
+            && let Kind::Construct(fields) = &value.kind
+            && fields
+                .iter()
+                .any(|(_, v)| matches!(v.kind, Kind::TemporalLiteral(_)))
+        {
+            return Err("contextual temporal default requires run preparation; node-hook construction is unsupported".into());
+        }
+        Ok(value)
     }
     fn delta_constructor(
         &mut self,
@@ -1763,12 +1825,11 @@ fn select_eval(
             continue;
         }
         let signature = decl.signature()?;
-        let mut candidate = Checker {
-            library: checker.library.clone(),
-            test_scope: checker.test_scope.clone(),
-            harness_values: checker.harness_values.clone(),
-            ..Checker::default()
-        };
+        let mut candidate = test_checker(
+            checker.library.clone(),
+            module,
+            checker.harness_values.clone(),
+        );
         match eval_arguments(&mut candidate, module, &decl.module, &signature, args) {
             Ok((plan, values)) => candidates.push((candidate, plan, values)),
             Err(error) => errors.push(error),
@@ -1784,23 +1845,39 @@ fn select_eval(
     Ok(candidates.remove(0))
 }
 
-pub(crate) fn evaluate(
+pub(crate) fn prepare_evaluation(
     library: Library,
     module: &str,
     name: &str,
     args: &[(Option<String>, Expr)],
-    values: Env,
-) -> Result<Plan, String> {
-    let checker = test_checker(library, module, values);
+    values: &Env,
+) -> Result<(Plan, Vec<hgl_harness_ir::Argument>), String> {
+    let checker = test_checker(library, module, values.clone());
     let (mut checker, plan, mut values) = select_eval(&checker, module, name, args)?;
-    checker.plan.input_length = plan.input_length;
-    if plan.construction_error.is_some() {
-        checker.plan.construction_error = plan.construction_error;
-    }
-    for (_, value) in &mut values {
+    let mut prepared = Vec::new();
+    checker.static_values.prepared = values.iter().map(|(_, value)| value.clone()).collect();
+    for (binding, (name, value)) in values.iter_mut().enumerate() {
         if let Kind::Wire(input) = value.kind {
-            let data = replay_data(&checker.library, &value.ty, &plan.sequences[input])?;
+            let shape = value.ty.clone();
+            let entry_type = replay_type(&checker.library, &shape)?;
+            let data = Value::new(
+                Ty::List(Box::new(entry_type.clone()), None),
+                Kind::Prepared(binding),
+            );
+            prepared.push(hgl_harness_ir::Argument::Dense {
+                parameter: name.clone().ok_or("missing checked eval parameter")?,
+                binding,
+                shape,
+                entry_type,
+                slots: plan[input].clone(),
+            });
             *value = checker.call("hgraph.std", "replay", &[(None, data)], false)?;
+        } else {
+            prepared.push(hgl_harness_ir::Argument::Constant {
+                binding,
+                value: value.clone(),
+            });
+            *value = Value::new(value.ty.clone(), Kind::Prepared(binding));
         }
     }
     checker.result_hint = None;
@@ -1834,24 +1911,18 @@ pub(crate) fn evaluate(
         checker.plan.recording = Some((key, recording));
         checker.plan.output = Some((record, ty));
     }
-    Ok(checker.plan)
+    Ok((checker.plan, prepared))
 }
 
-fn replay_data(library: &Library, ty: &Ty, slots: &[Option<Value>]) -> Result<Value, String> {
+fn replay_type(library: &Library, ty: &Ty) -> Result<Ty, String> {
     let decl = hgl_value_types::declaration(library, "hgraph.std", "TimedValue")?
         .ok_or("eval requires the ordinary TimedValue declaration")?;
-    let timed = hgl_value_types::specialize(library, decl, vec![ty.clone()], &mut BTreeSet::new())?;
-    hgl_eval_data::timed(timed, slots)
+    hgl_value_types::specialize(library, decl, vec![ty.clone()], &mut BTreeSet::new())
 }
 
-#[derive(Default)]
-struct EvalInputs {
-    input_length: usize,
-    sequences: Vec<Vec<Option<Value>>>,
-    construction_error: Option<String>,
-}
+type EvalInputs = Vec<Vec<Option<Value>>>;
 
-fn closed_eval(
+fn checked_eval(
     checker: &mut Checker,
     module: &str,
     expr: &Expr,
@@ -1870,22 +1941,21 @@ fn closed_eval(
     {
         return Err(format!("expected {}, got {}", ty.name(), value.ty.name()));
     }
-    checker.wiring_value(&value)
+    Ok(value)
 }
 
-pub(crate) fn expected_values(
+pub(crate) fn prepared_expected(
     library: Library,
     module: &str,
     ty: &Ty,
     slots: &[Option<Expr>],
-    values: Env,
+    values: &Env,
 ) -> Result<Vec<Option<Value>>, String> {
-    let mut checker = test_checker(library, module, values);
-    let result = hgl_eval_data::sequence(slots, Some(ty.clone()), |expr, expected| {
-        closed_eval(&mut checker, module, expr, expected)
+    let mut checker = test_checker(library, module, values.clone());
+    hgl_eval_data::sequence(slots, Some(ty.clone()), |expr, expected| {
+        checked_eval(&mut checker, module, expr, expected)
     })
-    .map(|(_, slots)| slots);
-    checker.plan.construction_error.map_or(result, Err)
+    .map(|(_, slots)| slots)
 }
 
 fn eval_configuration(
@@ -1897,12 +1967,7 @@ fn eval_configuration(
 ) -> Result<Arguments, String> {
     let mut values = Vec::new();
     for (index, (label, expr)) in args.iter().enumerate() {
-        let parameter = if let Some(label) = label {
-            signature.parameters.iter().find(|p| p.name == *label)
-        } else {
-            signature.parameters.get(index)
-        }
-        .ok_or("unknown eval argument")?;
+        let parameter = hgl_eval_data::parameter(signature, index, label.as_deref())?;
         if !parameter.constant {
             continue;
         }
@@ -1912,7 +1977,7 @@ fn eval_configuration(
             .map(|ty| hgl_value_access::project(&ty));
         values.push((
             Some(parameter.name.clone()),
-            closed_eval(checker, module, expr, hint.as_ref())?,
+            checked_eval(checker, module, expr, hint.as_ref())?,
         ));
     }
     Ok(values)
@@ -1927,15 +1992,10 @@ fn eval_arguments(
 ) -> Result<(EvalInputs, Arguments), String> {
     let configuration = eval_configuration(checker, module, owner, signature, args)?;
     let signature = checker.signature_sizes(owner, signature.clone(), &configuration)?;
-    let mut plan = EvalInputs::default();
+    let mut plan = Vec::new();
     let mut values = Vec::new();
     for (position, (label, expr)) in args.iter().enumerate() {
-        let parameter = if let Some(label) = label {
-            signature.parameters.iter().find(|p| p.name == *label)
-        } else {
-            signature.parameters.get(position)
-        }
-        .ok_or("unknown eval argument")?;
+        let parameter = hgl_eval_data::parameter(&signature, position, label.as_deref())?;
         let type_name = checker.type_sizes(owner, &parameter.ty, &Env::new())?;
         let hint =
             hgl_value_types::resolve(&checker.library, owner, &type_name, &mut BTreeSet::new())
@@ -1946,14 +2006,10 @@ fn eval_arguments(
                 return Err("const parameter requires a fixed value".into());
             }
             let (ty, slots) = hgl_eval_data::sequence(ticks, hint, |expr, expected| {
-                closed_eval(checker, module, expr, expected)
+                checked_eval(checker, module, expr, expected)
             })?;
-            if let Err((index, error)) = hgl_eval_data::validate(&ty, &slots) {
-                plan.construction_error.get_or_insert(format!("eval: input delta outside publication profile: {} at position {index}: {error}", parameter.name));
-            }
-            let index = plan.sequences.len();
-            plan.input_length = plan.input_length.max(slots.len());
-            plan.sequences.push(slots);
+            let index = plan.len();
+            plan.push(slots);
             Value::new(ty, Kind::Wire(index))
         } else {
             if !parameter.constant {
@@ -1965,10 +2021,19 @@ fn eval_arguments(
                 .map(|(_, value)| value.clone())
                 .ok_or("missing evaluated configuration")?
         };
-        values.push((label.clone(), value));
+        values.push((Some(parameter.name.clone()), value));
     }
     let types = hgl_value_bind::signature_types(&checker.library, owner, &signature, &values)?;
-    bind(&signature, &values, false, None, &types)?;
+    let (bound, _, _) = bind_prepared(&signature, &values, false, None, &types)?;
+    for (parameter, value) in signature.parameters.iter().zip(bound) {
+        if parameter.constant
+            && !values
+                .iter()
+                .any(|(name, _)| name.as_ref() == Some(&parameter.name))
+        {
+            values.push((Some(parameter.name.clone()), value));
+        }
+    }
     Ok((plan, values))
 }
 

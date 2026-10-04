@@ -8,3 +8,6 @@ publish.workspace = true
 line-budget = 300
 [lints]
 workspace = true
+
+[dependencies]
+hgl-type-syntax = { path = "../hgl-type-syntax" }

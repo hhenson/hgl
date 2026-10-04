@@ -14,3 +14,4 @@ workspace = true
 [dependencies]
 hgl-source = { path = "../hgl-source" }
 hgl-rust-ir = { path = "../hgl-rust-ir" }
+hgl-rust-scalars = { path = "../hgl-rust-scalars" }

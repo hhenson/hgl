@@ -1,6 +1,6 @@
 //! Direct ordinary evaluation of checked IR without runtime capabilities.
 use hgl_rust_ir::{DeltaEntry, Kind, Statement, Value};
-use hgl_source::{Literal, Ty};
+use hgl_source::{Literal, TemporalLiteral, Ty};
 use std::fmt;
 mod operators;
 
@@ -9,6 +9,8 @@ mod operators;
 pub enum EvalError {
     /// An admitted operation failed when evaluated.
     Operation(String),
+    /// A provider-dependent value needs the host construction context.
+    ContextRequired,
     /// The checked IR cannot be executed by this ordinary evaluator.
     Unsupported(String),
 }
@@ -16,6 +18,9 @@ impl fmt::Display for EvalError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Operation(message) | Self::Unsupported(message) => f.write_str(message),
+            Self::ContextRequired => {
+                f.write_str("temporal literal requires a construction context")
+            }
         }
     }
 }
@@ -47,6 +52,7 @@ pub fn constant(value: &Value) -> bool {
 pub struct Evaluator {
     locals: Vec<(usize, Value, bool)>,
 }
+type Materialize<'a> = dyn FnMut(&TemporalLiteral) -> Result<Literal, EvalError> + 'a;
 impl Evaluator {
     /// Preserve a checked unavailable wiring result while later source checks continue.
     pub fn bind_failed(&mut self, id: usize, value: Value, writable: bool) {
@@ -54,7 +60,45 @@ impl Evaluator {
     }
     /// Evaluate a checked expression to a closed, independently owned value.
     pub fn value(&mut self, value: &Value) -> Result<Value, EvalError> {
+        self.value_with(value, &mut |_| Err(EvalError::ContextRequired))
+    }
+    /// Evaluate with the host construction context, preserving expression order.
+    pub fn value_with(
+        &mut self,
+        value: &Value,
+        materialize: &mut Materialize<'_>,
+    ) -> Result<Value, EvalError> {
+        Execution {
+            locals: &mut self.locals,
+            materialize,
+        }
+        .value(value)
+    }
+    /// Execute one statement without a provider context.
+    pub fn statement(&mut self, statement: &Statement) -> Result<Option<Value>, EvalError> {
+        self.statement_with(statement, &mut |_| Err(EvalError::ContextRequired))
+    }
+    /// Execute a statement with provider-dependent literal materialization.
+    pub fn statement_with(
+        &mut self,
+        statement: &Statement,
+        materialize: &mut Materialize<'_>,
+    ) -> Result<Option<Value>, EvalError> {
+        Execution {
+            locals: &mut self.locals,
+            materialize,
+        }
+        .statement(statement)
+    }
+}
+struct Execution<'a, 'b> {
+    locals: &'a mut Vec<(usize, Value, bool)>,
+    materialize: &'a mut Materialize<'b>,
+}
+impl Execution<'_, '_> {
+    fn value(&mut self, value: &Value) -> Result<Value, EvalError> {
         let kind = match &value.kind {
+            Kind::TemporalLiteral(recipe) => Kind::Literal((self.materialize)(recipe)?),
             Kind::Delta(parts) => self.delta(parts)?,
             Kind::WiringFailure(message) => return Err(EvalError::Operation(message.clone())),
             Kind::Literal(_) | Kind::Void => return Ok(value.clone()),
@@ -74,13 +118,7 @@ impl Evaluator {
                     .collect::<Result<_, EvalError>>()?,
             ),
             Kind::Local(id) | Kind::MutableLocal(id) => {
-                let value = self
-                    .locals
-                    .iter()
-                    .rev()
-                    .find(|(local, _, _)| local == id)
-                    .map(|(_, value, _)| value.clone())
-                    .ok_or_else(|| unsupported("ordinary local is not initialized"))?;
+                let value = self.binding(*id)?.1.clone();
                 if let Kind::WiringFailure(message) = &value.kind {
                     return Err(EvalError::Operation(message.clone()));
                 }
@@ -103,8 +141,11 @@ impl Evaluator {
             }
             Kind::ValueCall(args, body) => return self.call(args, body, &value.ty),
             Kind::Binary(op, a, b) => return self.binary(op, a, b),
-            Kind::Unary(op, operand) => return operators::unary(op, &self.value(operand)?),
-            Kind::Configuration(_)
+            Kind::Unary(op, operand) => {
+                return operators::unary(op, &self.value(operand)?);
+            }
+            Kind::Prepared(_)
+            | Kind::Configuration(_)
             | Kind::GlobalGet(_)
             | Kind::BorrowedLocal(..)
             | Kind::GlobalSet(..)
@@ -138,18 +179,22 @@ impl Evaluator {
         operators::binary(op, &a, &self.value(b)?)
     }
     fn call(&mut self, args: &[Value], body: &[Statement], ty: &Ty) -> Result<Value, EvalError> {
-        let mut invocation = Self::default();
-        for (id, arg) in args.iter().enumerate() {
-            invocation.locals.push((id, self.value(arg)?, false));
-        }
+        let mut locals = args
+            .iter()
+            .enumerate()
+            .map(|(id, arg)| Ok((id, self.value(arg)?, false)))
+            .collect::<Result<Vec<_>, EvalError>>()?;
+        let mut invocation = Execution {
+            locals: &mut locals,
+            materialize: self.materialize,
+        };
         match invocation.block(body)? {
             Some(value) if value.ty == *ty => Ok(value),
             None if *ty == Ty::Void => Ok(Value::new(Ty::Void, Kind::Void)),
             Some(_) | None => Err(unsupported("ordinary call has no correctly typed result")),
         }
     }
-    /// Execute one statement; a yielded value ends the containing invocation.
-    pub fn statement(&mut self, statement: &Statement) -> Result<Option<Value>, EvalError> {
+    fn statement(&mut self, statement: &Statement) -> Result<Option<Value>, EvalError> {
         match statement {
             Statement::Let(id, value) | Statement::Var(id, value) => {
                 let value = self.value(value)?;
@@ -239,60 +284,39 @@ impl Evaluator {
         ))
     }
     fn path(&mut self, value: &Value, path: &mut Vec<Projection>) -> Result<usize, EvalError> {
-        match &value.kind {
-            Kind::WiringFailure(message) => Err(EvalError::Operation(message.clone())),
-            Kind::MutableLocal(id) => Ok(*id),
-            Kind::Field(parent, field) => {
-                let id = self.path(parent, path)?;
-                path.push(Projection::Field(*field));
-                Ok(id)
-            }
-            Kind::Index(parent, offset) => {
-                let id = self.path(parent, path)?;
-                path.push(Projection::Index(index(&self.value(offset)?)?));
-                Ok(id)
-            }
-            Kind::Delta(_)
-            | Kind::ObservedLocal(_)
-            | Kind::List(_)
-            | Kind::Length(_)
-            | Kind::Push(..)
-            | Kind::ValueCall(..)
-            | Kind::Configuration(_)
-            | Kind::Construct(_)
-            | Kind::GlobalGet(_)
-            | Kind::BorrowedLocal(..)
-            | Kind::GlobalSet(..)
-            | Kind::IsPresent(_)
-            | Kind::Present(_)
-            | Kind::Literal(_)
-            | Kind::GeneratorLocal(_)
-            | Kind::Wire(_)
-            | Kind::Input(..)
-            | Kind::Cache(_)
-            | Kind::Local(_)
-            | Kind::Native(..)
-            | Kind::Binary(..)
-            | Kind::Unary(..)
-            | Kind::Query(..)
-            | Kind::Output
-            | Kind::Capability
-            | Kind::Void => Err(unsupported(
-                "ordinary mutation requires writable owner access",
-            )),
+        if let Kind::WiringFailure(message) = &value.kind {
+            return Err(EvalError::Operation(message.clone()));
         }
+        if let Kind::MutableLocal(id) = value.kind {
+            return Ok(id);
+        }
+        if let Kind::Field(parent, field) = &value.kind {
+            let id = self.path(parent, path)?;
+            path.push(Projection::Field(*field));
+            return Ok(id);
+        }
+        if let Kind::Index(parent, offset) = &value.kind {
+            let id = self.path(parent, path)?;
+            path.push(Projection::Index(index(&self.value(offset)?)?));
+            return Ok(id);
+        }
+        Err(unsupported(
+            "ordinary mutation requires writable owner access",
+        ))
+    }
+    fn binding(&mut self, id: usize) -> Result<&mut (usize, Value, bool), EvalError> {
+        self.locals
+            .iter_mut()
+            .rev()
+            .find(|(local, _, _)| *local == id)
+            .ok_or_else(|| unsupported("ordinary local is not initialized"))
     }
     fn place(&mut self, value: &Value) -> Result<&mut Value, EvalError> {
         let mut path = Vec::new();
         let id = self.path(value, &mut path)?;
-        let (_, mut value, writable) = self
-            .locals
-            .iter_mut()
-            .rev()
-            .find(|(local, _, _)| *local == id)
-            .map(|(id, value, writable)| (*id, value, *writable))
-            .ok_or_else(|| unsupported("ordinary local is not initialized"))?;
-        if !writable {
+        let (_, value, writable) = self.binding(id)?;
+        let mut value = value;
+        if !*writable {
             return Err(unsupported("ordinary local is read-only"));
         }
         if let Kind::WiringFailure(message) = &value.kind {

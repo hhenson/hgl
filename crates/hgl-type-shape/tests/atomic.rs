@@ -31,5 +31,5 @@ fn complete_payload_and_structural_delta_are_different_types() {
         assert_eq!(atomic.delta(), Ok(payload));
     }
     assert!(Ty::Set(Box::new(Ty::I64)).atomic().delta().is_err());
-    assert!(Ty::parse("atomic<civil_datetime>").is_none());
+    assert_eq!(Ty::parse("atomic<civil_datetime>"), Some(Ty::CivilDateTime));
 }

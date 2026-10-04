@@ -104,3 +104,7 @@ its existing contract.
 Conversion of a retained ordinary recording validates strictly increasing
 publication timestamps before dense comparison. A malformed duplicate entry is
 an error even if the first entry would match the expected value.
+
+Observation::into_parts(self) -> (usize, Vec<(usize, T)>) transfers the dense
+logical length and sparse owned captures without allocating silent cells.
+The ordered source harness uses these parts after graph teardown.

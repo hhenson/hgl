@@ -38,3 +38,9 @@ test generic_defaulted_sparse_fields {
  assert eval(defaulted,[_,_]) == [_,_]
  assert eval(defaulted,[]) == []
 }
+
+fn zero_size(value:list<i64,0>)->list<i64,0> => identity(value)
+test zero_size_lists_allow_empty_and_silent_traces {
+ assert eval(zero_size,[]) == []
+ assert eval(zero_size,[_,_]) == [_,_]
+}

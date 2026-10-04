@@ -1,7 +1,7 @@
 //! Owned scalar storage borrowed by the HGL replay and record capabilities.
 use hgl_kernel::{NodeError, NodeResult};
 use hgl_store::Scalar;
-use hgl_types::{Date, EngineDelta, EngineTime, ScalarType, Time};
+use hgl_types::{EngineDelta, EngineTime, ScalarType};
 
 type Result<T> = std::result::Result<T, Box<NodeError>>;
 
@@ -10,49 +10,9 @@ pub trait BufferScalar: Scalar {
     /// Return an independent delta or a translated allocation error.
     fn copy_delta(&self) -> Result<Self>;
 }
-impl BufferScalar for bool {
+impl<T: Scalar> BufferScalar for T {
     fn copy_delta(&self) -> Result<Self> {
-        Ok(*self)
-    }
-}
-impl BufferScalar for i64 {
-    fn copy_delta(&self) -> Result<Self> {
-        Ok(*self)
-    }
-}
-impl BufferScalar for f64 {
-    fn copy_delta(&self) -> Result<Self> {
-        Ok(*self)
-    }
-}
-impl BufferScalar for Date {
-    fn copy_delta(&self) -> Result<Self> {
-        Ok(*self)
-    }
-}
-impl BufferScalar for Time {
-    fn copy_delta(&self) -> Result<Self> {
-        Ok(*self)
-    }
-}
-impl BufferScalar for EngineTime {
-    fn copy_delta(&self) -> Result<Self> {
-        Ok(*self)
-    }
-}
-impl BufferScalar for EngineDelta {
-    fn copy_delta(&self) -> Result<Self> {
-        Ok(*self)
-    }
-}
-impl BufferScalar for String {
-    fn copy_delta(&self) -> Result<Self> {
-        let mut owned = Self::new();
-        owned
-            .try_reserve(self.len())
-            .map_err(|e| NodeError::new(e.to_string()))?;
-        owned.push_str(self);
-        Ok(owned)
+        self.try_clone()
     }
 }
 

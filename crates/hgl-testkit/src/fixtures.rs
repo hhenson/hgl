@@ -72,7 +72,10 @@ impl Node for Replay {
                 | ScalarValue::Date(_)
                 | ScalarValue::Time(_)
                 | ScalarValue::DateTime(_)
-                | ScalarValue::Duration(_),
+                | ScalarValue::Duration(_)
+                | ScalarValue::CivilDateTime(_)
+                | ScalarValue::TimeZone(_)
+                | ScalarValue::ZonedDateTime(_),
             ) => {
                 return Err(NodeError::new("testkit.replay emits TS[int] only"));
             }

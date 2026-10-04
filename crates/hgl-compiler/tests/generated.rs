@@ -107,6 +107,12 @@ fn prepare(
     );
     for dependency in [
         "hgl-describe",
+        "hgl-harness",
+        "hgl-harness-ir",
+        "hgl-rust-ir",
+        "hgl-source",
+        "hgl-value-eval",
+        "hgl-time-context",
         "hgl-kernel",
         "hgl-store",
         "hgl-types",

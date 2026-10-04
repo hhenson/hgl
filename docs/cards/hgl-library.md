@@ -25,7 +25,7 @@ contexts; invalid context members; production helper isolation.
 `Role::Struct` indexes ordinary struct declarations without treating them as
 functions. `Decl::required_struct() -> Result<RequiredStruct, String>`
 parses finite nonrecursive fields, preserving source type names and checked
-non-null fixed scalar defaults for frontend resolution. Duplicate fields, optional
+non-null scalar literal defaults (including contextual calendar recipes) for frontend resolution. Duplicate fields, optional
 fields, inheritance and unsupported generic declarations are diagnosed.
 
 `RequiredStruct { generics, fields, defaults, type_domain }` and `Decl::required_struct`
@@ -46,3 +46,9 @@ implementation, never comparing only a scalar/shape display name.
 by module and expression during source compilation. It contains only canonical
 i64 values, is populated by the normal ordinary expression checker/evaluator,
 and never reaches runtime shape storage or emitted lookup code.
+
+StructSchema.defaults stores Vec<(usize, hgl_source::ParsedLiteral)> so fixed
+ordinary literals and contextual scalar recipes share the existing default
+profile. Type-check each against the substituted canonical field type. Omitted
+fields construct/retain defaults in declaration order after supplied fields; an
+explicit field suppresses its default. No provider call occurs during indexing.

@@ -305,7 +305,7 @@ _ => panic!("unknown test image") } }
 }
 fn check_images(binary: &Path) -> Result<(), Box<dyn std::error::Error>> {
     for (name, success, message) in [
-        ("standard", true, "131 tests, 247 evaluations, 0 failures"),
+        ("standard", true, "158 tests, 324 evaluations, 0 failures"),
         ("source_operators", true, "0 failures"),
         (
             "replay_order_failure",
@@ -659,6 +659,12 @@ fn manifest(root: &Path, dir: &Path) -> std::io::Result<()> {
         "hgl-store",
         "hgl-kernel",
         "hgl-describe",
+        "hgl-harness",
+        "hgl-harness-ir",
+        "hgl-rust-ir",
+        "hgl-source",
+        "hgl-value-eval",
+        "hgl-time-context",
         "hgl-testkit",
         "hgl-std-native",
     ] {

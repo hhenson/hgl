@@ -13,6 +13,17 @@ pub fn literal(value: &Literal) -> String {
         Literal::Date(i) => format!("hgl_types::Date({i})"),
         Literal::Time(i) => format!("hgl_types::Time({i})"),
         Literal::DateTime(i) => format!("hgl_types::EngineTime::from_micros({i})"),
+        Literal::CivilDateTime(i) => format!("hgl_types::CivilDateTime::from_micros({i})"),
+        Literal::TimeZone(zone) => format!(
+            "hgl_types::ZoneId::from_validated_name({:?}.to_owned())",
+            zone.as_str()
+        ),
+        Literal::ZonedDateTime(value) => format!(
+            "hgl_types::ZonedDateTime::from_validated_parts(hgl_types::EngineTime::from_micros({}), hgl_types::ZoneId::from_validated_name({:?}.to_owned()), {})",
+            value.instant().micros(),
+            value.zone().as_str(),
+            value.offset_seconds()
+        ),
         Literal::Bool(b) => b.to_string(),
         Literal::Float(f) if !f.is_finite() => format!("f64::from_bits({})", f.to_bits()),
         Literal::Float(f) => format!("{f:?}_f64"),
@@ -24,6 +35,8 @@ fn value(plan: &Plan, v: &Value) -> String {
         return format!("({slot}).read(_ctx.store().atomic_values())?");
     }
     match &v.kind {
+        Kind::Prepared(id) => retained(&format!("prepared{id}"), &v.ty),
+        Kind::TemporalLiteral(_) => unreachable!("preparation expressions cannot reach node hooks"),
         Kind::WiringFailure(message) => {
             format!("return Err(hgl_types::NodeError::new({message:?}))")
         }
@@ -55,13 +68,7 @@ fn value(plan: &Plan, v: &Value) -> String {
                 format!("_ctx.get(self.input{i})")
             }
         }
-        Kind::Cache(i) => {
-            if v.ty == Ty::Str {
-                format!("self.cache{i}.clone()")
-            } else {
-                format!("self.cache{i}")
-            }
-        }
+        Kind::Cache(i) => retained(&format!("self.cache{i}"), &v.ty),
         Kind::GlobalGet(i) => format!("_ctx.global_state().get(self.global{i})?"),
         Kind::GlobalSet(i, v) => format!(
             "{{ let value = {}; _ctx.global_state().set(self.global{i}, &value)?; }}",
@@ -169,7 +176,7 @@ fn retained(source: &str, ty: &Ty) -> String {
             format!("{{ let source = &({source}); ({fields},) }}")
         };
     }
-    if *ty == Ty::Str {
+    if matches!(ty, Ty::Str | Ty::TimeZone | Ty::ZonedDateTime) {
         format!("hgl_store::Scalar::try_clone(&({source}))?")
     } else {
         format!("({source})")
@@ -455,7 +462,9 @@ fn native_argument(plan: &Plan, v: &Value) -> String {
         Kind::Output => {
             "_ctx.store().output_ref(self._output).expect(\"valid output\").as_str()".into()
         }
-        Kind::Delta(_)
+        Kind::TemporalLiteral(_)
+        | Kind::Prepared(_)
+        | Kind::Delta(_)
         | Kind::ObservedLocal(_)
         | Kind::WiringFailure(_)
         | Kind::List(_)

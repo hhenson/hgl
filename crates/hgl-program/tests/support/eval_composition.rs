@@ -18,7 +18,7 @@ fn plan(body: &str) -> Plan {
         ),
     ])
     .unwrap();
-    evaluate(
+    prepare_evaluation(
         library,
         "example",
         "probe",
@@ -26,9 +26,10 @@ fn plan(body: &str) -> Plan {
             None,
             Expr::Sequence(vec![Some(Expr::Literal(Literal::Int(1)))]),
         )],
-        Env::new(),
+        &Env::new(),
     )
     .unwrap()
+    .0
 }
 #[test]
 fn fresh_keys_exclude_all_selected_requirements_regardless_of_type_or_execution() {

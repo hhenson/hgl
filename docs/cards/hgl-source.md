@@ -84,3 +84,13 @@ atomic payload value-type syntax recursively before scalar normalization.
 Grouping has no comma; a one-element tuple has a trailing comma. Source checking
 distinguishes complete ordinary tuples from sparse temporal tuple publications;
 omissions are admitted only in the latter context.
+
+## Temporal scalar preparation
+
+Literal and numeric conversion move to hgl-literals and remain re-exported.
+TemporalLiteral is also re-exported for checked IR and preparation clients.
+May use hgl-literals. Expr::TemporalLiteral(TemporalLiteral) preserves unresolved
+provider-dependent construction. Expr::fixed never treats it as a closed value.
+The lexer retains a complete bracketed zone annotation in one temporal token.
+
+Re-export ParsedLiteral with Literal and TemporalLiteral for schema defaults.

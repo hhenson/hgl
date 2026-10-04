@@ -4,7 +4,7 @@ Reusable run-owned storage for typed ordinary values. Uses `hgl-types` and
 `hgl-columns`; budget 220 lines. No unsafe code or third-party dependencies.
 
 `Capacity` accumulates `scalar<T: Scalar>()` and `list()` reservations.
-`Columns` owns eight primitive columns, matching free-slot pools, and list
+`Columns` owns eleven primitive columns, matching free-slot pools, and list
 entries. `reserve(&Capacity) -> NodeResult` obtains capacity before any logical
 mutation, including capacity required to reclaim every allocated slot.
 `insert<T>(T) -> usize`, `scalar<T>(usize) -> &T`, `replace<T>(usize,T)`, and
