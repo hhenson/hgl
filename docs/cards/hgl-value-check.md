@@ -49,3 +49,14 @@ constructor/list/global/owning assignment and matching delta publication are
 explicit retention boundaries; helper returns/calls cannot escape observations.
 Ordered delta children are traversed for entry effects without weakening borrow
 conflict checks. Delta binary comparison and field/index inspection are rejected.
+
+`aggregate(expr: &Expr, expected: Option<&Ty>, constant_context: bool,
+check: impl FnMut(&Expr, Option<&Ty>) -> Result<Value, String>) ->
+Result<Value, String>` centralizes
+ordinary list and positional tuple checking. The caller supplies its existing
+expression checker; element admission, constant-expression requirements and
+exact contextual list fixedness are unchanged. Tuple arity and each position's
+expected type are checked independently, retaining source evaluation order.
+
+A constant context may retain local expression IR until source-order ordinary
+evaluation closes it. This does not admit nonconstant runtime list literals.

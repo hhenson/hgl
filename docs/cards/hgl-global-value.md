@@ -55,3 +55,7 @@ borrow allocations, and bounded arena storage under repeated replacement.
 Mutants: erase nominal identity; copy payload at borrow; commit a field before
 later preparation fails; project the wrong slot; detach root on replacement;
 forget typed descendant reclamation.
+
+Ordinary tuple preparation uses `OrdinaryType::Tuple` and positional child
+layouts. Generated tuple GlobalValue implementations retain, prepare, commit
+and reclaim recursively under the same ownership contract as nominal structs.

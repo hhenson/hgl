@@ -327,3 +327,7 @@ lifetimes; runtime presence belongs to the single prepared root.
 `Ctx::get_or_create_with(dict,key,create)` exposes the store's prepared child
 factory under the existing writing-owner and evaluation-phase checks. The
 factory receives Store and NodeId and runs only on fresh member allocation.
+
+`Ctx::set_atomic<T: GlobalValue>(Output<Atomic<T>>, T::Value) -> NodeResult`
+publishes a prepared complete ordinary value through Store and the existing
+wake mechanism. Failed preparation neither changes the held value nor ticks.

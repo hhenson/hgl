@@ -52,6 +52,7 @@ pub fn scalar(ty: &Ty) -> bool {
     !matches!(
         ty,
         Ty::Void
+            | Ty::Atomic(_)
             | Ty::Ref(_)
             | Ty::Set(_)
             | Ty::Nullable(_)
@@ -104,7 +105,7 @@ pub fn require_payload(value: &Value) -> Result<(), String> {
     if matches!(value.kind, Kind::Input(..) | Kind::Output)
         && matches!(
             value.ty,
-            Ty::Map(..) | Ty::Tuple(_) | Ty::List(..) | Ty::Struct(..)
+            Ty::Atomic(_) | Ty::Map(..) | Ty::Tuple(_) | Ty::List(..) | Ty::Struct(..)
         )
     {
         return Err("structural endpoint payload requires delta_value observation".into());

@@ -30,49 +30,51 @@ pub fn compile_tests(sources: &[(String, String)]) -> Result<Suite, String> {
         c.name()?;
         c.need("{")?;
         c.lines();
+        let mut scope = hgl_eval_data::Scope::default();
         while !c.take("}") {
-            let assertion = c.take("assert");
-            let expr = c.expr()?;
-            if assertion && !eval_assertion(&expr) {
-                cases.push(ordinary_case(&library, decl, &name, &expr)?);
+            if !c.at("assert") && !c.at("eval") {
+                let statement = hgl_eval_data::statement(&mut c)?;
+                scope.apply(&statement, |statement, env, next| {
+                    resolve::test_statement(library.clone(), &decl.module, statement, env, next)
+                })?;
                 c.lines();
                 continue;
             }
-            let (call, expected) = if assertion {
-                let Expr::Binary(op, call, expected) = expr else {
-                    return Err(format!("{name}: expected eval comparison"));
-                };
-                if op != "==" {
-                    return Err("eval assertion requires ==".into());
-                }
-                let Expr::Sequence(elements) = *expected else {
-                    return Err("expected a dense sequence".into());
-                };
-                (*call, Some(elements))
-            } else {
-                (expr, None)
-            };
-            let Expr::Call(eval, mut args) = call else {
-                return Err("expected eval call".into());
-            };
-            if eval != "eval" || args.is_empty() {
-                return Err("expected eval(function, ...)".into());
+            let values = scope.values()?;
+            let assertion = c.take("assert");
+            let expr = c.expr()?;
+            if assertion && !eval_assertion(&expr) {
+                cases.push(Case {
+                    name: name.clone(),
+                    plan: hgl_rust::Plan::default(),
+                    expected: None,
+                    ordinary: Some(resolve::assertion(
+                        library.clone(),
+                        &decl.module,
+                        &expr,
+                        &values,
+                    )?),
+                });
+                c.lines();
+                continue;
             }
-            let (label, Expr::Name(function)) = args.remove(0) else {
-                return Err("eval requires a named function".into());
-            };
-            if label.is_some() {
-                return Err("eval function must be positional".into());
-            }
-            let plan = resolve::evaluate(library.clone(), &decl.module, &function, &args)
-                .map_err(|e| format!("{name}: {e}"))?;
-            let expected = expected
+            let call = hgl_eval_data::evaluation(expr, assertion)?;
+            let plan = resolve::evaluate(
+                library.clone(),
+                &decl.module,
+                &call.function,
+                &call.arguments,
+                values.clone(),
+            )
+            .map_err(|e| format!("{name}: {e}"))?;
+            let expected = call
+                .expected
                 .map(|slots| {
                     let (_, ty) = plan
                         .output
                         .as_ref()
                         .ok_or("outputless eval cannot be compared")?;
-                    resolve::expected_values(library.clone(), &decl.module, ty, &slots)
+                    resolve::expected_values(library.clone(), &decl.module, ty, &slots, values)
                         .map_err(|e| format!("{name}: expected output: {e}"))
                 })
                 .transpose()?;
@@ -126,19 +128,4 @@ fn eval_assertion(expr: &Expr) -> bool {
         return matches!(left.as_ref(), Expr::Call(name, _) if name == "eval");
     }
     false
-}
-
-fn ordinary_case(
-    library: &index::Library,
-    decl: &index::Decl,
-    name: &str,
-    expr: &Expr,
-) -> Result<Case, String> {
-    let ordinary = resolve::assertion(library.clone(), &decl.module, expr)?;
-    Ok(Case {
-        name: name.into(),
-        plan: hgl_rust::Plan::default(),
-        expected: None,
-        ordinary: Some(ordinary),
-    })
 }

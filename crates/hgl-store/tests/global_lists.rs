@@ -106,7 +106,7 @@ impl GlobalValue for Fallible {
 }
 fn provisioned() -> Store {
     let mut store = Store::new();
-    store.provision_global_state();
+    store.global_state().provision();
     store
 }
 
@@ -133,26 +133,29 @@ fn list_empty_bounds_owned_growth_and_self_source() -> NodeResult {
 #[test]
 fn fixed_identity_seed_validation_and_absence_are_recursive() -> NodeResult {
     let mut store = provisioned();
-    let fixed = store.bind_global::<List<i64, 2>>("fixed")?;
+    let fixed = store.global_state().bind::<List<i64, 2>>("fixed")?;
     assert!(store.global_state().borrow(fixed).is_err());
-    assert!(store.global_set(fixed, &vec![]).is_err());
+    assert!(store.global_state().set(fixed, &vec![]).is_err());
     assert!(store.global_state().borrow(fixed).is_err());
-    store.global_set(fixed, &vec![1, 2])?;
-    assert!(store.global_set(fixed, &vec![9]).is_err());
-    assert_eq!(store.global_get(fixed)?, [1, 2]);
-    assert!(store.bind_global::<List<i64>>("fixed").is_err());
-    assert!(store.bind_global::<List<i64, 0>>("fixed").is_err());
-    let nested = store.bind_global::<Envelope<List<List<i64, 2>>>>("nested")?;
+    store.global_state().set(fixed, &vec![1, 2])?;
+    assert!(store.global_state().set(fixed, &vec![9]).is_err());
+    assert_eq!(store.global_state().get(fixed)?, [1, 2]);
+    assert!(store.global_state().bind::<List<i64>>("fixed").is_err());
+    assert!(store.global_state().bind::<List<i64, 0>>("fixed").is_err());
+    let nested = store
+        .global_state()
+        .bind::<Envelope<List<List<i64, 2>>>>("nested")?;
     let original = ("stable".into(), vec![vec![1, 2]]);
-    store.global_set(nested, &original)?;
+    store.global_state().set(nested, &original)?;
     assert!(
         store
-            .global_set(nested, &("changed".into(), vec![vec![1, 2], vec![3]]))
+            .global_state()
+            .set(nested, &("changed".into(), vec![vec![1, 2], vec![3]]))
             .is_err()
     );
-    assert_eq!(store.global_get(nested)?, original);
-    let zero = store.bind_global::<List<i64, 0>>("zero")?;
-    store.global_set(zero, &vec![])?;
+    assert_eq!(store.global_state().get(nested)?, original);
+    let zero = store.global_state().bind::<List<i64, 0>>("zero")?;
+    store.global_state().set(zero, &vec![])?;
     let slot = store.global_state().borrow(zero)?;
     assert_eq!(store.global_state().list_len(slot)?, 0);
     assert!(store.global_state().list_index(slot, 0).is_err());
@@ -163,9 +166,9 @@ fn fixed_identity_seed_validation_and_absence_are_recursive() -> NodeResult {
 fn nested_lists_and_struct_fields_are_live_without_aliasing_retained_payloads() -> NodeResult {
     type Root = Envelope<List<Envelope<List<i64>>>>;
     let mut store = provisioned();
-    let entry = store.bind_global::<Root>("root")?;
+    let entry = store.global_state().bind::<Root>("root")?;
     let mut original = ("root".into(), vec![("child".into(), vec![1])]);
-    store.global_set(entry, &original)?;
+    store.global_state().set(entry, &original)?;
     original.1[0].1.push(99);
     let root = store.global_state().borrow(entry)?;
     let items = root.fields().1;
@@ -182,7 +185,7 @@ fn nested_lists_and_struct_fields_are_live_without_aliasing_retained_payloads() 
         store.global_state().read(second)?,
         ("child".into(), vec![1])
     );
-    let snapshot = store.global_get(entry)?;
+    let snapshot = store.global_state().get(entry)?;
     store.global_state().write(root, &("new".into(), vec![]))?;
     assert_eq!(store.global_state().list_len(root.fields().1)?, 0);
     drop(store);
@@ -196,9 +199,11 @@ fn nested_lists_and_struct_fields_are_live_without_aliasing_retained_payloads() 
 #[test]
 fn failed_retention_and_capacity_reservation_preserve_values_and_slot_counts() -> NodeResult {
     let mut store = provisioned();
-    let entry = store.bind_global::<Envelope<List<Envelope<List<Fallible>>>>>("root")?;
+    let entry = store
+        .global_state()
+        .bind::<Envelope<List<Envelope<List<Fallible>>>>>("root")?;
     let original = ("outer".into(), vec![("child".into(), vec![1])]);
-    store.global_set(entry, &original)?;
+    store.global_state().set(entry, &original)?;
     let root = store.global_state().borrow(entry)?;
     let items = root.fields().1;
     let counts = store.global_state().slot_counts();
@@ -212,7 +217,7 @@ fn failed_retention_and_capacity_reservation_preserve_values_and_slot_counts() -
                     .write(root, &("changed".into(), vec![failed_item.clone()]))
                     .is_err()
             );
-            assert_eq!(store.global_get(entry)?, original);
+            assert_eq!(store.global_state().get(entry)?, original);
             assert_eq!(store.global_state().slot_counts(), counts);
         }
     }
@@ -222,9 +227,11 @@ fn failed_retention_and_capacity_reservation_preserve_values_and_slot_counts() -
 #[test]
 fn repeated_whole_replacement_and_push_reuse_all_recursive_slots() -> NodeResult {
     let mut store = provisioned();
-    let entry = store.bind_global::<List<Envelope<List<String>>>>("root")?;
+    let entry = store
+        .global_state()
+        .bind::<List<Envelope<List<String>>>>("root")?;
     let value = vec![("label".into(), vec!["one".into(), "two".into()])];
-    store.global_set(entry, &value)?;
+    store.global_state().set(entry, &value)?;
     let root = store.global_state().borrow(entry)?;
     for _ in 0..4 {
         store.global_state().write(root, &value)?;
@@ -237,7 +244,7 @@ fn repeated_whole_replacement_and_push_reuse_all_recursive_slots() -> NodeResult
     }
     assert_eq!(store.global_state().slot_counts(), counts);
     assert_eq!(
-        store.global_get(entry)?,
+        store.global_state().get(entry)?,
         [value[0].clone(), value[0].clone()]
     );
     Ok(())
@@ -246,8 +253,10 @@ fn repeated_whole_replacement_and_push_reuse_all_recursive_slots() -> NodeResult
 #[test]
 fn list_borrow_length_and_nested_projection_do_not_copy_or_allocate() -> NodeResult {
     let mut store = provisioned();
-    let entry = store.bind_global::<List<Envelope<List<String>>>>("root")?;
-    store.global_set(
+    let entry = store
+        .global_state()
+        .bind::<List<Envelope<List<String>>>>("root")?;
+    store.global_state().set(
         entry,
         &vec![("large".repeat(4096), vec!["payload".repeat(4096)])],
     )?;
@@ -268,8 +277,8 @@ fn list_borrow_length_and_nested_projection_do_not_copy_or_allocate() -> NodeRes
 
 fn scalar_list<T: hgl_store::Scalar>(item: &T) -> NodeResult {
     let mut store = provisioned();
-    let entry = store.bind_global::<List<T>>("value")?;
-    store.global_set(entry, &vec![])?;
+    let entry = store.global_state().bind::<List<T>>("value")?;
+    store.global_state().set(entry, &vec![])?;
     let slot = store.global_state().borrow(entry)?;
     store.global_state().list_push(slot, item)?;
     let element = store.global_state().list_index(slot, 0)?;

@@ -18,12 +18,12 @@ fn config() -> RunConfig {
     RunConfig { start_time: EngineTime::MIN_START, end_time: EngineTime::from_micros(10) }
 }
 fn integer(store: &mut Store, key: &str, expected: i64) {
-    let entry = store.bind_global::<i64>(key).unwrap();
-    assert_eq!(store.global_get(entry).unwrap(), expected, "{key}");
+    let entry = store.global_state().bind::<i64>(key).unwrap();
+    assert_eq!(store.global_state().get(entry).unwrap(), expected, "{key}");
 }
 fn text(store: &mut Store, key: &str, expected: &str) {
-    let entry = store.bind_global::<String>(key).unwrap();
-    assert_eq!(store.global_get(entry).unwrap(), expected, "{key}");
+    let entry = store.global_state().bind::<String>(key).unwrap();
+    assert_eq!(store.global_state().get(entry).unwrap(), expected, "{key}");
 }
 fn lifecycle() {
     let mut registry = Registry::new();
@@ -31,7 +31,7 @@ fn lifecycle() {
     let description = graph::main(&registry).unwrap();
     for _ in 0..2 {
         let mut store = Store::new();
-        store.provision_global_state();
+        store.global_state().provision();
         let mut built = instantiate_complete(&description, &registry, &mut store).unwrap();
         run_simulation(&mut built.graph, &mut store, &config()).unwrap();
         for (key, expected) in [
@@ -45,8 +45,8 @@ fn lifecycle() {
             ("owned_text", "initial"), ("field_owned_text", "initial"),
             ("retained_text", "initial"), ("nested_replaced_text", "initial"), ("stop_text", "after scopes")
         ] { text(&mut store, key, expected); }
-        let valid = store.bind_global::<bool>("wide_valid").unwrap();
-        assert!(store.global_get(valid).unwrap());
+        let valid = store.global_state().bind::<bool>("wide_valid").unwrap();
+        assert!(store.global_state().get(valid).unwrap());
     }
 }
 fn replacement_failure() {
@@ -60,13 +60,13 @@ fn replacement_failure() {
             fail_set::main(&registry).unwrap()
         };
         let mut store = Store::new();
-        store.provision_global_state();
+        store.global_state().provision();
         let mut built = instantiate_complete(&description, &registry, &mut store).unwrap();
         assert!(run_simulation(&mut built.graph, &mut store, &config()).is_err());
         integer(&mut store, "failure_amount", if assignment { 22 } else { 20 });
         text(&mut store, "failure_text", "preserved");
-        let after = store.bind_global::<bool>("after_failure").unwrap();
-        assert!(store.global_get(after).is_err());
+        let after = store.global_state().bind::<bool>("after_failure").unwrap();
+        assert!(store.global_state().get(after).is_err());
     }
 }
 fn main() {

@@ -410,7 +410,7 @@ impl Bindings {
                     self.invalidate(self.output(output).fixed[n], now, wake);
                 }
             }
-            Kind::Ts(_) => {}
+            Kind::Ts(_) | Kind::Atomic(_) => {}
         }
         self.endpoints.outputs[output.0 as usize].modified_at = EngineTime::NEVER;
         self.notify_output(output, now, wake);

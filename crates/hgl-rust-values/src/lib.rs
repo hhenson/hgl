@@ -20,6 +20,9 @@ pub fn literal(value: &Literal) -> String {
     }
 }
 fn value(plan: &Plan, v: &Value) -> String {
+    if let Some(slot) = atomic_place(plan, v) {
+        return format!("({slot}).read(_ctx.store().atomic_values())?");
+    }
     match &v.kind {
         Kind::WiringFailure(message) => {
             format!("return Err(hgl_types::NodeError::new({message:?}))")
@@ -147,7 +150,7 @@ fn retained(source: &str, ty: &Ty) -> String {
     if matches!(ty, Ty::Nullable(_)) {
         return format!("({source}).as_ref().map(hgl_store::Scalar::try_clone).transpose()?");
     }
-    if matches!(ty, Ty::List(..) | Ty::Delta(_)) {
+    if matches!(ty, Ty::Tuple(_) | Ty::List(..) | Ty::Delta(_)) {
         return format!(
             "<{} as hgl_store::GlobalValue>::retain(&({source}))?",
             global_type(ty)
@@ -245,7 +248,7 @@ pub fn statements(plan: &Plan, body: &[Statement], out: &mut Vec<String>) {
             Statement::Yield(v) => format!("return Ok({});\n", value(plan, v)),
             Statement::Exit => "return Ok(());\n".into(),
             Statement::Let(i,v) => {
-                let init = observation(v).unwrap_or_else(||condition_code(plan,v));
+                let init = atomic_place(plan,v).or_else(||observation(v)).unwrap_or_else(||condition_code(plan,v));
                 format!("let local{i} = {init};\n")
             },
             Statement::Borrow(i, v, _) => {
@@ -339,7 +342,15 @@ pub fn query(op: &str, args: &[Value]) -> String {
             let Kind::Input(i, _) = v.kind else {
                 unreachable!("checked endpoint query")
             };
-            if hgl_rust_deltas::structural(&v.ty) {
+            if let Ty::Atomic(payload) = &v.ty
+                && op == "delta_value"
+            {
+                return format!(
+                    "_ctx.store().atomic_get::<{}>(self.input{i})?",
+                    global_type(payload)
+                );
+            }
+            if hgl_rust_deltas::structural(&v.ty) || matches!(v.ty, Ty::Atomic(_)) {
                 let input = format!("self.input{i}");
                 return match op {
                     "delta_value" => hgl_rust_deltas::observe(
@@ -587,6 +598,11 @@ fn prepare_place(plan: &Plan, target: &Value, setup: &mut Vec<String>) -> String
 }
 
 fn length(plan: &Plan, parent: &Value) -> String {
+    if let Some(slot) = atomic_place(plan, parent) {
+        return format!(
+            "hgl_store::list_len(_ctx.store().atomic_values().list(({slot}).fields()))?"
+        );
+    }
     if let Some(slot) = borrowed_place(plan, parent) {
         format!("{{ let slot = {slot}; _ctx.global_state().list_len(slot)? }}")
     } else {
@@ -608,6 +624,37 @@ fn observation(v: &Value) -> Option<String> {
             unreachable!("checked observed input")
         };
         return Some(format!("self.input{id}"));
+    }
+    None
+}
+
+fn atomic_place(plan: &Plan, value: &Value) -> Option<String> {
+    if matches!(value.ty, Ty::Delta(_)) {
+        return None;
+    }
+    if let Kind::ObservedLocal(id) = value.kind {
+        return Some(format!("local{id}"));
+    }
+    if let Kind::Query(name, args) = &value.kind
+        && name == "delta_value"
+    {
+        let input = args.first()?;
+        let Ty::Atomic(payload) = &input.ty else {
+            return None;
+        };
+        let Kind::Input(id, _) = input.kind else {
+            return None;
+        };
+        return Some(format!(
+            "_ctx.store().atomic_borrow::<{}>(self.input{id})?",
+            global_type(payload)
+        ));
+    }
+    if let Kind::Field(parent, index) = &value.kind {
+        return atomic_place(plan, parent).map(|slot| format!("({slot}).fields().{index}"));
+    }
+    if let Kind::Index(parent, index) = &value.kind {
+        return atomic_place(plan, parent).map(|slot| format!("hgl_store::ValueSlot::<{}>::bind(&mut hgl_store::list_index(_ctx.store().atomic_values().list(({slot}).fields()), {})?.as_slice())", global_type(&value.ty), self::value(plan, index)));
     }
     None
 }

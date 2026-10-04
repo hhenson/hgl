@@ -158,6 +158,12 @@ pub struct Layouts {
     position: usize,
 }
 impl Layouts {
+    /// Discard prior preparation while retaining reusable scratch capacity.
+    pub fn reset(&mut self) {
+        self.values.clear();
+        self.position = 0;
+    }
+
     /// Retain a complete layout before touching live values.
     pub fn push(&mut self, value: ListData) -> NodeResult {
         self.values

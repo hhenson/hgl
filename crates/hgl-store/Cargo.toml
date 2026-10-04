@@ -10,6 +10,7 @@ description = "Where time-series live and how a tick travels: every value, last-
 line-budget = 500
 
 [dependencies]
+hgl-atomic = { path = "../hgl-atomic" }
 hgl-shapes = { path = "../hgl-shapes" }
 hgl-columns = { path = "../hgl-columns" }
 hgl-bindings = { path = "../hgl-bindings" }

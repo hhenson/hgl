@@ -68,6 +68,11 @@ pub fn bind(
         return Err(format!("requires {parameter} in {{{}}}", domain.join(", ")));
     }
     let result = resolve_type(&signature.result, &types).ok_or("unresolved result type")?;
+    let result = if signature.value_function && !matches!(result, Ty::Atomic(_)) {
+        hgl_value_access::project(&result)
+    } else {
+        result
+    };
     if !signature.value_function {
         supported_type(&result)?;
     }
@@ -88,7 +93,13 @@ pub fn supported_type(ty: &Ty) -> Result<(), String> {
     }
     if matches!(
         ty,
-        Ty::Struct(..) | Ty::List(..) | Ty::Map(..) | Ty::Tuple(_) | Ty::Delta(_) | Ty::Set(_)
+        Ty::Atomic(_)
+            | Ty::Struct(..)
+            | Ty::List(..)
+            | Ty::Map(..)
+            | Ty::Tuple(_)
+            | Ty::Delta(_)
+            | Ty::Set(_)
     ) && !ty.publication()
     {
         return Err("unsupported temporal publication shape".into());
@@ -137,13 +148,24 @@ fn bind_type(
         &value.ty
     };
     if signature.generics.contains(&formal.to_owned()) {
-        if types
-            .insert(formal.to_owned(), actual.clone())
-            .is_some_and(|old| old != *actual)
+        let expected = types
+            .entry(formal.to_owned())
+            .or_insert_with(|| actual.clone());
+        if *expected != *actual
+            && (!(p.constant || signature.value_function)
+                || hgl_value_access::project(expected) != *actual)
         {
             return Err("inconsistent generic inference".into());
         }
-    } else if p.ty != "signal" && resolve_type(formal, types) != Some(actual.clone()) {
+    } else if p.ty != "signal"
+        && resolve_type(formal, types).map(|ty| {
+            if p.constant || signature.value_function {
+                hgl_value_access::project(&ty)
+            } else {
+                ty
+            }
+        }) != Some(actual.clone())
+    {
         return Err(format!("type mismatch for {}", p.name));
     }
 
@@ -162,6 +184,9 @@ pub fn resolve_type(name: &str, types: &BTreeMap<String, Ty>) -> Option<Ty> {
         return resolve_type(origin, types)?.delta().ok();
     }
     if let Some((base, args)) = hgl_source::application(name) {
+        if base == "atomic" && args.len() == 1 {
+            return Some(hgl_value_access::project(&resolve_type(args[0], types)?).atomic());
+        }
         if base == "tuple" {
             return Some(Ty::Tuple(
                 args.into_iter()
@@ -267,12 +292,29 @@ pub fn signature_types(
             .or_else(|| parameter.ty.strip_prefix("set<"))
             .and_then(|s| s.strip_suffix('>'))
             .unwrap_or(&parameter.ty);
-        if signature.generics.iter().any(|name| name == formal) {
+        if (parameter.constant || signature.value_function)
+            && hgl_value_types::substitute(
+                library,
+                module,
+                &parameter.ty,
+                &types,
+                &mut BTreeSet::new(),
+            )
+            .is_ok_and(|ty| hgl_value_access::project(&ty) == value.ty)
+        {
+            continue;
+        }
+        if signature.generics.iter().any(|name| name == formal)
+            && (formal != parameter.ty || matches!(value.ty, Ty::Ref(_)))
+        {
             bind_type(signature, parameter, value, &mut types)?;
-        } else if matches!(
-            value.ty,
-            Ty::Struct(..) | Ty::List(..) | Ty::Delta(_) | Ty::Map(..) | Ty::Tuple(_)
-        ) || hgl_source::delta_argument(&parameter.ty).is_some()
+        } else if signature.generics.iter().any(|name| name == formal)
+            || matches!(
+                value.ty,
+                Ty::Struct(..) | Ty::List(..) | Ty::Delta(_) | Ty::Map(..) | Ty::Tuple(_)
+            )
+            || hgl_source::application(&parameter.ty)
+                .is_some_and(|(base, _)| matches!(base, "delta" | "atomic"))
         {
             hgl_value_types::unify(
                 library,

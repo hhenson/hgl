@@ -16,3 +16,4 @@ hgl-source = { path = "../hgl-source" }
 hgl-library = { path = "../hgl-library" }
 hgl-rust-ir = { path = "../hgl-rust-ir" }
 hgl-value-types = { path = "../hgl-value-types" }
+hgl-value-access = { path = "../hgl-value-access" }

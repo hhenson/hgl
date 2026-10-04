@@ -26,13 +26,13 @@ fn main() {
  let mut registry=Registry::new(); values::register(&mut registry).unwrap();
  let description=values::main(&registry).unwrap();
  for _ in 0..2 {
-  let mut store=Store::new();store.provision_global_state();
+  let mut store=Store::new();store.global_state().provision();
   let mut built=instantiate_complete(&description,&registry,&mut store).unwrap();
   run_simulation(&mut built.graph,&mut store,&RunConfig{start_time:EngineTime::MIN_START,end_time:EngineTime::from_micros(10)}).unwrap();
   values::verify(&mut store);
  }
  // Stop after the second sparse update, while the nested map still exists.
- let mut store=Store::new();store.provision_global_state();
+ let mut store=Store::new();store.global_state().provision();
  let mut built=instantiate_complete(&description,&registry,&mut store).unwrap();
  run_simulation(&mut built.graph,&mut store,&RunConfig{start_time:EngineTime::MIN_START,end_time:EngineTime::from_micros(3)}).unwrap();
  let node=description.nodes.iter().position(|n|n.implementation.starts_with("structural_values::nested#")).unwrap();
@@ -48,7 +48,7 @@ fn main() {
  let description=effects::main(&registry).unwrap();
  for (end,fail,trace) in [(3,0,123),(10,0,1234),(10,2,12),(10,0,1234)] {
   TRACE.store(0,Ordering::SeqCst);FAIL.store(fail,Ordering::SeqCst);
-  let mut store=Store::new();store.provision_global_state();
+  let mut store=Store::new();store.global_state().provision();
   let mut built=instantiate_complete(&description,&registry,&mut store).unwrap();
   let result=run_simulation(&mut built.graph,&mut store,&RunConfig{start_time:EngineTime::MIN_START,end_time:EngineTime::from_micros(end)});
   if fail!=0 {assert!(format!("{:?}",result.unwrap_err()).contains("marker failure"));}else{result.unwrap();}

@@ -18,6 +18,7 @@ struct Checker {
     active: BTreeSet<usize>,
     documented: BTreeSet<usize>,
     test_scope: Option<String>,
+    harness_values: Env,
     result_hint: Option<Ty>,
     phase: Phase,
     types: BTreeMap<String, Ty>,
@@ -49,13 +50,33 @@ type Selection = (usize, Signature, Vec<Value>, BTreeMap<String, Ty>, Ty);
 type Env = BTreeMap<String, Value>;
 type Arguments = Vec<(Option<String>, Value)>;
 
-pub(crate) fn assertion(library: Library, module: &str, expr: &Expr) -> Result<bool, String> {
-    let mut checker = Checker {
+fn test_checker(library: Library, module: &str, values: Env) -> Checker {
+    Checker {
         library,
         test_scope: Some(module.into()),
+        harness_values: values,
         ..Checker::default()
-    };
-    let value = checker.expression(module, expr, &Env::new(), false)?;
+    }
+}
+pub(crate) fn test_statement(
+    library: Library,
+    module: &str,
+    statement: &Stmt,
+    env: &mut Env,
+    next: &mut usize,
+) -> Result<Statement, String> {
+    let mut checker = test_checker(library, module, Env::new());
+    checker.value_context = ValueContext::Constant;
+    checker.statement(module, statement, env, &Ty::Void, next)
+}
+pub(crate) fn assertion(
+    library: Library,
+    module: &str,
+    expr: &Expr,
+    env: &Env,
+) -> Result<bool, String> {
+    let mut checker = test_checker(library, module, Env::new());
+    let value = checker.expression(module, expr, env, false)?;
     let value = checker
         .wiring
         .value(&value)
@@ -74,9 +95,6 @@ pub(crate) fn compile(library: Library, module: &str, entry: &str) -> Result<Pla
     Ok(checker.plan)
 }
 impl Checker {
-    fn identity(&self, module: &str, name: &str) -> (String, String) {
-        hgl_value_types::identity(&self.library, module, name)
-    }
     fn call(
         &mut self,
         module: &str,
@@ -101,7 +119,7 @@ impl Checker {
                 .collect::<Result<Vec<_>, String>>()?;
             &folded
         };
-        let (module, name) = self.identity(module, name);
+        let (module, name) = hgl_value_types::identity(&self.library, module, name);
         let (mut id, mut signature, values, mut types, result) =
             self.select(&module, &name, args, runtime)?;
         let mut decl = self.library.declarations[id].clone();
@@ -305,7 +323,7 @@ impl Checker {
         index: usize,
         label: Option<&str>,
     ) -> Option<Ty> {
-        let (owner, item) = self.identity(module, name);
+        let (owner, item) = hgl_value_types::identity(&self.library, module, name);
         let mut declarations = self.library.declarations.iter().filter(|d| {
             d.module == owner
                 && d.name == item
@@ -493,7 +511,7 @@ impl Checker {
             let Some(args) = args else {
                 return false;
             };
-            let (owner, item) = self.identity(module, required);
+            let (owner, item) = hgl_value_types::identity(&self.library, module, required);
             let Ok((id, _, _, _, provided)) = self.select(&owner, &item, &args, true) else {
                 return false;
             };
@@ -540,7 +558,8 @@ impl Checker {
             env.insert(name.into(), value);
             return Ok(());
         }
-        let id = local(env, name, value.ty.clone(), &mut self.next_wiring_local);
+        let id = self.next_wiring_local;
+        self.next_wiring_local += 1;
         env.insert(
             name.into(),
             hgl_value_check::binding(id, &value, mutable, annotated)?,
@@ -903,7 +922,7 @@ impl Checker {
         env: &Env,
         runtime: bool,
     ) -> Result<Value, String> {
-        let ty = annotation
+        let mut ty = annotation
             .map(|name| {
                 let name = self.type_sizes(module, name, env)?;
                 resolve_type(&name, &self.types).map_or_else(
@@ -920,7 +939,17 @@ impl Checker {
                 )
             })
             .transpose()?;
-        let value = self.expected_expression(module, expr, env, runtime, ty.as_ref())?;
+        let hint = ty.as_ref().map(|ty| {
+            if matches!(ty, Ty::Atomic(_)) {
+                ty.clone()
+            } else {
+                hgl_value_access::project(ty)
+            }
+        });
+        let value = self.expected_expression(module, expr, env, runtime, hint.as_ref())?;
+        if !matches!(value.kind, Kind::Wire(_)) {
+            ty = hint;
+        }
         if value.ty == Ty::Void {
             return Err("statement operation has no initializer value".into());
         }
@@ -942,6 +971,7 @@ impl Checker {
         active: &mut BTreeSet<String>,
     ) -> Result<Ty, String> {
         hgl_value_types::resolve(&self.library, module, name, active)
+            .map(|ty| hgl_value_access::project(&ty))
     }
     fn global_operation(&mut self, operation: &str, args: &Arguments) -> Result<Value, String> {
         if operation == "get" {
@@ -1001,10 +1031,22 @@ impl Checker {
         expected: &Ty,
     ) -> Result<Value, String> {
         let Expr::Tuple(cells) = expr else {
-            return self.expected_expression(module, expr, &Env::new(), false, Some(expected));
+            return self.expected_expression(
+                module,
+                expr,
+                &self.harness_values.clone(),
+                false,
+                Some(expected),
+            );
         };
         let Ty::Delta(origin) = expected else {
-            return Err("tuple shorthand requires an exact tuple publication shape".into());
+            return self.expected_expression(
+                module,
+                expr,
+                &self.harness_values.clone(),
+                false,
+                Some(expected),
+            );
         };
         let Ty::Tuple(children) = origin.as_ref() else {
             return Err("tuple shorthand requires an exact tuple publication shape".into());
@@ -1047,8 +1089,13 @@ impl Checker {
         {
             return self.constructor(module, (name, args), env, runtime, expected);
         }
-        if let Expr::Sequence(elements) = expr {
-            return hgl_value_check::list_literal(elements, expected);
+        if matches!(expr, Expr::Sequence(_) | Expr::Tuple(_)) {
+            return hgl_value_check::aggregate(
+                expr,
+                expected,
+                self.value_context == ValueContext::Constant || !runtime,
+                |expr, expected| self.expected_expression(module, expr, env, runtime, expected),
+            );
         }
         if let Expr::Call(name, args) = expr
             && name == "get"
@@ -1094,7 +1141,8 @@ impl Checker {
                         "mutable locals currently require an ordinary scalar or struct".into(),
                     );
                 }
-                let id = local(env, name, value.ty.clone(), next_local);
+                let id = *next_local;
+                *next_local += 1;
                 let binding = hgl_value_check::binding(id, &value, mutable, annotation.is_some())?;
                 let borrowed = matches!(binding.kind, Kind::BorrowedLocal(..));
                 env.insert(name.clone(), binding);
@@ -1322,9 +1370,7 @@ impl Checker {
         runtime: bool,
     ) -> Result<Value, String> {
         match expr {
-            Expr::Tuple(_) => {
-                Err("tuple shorthand requires a contextual harness publication position".into())
-            }
+            Expr::Tuple(_) => self.expected_expression(module, expr, env, runtime, None),
             Expr::Sparse(_) => Err("sparse entries require a delta constructor context".into()),
             Expr::Null => Err("null requires a contextual nullable comparison".into()),
             Expr::Property(receiver, name) => {
@@ -1593,7 +1639,7 @@ impl Checker {
         args: Vec<(Option<String>, Value)>,
         runtime: bool,
     ) -> Result<Value, String> {
-        let (owner, item) = self.identity(module, name);
+        let (owner, item) = hgl_value_types::identity(&self.library, module, name);
         if matches!(name, "upsert" | "discard")
             || (name == "contains"
                 && args
@@ -1697,7 +1743,7 @@ fn select_eval(
     name: &str,
     args: &[(Option<String>, Expr)],
 ) -> Result<(Checker, EvalInputs, Arguments), String> {
-    let (owner, item) = checker.identity(module, name);
+    let (owner, item) = hgl_value_types::identity(&checker.library, module, name);
     let helpers =
         checker.library.declarations.iter().any(|d| {
             d.module == owner && d.name == item && d.test_only && d.role == Role::Function
@@ -1720,6 +1766,7 @@ fn select_eval(
         let mut candidate = Checker {
             library: checker.library.clone(),
             test_scope: checker.test_scope.clone(),
+            harness_values: checker.harness_values.clone(),
             ..Checker::default()
         };
         match eval_arguments(&mut candidate, module, &decl.module, &signature, args) {
@@ -1742,12 +1789,9 @@ pub(crate) fn evaluate(
     module: &str,
     name: &str,
     args: &[(Option<String>, Expr)],
+    values: Env,
 ) -> Result<Plan, String> {
-    let checker = Checker {
-        library,
-        test_scope: Some(module.into()),
-        ..Checker::default()
-    };
+    let checker = test_checker(library, module, values);
     let (mut checker, plan, mut values) = select_eval(&checker, module, name, args)?;
     checker.plan.input_length = plan.input_length;
     if plan.construction_error.is_some() {
@@ -1766,7 +1810,7 @@ pub(crate) fn evaluate(
             return Err("eval output is outside the delta publication profile".into());
         }
         let ty = output.ty.clone();
-        let key = eval_recording_key(&checker.plan);
+        let key = hgl_eval_data::recording_key(&checker.plan);
         checker.call(
             "hgraph.std",
             "record",
@@ -1800,29 +1844,6 @@ fn replay_data(library: &Library, ty: &Ty, slots: &[Option<Value>]) -> Result<Va
     hgl_eval_data::timed(timed, slots)
 }
 
-fn eval_recording_key(plan: &Plan) -> String {
-    let used = plan
-        .nodes
-        .iter()
-        .flat_map(|node| node.globals.iter().map(|(key, _)| key))
-        .collect::<BTreeSet<_>>();
-    let mut index = 0;
-    loop {
-        let key = format!("eval.recording.{index}");
-        if !used.contains(&key) {
-            return key;
-        }
-        index += 1;
-    }
-}
-
-fn local(env: &mut Env, name: &str, ty: Ty, next: &mut usize) -> usize {
-    let id = *next;
-    *next += 1;
-    env.insert(name.into(), Value::new(ty, Kind::Local(id)));
-    id
-}
-
 #[derive(Default)]
 struct EvalInputs {
     input_length: usize,
@@ -1839,7 +1860,7 @@ fn closed_eval(
     let mut value = if let Some(expected) = expected {
         checker.harness_expression(module, expr, expected)?
     } else {
-        checker.expression(module, expr, &Env::new(), false)?
+        checker.expression(module, expr, &checker.harness_values.clone(), false)?
     };
     if expected == Some(&Ty::F64) && value.ty == Ty::I64 {
         value = Value::new(Ty::F64, Kind::Unary("float".into(), Box::new(value)));
@@ -1857,25 +1878,14 @@ pub(crate) fn expected_values(
     module: &str,
     ty: &Ty,
     slots: &[Option<Expr>],
+    values: Env,
 ) -> Result<Vec<Option<Value>>, String> {
-    let mut checker = Checker {
-        library,
-        test_scope: Some(module.into()),
-        ..Checker::default()
-    };
-    let expected = ty.clone().delta()?;
-    let result = slots
-        .iter()
-        .map(|expr| {
-            expr.as_ref()
-                .map(|expr| closed_eval(&mut checker, module, expr, Some(&expected)))
-                .transpose()
-        })
-        .collect();
-    if let Some(error) = checker.plan.construction_error {
-        return Err(error);
-    }
-    result
+    let mut checker = test_checker(library, module, values);
+    let result = hgl_eval_data::sequence(slots, Some(ty.clone()), |expr, expected| {
+        closed_eval(&mut checker, module, expr, expected)
+    })
+    .map(|(_, slots)| slots);
+    checker.plan.construction_error.map_or(result, Err)
 }
 
 fn eval_configuration(
@@ -1897,8 +1907,9 @@ fn eval_configuration(
             continue;
         }
         let name = checker.type_sizes(owner, &parameter.ty, &Env::new())?;
-        let hint =
-            hgl_value_types::resolve(&checker.library, owner, &name, &mut BTreeSet::new()).ok();
+        let hint = hgl_value_types::resolve(&checker.library, owner, &name, &mut BTreeSet::new())
+            .ok()
+            .map(|ty| hgl_value_access::project(&ty));
         values.push((
             Some(parameter.name.clone()),
             closed_eval(checker, module, expr, hint.as_ref())?,

@@ -17,7 +17,8 @@ pub fn rust_type(ty: &Ty) -> &'static str {
         Ty::F64 => "f64",
         Ty::Str => "String",
         Ty::Void => "()",
-        Ty::Map(..)
+        Ty::Atomic(_)
+        | Ty::Map(..)
         | Ty::Tuple(_)
         | Ty::Delta(_)
         | Ty::Struct(..)
@@ -40,7 +41,8 @@ pub fn scalar_type(ty: &Ty) -> &'static str {
         Ty::Date => "Date",
         Ty::Time => "Time",
         Ty::DateTime => "DateTime",
-        Ty::Map(..)
+        Ty::Atomic(_)
+        | Ty::Map(..)
         | Ty::Tuple(_)
         | Ty::Delta(_)
         | Ty::Ref(_)
@@ -55,6 +57,9 @@ pub fn scalar_type(ty: &Ty) -> &'static str {
 }
 /// Rust owned representation of a concrete ordinary type.
 pub fn owned_type(ty: &Ty) -> String {
+    if let Ty::Tuple(children) = ty {
+        return owned_type(&tuple_storage(children));
+    }
     if let Ty::Delta(origin) = ty {
         return owned_type(&delta_storage(origin));
     }
@@ -62,17 +67,19 @@ pub fn owned_type(ty: &Ty) -> String {
         return format!("Vec<{}>", owned_type(element));
     }
     if let Ty::Struct(_, fields) = ty {
-        if fields.is_empty() {
-            return "()".into();
-        }
-        return format!(
-            "({},)",
-            fields
-                .iter()
-                .map(|(_, ty)| owned_type(ty))
-                .collect::<Vec<_>>()
-                .join(",")
-        );
+        return globals::tuple(fields.iter().map(|(_, ty)| owned_type(ty)));
     }
     rust_type(ty).into()
+}
+
+fn tuple_storage(children: &[Ty]) -> Ty {
+    let identity = Ty::Tuple(children.to_vec()).source_name();
+    Ty::Struct(
+        format!("\0{identity}").into(),
+        children
+            .iter()
+            .enumerate()
+            .map(|(i, ty)| (i.to_string(), ty.clone()))
+            .collect(),
+    )
 }

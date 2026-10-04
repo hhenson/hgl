@@ -40,7 +40,7 @@ fn contextual_get_order() {
     ] {
         TRACE.store(0, std::sync::atomic::Ordering::SeqCst);
         let mut store = Store::new();
-        store.provision_global_state();
+        store.global_state().provision();
         let mut built = instantiate_complete(&description, registry, &mut store).unwrap();
         let result = run_simulation(&mut built.graph, &mut store, &RunConfig {
             start_time: EngineTime::MIN_START,
@@ -52,8 +52,8 @@ fn contextual_get_order() {
     }
 }
 fn read<T: Scalar>(store: &mut Store, key: &str, expected: &T) {
-    let entry = store.bind_global::<T>(key).unwrap();
-    assert_eq!(&store.global_get(entry).unwrap(), expected, "{key}");
+    let entry = store.global_state().bind::<T>(key).unwrap();
+    assert_eq!(&store.global_state().get(entry).unwrap(), expected, "{key}");
 }
 fn main() {
     contextual_get_order();
@@ -63,7 +63,7 @@ fn main() {
     for _ in 0..2 {
         TRACE.store(0, std::sync::atomic::Ordering::SeqCst);
         let mut store = Store::new();
-        store.provision_global_state();
+        store.global_state().provision();
         let mut built = instantiate_complete(&description, &registry, &mut store).unwrap();
         let config = RunConfig {
             start_time: EngineTime::MIN_START,

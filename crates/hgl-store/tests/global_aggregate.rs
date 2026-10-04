@@ -139,8 +139,8 @@ fn original() -> <Outer as GlobalValue>::Value {
 #[test]
 fn required_presence_nested_write_through_and_whole_replacement() -> Result<()> {
     let mut store = Store::new();
-    store.provision_global_state();
-    let entry = store.bind_global::<Outer>("entry")?;
+    store.global_state().provision();
+    let entry = store.global_state().bind::<Outer>("entry")?;
     assert!(
         store
             .global_state()
@@ -149,20 +149,23 @@ fn required_presence_nested_write_through_and_whole_replacement() -> Result<()> 
             .message
             .contains("missing value")
     );
-    assert!(store.global_get(entry).is_err());
-    store.global_set(entry, &original())?;
+    assert!(store.global_state().get(entry).is_err());
+    store.global_state().set(entry, &original())?;
     let root = store.global_state().borrow(entry)?;
     let nested = root.fields().1;
     store.global_state().write(nested.fields().0, &9)?;
-    assert_eq!(store.global_get(entry)?.1.0, 9);
+    assert_eq!(store.global_state().get(entry)?.1.0, 9);
     assert_eq!(store.global_state().read(root)?.0, "label");
     store
         .global_state()
         .write(root, &("replacement".into(), (11, "new".into()), true))?;
     assert_eq!(store.global_state().read(nested)?.0, 11);
     assert_eq!(store.global_state().read(root)?.0, "replacement");
-    let alias = store.bind_global::<Outer>("entry")?;
-    assert_eq!(store.global_get(alias)?, store.global_get(entry)?);
+    let alias = store.global_state().bind::<Outer>("entry")?;
+    assert_eq!(
+        store.global_state().get(alias)?,
+        store.global_state().get(entry)?
+    );
     Ok(())
 }
 
@@ -170,21 +173,22 @@ fn required_presence_nested_write_through_and_whole_replacement() -> Result<()> 
 fn retained_nested_values_are_independent_and_survive_run_disposal() -> Result<()> {
     let retained = {
         let mut store = Store::new();
-        store.provision_global_state();
-        let entry = store.bind_global::<Outer>("entry")?;
+        store.global_state().provision();
+        let entry = store.global_state().bind::<Outer>("entry")?;
         let mut source = original();
-        store.global_set(entry, &source)?;
+        store.global_state().set(entry, &source)?;
         source.0.push('!');
         source.1.1.push('!');
-        assert_eq!(store.global_get(entry)?, original());
-        let retained = store.global_get(entry)?;
-        let destination = store.bind_global::<Outer>("copy")?;
-        store.global_set(destination, &store.global_get(entry)?)?;
+        assert_eq!(store.global_state().get(entry)?, original());
+        let retained = store.global_state().get(entry)?;
+        let destination = store.global_state().bind::<Outer>("copy")?;
+        let copied = store.global_state().get(entry)?;
+        store.global_state().set(destination, &copied)?;
         let root = store.global_state().borrow(entry)?;
         store
             .global_state()
             .write(root.fields().1.fields().1, &"changed".into())?;
-        assert_eq!(store.global_get(destination)?, original());
+        assert_eq!(store.global_state().get(destination)?, original());
         retained
     };
     assert_eq!(retained, original());
@@ -194,50 +198,52 @@ fn retained_nested_values_are_independent_and_survive_run_disposal() -> Result<(
 #[test]
 fn failed_retention_preserves_all_fields_and_absence() -> Result<()> {
     let mut store = Store::new();
-    store.provision_global_state();
-    let entry = store.bind_global::<Outer>("entry")?;
+    store.global_state().provision();
+    let entry = store.global_state().bind::<Outer>("entry")?;
     let failing = (
         "changed first field".into(),
         (99, "inject retention failure".into()),
         true,
     );
-    assert!(store.global_set(entry, &failing).is_err());
+    assert!(store.global_state().set(entry, &failing).is_err());
     assert!(store.global_state().borrow(entry).is_err());
-    store.global_set(entry, &original())?;
-    assert!(store.global_set(entry, &failing).is_err());
-    assert_eq!(store.global_get(entry)?, original());
+    store.global_state().set(entry, &original())?;
+    assert!(store.global_state().set(entry, &failing).is_err());
+    assert_eq!(store.global_state().get(entry)?, original());
     let root = store.global_state().borrow(entry)?;
     assert!(store.global_state().write(root, &failing).is_err());
-    assert_eq!(store.global_get(entry)?, original());
+    assert_eq!(store.global_state().get(entry)?, original());
     assert!(
         store
             .global_state()
             .write(root.fields().1, &failing.1)
             .is_err()
     );
-    assert_eq!(store.global_get(entry)?, original());
+    assert_eq!(store.global_state().get(entry)?, original());
     Ok(())
 }
 
 #[test]
 fn exact_nominal_identity_field_names_and_nested_types_bind_before_start() -> Result<()> {
     let mut store = Store::new();
-    store.provision_global_state();
-    let entry = store.bind_global::<Outer>("entry")?;
-    store.global_set(entry, &original())?;
+    store.global_state().provision();
+    let entry = store.global_state().bind::<Outer>("entry")?;
+    store.global_state().set(entry, &original())?;
     let OrdinaryType::Struct(_, fields) = Outer::schema() else {
         unreachable!()
     };
     assert!(
         store
-            .prepare_global("entry", OrdinaryType::Struct("Other", fields.clone()))
+            .global_state()
+            .prepare("entry", OrdinaryType::Struct("Other", fields.clone()))
             .is_err()
     );
     let mut renamed = fields.clone();
     renamed[0].0 = "other_label";
     assert!(
         store
-            .prepare_global("entry", OrdinaryType::Struct("test::Outer", renamed))
+            .global_state()
+            .prepare("entry", OrdinaryType::Struct("test::Outer", renamed))
             .is_err()
     );
     let mut changed = fields;
@@ -247,24 +253,27 @@ fn exact_nominal_identity_field_names_and_nested_types_bind_before_start() -> Re
     }
     assert!(
         store
-            .prepare_global("entry", OrdinaryType::Struct("test::Outer", changed))
+            .global_state()
+            .prepare("entry", OrdinaryType::Struct("test::Outer", changed))
             .is_err()
     );
-    assert!(store.bind_global::<i64>("entry").is_err());
-    assert_eq!(store.global_get(entry)?, original());
+    assert!(store.global_state().bind::<i64>("entry").is_err());
+    assert_eq!(store.global_state().get(entry)?, original());
     let mut another_run = Store::new();
-    another_run.provision_global_state();
-    let other = another_run.bind_global::<Inner>("entry")?;
-    assert!(another_run.global_get(other).is_err());
+    another_run.global_state().provision();
+    let other = another_run.global_state().bind::<Inner>("entry")?;
+    assert!(another_run.global_state().get(other).is_err());
     Ok(())
 }
 
 #[test]
 fn borrowing_large_text_aggregate_and_mutating_primitive_leaf_allocates_nothing() -> Result<()> {
     let mut store = Store::new();
-    store.provision_global_state();
-    let entry = store.bind_global::<Outer>("entry")?;
-    store.global_set(entry, &("a".repeat(8192), (0, "b".repeat(8192)), false))?;
+    store.global_state().provision();
+    let entry = store.global_state().bind::<Outer>("entry")?;
+    store
+        .global_state()
+        .set(entry, &("a".repeat(8192), (0, "b".repeat(8192)), false))?;
     let (result, allocations) = count_in(|| -> Result<()> {
         for _ in 0..10_000 {
             let root = store.global_state().borrow(entry)?;
@@ -276,6 +285,6 @@ fn borrowing_large_text_aggregate_and_mutating_primitive_leaf_allocates_nothing(
     });
     result?;
     assert_eq!(allocations, 0);
-    assert_eq!(store.global_get(entry)?.1.0, 10_000);
+    assert_eq!(store.global_state().get(entry)?.1.0, 10_000);
     Ok(())
 }

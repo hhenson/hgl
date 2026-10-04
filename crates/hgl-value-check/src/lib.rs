@@ -41,14 +41,14 @@ fn block(body: &[Statement], live: &mut BTreeMap<usize, bool>) -> Result<(), Str
                 expression(value, live)?;
             }
             Statement::Return(value) | Statement::Yield(value) => {
-                if !matches!(statement, Statement::Return(_)) || !matches!(value.ty, Ty::Delta(_)) {
+                if !matches!(statement, Statement::Return(_)) || !observed(value) {
                     helper_argument(value)?;
                 }
                 expression(value, live)?;
             }
             Statement::Assign(target, value) => {
                 if matches!(target.kind, Kind::Cache(_))
-                    || (matches!(target.kind, Kind::Output) && !matches!(value.ty, Ty::Delta(_)))
+                    || (matches!(target.kind, Kind::Output) && !observed(value))
                 {
                     helper_argument(value)?;
                 }
@@ -56,7 +56,7 @@ fn block(body: &[Statement], live: &mut BTreeMap<usize, bool>) -> Result<(), Str
             }
             Statement::TimedYield(time, payload) => {
                 expression(time, live)?;
-                if !matches!(payload.ty, Ty::Delta(_)) {
+                if !observed(payload) {
                     helper_argument(payload)?;
                 }
                 expression(payload, live)?;
@@ -79,7 +79,10 @@ fn expression(value: &Value, live: &BTreeMap<usize, bool>) -> Result<(), String>
     match &value.kind {
         Kind::GlobalGet(entry) => {
             conflict(*entry, false, live)?;
-            if matches!(value.ty, Ty::Struct(..) | Ty::List(..) | Ty::Delta(_)) {
+            if matches!(
+                value.ty,
+                Ty::Tuple(_) | Ty::Struct(..) | Ty::List(..) | Ty::Delta(_)
+            ) {
                 return Err("aggregate get requires a typed let or var binding".into());
             }
         }
@@ -150,46 +153,86 @@ fn expression(value: &Value, live: &BTreeMap<usize, bool>) -> Result<(), String>
     Ok(())
 }
 
+/// Check complete ordinary aggregate literals through contextual child checking.
+pub fn aggregate(
+    expr: &hgl_source::Expr,
+    expected: Option<&Ty>,
+    constant_context: bool,
+    mut check: impl FnMut(&hgl_source::Expr, Option<&Ty>) -> Result<Value, String>,
+) -> Result<Value, String> {
+    use hgl_source::Expr;
+    let (Expr::Sequence(cells) | Expr::Tuple(cells)) = expr else {
+        return Err("expected an ordinary aggregate literal".into());
+    };
+    let tuple = matches!(expr, Expr::Tuple(_));
+    let mut values = Vec::new();
+    for (index, expr) in cells.iter().enumerate() {
+        let child = match expected {
+            Some(Ty::List(child, _)) if !tuple => Some(child.as_ref()),
+            Some(Ty::Tuple(children)) if tuple => children.get(index),
+            _ => None,
+        };
+        let value = check(
+            expr.as_ref()
+                .ok_or("ordinary aggregate literals cannot contain absent elements")?,
+            child,
+        )?;
+        if !ordinary(&value.ty)
+            || (!constant_context && !value.closed())
+            || child.is_some_and(|ty| *ty != value.ty)
+        {
+            return Err(if tuple {
+                "ordinary tuple literals require constant elements of the expected type"
+            } else {
+                "ordinary nonempty list literals require constant elements"
+            }
+            .into());
+        }
+        values.push(value);
+    }
+    if tuple {
+        let ty = Ty::Tuple(values.iter().map(|value| value.ty.clone()).collect());
+        if expected.is_some_and(|expected| *expected != ty) {
+            return Err("ordinary tuple type or arity mismatch".into());
+        }
+        return Ok(Value::new(
+            ty,
+            Kind::Construct(values.into_iter().enumerate().collect()),
+        ));
+    }
+    let Some(Ty::List(child, size)) = expected else {
+        return Err(if cells.is_empty() { "empty list requires an expected concrete list type" } else { "uncontextualized nonempty ordinary list literal inference is unsupported; expected concrete list type required" }.into());
+    };
+    if size.is_some_and(|size| size != values.len()) {
+        return Err("fixed list size mismatch".into());
+    }
+    if !ordinary(child) {
+        return Err("ordinary list element type mismatch".into());
+    }
+    Ok(Value::new(
+        Ty::List(child.clone(), *size),
+        Kind::List(values),
+    ))
+}
 /// Check a constant ordinary list literal under its exact expected type.
 pub fn list_literal(
     elements: &[Option<hgl_source::Expr>],
     expected: Option<&Ty>,
 ) -> Result<Value, String> {
-    let context = if let Some(Ty::List(element, size)) = expected {
-        Some((element.as_ref(), *size))
-    } else {
-        None
-    };
-    if elements.is_empty() && context.is_none() {
-        return Err("empty list requires an expected concrete list type".into());
-    }
-    let mut values = Vec::new();
-    for expr in elements {
-        let expr = expr
-            .as_ref()
-            .ok_or("ordinary lists cannot contain absent elements")?;
-        let value = if let hgl_source::Expr::Sequence(child) = expr {
-            list_literal(child, context.map(|(element, _)| element))?
-        } else {
+    aggregate(
+        &hgl_source::Expr::Sequence(elements.to_vec()),
+        expected,
+        false,
+        |expr, context| {
+            if let hgl_source::Expr::Sequence(elements) = expr {
+                return list_literal(elements, context);
+            }
             let fixed = expr
                 .fixed()
-                .ok_or("ordinary nonempty list literals require constant elements")?;
-            Value::new(fixed.ty(), Kind::Literal(fixed))
-        };
-        values.push(value);
-    }
-    let (element, size) = context.ok_or("uncontextualized nonempty ordinary list literal inference is unsupported; expected concrete list type required")?;
-    let element = element.clone();
-    if size.is_some_and(|size| size != values.len()) {
-        return Err("fixed list size mismatch".into());
-    }
-    if !ordinary(&element) || values.iter().any(|v| v.ty != element) {
-        return Err("ordinary list element type mismatch".into());
-    }
-    Ok(Value::new(
-        Ty::List(Box::new(element), size),
-        Kind::List(values),
-    ))
+                .ok_or("ordinary list literals require constant elements")?;
+            Ok(Value::new(fixed.ty(), Kind::Literal(fixed)))
+        },
+    )
 }
 /// Check an ordinary indexed read without introducing copy or write authority.
 pub fn indexed(parent: Value, index: Value) -> Result<Value, String> {

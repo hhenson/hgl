@@ -1,7 +1,9 @@
 # Card: hgl-value-types
 
 Resolve finite ordinary schemas against source declarations and imports. Uses
-hgl-source, hgl-library and hgl-value-check; budget 350 source lines.
+hgl-source, hgl-library, hgl-value-check, hgl-value-access and hgl-struct-names;
+budget 350 source lines. Identity and declaration lookup are re-exported from
+hgl-struct-names; export closure validation delegates to the same owner.
 
 Public surface: identity, declaration, resolve, specialize, substitute, unify. Nominal required-field structs
 preserve qualified identity; ordinary lists preserve recursive element type and
@@ -33,3 +35,8 @@ patterns remain source spellings until a concrete specialization is selected.
 Resolution and inference consume Library's checked constant sizes. This keeps
 helper calls in size positions on the same source/effect/type path as ordinary
 constant evaluation, without alias-dependent size identity.
+
+Generic occurrence validation delegates to hgl-shape-obligations (an allowed
+dependency), preserving the same checked argument identities. Scalar atomic
+spelling normalizes before ordinary-value requirements; composite atomic
+arguments remain shapes and only pass occurrences that admit them.

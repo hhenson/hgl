@@ -1,7 +1,8 @@
 # Card: hgl-value-bind
 
 Bind checked argument values to source signatures and resolve their concrete
-types. Uses hgl-source, hgl-library, hgl-rust-ir and hgl-value-types; budget 500 source lines.
+types. Uses hgl-source, hgl-library, hgl-rust-ir, hgl-value-types and
+hgl-value-access; budget 500 source lines.
 
 Public surface: bind, supported_type, resolve_type, method_arguments,
 order_arguments, constant. This layer preserves exact ordinary list/nominal

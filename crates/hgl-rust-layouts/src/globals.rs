@@ -5,6 +5,9 @@ use std::collections::BTreeMap;
 
 /// Rust marker identifying an exact prepared entry type.
 pub fn global_type(ty: &Ty) -> String {
+    if let Ty::Tuple(children) = ty {
+        return global_type(&crate::tuple_storage(children));
+    }
     if let Ty::Delta(origin) = ty {
         return global_type(&delta_storage(origin));
     }
@@ -29,7 +32,10 @@ pub fn global_type(ty: &Ty) -> String {
 }
 /// Construction-only exact ordinary type descriptor.
 pub fn global_schema(ty: &Ty) -> String {
-    if matches!(ty, Ty::Delta(_) | Ty::Struct(..) | Ty::List(..)) {
+    if matches!(
+        ty,
+        Ty::Tuple(_) | Ty::Delta(_) | Ty::Struct(..) | Ty::List(..)
+    ) {
         format!("<{} as hgl_store::GlobalValue>::schema()", global_type(ty))
     } else {
         format!("hgl_types::ScalarType::{}.into()", scalar_type(ty))
@@ -62,9 +68,12 @@ pub fn global_markers(plan: &Plan) -> String {
             collect(ty, &mut types);
         }
     }
-    types.values().map(marker).collect::<Vec<_>>().concat()
+    types.values().map(marker).collect()
 }
 fn collect(ty: &Ty, types: &mut BTreeMap<String, Ty>) {
+    if let Ty::Tuple(children) = ty {
+        collect(&crate::tuple_storage(children), types);
+    }
     if let Ty::Delta(origin) = ty {
         collect(&delta_storage(origin), types);
     }
@@ -78,12 +87,10 @@ fn collect(ty: &Ty, types: &mut BTreeMap<String, Ty>) {
         }
     }
 }
-fn tuple(fields: impl Iterator<Item = String>) -> String {
-    let fields = fields.collect::<Vec<_>>();
-    if fields.is_empty() {
-        "()".into()
-    } else {
-        format!("({},)", fields.join(","))
+pub(super) fn tuple(fields: impl Iterator<Item = String>) -> String {
+    match fields.collect::<Vec<_>>().as_slice() {
+        [] => "()".into(),
+        fields => format!("({},)", fields.join(",")),
     }
 }
 fn marker(ty: &Ty) -> String {
@@ -102,11 +109,7 @@ fn marker(ty: &Ty) -> String {
             .iter()
             .map(|(_, ty)| format!("hgl_store::ValueSlot<{}>", global_type(ty))),
     );
-    let schema = fields
-        .iter()
-        .map(|(name, ty)| format!("({name:?}, {})", global_schema(ty)))
-        .collect::<Vec<_>>()
-        .join(",");
+    let schema = marker_schema(&identity, fields);
     let bind = tuple(
         fields
             .iter()
@@ -164,7 +167,7 @@ fn marker(ty: &Ty) -> String {
         .concat();
     let flatten = widths.iter().enumerate().map(|(i,width)| format!("let (field, rest) = layout.split_at_mut({width}); slots.{i}.flatten(field); let layout = rest;")).collect::<Vec<_>>().concat();
     format!(
-        "#[derive(Debug)]\nstruct {name};\nimpl hgl_store::GlobalValue for {name} {{\ntype Value = {value};\ntype Slots = {slots};\nconst WIDTH: usize = {width};\nfn prepare(value: &Self::Value, capacity: &mut hgl_store::Capacity, layouts: &mut hgl_store::Layouts) -> hgl_types::NodeResult {{ {prepare} Ok(()) }}\nfn install(columns: &mut hgl_store::ValueColumns, value: Self::Value, layouts: &mut hgl_store::Layouts) -> Self::Slots {{ {install} }}\nfn release(columns: &mut hgl_store::ValueColumns, slots: Self::Slots) {{ {release} }}\nfn flatten(slots: Self::Slots, layout: &mut [usize]) {{ {flatten} }}\nfn schema() -> hgl_types::OrdinaryType {{ hgl_types::OrdinaryType::Struct({identity:?}, vec![{schema}]) }}\nfn slots(layout: &mut &[usize]) -> Self::Slots {{ {bind} }}\nfn retain(value: &Self::Value) -> Result<Self::Value, Box<hgl_types::NodeError>> {{ Ok({retain}) }}\nfn read(columns: &hgl_store::ValueColumns, slots: Self::Slots) -> Result<Self::Value, Box<hgl_types::NodeError>> {{ Ok({read}) }}\nfn commit(columns: &mut hgl_store::ValueColumns, slots: Self::Slots, value: Self::Value, layouts: &mut hgl_store::Layouts) {{ {commit} }}\n}}\n"
+        "#[derive(Debug)]\nstruct {name};\nimpl hgl_store::GlobalValue for {name} {{\ntype Value = {value};\ntype Slots = {slots};\nconst WIDTH: usize = {width};\nfn prepare(value: &Self::Value, capacity: &mut hgl_store::Capacity, layouts: &mut hgl_store::Layouts) -> hgl_types::NodeResult {{ {prepare} Ok(()) }}\nfn install(columns: &mut hgl_store::ValueColumns, value: Self::Value, layouts: &mut hgl_store::Layouts) -> Self::Slots {{ {install} }}\nfn release(columns: &mut hgl_store::ValueColumns, slots: Self::Slots) {{ {release} }}\nfn flatten(slots: Self::Slots, layout: &mut [usize]) {{ {flatten} }}\nfn schema() -> hgl_types::OrdinaryType {{ {schema} }}\nfn slots(layout: &mut &[usize]) -> Self::Slots {{ {bind} }}\nfn retain(value: &Self::Value) -> Result<Self::Value, Box<hgl_types::NodeError>> {{ Ok({retain}) }}\nfn read(columns: &hgl_store::ValueColumns, slots: Self::Slots) -> Result<Self::Value, Box<hgl_types::NodeError>> {{ Ok({read}) }}\nfn commit(columns: &mut hgl_store::ValueColumns, slots: Self::Slots, value: Self::Value, layouts: &mut hgl_store::Layouts) {{ {commit} }}\n}}\n"
     )
 }
 
@@ -197,7 +200,9 @@ fn statement_types(statements: &[hgl_rust_ir::Statement], types: &mut BTreeMap<S
 }
 fn value_types(value: &hgl_rust_ir::Value, types: &mut BTreeMap<String, Ty>) {
     use hgl_rust_ir::Kind;
-    collect(&value.ty, types);
+    if !matches!(value.kind, Kind::Wire(_) | Kind::Input(..) | Kind::Output) {
+        collect(&value.ty, types);
+    }
     match &value.kind {
         Kind::List(values) | Kind::Native(_, values) | Kind::Query(_, values) => {
             for value in values {
@@ -247,5 +252,26 @@ fn value_types(value: &hgl_rust_ir::Value, types: &mut BTreeMap<String, Ty>) {
         | Kind::Output
         | Kind::Capability
         | Kind::Void => {}
+    }
+}
+
+fn marker_schema(identity: &str, fields: &[(String, Ty)]) -> String {
+    let positional = identity.starts_with("\0tuple<");
+    let values = fields
+        .iter()
+        .map(|(name, ty)| {
+            let ty = global_schema(ty);
+            if positional {
+                ty
+            } else {
+                format!("({name:?}, {ty})")
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    if positional {
+        format!("hgl_types::OrdinaryType::Tuple(vec![{values}])")
+    } else {
+        format!("hgl_types::OrdinaryType::Struct({identity:?}, vec![{values}])")
     }
 }

@@ -136,3 +136,137 @@ pub fn sequence(
     }
     Ok((ty, slots))
 }
+
+/// Ordinary test setup, executed once in source order before fresh eval graphs.
+#[derive(Debug, Default)]
+pub struct Scope {
+    bindings: BTreeMap<String, Value>,
+    next: usize,
+    evaluator: hgl_value_eval::Evaluator,
+}
+impl Scope {
+    /// Check one source statement while retaining the usual lexical write authority.
+    pub fn apply(
+        &mut self,
+        statement: &hgl_source::Stmt,
+        mut check: impl FnMut(
+            &hgl_source::Stmt,
+            &mut BTreeMap<String, Value>,
+            &mut usize,
+        ) -> Result<hgl_rust_ir::Statement, String>,
+    ) -> Result<(), String> {
+        if let hgl_source::Stmt::Let(name, _, _) | hgl_source::Stmt::Var(name, _, _) = statement
+            && self.bindings.contains_key(name)
+        {
+            return Err(format!("duplicate test local {name}"));
+        }
+        let checked = check(statement, &mut self.bindings, &mut self.next)?;
+        self.evaluator
+            .statement(&checked)
+            .map_err(|error| error.to_string())?;
+        Ok(())
+    }
+    /// Independently retain a closed environment for one evaluation or assertion.
+    pub fn values(&mut self) -> Result<BTreeMap<String, Value>, String> {
+        self.bindings
+            .iter()
+            .map(|(name, value)| {
+                Ok((
+                    name.clone(),
+                    self.evaluator
+                        .value(value)
+                        .map_err(|error| error.to_string())?,
+                ))
+            })
+            .collect()
+    }
+}
+/// Parse one ordinary setup statement without consuming subsequent assertions.
+pub fn statement(cursor: &mut hgl_source::Cursor<'_>) -> Result<hgl_source::Stmt, String> {
+    use hgl_source::Stmt;
+    if cursor.at("let") || cursor.at("var") {
+        let mutable = cursor.consume()? == "var";
+        let name = cursor.name()?;
+        let annotation = if cursor.take(":") {
+            Some(cursor.type_name()?)
+        } else {
+            None
+        };
+        cursor.need("=")?;
+        let value = cursor.expr()?;
+        return Ok(if mutable {
+            Stmt::Var(name, annotation, value)
+        } else {
+            Stmt::Let(name, annotation, value)
+        });
+    }
+    let target = cursor.expr()?;
+    Ok(if cursor.take("=") {
+        Stmt::Assign(target, cursor.expr()?)
+    } else if cursor.take("+=") {
+        Stmt::Add(target, cursor.expr()?)
+    } else {
+        Stmt::Call(target)
+    })
+}
+/// Choose an unused run-owned recording key during graph construction.
+pub fn recording_key(plan: &hgl_rust_ir::Plan) -> String {
+    let used = plan
+        .nodes
+        .iter()
+        .flat_map(|node| node.globals.iter().map(|(key, _)| key))
+        .collect::<BTreeSet<_>>();
+    let mut index = 0;
+    loop {
+        let key = format!("eval.recording.{index}");
+        if !used.contains(&key) {
+            return key;
+        }
+        index += 1;
+    }
+}
+
+/// Parsed eval syntax, before name resolution or checking.
+#[derive(Debug)]
+pub struct Evaluation {
+    /// Named target.
+    pub function: String,
+    /// Source-ordered arguments.
+    pub arguments: Vec<(Option<String>, Expr)>,
+    /// Optional dense expected output.
+    pub expected: Option<Vec<Option<Expr>>>,
+}
+/// Extract an eval call or equality assertion without evaluating source data.
+pub fn evaluation(expr: Expr, assertion: bool) -> Result<Evaluation, String> {
+    let (call, expected) = if assertion {
+        let Expr::Binary(op, call, expected) = expr else {
+            return Err("expected eval comparison".into());
+        };
+        if op != "==" {
+            return Err("eval assertion requires ==".into());
+        }
+        let Expr::Sequence(elements) = *expected else {
+            return Err("expected a dense sequence".into());
+        };
+        (*call, Some(elements))
+    } else {
+        (expr, None)
+    };
+    let Expr::Call(eval, mut arguments) = call else {
+        return Err("expected eval call".into());
+    };
+    if eval != "eval" || arguments.is_empty() {
+        return Err("expected eval(function, ...)".into());
+    }
+    let (label, Expr::Name(function)) = arguments.remove(0) else {
+        return Err("eval requires a named function".into());
+    };
+    if label.is_some() {
+        return Err("eval function must be positional".into());
+    }
+    Ok(Evaluation {
+        function,
+        arguments,
+        expected,
+    })
+}

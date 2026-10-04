@@ -122,7 +122,11 @@ fn unsupported_set_shapes_fail_before_emission() {
         );
         let error = compile(&[("invalid.hgl".into(), text)], "main").unwrap_err();
         assert!(
-            error.contains("set elements currently require bool or i64"),
+            error.contains(if ty.contains("ref<i64>") {
+                "type position requires value_type"
+            } else {
+                "set elements currently require bool or i64"
+            }),
             "{ty}: {error}"
         );
     }

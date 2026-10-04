@@ -1,7 +1,7 @@
 # Card: hgl-struct-check
 
 Check ordinary finite-field constructors and infer their type parameters.
-Uses hgl-source, hgl-library, hgl-value-types and hgl-rust-ir;
+Uses hgl-source, hgl-library, hgl-value-types, hgl-value-access and hgl-rust-ir;
 budget 450 source lines. No runtime or third-party dependency.
 
 Public surface: `Constructor::{new,next,checked,finish}`. A session accepts

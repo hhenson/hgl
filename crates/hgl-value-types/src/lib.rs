@@ -1,69 +1,9 @@
 //! Resolve finite ordinary value schemas against source library declarations.
-use hgl_library::{Decl, Library, Role};
+use hgl_library::{Decl, Library};
 use hgl_source::{Nominal, Ty, application, delta_argument};
+pub use hgl_struct_names::{declaration, identity};
 use hgl_value_check::ordinary;
 use std::collections::{BTreeMap, BTreeSet};
-/// Resolve imported declaration identity.
-pub fn identity(library: &Library, module: &str, name: &str) -> (String, String) {
-    if let Some((alias, item)) = name.split_once("::") {
-        return (
-            library
-                .imports
-                .get(&(module.into(), alias.into()))
-                .cloned()
-                .unwrap_or_else(|| alias.into()),
-            item.into(),
-        );
-    }
-    if let Some(target) = library.imports.get(&(module.into(), name.into()))
-        && let Some((owner, item)) = target.rsplit_once("::")
-    {
-        return (owner.into(), item.into());
-    }
-    (module.into(), name.into())
-}
-
-/// Find a visible required-field struct declaration.
-pub fn declaration<'a>(
-    library: &'a Library,
-    module: &str,
-    name: &str,
-) -> Result<Option<&'a Decl>, String> {
-    let local = !name.contains("::")
-        && library
-            .declarations
-            .iter()
-            .any(|d| d.module == module && d.name == name && d.role == Role::Struct);
-    let (owner, item) = if local {
-        (module.into(), name.into())
-    } else {
-        identity(library, module, name)
-    };
-    let mut found = library
-        .declarations
-        .iter()
-        .filter(|d| d.module == owner && d.name == item && d.role == Role::Struct);
-    let declaration = found.next();
-    if found.next().is_some() {
-        return Err(format!("duplicate struct {owner}::{item}"));
-    }
-    if let Some(decl) = declaration {
-        if decl.module != module && !exported(decl) {
-            return Err(format!(
-                "{}::{}: struct is not exported",
-                decl.module, decl.name
-            ));
-        }
-        if let Some((alias, _)) = name.split_once("::")
-            && !library.imports.contains_key(&(module.into(), alias.into()))
-        {
-            return Err(format!(
-                "struct qualification requires an imported module alias {alias}"
-            ));
-        }
-    }
-    Ok(declaration)
-}
 /// Resolve a finite ordinary type, retaining nominal identity.
 pub fn resolve(
     library: &Library,
@@ -98,8 +38,7 @@ pub fn substitute(
             size,
         ));
     }
-    let (base, arguments) =
-        application(name).map_or((name, Vec::new()), |(base, args)| (base, args));
+    let (base, arguments) = application(name).unwrap_or((name, Vec::new()));
     if matches!(base, "map" | "tuple" | "set") {
         let children = arguments
             .into_iter()
@@ -112,7 +51,17 @@ pub fn substitute(
             _ => Err(format!("invalid structural type arguments {name}")),
         };
     }
-    if matches!(base, "atomic" | "rolling" | "ref") {
+    if base == "atomic" && arguments.len() == 1 {
+        return Ok(hgl_value_access::project(&substitute(
+            library,
+            module,
+            arguments[0],
+            bindings,
+            active,
+        )?)
+        .atomic());
+    }
+    if matches!(base, "rolling" | "ref") {
         return Err(format!(
             "unsupported ordinary struct argument or field {name}"
         ));
@@ -140,17 +89,8 @@ pub fn specialize(
             schema.generics.len()
         ));
     }
-    if arguments
-        .iter()
-        .any(|ty| !ordinary(ty) && !ty.publication())
-    {
-        return Err("struct type arguments require canonical ordinary value types".into());
-    }
-    if exported(decl) {
-        for (_, field) in &schema.fields {
-            exported_name(library, &decl.module, field, &schema.generics)?;
-        }
-    }
+    hgl_shape_obligations::validate(library, decl, &arguments)?;
+    hgl_struct_names::exported_fields(library, decl)?;
     let bindings = schema
         .generics
         .into_iter()
@@ -202,24 +142,17 @@ pub fn unify(
         if !ordinary(actual) && !actual.publication() {
             return Err("struct type arguments require canonical ordinary value types".into());
         }
+        let actual = source_argument(library, actual)?;
         if bindings
             .insert(pattern.into(), actual.clone())
-            .is_some_and(|old| old != *actual)
+            .is_some_and(|old| old != actual)
         {
             return Err(format!("conflicting struct inference for {pattern}"));
         }
         return Ok(());
     }
     if let Some(origin) = delta_argument(pattern) {
-        let actual_origin = if let Ty::Delta(origin) = actual {
-            origin.as_ref()
-        } else {
-            actual
-        };
-        if actual_origin.clone().delta()? != *actual {
-            return Err("delta originating shape mismatch".into());
-        }
-        return unify(library, module, origin, actual_origin, generics, bindings);
+        return unify_delta(library, module, origin, actual, generics, bindings);
     }
     if let Some((element, size)) = Ty::list_parts(pattern) {
         let Ty::List(child, actual_size) = actual else {
@@ -231,6 +164,16 @@ pub fn unify(
         return unify(library, module, element, child, generics, bindings);
     }
     if let Some((base, arguments)) = application(pattern) {
+        if base == "atomic" && arguments.len() == 1 {
+            let payload = if let Ty::Atomic(payload) = actual {
+                payload.as_ref()
+            } else if actual.clone().atomic() == *actual {
+                actual
+            } else {
+                return Err("atomic boundary mismatch".into());
+            };
+            return unify(library, module, arguments[0], payload, generics, bindings);
+        }
         let children = match (base, actual) {
             ("map", Ty::Map(key, child)) => Some(vec![key.as_ref(), child.as_ref()]),
             ("tuple", Ty::Tuple(children)) => Some(children.iter().collect()),
@@ -261,50 +204,9 @@ pub fn unify(
         }
         return Ok(());
     }
-    if resolve(library, module, pattern, &mut BTreeSet::new())? != *actual {
+    let expected = resolve(library, module, pattern, &mut BTreeSet::new())?;
+    if expected != *actual && hgl_value_access::project(&expected) != *actual {
         return Err("struct field type mismatch".into());
-    }
-    Ok(())
-}
-fn exported(decl: &Decl) -> bool {
-    decl.tokens
-        .first()
-        .is_some_and(|token| token.text == "export")
-}
-fn exported_name(
-    library: &Library,
-    module: &str,
-    name: &str,
-    generics: &[String],
-) -> Result<(), String> {
-    if generics.iter().any(|generic| generic == name) {
-        return Ok(());
-    }
-    if let Some(origin) = delta_argument(name) {
-        return exported_name(library, module, origin, generics);
-    }
-    let (base, args) = application(name).unwrap_or((name, Vec::new()));
-    for argument in args
-        .iter()
-        .take(if base == "list" { 1 } else { args.len() })
-    {
-        exported_name(library, module, argument, generics)?;
-    }
-    if Ty::parse(name).is_some()
-        || matches!(
-            base,
-            "list" | "map" | "tuple" | "set" | "ref" | "rolling" | "atomic"
-        )
-    {
-        return Ok(());
-    }
-    if let Some(decl) = declaration(library, module, base)?
-        && !exported(decl)
-    {
-        return Err(format!(
-            "exported struct reaches unexported {}::{}",
-            decl.module, decl.name
-        ));
     }
     Ok(())
 }
@@ -317,4 +219,72 @@ fn size(library: &Library, module: &str, expr: &str) -> Result<hgl_source::Liter
             || hgl_type_sizes::literal(expr),
             |size| Ok(hgl_source::Literal::Int(*size)),
         )
+}
+
+fn unify_delta(
+    library: &Library,
+    module: &str,
+    origin: &str,
+    actual: &Ty,
+    generics: &[String],
+    bindings: &mut BTreeMap<String, Ty>,
+) -> Result<(), String> {
+    if let Ok(expected) =
+        substitute(library, module, origin, bindings, &mut BTreeSet::new()).and_then(Ty::delta)
+    {
+        return if expected == *actual {
+            Ok(())
+        } else {
+            Err("delta originating shape mismatch".into())
+        };
+    }
+    if let Some(("atomic", arguments)) = application(origin)
+        && let [payload] = arguments.as_slice()
+    {
+        return unify(library, module, payload, actual, generics, bindings);
+    }
+    let actual_origin = if let Ty::Delta(origin) = actual {
+        origin.as_ref()
+    } else if actual.atomic_payload()
+        && !matches!(actual, Ty::List(..) | Ty::Tuple(_) | Ty::Struct(..))
+    {
+        actual
+    } else {
+        return Err("unresolved temporal shape from complete composite delta payload".into());
+    };
+    if actual_origin.clone().delta()? != *actual {
+        return Err("delta originating shape mismatch".into());
+    }
+    unify(library, module, origin, actual_origin, generics, bindings)
+}
+
+fn source_argument(library: &Library, ty: &Ty) -> Result<Ty, String> {
+    if let Ty::Struct(identity, _) = ty {
+        let decl = library
+            .declarations
+            .iter()
+            .find(|decl| {
+                decl.role == hgl_library::Role::Struct
+                    && format!("{}::{}", decl.module, decl.name) == identity.origin
+            })
+            .ok_or("unresolved nominal source argument")?;
+        return specialize(
+            library,
+            decl,
+            identity.arguments.clone(),
+            &mut BTreeSet::new(),
+        );
+    }
+    if let Ty::List(child, size) = ty {
+        return Ok(Ty::List(Box::new(source_argument(library, child)?), *size));
+    }
+    if let Ty::Tuple(children) = ty {
+        return Ok(Ty::Tuple(
+            children
+                .iter()
+                .map(|child| source_argument(library, child))
+                .collect::<Result<_, _>>()?,
+        ));
+    }
+    Ok(ty.clone())
 }

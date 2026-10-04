@@ -154,7 +154,8 @@ fn validate(ty: &Ty) -> String {
             }
             code
         }
-        Ty::Delta(_)
+        Ty::Atomic(_)
+        | Ty::Delta(_)
         | Ty::I64
         | Ty::F64
         | Ty::Bool
@@ -208,7 +209,8 @@ fn observation(ty: &Ty) -> String {
             })
             .collect::<Vec<_>>()
             .concat(),
-        Ty::Delta(_)
+        Ty::Atomic(_)
+        | Ty::Delta(_)
         | Ty::I64
         | Ty::F64
         | Ty::Bool
@@ -244,7 +246,7 @@ fn application(ty: &Ty) -> String {
         Ty::Map(_,child)=>format!("for &key in &delta.2 {{if output.member(_ctx.store().bindings(),key).is_none() {{return Err(hgl_types::NodeError::new(\"noncanonical map removal\"));}}}} for key in delta.2 {{_ctx.remove_shaped(output.id(),key);}} for (key,value) in delta.0.into_iter().zip(delta.1) {{_ctx.get_or_create_with(output.id(),key,|store,owner|{}); let child=output.member(_ctx.store().bindings(),key).ok_or_else(||hgl_types::NodeError::new(\"missing created map member\"))?; {} }}",allocation(child),apply(child,"child","value")),
         Ty::List(child,Some(n))=>format!("for (key,value) in delta.0.into_iter().zip(delta.1) {{let n=usize::try_from(key).ok().filter(|&n|n<{n}).ok_or_else(||hgl_types::NodeError::new(\"sparse list index out of bounds\"))?; let child=output.index(_ctx.store().bindings(),n); {} }}",apply(child,"child","value")),
         Ty::Struct(..)|Ty::Tuple(_)=>children(ty).iter().enumerate().map(|(i,child)|format!("for value in delta.{i} {{let child=output.field::<{i}>(_ctx.store().bindings()); {}}}",apply(child,"child","value"))).collect::<Vec<_>>().concat(),
-        Ty::Delta(_) | Ty::I64 | Ty::F64 | Ty::Bool | Ty::Str | Ty::Duration | Ty::Date | Ty::Time | Ty::DateTime | Ty::Ref(_) | Ty::Nullable(_) | Ty::Void | Ty::List(_,None)=>unreachable!("structural origin"),
+        Ty::Atomic(_) | Ty::Delta(_) | Ty::I64 | Ty::F64 | Ty::Bool | Ty::Str | Ty::Duration | Ty::Date | Ty::Time | Ty::DateTime | Ty::Ref(_) | Ty::Nullable(_) | Ty::Void | Ty::List(_,None)=>unreachable!("structural origin"),
     }
 }
 

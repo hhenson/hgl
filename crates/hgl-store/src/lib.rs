@@ -22,14 +22,15 @@ pub use hgl_global::{
     Capacity, Global, GlobalState, GlobalValue, Layouts, List, ValueColumns, ValueSlot, list_index,
     list_index_mut, list_len, list_push,
 };
+use hgl_types::NodeResult;
 use hgl_types::{EngineTime, NodeId, ScalarType, ScalarValue};
-use hgl_types::{NodeError, NodeResult};
 
 use hgl_bindings::Bindings;
 pub use hgl_bindings::Kind;
 pub use hgl_bindings::{BindError, InputId, OutputId, Reference, ScopeId, Wake};
 pub use hgl_columns::Columns;
 pub use hgl_columns::Scalar;
+mod atomic;
 mod fixed;
 pub use hgl_shapes as shapes;
 
@@ -74,6 +75,7 @@ pub struct Store {
     columns: Columns,
     bindings: Bindings,
     globals: GlobalState,
+    atomic: hgl_atomic::Arena,
 }
 
 /// A dictionary with i64 keys and scalar children.
@@ -105,37 +107,6 @@ impl Store {
     /// Access the run-owned ordinary capability, independently of temporal storage.
     pub fn global_state(&mut self) -> &mut GlobalState {
         &mut self.globals
-    }
-    /// Provision this run's ordinary state, independently of temporal endpoints.
-    pub fn provision_global_state(&mut self) {
-        self.globals.provision();
-    }
-    /// Whether an owner supplied the run's state before construction.
-    pub fn global_state_provisioned(&self) -> bool {
-        self.globals.provisioned()
-    }
-    /// Resolve a key and exact type during owner configuration or construction.
-    pub fn bind_global<T: GlobalValue>(&mut self, key: &str) -> Result<Global<T>, Box<NodeError>> {
-        self.globals.bind(key)
-    }
-    /// Preflight description metadata before any node starts.
-    pub fn prepare_global(&mut self, key: &str, ty: hgl_types::OrdinaryType) -> NodeResult {
-        self.globals.prepare(key, ty)
-    }
-    /// Retain a prepared entry without name lookup or runtime type tests.
-    pub fn global_get<T: GlobalValue>(
-        &self,
-        handle: Global<T>,
-    ) -> Result<T::Value, Box<NodeError>> {
-        self.globals.get(handle)
-    }
-    /// Independently retain a value in its prepared ordinary entry.
-    pub fn global_set<T: GlobalValue>(
-        &mut self,
-        handle: Global<T>,
-        value: &T::Value,
-    ) -> NodeResult {
-        self.globals.set(handle, value)
     }
     /// An empty run.
     pub fn new() -> Self {
@@ -189,7 +160,6 @@ impl Store {
     #[inline]
     pub fn get<T: Scalar>(&self, input: In<T>) -> T {
         debug_assert_eq!(self.input_type(input.id), T::TYPE, "foreign handle");
-        debug_assert!(self.valid(input), "TS-2: not valid, so no value");
         self.get_ref(input).clone()
     }
     /// Borrow the current scalar payload without copying it.
@@ -342,21 +312,14 @@ impl Store {
     /// Create a dictionary output.
     pub fn add_dictionary<T: Scalar>(&mut self, owner: NodeId) -> DictOut<T> {
         DictOut {
-            id: self
-                .bindings
-                .add_output(owner, Kind::Dictionary(Box::new(Kind::Ts(T::TYPE))), 0)
-                .0,
+            id: self.add_shaped_output(owner, Kind::Dictionary(Box::new(Kind::Ts(T::TYPE)))),
             value_type: PhantomData,
         }
     }
     /// Create a dictionary input.
     pub fn add_dictionary_input<T: Scalar>(&mut self, owner: NodeId, active: bool) -> DictIn<T> {
         DictIn {
-            id: self.bindings.add_input(
-                owner,
-                Kind::Dictionary(Box::new(Kind::Ts(T::TYPE))),
-                active,
-            ),
+            id: self.add_shaped_input(owner, Kind::Dictionary(Box::new(Kind::Ts(T::TYPE))), active),
             value_type: PhantomData,
         }
     }

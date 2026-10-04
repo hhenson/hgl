@@ -25,7 +25,7 @@ pub fn project<'a>(kind: &'a TsType, path: &[Step], keyed: bool) -> Result<&'a T
 /// Reject ambiguous field names anywhere in a recursive shape.
 pub fn check_shape(kind: &TsType) -> Result<(), BuildError> {
     match kind {
-        TsType::Ts(_) | TsType::Set(_) => Ok(()),
+        TsType::Ts(_) | TsType::Atomic(_) | TsType::Set(_) => Ok(()),
         TsType::Dictionary(child) | TsType::Reference(child) | TsType::List(child, _) => {
             check_shape(child)
         }

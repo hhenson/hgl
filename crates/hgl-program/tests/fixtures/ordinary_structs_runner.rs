@@ -30,7 +30,7 @@ fn constructor_order() {
             order_success::main(&registry).unwrap()
         };
         let mut store = Store::new();
-        store.provision_global_state();
+        store.global_state().provision();
         let mut built = instantiate_complete(&description, &registry, &mut store).unwrap();
         let result = run_simulation(&mut built.graph, &mut store, &RunConfig {
             start_time: EngineTime::MIN_START, end_time: EngineTime::from_micros(10)
@@ -38,20 +38,20 @@ fn constructor_order() {
         if failure {
             assert!(format!("{:?}", result.unwrap_err()).contains("constructor argument failure"));
             assert_eq!(TRACE.load(std::sync::atomic::Ordering::SeqCst), 9);
-            let after = store.bind_global::<i64>("after").unwrap();
-            assert!(store.global_get(after).is_err());
+            let after = store.global_state().bind::<i64>("after").unwrap();
+            assert!(store.global_state().get(after).is_err());
         } else {
             result.unwrap();
             assert_eq!(TRACE.load(std::sync::atomic::Ordering::SeqCst), 21436587);
-            let fallback = store.bind_global::<String>("fallback").unwrap();
-            assert_eq!(store.global_get(fallback).unwrap(), "default");
+            let fallback = store.global_state().bind::<String>("fallback").unwrap();
+            assert_eq!(store.global_state().get(fallback).unwrap(), "default");
             for (key, expected) in [("pair", 12), ("nested", 5634), ("projected", 7)] {
-                let handle = store.bind_global::<i64>(key).unwrap();
-                assert_eq!(store.global_get(handle).unwrap(), expected);
+                let handle = store.global_state().bind::<i64>(key).unwrap();
+                assert_eq!(store.global_state().get(handle).unwrap(), expected);
             }
         }
-        let before = store.bind_global::<i64>("before").unwrap();
-        assert_eq!(store.global_get(before).unwrap(), 1);
+        let before = store.global_state().bind::<i64>("before").unwrap();
+        assert_eq!(store.global_state().get(before).unwrap(), 1);
     }
 }
 fn main() {
@@ -61,7 +61,7 @@ fn main() {
     graph::register(&mut registry).unwrap();
     let description = graph::main(&registry).unwrap();
     let mut store = Store::new();
-    store.provision_global_state();
+    store.global_state().provision();
     let mut built = instantiate_complete(&description, &registry, &mut store).unwrap();
     run_simulation(&mut built.graph, &mut store, &RunConfig {
         start_time: EngineTime::MIN_START, end_time: EngineTime::from_micros(10)
@@ -73,8 +73,8 @@ fn main() {
         ("shadow", 301), ("after_shadow", 8), ("child_copy", 10),
         ("temporary_field", 42), ("stop", 3)
     ] {
-        let handle = store.bind_global::<i64>(name).unwrap();
-        assert_eq!(store.global_get(handle).unwrap(), expected, "{name}");
+        let handle = store.global_state().bind::<i64>(name).unwrap();
+        assert_eq!(store.global_state().get(handle).unwrap(), expected, "{name}");
     }
     for (name, expected) in [
         ("frozen_text", "original"), ("copy_text", "original changed"),
@@ -82,7 +82,7 @@ fn main() {
         ("field_retained_text", "new"), ("whole_retained_text", "original changed"),
         ("child_text", "new")
     ] {
-        let handle = store.bind_global::<String>(name).unwrap();
-        assert_eq!(store.global_get(handle).unwrap(), expected, "{name}");
+        let handle = store.global_state().bind::<String>(name).unwrap();
+        assert_eq!(store.global_state().get(handle).unwrap(), expected, "{name}");
     }
 }

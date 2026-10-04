@@ -180,7 +180,7 @@ fn direct_images(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
                 .to_owned();
             writeln!(
                 code,
-                "let {key}_handle=store.bind_global::<{marker}>({key:?}).unwrap(); let {key}=store.global_get({key}_handle).unwrap();"
+                "let {key}_handle=store.global_state().bind::<{marker}>({key:?}).unwrap(); let {key}=store.global_state().get({key}_handle).unwrap();"
             )?;
         }
         code.push_str(if module=="values" {include_str!("fixtures/structural_values_verify.rs")}else{
@@ -193,6 +193,10 @@ fn direct_images(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
 }
 fn positive_images(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let suite = compile_tests(&[
+        (
+            "atomic_edges.hgl".into(),
+            include_str!("fixtures/atomic_edges.hgl").into(),
+        ),
         (
             "structural_evals.hgl".into(),
             include_str!("fixtures/structural_evals.hgl").into(),

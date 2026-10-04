@@ -47,6 +47,8 @@ impl fmt::Display for Nominal {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 /// Types admitted by the executable source compiler.
 pub enum Ty {
+    /// Complete ordinary payload behind one temporal boundary.
+    Atomic(Box<Self>),
     /// Integer-keyed temporal map and recursively checked child shape.
     Map(Box<Self>, Box<Self>),
     /// Positional temporal children.
@@ -103,6 +105,7 @@ impl Ty {
             Self::Map(..) => "map",
             Self::Tuple(..) => "tuple",
             Self::Delta(..) => "delta",
+            Self::Atomic(_) => "atomic",
         }
     }
     /// Parse a concrete admitted type spelling.
@@ -111,6 +114,9 @@ impl Ty {
             return Self::parse(origin)?.delta().ok();
         }
         if let Some((base, arguments)) = application(name) {
+            if base == "atomic" && arguments.len() == 1 {
+                return Some(Self::parse(arguments[0])?.atomic());
+            }
             if base == "tuple" {
                 return Some(Self::Tuple(
                     arguments
@@ -173,9 +179,6 @@ impl Ty {
         }
         Some((body, None))
     }
-}
-
-impl Ty {
     /// Canonical checked HGL source form, including complete nominal arguments.
     pub fn source_name(&self) -> String {
         match self {
@@ -194,7 +197,7 @@ impl Ty {
                 Some(size) => format!("list<{},{}>", element.source_name(), size),
                 None => format!("list<{}>", element.source_name()),
             },
-            Self::Ref(child) | Self::Set(child) | Self::Nullable(child) => {
+            Self::Atomic(child) | Self::Ref(child) | Self::Set(child) | Self::Nullable(child) => {
                 format!("{}<{}>", self.name(), child.source_name())
             }
             Self::I64
@@ -264,6 +267,7 @@ impl Ty {
             | Self::Time
             | Self::DateTime
             | Self::Duration => true,
+            Self::Atomic(payload) => payload.atomic_payload(),
             Self::Set(member) => matches!(**member, Self::Bool | Self::I64),
             Self::List(child, Some(_)) => child.publication(),
             Self::Tuple(children) => children.iter().all(Self::publication),
@@ -284,19 +288,48 @@ impl Ty {
                 self.source_name()
             ));
         }
-        Ok(match self {
-            Self::Set(_) | Self::List(..) | Self::Tuple(_) | Self::Struct(..) | Self::Map(..) => {
-                Self::Delta(Box::new(self))
-            }
-            Self::Bool
-            | Self::I64
-            | Self::F64
-            | Self::Str
-            | Self::Date
-            | Self::Time
-            | Self::DateTime
-            | Self::Duration => self,
-            Self::Delta(_) | Self::Ref(_) | Self::Nullable(_) | Self::Void => unreachable!(),
+        if let Self::Atomic(payload) = self {
+            return Ok(*payload);
+        }
+        Ok(if self.scalar() {
+            self
+        } else {
+            Self::Delta(Box::new(self))
         })
+    }
+    /// Normalize admitted non-composite spellings before type comparison.
+    #[must_use]
+    pub fn atomic(self) -> Self {
+        if self.scalar() {
+            self
+        } else {
+            Self::Atomic(Box::new(self))
+        }
+    }
+    /// Whether an ordinary value belongs to the finite complete-payload profile.
+    pub fn atomic_payload(&self) -> bool {
+        if let Self::List(child, _) = self {
+            return child.atomic_payload();
+        }
+        if let Self::Tuple(children) = self {
+            return children.iter().all(Self::atomic_payload);
+        }
+        if let Self::Struct(_, fields) = self {
+            return fields.iter().all(|(_, ty)| ty.atomic_payload());
+        }
+        self.scalar()
+    }
+    fn scalar(&self) -> bool {
+        matches!(
+            self,
+            Self::Bool
+                | Self::I64
+                | Self::F64
+                | Self::Str
+                | Self::Date
+                | Self::Time
+                | Self::DateTime
+                | Self::Duration
+        )
     }
 }

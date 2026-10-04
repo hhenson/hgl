@@ -140,6 +140,11 @@ pub fn allocate(
     slots: &mut Vec<usize>,
 ) -> hgl_types::NodeResult {
     match ty {
+        OrdinaryType::Tuple(fields) => {
+            for field in fields {
+                allocate(field, columns, slots)?;
+            }
+        }
         OrdinaryType::Struct(_, fields) => {
             for (_, field) in fields {
                 allocate(field, columns, slots)?;

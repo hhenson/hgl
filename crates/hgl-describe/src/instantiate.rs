@@ -180,12 +180,13 @@ fn preflight_globals(
             node: ty.name,
             what,
         };
-        if ty.uses_global_state && !store.global_state_provisioned() {
+        if ty.uses_global_state && !store.global_state().provisioned() {
             return Err(invalid("global_state: unprovisioned run store".into()));
         }
         for (key, value_type) in &ty.global_entries {
             store
-                .prepare_global(key, value_type.clone())
+                .global_state()
+                .prepare(key, value_type.clone())
                 .map_err(|error| invalid(error.message))?;
         }
         for child in &node.children {

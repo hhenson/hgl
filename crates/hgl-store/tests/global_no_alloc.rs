@@ -9,15 +9,15 @@ static ALLOCATOR: CountingAllocator = CountingAllocator;
 #[test]
 fn typed_primitive_access_uses_prepared_slots() -> Result<(), Box<NodeError>> {
     let mut store = Store::new();
-    store.provision_global_state();
-    let handle = store.bind_global::<i64>("count")?;
-    store.global_set(handle, &0)?;
+    store.global_state().provision();
+    let handle = store.global_state().bind::<i64>("count")?;
+    store.global_state().set(handle, &0)?;
     let (result, allocations) = count_in(|| {
         for _ in 0..10_000 {
-            let previous = store.global_get(handle)?;
-            store.global_set(handle, &(previous + 1))?;
+            let previous = store.global_state().get(handle)?;
+            store.global_state().set(handle, &(previous + 1))?;
         }
-        store.global_get(handle)
+        store.global_state().get(handle)
     });
     assert_eq!(result?, 10_000);
     assert_eq!(allocations, 0);
