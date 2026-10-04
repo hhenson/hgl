@@ -34,6 +34,9 @@ impl Store {
     }
     /// Construct an output and its fixed descendants in the current scope.
     pub fn add_shaped_output(&mut self, owner: NodeId, kind: Kind) -> OutputId {
+        if let Kind::Atomic(ty) = kind {
+            return self.atomic.add_output(&mut self.bindings, owner, ty);
+        }
         if let Kind::Ts(t) = kind {
             return match t {
                 ScalarType::Bool => self.add_output::<bool>(owner).id(),
@@ -46,14 +49,10 @@ impl Store {
                 ScalarType::Text => self.add_output::<String>(owner).id(),
             };
         }
-        let id = self.bindings.add_output(owner, kind, 0).0;
-        for n in 0..self.bindings.output(id).kind.len() {
-            let child =
-                self.add_shaped_output(owner, self.bindings.output(id).kind.child(n).clone());
-            let result = self.bindings.append_fixed(id, child);
-            debug_assert!(result.is_ok());
-        }
-        id
+        let children = (0..kind.len())
+            .map(|n| self.add_shaped_output(owner, kind.child(n).clone()))
+            .collect();
+        self.add_prepared_output(owner, kind, children)
     }
     /// Construct an unbound view with stable fixed child slots.
     pub fn add_shaped_input(&mut self, owner: NodeId, kind: Kind, active: bool) -> InputId {

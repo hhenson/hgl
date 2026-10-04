@@ -51,6 +51,11 @@ valid and modified. `delta<T>(...)` is a distinct constructor form;
 the eight scalar leaves, bool/i64 sets, fixed lists, positional tuples, concrete
 nonrecursive nominal structs and i64-keyed maps recursively. Shared tests cover
 sparse child omissions, equal repeated ticks, removals, silence and fresh runs.
+Atomic lists, tuples and concrete structs publish complete ordinary values; an
+empty list is a present snapshot. Defaults are reconstructed for each snapshot,
+and retained recordings do not alias later source or sibling mutations.
+For each supported non-composite type S, `atomic<S>` is the same type as S;
+composite boundaries remain significant in matching and generic arguments.
 
 Non-null fixed scalar struct field defaults are admitted, including in concrete
 generic specializations. Complete ordinary constructors fill omitted defaults
@@ -59,12 +64,13 @@ General constant-helper defaults, optional fields and inheritance remain
 unsupported by this increment. These are compiler limits, not changes to HGL.
 
 The [compiler card](../cards/hgl-program.md) lists supported forms and remaining
-limits. Direct eval assertions and deterministic ordinary assertions work;
-timed input syntax and harness locals do not yet. Atomic wrappers, references,
-growing temporal lists and windows remain outside the specified finite eval
-profile.
+limits. Direct eval assertions, deterministic ordinary assertions and ordinary
+test bindings work; timed input syntax remains unsupported. References, growing temporal
+lists, windows, atomic sets/maps and recursive or optional atomic payloads remain
+outside the finite eval profile. The compiler currently supports eight scalar
+leaves; other temporal scalars and enums remain unimplemented.
 
 Shared expectations and Python/C++ comparison evidence belong to the
-[delta-evaluation audit](https://github.com/hhenson/hgraph_spec_audit/tree/codex/replay-sequence-indexing/runtime/validation/delta_eval).
+[delta-evaluation audit](https://github.com/hhenson/hgraph_spec_audit/tree/main/runtime/validation/delta_eval).
 The specification defines HGL concepts and rules; implementation observations
 and differences are recorded separately in that audit.

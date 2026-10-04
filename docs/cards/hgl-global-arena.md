@@ -29,5 +29,7 @@ contents on retention; link an element before preparation succeeds.
 `Layouts::{push(ListData)->NodeResult, take()->ListData}` and `Default` hold
 preallocated buffers in typed traversal order. Taking a layout moves its buffer;
 there is no allocation, schema inspection or payload copy during commit.
+`Layouts::reset()` drops any pending preparation buffers, resets the traversal
+cursor, and preserves the outer scratch-vector capacity for the next preparation.
 `Capacity::lists(usize)` batches known descriptor demand; arithmetic saturates so
 oversized requests reliably fail reservation before any logical value is changed.

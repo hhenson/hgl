@@ -1,0 +1,90 @@
+module atomic_edges
+
+struct Empty {}
+struct Snapshot {
+    values: list<list<i64>>
+    label: str
+}
+fn empty_value(value:atomic<Empty>)->atomic<Empty> {when {return delta_value(value)}}
+fn inspect(value:atomic<Snapshot>)->i64 {
+    when {
+        let snapshot=delta_value(value)
+        let alias=snapshot
+        let lists=alias.values
+        let first=lists[0]
+        return len(first)
+    }
+}
+fn retain(value:atomic<Snapshot>)->atomic<Snapshot> {
+    inject global_state
+    when {
+        let snapshot=delta_value(value)
+        let alias=snapshot
+        set(global_state,"snapshot",alias)
+        var copy=Snapshot(values:alias.values,label:alias.label)
+        copy.label="changed"
+        return snapshot
+    }
+}
+const fn snapshot()->Snapshot {
+    var values:list<list<i64>> = []
+    let child:list<i64> = [1,2]
+    push(values,child)
+    return Snapshot(values:values,label:"original")
+}
+test empty_nominal_publications_are_present {
+    assert eval(empty_value,[Empty(),_,Empty(),Empty()])==[Empty(),_,Empty(),Empty()]
+}
+test atomic_observations_borrow_recursive_fields {
+    assert eval(inspect,[snapshot(),_,snapshot()])==[2,_,2]
+    assert eval(retain,[snapshot(),_,snapshot()])==[snapshot(),_,snapshot()]
+}
+
+test ordinary_setup_is_owned_ordered_and_shared_between_eval_calls {
+    var source:Snapshot=snapshot()
+    let retained=source
+    source.label="changed"
+    assert eval(retain,[retained])==[retained]
+    let empty:list<i64> = []
+    push(source.values,empty)
+    assert eval(inspect,[source])==[2]
+    assert eval(retain,[source])==[source]
+    assert retained.label=="original"
+    assert len(source.values)==2
+    assert len(retained.values)==1
+}
+
+struct Inner {x:i64}
+struct Outer {child:atomic<Inner>}
+struct Box<T>{value:T}
+struct Pair<T>{first:T
+second:T}
+struct AtomicItems<T>{value:atomic<list<T>>}
+const fn ident<T>(value:T)->T {return value}
+const fn read_box(value:Box<Outer>)->i64 {return value.value.child.x}
+test inferred_arguments_keep_declared_nominal_shapes {
+    let inferred=Box(value:Outer(child:Inner(x:1)))
+    let explicit:Box<Outer> = inferred
+    let pair=Pair(first:inferred,second:Box<Outer>(value:Outer(child:Inner(x:2))))
+    let copy:Outer=ident(explicit.value)
+    let items=AtomicItems(value:[1,2])
+    assert read_box(inferred)==1
+    assert pair.second.value.child.x==2
+    assert copy.child.x==1
+    assert len(items.value)==2
+}
+
+fn annotated_wire(value:atomic<Snapshot>)->atomic<Snapshot> {
+    let result:atomic<Snapshot> = retain(value)
+    return result
+}
+fn configured_shape<T>(const configuration:T,value:T)->T {
+    when {return delta_value(value)}
+}
+const fn normalized_result()->atomic<i64> {return 1}
+test full_type_local_annotations_and_temporal_generic_reuse {
+    let scalar:atomic<i64> = normalized_result()
+    assert scalar==1
+    assert eval(annotated_wire,[snapshot()])==[snapshot()]
+    assert eval(configured_shape,configuration:Outer(child:Inner(x:0)),value:[delta<Outer>(child:Inner(x:7))])==[delta<Outer>(child:Inner(x:7))]
+}

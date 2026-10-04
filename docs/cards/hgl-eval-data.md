@@ -23,3 +23,21 @@ present expression against the exact delta type, and infers a missing target
 from the first explicit delta origin or scalar. Its frontend callback performs
 source checking and closed ordinary evaluation; empty generic inputs cannot
 invent an origin. This helper does not validate endpoint membership.
+
+Ordinary test setup uses `Scope: Default`, backed by hgl-value-eval (an allowed
+dependency). `apply(&Stmt, check: impl FnMut(&Stmt, &mut BTreeMap<String, Value>,
+&mut usize) -> Result<Statement, String>) -> Result<(), String>` checks and
+executes one setup statement once. `values(&mut self) ->
+Result<BTreeMap<String, Value>, String>` supplies closed, independently retained
+ordinary bindings to each fresh eval/input/expected-value checker. The callback
+preserves ordinary let/var permissions, lexical scope and constant-call rules.
+`statement(&mut Cursor) -> Result<Stmt, String>` parses supported ordinary setup
+bindings, assignments and calls using the existing source AST; unsupported
+composition forms remain explicit diagnostics. `recording_key(&Plan) -> String`
+returns the existing run-owned recording entry identity without runtime lookup.
+
+`evaluation(Expr, assertion: bool) -> Result<Evaluation, String>` parses the
+named target, ordered arguments and optional dense expected sequence without
+resolution or evaluation. `Evaluation` has public `function: String`,
+`arguments: Vec<(Option<String>, Expr)>` and
+`expected: Option<Vec<Option<Expr>>>` fields.

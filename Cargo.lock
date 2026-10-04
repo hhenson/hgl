@@ -7,6 +7,16 @@ name = "hgl-alloc-count"
 version = "0.0.0"
 
 [[package]]
+name = "hgl-atomic"
+version = "0.0.0"
+dependencies = [
+ "hgl-bindings",
+ "hgl-global-value",
+ "hgl-shapes",
+ "hgl-types",
+]
+
+[[package]]
 name = "hgl-bench-twin"
 version = "0.0.0"
 dependencies = [
@@ -107,6 +117,7 @@ version = "0.0.0"
 dependencies = [
  "hgl-rust-ir",
  "hgl-source",
+ "hgl-value-eval",
 ]
 
 [[package]]
@@ -223,6 +234,7 @@ dependencies = [
  "hgl-source",
  "hgl-struct-check",
  "hgl-type-sizes",
+ "hgl-value-access",
  "hgl-value-bind",
  "hgl-value-check",
  "hgl-value-eval",
@@ -296,10 +308,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "hgl-shape-obligations"
+version = "0.0.0"
+dependencies = [
+ "hgl-library",
+ "hgl-source",
+ "hgl-struct-names",
+ "hgl-value-access",
+]
+
+[[package]]
 name = "hgl-shapes"
 version = "0.0.0"
 dependencies = [
  "hgl-bindings",
+ "hgl-global-value",
  "hgl-types",
 ]
 
@@ -340,6 +363,7 @@ name = "hgl-store"
 version = "0.0.0"
 dependencies = [
  "hgl-alloc-count",
+ "hgl-atomic",
  "hgl-bindings",
  "hgl-columns",
  "hgl-global",
@@ -355,7 +379,16 @@ dependencies = [
  "hgl-rust-ir",
  "hgl-source",
  "hgl-type-sizes",
+ "hgl-value-access",
  "hgl-value-types",
+]
+
+[[package]]
+name = "hgl-struct-names"
+version = "0.0.0"
+dependencies = [
+ "hgl-library",
+ "hgl-source",
 ]
 
 [[package]]
@@ -403,6 +436,7 @@ dependencies = [
  "hgl-library",
  "hgl-rust-ir",
  "hgl-source",
+ "hgl-value-access",
  "hgl-value-types",
 ]
 
@@ -429,8 +463,11 @@ name = "hgl-value-types"
 version = "0.0.0"
 dependencies = [
  "hgl-library",
+ "hgl-shape-obligations",
  "hgl-source",
+ "hgl-struct-names",
  "hgl-type-sizes",
+ "hgl-value-access",
  "hgl-value-check",
 ]
 

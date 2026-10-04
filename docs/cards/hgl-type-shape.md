@@ -22,3 +22,13 @@ structural origins retain their complete exact shape. Delta is never itself a
 temporal publication shape. `delta_argument` recognizes only the contextual
 outer `delta<type>` spelling. These rules derive from spec321ba4b
 ordinary-delta-types and contextual-collection-deltas.
+
+`Ty::Atomic(Box<Ty>)` preserves a composite whole-value temporal boundary.
+`Ty::atomic(self) -> Self` normalizes every admitted scalar leaf to itself;
+`Ty::atomic_payload(&self) -> bool` admits finite ordinary scalar8, lists,
+tuples and concrete required/defaulted structs recursively. Publication
+admission includes such atomic shapes, and `delta` reduces their payload to V.
+Canonical generic arguments normalize before occurrence checks and matching;
+an ordinary composite V alone never determines an atomic origin for `delta<T>`.
+These rules follow the atomic-scalar-equivalence and atomic-delta-publications
+contracts. Unsupported source scalar families remain explicit diagnostics.

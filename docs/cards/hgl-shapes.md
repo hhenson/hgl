@@ -22,3 +22,8 @@ Generated or native Shape/Field implementations must describe the same child
 layout; typed projection uses that compile-time obligation. Output projection
 debug-checks the retained parent generation before deriving a child token,
 matching scalar Store handle lifetime checks.
+
+`Atomic<T: hgl_global_value::GlobalValue>` is a whole-value endpoint marker;
+its Shape is `TsType::Atomic(T::schema())`. This card also permits the
+hgl-global-value dependency. Atomic inputs/outputs use the same prepared
+Input/Output tokens and generation checks, without structural field projection.

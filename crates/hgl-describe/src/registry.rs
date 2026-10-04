@@ -97,7 +97,8 @@ impl Ports<'_> {
             )));
         }
         self.store
-            .bind_global(key)
+            .global_state()
+            .bind(key)
             .map_err(|error| invalid(error.message))
     }
     /// The input called `name`, active or passive as the node type says.

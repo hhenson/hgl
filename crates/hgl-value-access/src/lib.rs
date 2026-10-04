@@ -4,7 +4,10 @@ use hgl_source::Ty;
 /// Whether the checked type admits ordinary owning retention.
 pub fn ordinary(ty: &Ty) -> bool {
     if let Ty::Struct(_, fields) = ty {
-        return fields.iter().all(|(_, ty)| ordinary(ty));
+        return fields.iter().all(|(_, ty)| ordinary(&project(ty)));
+    }
+    if let Ty::Tuple(children) = ty {
+        return children.iter().all(ordinary);
     }
     if let Ty::List(element, _) = ty {
         return ordinary(element);
@@ -52,7 +55,10 @@ pub fn field(parent: Value, name: &str) -> Result<Value, String> {
 }
 /// Return the entry and access mode carried by an aggregate view.
 pub fn provenance(value: &Value) -> Option<(usize, bool)> {
-    if !matches!(value.ty, Ty::Struct(..) | Ty::List(..) | Ty::Delta(_)) {
+    if !matches!(
+        value.ty,
+        Ty::Tuple(_) | Ty::Struct(..) | Ty::List(..) | Ty::Delta(_)
+    ) {
         return None;
     }
     if let Kind::BorrowedLocal(_, entry, writable) = value.kind {
@@ -71,7 +77,10 @@ pub fn binding(id: usize, value: &Value, mutable: bool, annotated: bool) -> Resu
         }
         Kind::ObservedLocal(id)
     } else if let Kind::GlobalGet(entry) = value.kind
-        && matches!(value.ty, Ty::Struct(..) | Ty::List(..) | Ty::Delta(_))
+        && matches!(
+            value.ty,
+            Ty::Tuple(_) | Ty::Struct(..) | Ty::List(..) | Ty::Delta(_)
+        )
     {
         if !annotated {
             return Err("aggregate get requires a typed let or var binding".into());
@@ -108,7 +117,44 @@ pub fn helper_argument(value: &Value) -> Result<(), String> {
 }
 /// Whether a structural delta is an evaluation-local input observation.
 pub fn observed(value: &Value) -> bool {
-    matches!(value.ty, Ty::Delta(_))
-        && (matches!(value.kind, Kind::ObservedLocal(_))
-            || matches!(&value.kind, Kind::Query(name, _) if name == "delta_value"))
+    if !matches!(
+        value.ty,
+        Ty::Delta(_) | Ty::Struct(..) | Ty::List(..) | Ty::Tuple(_)
+    ) {
+        return false;
+    }
+    if let Kind::Field(parent, _) | Kind::Index(parent, _) = &value.kind {
+        return observed(parent);
+    }
+    matches!(value.kind, Kind::ObservedLocal(_))
+        || matches!(&value.kind, Kind::Query(name,args) if name == "delta_value" && (matches!(value.ty, Ty::Delta(_)) || args.first().is_some_and(|value| matches!(value.ty, Ty::Atomic(_)))))
+}
+
+/// Ordinary scalar projection; nominal arguments and delta origins remain exact.
+pub fn project(ty: &Ty) -> Ty {
+    if let Ty::Atomic(payload) = ty {
+        return project(payload);
+    }
+    if let Ty::Struct(identity, fields) = ty {
+        return Ty::Struct(
+            identity.clone(),
+            fields
+                .iter()
+                .map(|(name, ty)| (name.clone(), project(ty)))
+                .collect(),
+        );
+    }
+    if let Ty::List(child, size) = ty {
+        return Ty::List(Box::new(project(child)), *size);
+    }
+    if let Ty::Tuple(children) = ty {
+        return Ty::Tuple(children.iter().map(project).collect());
+    }
+    if let Ty::Map(key, child) = ty {
+        return Ty::Map(Box::new(project(key)), Box::new(project(child)));
+    }
+    if let Ty::Set(child) = ty {
+        return Ty::Set(Box::new(project(child)));
+    }
+    ty.clone()
 }

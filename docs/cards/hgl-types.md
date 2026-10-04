@@ -167,3 +167,9 @@ node error; existing hook results retain their unit default.
 `OrdinaryType::List(Box<OrdinaryType>, Option<usize>)` includes exact recursive
 element identity and fixed length; None is unbounded. Access authority and current
 runtime length do not change the bound type.
+
+Atomic publication storage adds `TsType::Atomic(OrdinaryType)`. It has no
+structural children and retains the payload's exact canonical ordinary identity.
+`OrdinaryType::Tuple(Vec<OrdinaryType>)` represents positional ordinary values;
+OrdinaryType derives Hash alongside equality. Scalar atomic source spellings
+normalize before runtime lowering and continue to use `TsType::Ts`.

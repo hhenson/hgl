@@ -3,7 +3,7 @@
 Check closed HGL graphs and tests against source libraries; delegate checked
 plans to `hgl-rust` for Rust emission. Uses `hgl-source`, `hgl-library`,
 `hgl-documentation`, `hgl-rust`, `hgl-value-check`, `hgl-value-types`,
-`hgl-value-bind`, `hgl-value-eval`. Budget: 2200 source lines. No third-party
+`hgl-value-bind`, `hgl-value-eval`, `hgl-value-access`. Budget: 2200 source lines. No third-party
 dependencies. Source linking, type/phase/proof checks and eval wiring stay here;
 checked backend IR and Rust generation belong to `hgl-rust`.
 
@@ -34,8 +34,8 @@ never the expected sequence. A mismatch or node error fails the executable.
 
 Test helpers have a module-wide scope; production calls cannot see them.
 The current test body accepts direct `assert eval(...) == [...]`, outputless
-`eval(...)`, and deterministic ordinary bool assertions. Harness locals, timed input,
-and empty generic sequences remain unsupported. Structural delta literals use
+`eval(...)`, deterministic ordinary bool assertions and ordinary test bindings.
+Timed input and untyped empty generic sequences remain unsupported. Structural delta literals use
 the exact originating-shape publication profile described below.
 Unused library bodies are not advertised as implemented: reachable unsupported
 forms produce diagnostics. This is not the full language checker.
@@ -274,3 +274,11 @@ ordinary constructors retain supplied fields in written order, then omitted
 defaults in declaration order. Sparse deltas never apply those defaults. Generic
 specialization checks default types; unsupported non-fixed expressions and null
 optionality remain explicit diagnostics.
+
+Test bodies may establish ordinary harness bindings before eval/assert calls.
+Check and evaluate each binding once in source order in the test's lexical
+ordinary environment; use those values when preparing both inputs and expected
+results. Preserve let/var access rules and fresh eval lifecycle per invocation.
+Constant list/tuple expressions may reference already evaluated ordinary locals
+inside const functions or tests; closed value evaluation, not literal-only IR
+shape, determines their compile-time data. Unknown/open values remain errors.

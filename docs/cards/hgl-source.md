@@ -75,7 +75,12 @@ constant-key/payload syntax only inside delta constructor arguments; ordinary li
 sequence parsing does not admit sparse entries. Constructor shape, names,
 constant positions and payload compatibility remain checker obligations.
 
-`Expr::Tuple` preserves contextual positional harness cells and omissions.
+`value_type(&str) -> bool` checks source value-type grammar before type
+normalization. Value containers recurse through value types; named generic
+arguments and delta origins use full type grammar. `Cursor::type_name` validates
+atomic payload value-type syntax recursively before scalar normalization.
+
+`Expr::Tuple` preserves contextual positional values and harness omissions.
 Grouping has no comma; a one-element tuple has a trailing comma. Source checking
-restricts this shorthand to harness publication positions of an exact tuple
-shape, without admitting ordinary tuple value operations in this backend slice.
+distinguishes complete ordinary tuples from sparse temporal tuple publications;
+omissions are admitted only in the latter context.

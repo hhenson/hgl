@@ -110,7 +110,7 @@ impl Constructor {
             if self.values[index].is_none() {
                 self.literal_evidence(
                     library,
-                    &self.schema.fields[self.fields[index]].1.clone(),
+                    &ordinary_pattern(&self.schema.fields[self.fields[index]].1),
                     expr,
                 )?;
             }
@@ -125,7 +125,7 @@ impl Constructor {
                     &mut BTreeSet::new(),
                 )
             {
-                return Ok(Some((index, Some(ty))));
+                return Ok(Some((index, Some(hgl_value_access::project(&ty)))));
             }
         }
         let pending = self
@@ -173,10 +173,25 @@ impl Constructor {
     /// Unify and retain the checked field once, without executing its expression.
     pub fn checked(&mut self, library: &Library, index: usize, value: Value) -> Result<(), String> {
         let pattern = &self.schema.fields[self.fields[index]].1;
-        unify(
+        let projected = ordinary_pattern(pattern);
+        let resolved = substitute(
             library,
             &self.declaration.module,
             pattern,
+            &self.bindings,
+            &mut BTreeSet::new(),
+        );
+        if resolved
+            .as_ref()
+            .is_ok_and(|ty| hgl_value_access::project(ty) == value.ty)
+        {
+            self.values[index] = Some(value);
+            return Ok(());
+        }
+        unify(
+            library,
+            &self.declaration.module,
+            &projected,
             &value.ty,
             &self.schema.generics,
             &mut self.bindings,
@@ -214,7 +229,10 @@ impl Constructor {
                 fields.push((index, Value::new(default.ty(), Kind::Literal(default))));
             }
         }
-        Ok(Value::new(ty, Kind::Construct(fields)))
+        Ok(Value::new(
+            hgl_value_access::project(&ty),
+            Kind::Construct(fields),
+        ))
     }
 }
 fn needs_context(library: &Library, module: &str, expr: &Expr) -> bool {
@@ -315,4 +333,22 @@ fn schema_names(
         }
     }
     Ok(())
+}
+
+fn ordinary_pattern(pattern: &str) -> String {
+    if let Some((base, args)) = application(pattern) {
+        if base == "atomic" && args.len() == 1 {
+            return ordinary_pattern(args[0]);
+        }
+        if matches!(base, "list" | "tuple" | "map" | "set") {
+            return format!(
+                "{base}<{}>",
+                args.into_iter()
+                    .map(ordinary_pattern)
+                    .collect::<Vec<_>>()
+                    .join(",")
+            );
+        }
+    }
+    pattern.into()
 }

@@ -17,7 +17,7 @@ fn run(registry: &Registry, description: &hgl_describe::GraphDescription, fail:i
     TRACE.store(0,Ordering::SeqCst);
     FAIL.store(fail,Ordering::SeqCst);
     let mut store=Store::new();
-    store.provision_global_state();
+    store.global_state().provision();
     let mut built=instantiate_complete(description,registry,&mut store).unwrap();
     let result=run_simulation(&mut built.graph,&mut store,&RunConfig {start_time:EngineTime::MIN_START,end_time:EngineTime::from_micros(end)});
     match error {
@@ -27,10 +27,10 @@ fn run(registry: &Registry, description: &hgl_describe::GraphDescription, fail:i
     assert_eq!(TRACE.load(Ordering::SeqCst),trace);
     let output=built.outputs[0].unwrap();
     assert_eq!(store.output_value_erased(output),held.map(hgl_types::ScalarValue::I64));
-    let key=store.bind_global::<i64>("count").unwrap();
-    assert_eq!(store.global_get(key).unwrap(),count);
+    let key=store.global_state().bind::<i64>("count").unwrap();
+    assert_eq!(store.global_state().get(key).unwrap(),count);
     if let Some(value)=last {
-        let key=store.bind_global::<i64>("last").unwrap();
-        assert_eq!(store.global_get(key).unwrap(),value);
+        let key=store.global_state().bind::<i64>("last").unwrap();
+        assert_eq!(store.global_state().get(key).unwrap(),value);
     }
 }

@@ -26,6 +26,7 @@ fn identity(ty: &Ty) -> String {
 /// Compile-time marker for one exact prepared temporal shape.
 pub fn shape_marker(ty: &Ty) -> String {
     match ty {
+        Ty::Atomic(payload) => format!("hgl_store::shapes::Atomic<{}>", global_type(payload)),
         Ty::List(child, Some(n)) => {
             format!("hgl_store::shapes::Fixed<{}, {n}>", shape_marker(child))
         }
@@ -57,6 +58,11 @@ pub fn publish(ty: &Ty, payload: &str) -> String {
             "{}::apply(self._output,{payload},_ctx)?;",
             operations(origin)
         )
+    } else if matches!(ty, Ty::List(..) | Ty::Tuple(_) | Ty::Struct(..)) {
+        format!(
+            "_ctx.set_atomic::<{}>(self._output,{payload})?;",
+            global_type(ty)
+        )
     } else {
         format!("_ctx.set(self._output,{payload});")
     }
@@ -77,6 +83,12 @@ pub fn equivalent(ty: &Ty, left: &str, right: &str) -> String {
     }
 }
 fn read(ty: &Ty, input: &str) -> String {
+    if let Ty::Atomic(payload) = ty {
+        return format!(
+            "_ctx.store().atomic_get::<{}>({input})?",
+            global_type(payload)
+        );
+    }
     if structural(ty) {
         format!("{}::observe({input},_ctx)?", operations(ty))
     } else {
@@ -86,6 +98,12 @@ fn read(ty: &Ty, input: &str) -> String {
     }
 }
 fn apply(ty: &Ty, output: &str, payload: &str) -> String {
+    if let Ty::Atomic(ty) = ty {
+        return format!(
+            "_ctx.set_atomic::<{}>({output},{payload})?;",
+            global_type(ty)
+        );
+    }
     if structural(ty) {
         format!("{}::apply({output},{payload},_ctx)?;", operations(ty))
     } else {
@@ -93,6 +111,9 @@ fn apply(ty: &Ty, output: &str, payload: &str) -> String {
     }
 }
 fn allocation(ty: &Ty) -> String {
+    if let Ty::Atomic(payload) = ty {
+        return format!("store.add_atomic_output::<{}>(owner)", global_type(payload));
+    }
     if structural(ty) {
         format!("{}::allocate(store,owner)", operations(ty))
     } else {
@@ -103,7 +124,8 @@ fn children(ty: &Ty) -> Vec<&Ty> {
     match ty {
         Ty::Struct(_, fields) => fields.iter().map(|(_, t)| t).collect(),
         Ty::Tuple(children) => children.iter().collect(),
-        Ty::Map(..)
+        Ty::Atomic(_)
+        | Ty::Map(..)
         | Ty::Delta(_)
         | Ty::List(..)
         | Ty::I64
@@ -229,7 +251,8 @@ fn origin(ty: &Ty, types: &mut BTreeSet<Ty>) {
                 origin(child, types);
             }
         }
-        Ty::Delta(_)
+        Ty::Atomic(_)
+        | Ty::Delta(_)
         | Ty::I64
         | Ty::F64
         | Ty::Bool
@@ -252,7 +275,8 @@ fn collect(ty: &Ty, types: &mut BTreeSet<Ty>) {
                 collect(child, types);
             }
         }
-        Ty::Map(..)
+        Ty::Atomic(_)
+        | Ty::Map(..)
         | Ty::Tuple(_)
         | Ty::I64
         | Ty::F64

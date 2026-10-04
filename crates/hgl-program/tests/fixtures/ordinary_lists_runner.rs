@@ -12,8 +12,8 @@ fn config() -> RunConfig {
     RunConfig { start_time: EngineTime::MIN_START, end_time: EngineTime::from_micros(10) }
 }
 fn integer(store: &mut Store, key: &str, expected: i64) {
-    let entry = store.bind_global::<i64>(key).unwrap();
-    assert_eq!(store.global_get(entry).unwrap(), expected, "{key}");
+    let entry = store.global_state().bind::<i64>(key).unwrap();
+    assert_eq!(store.global_state().get(entry).unwrap(), expected, "{key}");
 }
 fn lifecycle() {
     let mut registry = Registry::new();
@@ -21,7 +21,7 @@ fn lifecycle() {
     let description = graph::main(&registry).unwrap();
     for _ in 0..2 {
         let mut store = Store::new();
-        store.provision_global_state();
+        store.global_state().provision();
         let mut built = instantiate_complete(&description, &registry, &mut store).unwrap();
         run_simulation(&mut built.graph, &mut store, &config()).unwrap();
         for (key, expected) in [
@@ -44,14 +44,14 @@ fn failure() {
             fail_append::main(&registry).unwrap()
         };
         let mut store = Store::new();
-        store.provision_global_state();
+        store.global_state().provision();
         let mut built = instantiate_complete(&description, &registry, &mut store).unwrap();
         assert!(run_simulation(&mut built.graph, &mut store, &config()).is_err());
         integer(&mut store, "failure_length", 2);
         integer(&mut store, "failure_first", 10);
         integer(&mut store, "failure_second", 20);
-        let after = store.bind_global::<bool>("after_failure").unwrap();
-        assert!(store.global_get(after).is_err());
+        let after = store.global_state().bind::<bool>("after_failure").unwrap();
+        assert!(store.global_state().get(after).is_err());
     }
 }
 fn ordinary_phases() {
@@ -59,7 +59,7 @@ fn ordinary_phases() {
     phases::register(&mut registry).unwrap();
     let description = phases::main(&registry).unwrap();
     let mut store = Store::new();
-    store.provision_global_state();
+    store.global_state().provision();
     let mut built = instantiate_complete(&description, &registry, &mut store).unwrap();
     run_simulation(&mut built.graph, &mut store, &config()).unwrap();
     for (key, expected) in [("wiring", 23), ("constant", 24), ("contextual_parameter", 0), ("parameter_copy", 1), ("value_body", 25), ("config_source",13), ("config_copy",99), ("config_nested",7), ("config_nested_copy",88)] {
@@ -67,8 +67,8 @@ fn ordinary_phases() {
     }
     for (name, expected) in [("negative",2.0_f64), ("negative_divisor",-2.0), ("negative_zero",-0.0), ("positive_zero",0.0), ("infinity",1.0), ("tiny",1.0 % 1e-308)] {
         for phase in ["wiring", "runtime"] {
-            let entry=store.bind_global::<f64>(&format!("mod_{phase}_{name}")).unwrap();
-            assert_eq!(store.global_get(entry).unwrap().to_bits(),expected.to_bits(),"{phase} {name}");
+            let entry=store.global_state().bind::<f64>(&format!("mod_{phase}_{name}")).unwrap();
+            assert_eq!(store.global_state().get(entry).unwrap().to_bits(),expected.to_bits(),"{phase} {name}");
         }
     }
 }

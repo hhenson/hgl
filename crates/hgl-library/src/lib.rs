@@ -404,6 +404,12 @@ impl Decl {
             let name = c.name()?;
             c.need(":")?;
             let ty = c.type_name()?;
+            if (constant || value_function) && !hgl_source::value_type(&ty) {
+                return Err(
+                    "const parameter annotations require value_type; atomic is a temporal boundary"
+                        .into(),
+                );
+            }
             let default = if c.take("=") { Some(c.expr()?) } else { None };
             parameters.push(Parameter {
                 name,

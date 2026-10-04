@@ -22,31 +22,35 @@ fn node(plan: &Plan, n: &Node, index: usize, out: &mut Vec<String>) {
         out.push(format!("configuration{id}: {},\n", owned_type(&value.ty)));
     }
     for (i, (_, _, ty)) in n.inputs.iter().enumerate() {
-        out.push(if hgl_rust_deltas::structural(ty) {
-            format!(
-                "input{i}: hgl_store::shapes::Input<{}>,\n",
-                hgl_rust_deltas::shape_marker(ty)
-            )
-        } else if matches!(ty, Ty::Ref(_)) {
-            format!("input{i}: hgl_store::InputId,\n")
-        } else {
-            format!("input{i}: hgl_store::In<{}>,\n", rust_type(ty))
-        });
+        out.push(
+            if hgl_rust_deltas::structural(ty) || matches!(ty, Ty::Atomic(_)) {
+                format!(
+                    "input{i}: hgl_store::shapes::Input<{}>,\n",
+                    hgl_rust_deltas::shape_marker(ty)
+                )
+            } else if matches!(ty, Ty::Ref(_)) {
+                format!("input{i}: hgl_store::InputId,\n")
+            } else {
+                format!("input{i}: hgl_store::In<{}>,\n", rust_type(ty))
+            },
+        );
     }
     for (i, cache) in n.caches.iter().enumerate() {
         out.push(format!("cache{i}: {},\n", rust_type(&cache.ty())));
     }
     if n.result != Ty::Void {
-        out.push(if hgl_rust_deltas::structural(&n.result) {
-            format!(
-                "_output: hgl_store::shapes::Output<{}>,\n",
-                hgl_rust_deltas::shape_marker(&n.result)
-            )
-        } else if matches!(n.result, Ty::Ref(_)) {
-            "_output: hgl_store::OutputId,\n".into()
-        } else {
-            format!("_output: hgl_store::Out<{}>,\n", rust_type(&n.result))
-        });
+        out.push(
+            if hgl_rust_deltas::structural(&n.result) || matches!(n.result, Ty::Atomic(_)) {
+                format!(
+                    "_output: hgl_store::shapes::Output<{}>,\n",
+                    hgl_rust_deltas::shape_marker(&n.result)
+                )
+            } else if matches!(n.result, Ty::Ref(_)) {
+                "_output: hgl_store::OutputId,\n".into()
+            } else {
+                format!("_output: hgl_store::Out<{}>,\n", rust_type(&n.result))
+            },
+        );
     }
     out.push(format!("}}\nimpl std::fmt::Debug for Node{index} {{ fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {{ f.debug_struct(\"Node{index}\").finish_non_exhaustive() }} }}\nimpl hgl_kernel::Node for Node{index} {{\nfn start(&mut self, _ctx: &mut hgl_kernel::Ctx<'_>) -> hgl_kernel::NodeResult {{\n"));
     for (i, cache) in n.caches.iter().enumerate() {
@@ -126,7 +130,7 @@ fn node_build(
         out.push(format!("configuration{id}: (|| -> Result<{}, Box<hgl_types::NodeError>> {{ Ok({}) }})().map_err(|e| hgl_describe::BuildError::InvalidNodeType {{ node: {:?}, what: e.message }})?,\n", owned_type(&value.ty), condition_code(plan, value), n.name));
     }
     for (i, (name, _, ty)) in n.inputs.iter().enumerate() {
-        if hgl_rust_deltas::structural(ty) {
+        if hgl_rust_deltas::structural(ty) || matches!(ty, Ty::Atomic(_)) {
             out.push(format!("input{i}: {{let id=ports.shaped_input({name:?})?; hgl_store::shapes::Input::<{}>::bind(ports.store().bindings(),id).map_err(hgl_describe::BuildError::Bind)?}},\n",hgl_rust_deltas::shape_marker(ty)));
             continue;
         }
@@ -142,7 +146,7 @@ fn node_build(
     for (i, cache) in n.caches.iter().enumerate() {
         out.push(format!("cache{i}: {},\n", literal(cache)));
     }
-    if hgl_rust_deltas::structural(&n.result) {
+    if hgl_rust_deltas::structural(&n.result) || matches!(n.result, Ty::Atomic(_)) {
         out.push(format!("_output: {{let id=ports.shaped_output()?; hgl_store::shapes::Output::<{}>::bind(ports.store().bindings(),id).map_err(hgl_describe::BuildError::Bind)?}},\n",hgl_rust_deltas::shape_marker(&n.result)));
     } else if n.result != Ty::Void {
         out.push(format!(
@@ -258,16 +262,16 @@ pub fn emit_test_body(plan: &Plan, expected: Option<&[Option<Value>]>) -> String
         out.push("Ok(())\n}\n".into());
         return out.concat();
     }
-    out.push("let mut store=hgl_store::Store::new();\nstore.provision_global_state();\nlet mut built=hgl_describe::instantiate_complete(&graph,&registry,&mut store).map_err(|e|format!(\"{e:?}\"))?;\n".into());
+    out.push("let mut store=hgl_store::Store::new();\nstore.global_state().provision();\nlet mut built=hgl_describe::instantiate_complete(&graph,&registry,&mut store).map_err(|e|format!(\"{e:?}\"))?;\n".into());
     if let Some((key, ty)) = &plan.recording {
         out.push(format!(
-            "let recording=store.bind_global::<{}>({key:?}).map_err(|e|format!(\"{{e:?}}\"))?;\n",
+            "let recording=store.global_state().bind::<{}>({key:?}).map_err(|e|format!(\"{{e:?}}\"))?;\n",
             global_type(ty)
         ));
     }
     out.push("hgl_kernel::run_simulation(&mut built.graph,&mut store,&hgl_kernel::RunConfig { start_time:hgl_types::EngineTime::MIN_START,end_time:hgl_types::EngineTime::MAX_END }).map_err(|e|format!(\"{e:?}\"))?;\n".into());
     if plan.output.is_some() {
-        out.push(format!("let ticks=store.global_get(recording).map_err(|e|e.message)?.into_iter().collect();\ndrop(built);\nlet _observed=hgl_testkit::evaluation::observe(ticks,{})?;\n", plan.input_length));
+        out.push(format!("let ticks=store.global_state().get(recording).map_err(|e|e.message)?.into_iter().collect();\ndrop(built);\nlet _observed=hgl_testkit::evaluation::observe(ticks,{})?;\n", plan.input_length));
         if let Some(expected) = expected {
             let (_, ty) = plan
                 .output
@@ -314,7 +318,7 @@ fn native_result(native: &crate::ir::Native) -> String {
 }
 
 fn shape(ty: &Ty) -> String {
-    if hgl_rust_deltas::structural(ty) {
+    if hgl_rust_deltas::structural(ty) || matches!(ty, Ty::Atomic(_)) {
         return format!(
             "<{} as hgl_store::shapes::Shape>::shape()",
             hgl_rust_deltas::shape_marker(ty)

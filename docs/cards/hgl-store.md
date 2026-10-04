@@ -13,11 +13,12 @@ nodes beyond an id to wake.
 The ordinary global-value facility also uses `hgl-global`, independently of
 time-series columns. Store re-exports its typed `Global<T>` handle.
 
-`provision_global_state()` enables the run's store; `global_state_provisioned()`
-reports availability. `bind_global<T>(key)` and `prepare_global(key, ScalarType)`
+`global_state().provision()` enables the run's store; `globals().provisioned()`
+reports availability. `global_state().bind<T>(key)` and
+`global_state().prepare(key, OrdinaryType)`
 resolve exact types during owner configuration/graph construction.
-`global_get(Global<T>) -> Result<T, Box<NodeError>>` and
-`global_set(Global<T>, &T) -> NodeResult` use only typed slots and presence on
+`globals().get(Global<T>) -> Result<T::Value, Box<NodeError>>` and
+`global_state().set(Global<T>, &T::Value) -> NodeResult` use only typed slots and presence on
 the hook path. Bindings do not initialize values. Owned scalar copies are
 independent of later sets; String copying can allocate/fail. These methods
 neither publish nor schedule. Nested graph scopes share the same facility;
@@ -277,9 +278,9 @@ also admits sets, using boolean occupancy children.
 
 Ordinary globals also support finite required-field nominal structs via
 `GlobalValue` markers (re-exported with `ValueSlot` and `ValueColumns` from the typed
-storage representation). `bind_global`, `global_get` and `global_set` use
+storage representation). GlobalState's `bind`, `get` and `set` use
 `T: GlobalValue`, with owning payload `T::Value`; all scalar callers are unchanged.
-`prepare_global` takes `OrdinaryType`. `global_state().borrow(Global<T>)` checks the single
+`prepare` takes `OrdinaryType`. `global_state().borrow(Global<T>)` checks the single
 root presence and returns `ValueSlot<T>` without copying the entry.
 `global_state().read(ValueSlot<T>)` returns an independently owned `T::Value`;
 `global_state().write(ValueSlot<T>, &T::Value)` retains fully before replacing a borrowed
@@ -300,3 +301,14 @@ and `prepared_output<T>(Output<T>) -> Out<T>` preserve the static shape proof.
 children. `get_or_create_with(dict,key,now,wake,create)` uses a compile-time chosen
 child factory only when no live/restorable child exists. Existing dynamic
 construction entry points remain available; no payload dispatch is introduced.
+
+Atomic ordinary payloads use hgl-atomic's prepared Arena (an allowed dependency).
+`add_atomic_output<T: GlobalValue>(NodeId) -> OutputId` prepares the exact
+root layout before publication; add_shaped_output handles the same cold path. `atomic_borrow<T>(Input<Atomic<T>>) ->
+NodeResult<ValueSlot<T>>`, `atomic_get<T>(Input<Atomic<T>>) -> NodeResult<T::Value>`
+and `atomic_values() -> &ValueColumns` provide prepared borrowing and explicit
+owning reads. `set_atomic<T, W: Wake>(Output<Atomic<T>>, T::Value, EngineTime,
+&mut W) -> NodeResult` commits the prepared complete replacement, then marks
+and wakes the existing binding. Validity and modification remain in Bindings.
+
+`globals() -> &GlobalState` provides immutable access to the same run-owned store.

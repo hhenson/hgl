@@ -190,7 +190,8 @@ pub(crate) fn snapshot(
                 fields.values().cloned().collect::<Vec<_>>().join(",")
             ),
             Kind::Bundle(_) | Kind::Dictionary(_) => object(&fields),
-            Kind::Reference(_)
+            Kind::Atomic(_)
+            | Kind::Reference(_)
             | Kind::Set(_)
             | Kind::Ts(
                 ScalarType::Text

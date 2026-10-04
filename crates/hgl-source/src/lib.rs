@@ -165,16 +165,16 @@ impl<'a> Cursor<'a> {
             name.push_str(&self.name()?);
         }
         if self.at("<") {
-            name.push_str(&self.type_arguments()?);
+            self.type_arguments(&mut name)?;
             if name.starts_with("ref<ref<") {
                 return Err("explicit ref<ref<T>> is not valid".into());
             }
         }
         Ok(name)
     }
-    fn type_arguments(&mut self) -> Result<String, String> {
+    fn type_arguments(&mut self, name: &mut String) -> Result<(), String> {
         self.need("<")?;
-        let mut text = String::from("<");
+        let mut text = format!("{name}<");
         let mut depth = 1;
         let mut parentheses = 0;
         while depth > 0 {
@@ -195,7 +195,11 @@ impl<'a> Cursor<'a> {
                 text.push_str(&token);
             }
         }
-        Ok(text)
+        if !type_admitted(&text, false) {
+            return Err("type position requires value_type".into());
+        }
+        *name = text;
+        Ok(())
     }
     fn applied_constructor(&self) -> bool {
         if !self.at("<") {
@@ -338,7 +342,7 @@ impl<'a> Cursor<'a> {
         }
         let applied = self.applied_constructor();
         if applied {
-            name.push_str(&self.type_arguments()?);
+            self.type_arguments(&mut name)?;
         }
         if !self.take("(") {
             return Ok(Expr::Name(name));
@@ -730,4 +734,28 @@ fn generic_token(text: &str) -> bool {
             .bytes()
             .next()
             .is_some_and(|c| c.is_ascii_alphanumeric() || c == b'_')
+}
+
+/// Source value-type admission, before scalar boundary normalization.
+pub fn value_type(name: &str) -> bool {
+    type_admitted(name, true)
+}
+fn type_admitted(name: &str, ordinary: bool) -> bool {
+    let Some((base, args)) = application(name) else {
+        return !ordinary || name != "signal";
+    };
+    if ordinary && matches!(base, "atomic" | "ref" | "rolling") {
+        return false;
+    }
+    if base == "map" && !value_type(args[0]) {
+        return false;
+    }
+    let child_ordinary = matches!(base, "atomic" | "set" | "rolling")
+        || (ordinary && matches!(base, "list" | "tuple" | "map"));
+    let args = if matches!(base, "list" | "rolling") {
+        &args[..1]
+    } else {
+        &args
+    };
+    args.iter().all(|arg| type_admitted(arg, child_ordinary))
 }

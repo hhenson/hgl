@@ -27,3 +27,4 @@ hgl-delta-check = { path = "../hgl-delta-check" }
 hgl-endpoint-check = { path = "../hgl-endpoint-check" }
 hgl-type-sizes = { path = "../hgl-type-sizes" }
 hgl-eval-data = { path = "../hgl-eval-data" }
+hgl-value-access = { path = "../hgl-value-access" }

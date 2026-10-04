@@ -120,7 +120,7 @@ fn incompatible_or_incomplete_generic_arguments_have_meaningful_diagnostics() {
             "ordinary",
         ),
         (
-            "let item:TimedValue<atomic<i64>> =get(global_state,\"bad\")",
+            "let item:TimedValue<atomic<set<i64>>> =get(global_state,\"bad\")",
             "ordinary",
         ),
         (

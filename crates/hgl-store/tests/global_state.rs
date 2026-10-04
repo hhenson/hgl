@@ -6,20 +6,21 @@ type Result<T> = std::result::Result<T, Box<NodeError>>;
 
 fn round_trip<T: Scalar>(first: &T, next: &T) -> Result<()> {
     let mut store = Store::new();
-    store.provision_global_state();
-    let handle = store.bind_global::<T>("ordinary key")?;
-    let alias = store.bind_global::<T>("ordinary key")?;
+    store.global_state().provision();
+    let handle = store.global_state().bind::<T>("ordinary key")?;
+    let alias = store.global_state().bind::<T>("ordinary key")?;
     let missing = store
-        .global_get(handle)
+        .global_state()
+        .get(handle)
         .err()
         .ok_or_else(|| NodeError::new("expected missing value"))?;
     assert!(missing.message.contains("missing value"));
     assert!(missing.message.contains("ordinary key"));
-    store.global_set(handle, first)?;
-    let retained = store.global_get(alias)?;
+    store.global_state().set(handle, first)?;
+    let retained = store.global_state().get(alias)?;
     assert_eq!(&retained, first);
-    store.global_set(alias, next)?;
-    assert_eq!(&store.global_get(handle)?, next);
+    store.global_state().set(alias, next)?;
+    assert_eq!(&store.global_state().get(handle)?, next);
     assert_eq!(&retained, first);
     Ok(())
 }
@@ -41,55 +42,60 @@ fn provisioning_type_conflicts_and_independent_runs() -> Result<()> {
     let mut first = Store::new();
     assert!(
         first
-            .bind_global::<i64>("shared")
+            .global_state()
+            .bind::<i64>("shared")
             .unwrap_err()
             .message
             .contains("unprovisioned")
     );
-    first.provision_global_state();
-    let count = first.bind_global::<i64>("shared")?;
-    first.global_set(count, &7)?;
+    first.global_state().provision();
+    let count = first.global_state().bind::<i64>("shared")?;
+    first.global_state().set(count, &7)?;
     assert!(
         first
-            .bind_global::<bool>("shared")
+            .global_state()
+            .bind::<bool>("shared")
             .unwrap_err()
             .message
             .contains("type conflict")
     );
-    assert_eq!(first.global_get(count)?, 7);
+    assert_eq!(first.global_state().get(count)?, 7);
     let mut second = Store::new();
-    second.provision_global_state();
-    let flag = second.bind_global::<bool>("shared")?;
+    second.global_state().provision();
+    let flag = second.global_state().bind::<bool>("shared")?;
     assert!(
         second
-            .global_get(flag)
+            .global_state()
+            .get(flag)
             .unwrap_err()
             .message
             .contains("missing value")
     );
-    second.global_set(flag, &false)?;
-    assert!(!second.global_get(flag)?);
-    assert_eq!(first.global_get(count)?, 7);
+    second.global_state().set(flag, &false)?;
+    assert!(!second.global_state().get(flag)?);
+    assert_eq!(first.global_state().get(count)?, 7);
     Ok(())
 }
 
 #[test]
 fn typed_handles_survive_growth_and_nested_scope_changes() -> Result<()> {
     let mut store = Store::new();
-    store.provision_global_state();
-    let first = store.bind_global::<i64>("first")?;
-    store.global_set(first, &42)?;
+    store.global_state().provision();
+    let first = store.global_state().bind::<i64>("first")?;
+    store.global_state().set(first, &42)?;
     for index in 0..100 {
-        let next = store.bind_global::<i64>(&format!("entry {index}"))?;
-        store.global_set(next, &index)?;
+        let next = store
+            .global_state()
+            .bind::<i64>(&format!("entry {index}"))?;
+        store.global_state().set(next, &index)?;
     }
     let child = store.child_scope(NodeId(0));
     let parent = store.enter_scope(child);
-    let nested = store.bind_global::<i64>("first")?;
-    assert_eq!(store.global_get(nested)?, 42);
-    store.global_set(nested, &43)?;
+    let nested = store.global_state().bind::<i64>("first")?;
+    assert_eq!(store.global_state().get(nested)?, 42);
+    store.global_state().set(nested, &43)?;
     store.enter_scope(parent);
-    assert_eq!(store.global_get(first)?, 43);
+    assert_eq!(store.global_state().get(first)?, 43);
     Ok(())
 }
 
@@ -99,16 +105,16 @@ fn text_handles_are_copy_and_values_outlive_source_and_store() -> Result<()> {
         (handle, handle)
     }
     let mut store = Store::new();
-    store.provision_global_state();
-    let handle = store.bind_global::<String>("text")?;
+    store.global_state().provision();
+    let handle = store.global_state().bind::<String>("text")?;
     let (handle, alias) = copy_handle(handle);
     let mut source = "original".to_owned();
-    store.global_set(handle, &source)?;
+    store.global_state().set(handle, &source)?;
     source.clear();
-    let mut copied = store.global_get(alias)?;
+    let mut copied = store.global_state().get(alias)?;
     copied.push_str(" changed locally");
-    let retained = store.global_get(handle)?;
-    store.global_set(alias, &"replacement".to_owned())?;
+    let retained = store.global_state().get(handle)?;
+    store.global_state().set(alias, &"replacement".to_owned())?;
     drop(store);
     assert_eq!(retained, "original");
     assert_eq!(copied, "original changed locally");

@@ -145,6 +145,8 @@ impl ScalarValue {
 pub enum TsType {
     /// A scalar column.
     Ts(ScalarType),
+    /// One complete ordinary payload.
+    Atomic(OrdinaryType),
     /// An i64 keyed dictionary.
     Dictionary(Box<TsType>),
     /// A set of scalar values; bool and i64 membership is currently implemented.
@@ -171,7 +173,11 @@ impl TsType {
         match self {
             Self::Dictionary(child) => Some(child),
             Self::Set(_) => Some(&Self::Ts(ScalarType::Bool)),
-            Self::Ts(_) | Self::Reference(_) | Self::List(..) | Self::Bundle(_) => None,
+            Self::Ts(_)
+            | Self::Atomic(_)
+            | Self::Reference(_)
+            | Self::List(..)
+            | Self::Bundle(_) => None,
         }
     }
     /// Number of dense children.
@@ -179,7 +185,11 @@ impl TsType {
         match self {
             Self::List(_, n) => *n,
             Self::Bundle(fields) => fields.len(),
-            Self::Ts(_) | Self::Dictionary(_) | Self::Set(_) | Self::Reference(_) => 0,
+            Self::Ts(_)
+            | Self::Atomic(_)
+            | Self::Dictionary(_)
+            | Self::Set(_)
+            | Self::Reference(_) => 0,
         }
     }
     /// Whether the shape has no dense children.
@@ -192,6 +202,7 @@ impl TsType {
             Self::List(child, n) if position < *n => child,
             Self::Bundle(fields) => &fields[position].1,
             Self::Ts(_)
+            | Self::Atomic(_)
             | Self::Dictionary(_)
             | Self::Set(_)
             | Self::Reference(_)
@@ -215,10 +226,12 @@ impl TsType {
 }
 
 /// An exact ordinary entry type, including nominal identity and required fields.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum OrdinaryType {
     /// One of the eight owning primitive values.
     Scalar(ScalarType),
+    /// Positional ordinary fields in declaration order.
+    Tuple(Vec<OrdinaryType>),
     /// Canonical nominal identity and fields in declaration order.
     Struct(&'static str, Vec<(&'static str, OrdinaryType)>),
     /// Homogeneous ordinary elements and an optional exact fixed length.

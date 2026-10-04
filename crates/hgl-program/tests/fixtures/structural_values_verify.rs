@@ -25,7 +25,7 @@ assert_eq!(scalar8[0].1,scalar8[1].1);
 assert_eq!(scalar8[0].1.0,vec![false]);
 assert_eq!(scalar8[0].1.3,vec![String::new()]);
 // Changing every source and replacing the global entry cannot mutate this retained owner.
-store.global_set(fixed_handle,&Vec::new()).unwrap();
+store.global_state().set(fixed_handle,&Vec::new()).unwrap();
 assert_eq!(fixed[0].1.1,vec![10,30]);
 
 assert!(empty.0.is_empty() && empty.1.is_empty());

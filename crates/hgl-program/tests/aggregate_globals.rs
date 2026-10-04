@@ -237,7 +237,7 @@ fn missing_values(dir: &Path) -> Result<String, Box<dyn std::error::Error>> {
             writeln!(modules, "mod {name};")?;
             writeln!(
                 calls,
-                "let mut registry=Registry::new();\n{name}::register(&mut registry).unwrap();\nlet description={name}::main(&registry).unwrap();\nlet mut store=Store::new();\nstore.provision_global_state();\nlet mut built=instantiate_complete(&description,&registry,&mut store).unwrap();\nlet error=run_simulation(&mut built.graph,&mut store,&config()).unwrap_err();\nassert!(format!(\"{{error:?}}\").contains(\"box\"));"
+                "let mut registry=Registry::new();\n{name}::register(&mut registry).unwrap();\nlet description={name}::main(&registry).unwrap();\nlet mut store=Store::new();\nstore.global_state().provision();\nlet mut built=instantiate_complete(&description,&registry,&mut store).unwrap();\nlet error=run_simulation(&mut built.graph,&mut store,&config()).unwrap_err();\nassert!(format!(\"{{error:?}}\").contains(\"box\"));"
             )?;
         }
     }

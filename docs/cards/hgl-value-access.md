@@ -4,7 +4,11 @@ Ordinary access classification, separate from effect traversal and payload
 operations. Dependencies hgl-source/hgl-rust-ir; budget 200 source lines.
 
 Public: ordinary, writable, field, provenance, binding, helper_argument,
-observed. Owning values, lexical global aggregates and evaluation-local
+observed, `project(&Ty) -> Ty`. Projection recursively erases atomic field
+boundaries in ordinary payloads and containers, preserving nominal generic
+arguments and delta origins. Temporal schemas retain their field boundaries;
+projection does not broaden ordinary type admission.
+Owning values, lexical global aggregates and evaluation-local
 structural delta observations retain distinct provenance without source type
 qualifiers. Delta objects admit ownership and whole replacement, no inspection.
 An immutable observation alias preserves observation identity; an annotation

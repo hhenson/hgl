@@ -92,6 +92,17 @@ impl Ctx<'_> {
             .set(output, value, self.now, self.node, self.schedule);
     }
 
+    /// Publish a prepared complete ordinary value from an atomic endpoint.
+    pub fn set_atomic<T: hgl_store::GlobalValue>(
+        &mut self,
+        output: hgl_store::shapes::Output<hgl_store::shapes::Atomic<T>>,
+        value: T::Value,
+    ) -> NodeResult {
+        self.writes(output.id());
+        self.store
+            .set_atomic(output, value, self.now, self.schedule)
+    }
+
     /// What the node's own output holds: `None` until it has ticked.
     #[inline]
     pub fn output_value<T: Scalar>(&self, output: Out<T>) -> Option<T> {

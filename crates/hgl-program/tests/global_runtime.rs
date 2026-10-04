@@ -114,45 +114,45 @@ fn run(seed:i64) {
     graph::register(&mut registry).unwrap();
     let description=graph::main(&registry).unwrap();
     let mut wrong=Store::new();
-    wrong.provision_global_state();
-    let wrong_counter=wrong.bind_global::<bool>("counter").unwrap();
-    wrong.global_set(wrong_counter,&false).unwrap();
+    wrong.global_state().provision();
+    let wrong_counter=wrong.global_state().bind::<bool>("counter").unwrap();
+    wrong.global_state().set(wrong_counter,&false).unwrap();
     assert!(instantiate_complete(&description,&registry,&mut wrong).is_err());
-    let started=wrong.bind_global::<bool>("started").unwrap();
-    assert!(wrong.global_get(started).is_err());
+    let started=wrong.global_state().bind::<bool>("started").unwrap();
+    assert!(wrong.global_state().get(started).is_err());
     let mut store=Store::new();
     assert!(instantiate_complete(&description,&registry,&mut store).is_err());
-    store.provision_global_state();
-    let counter=store.bind_global::<i64>("counter").unwrap();
-    store.global_set(counter,&seed).unwrap();
+    store.global_state().provision();
+    let counter=store.global_state().bind::<i64>("counter").unwrap();
+    store.global_state().set(counter,&seed).unwrap();
     let mut built=instantiate_complete(&description,&registry,&mut store).unwrap();
     run_simulation(&mut built.graph,&mut store,&RunConfig {
         start_time:EngineTime::MIN_START,end_time:EngineTime::from_micros(10)
     }).unwrap();
-    assert_eq!(store.global_get(counter).unwrap(),seed+2);
+    assert_eq!(store.global_state().get(counter).unwrap(),seed+2);
     for name in ["seen","published","stopped"] {
-        let entry=store.bind_global::<i64>(name).unwrap();
-        assert_eq!(store.global_get(entry).unwrap(),seed+2);
+        let entry=store.global_state().bind::<i64>(name).unwrap();
+        assert_eq!(store.global_state().get(entry).unwrap(),seed+2);
     }
-    let started=store.bind_global::<bool>("started").unwrap();
-    assert!(store.global_get(started).unwrap());
-    let snapshot=store.bind_global::<String>("snapshot").unwrap();
-    assert_eq!(store.global_get(snapshot).unwrap(),"");
-    let text=store.bind_global::<String>("text").unwrap();
-    assert_eq!(store.global_get(text).unwrap(),"changed");
+    let started=store.global_state().bind::<bool>("started").unwrap();
+    assert!(store.global_state().get(started).unwrap());
+    let snapshot=store.global_state().bind::<String>("snapshot").unwrap();
+    assert_eq!(store.global_state().get(snapshot).unwrap(),"");
+    let text=store.global_state().bind::<String>("text").unwrap();
+    assert_eq!(store.global_state().get(text).unwrap(),"changed");
     for (name,expected) in [("local_start",3),("initial",10),("shadow",101),("local_snapshot",15),("local_final",18),("helper",9),("local_counter",seed+102)] {
-        let entry=store.bind_global::<i64>(name).unwrap();
-        assert_eq!(store.global_get(entry).unwrap(),expected,"{name}");
+        let entry=store.global_state().bind::<i64>(name).unwrap();
+        assert_eq!(store.global_state().get(entry).unwrap(),expected,"{name}");
     }
     for (name,expected) in [("local_text_snapshot","a"),("local_text","abc")] {
-        let entry=store.bind_global::<String>(name).unwrap();
-        assert_eq!(store.global_get(entry).unwrap(),expected);
+        let entry=store.global_state().bind::<String>(name).unwrap();
+        assert_eq!(store.global_state().get(entry).unwrap(),expected);
     }
-    let real=store.bind_global::<f64>("local_real").unwrap();
-    assert_eq!(store.global_get(real).unwrap(),3.5);
-    let stopped=store.bind_global::<bool>("local_stop").unwrap();
-    assert!(store.global_get(stopped).unwrap());
-    assert_eq!(store.global_get(counter).unwrap(),seed+2);
+    let real=store.global_state().bind::<f64>("local_real").unwrap();
+    assert_eq!(store.global_state().get(real).unwrap(),3.5);
+    let stopped=store.global_state().bind::<bool>("local_stop").unwrap();
+    assert!(store.global_state().get(stopped).unwrap());
+    assert_eq!(store.global_state().get(counter).unwrap(),seed+2);
     scalar_assertions(&mut store);
 }
 fn main() { run(40); run(40); run(-2); missing_values(); }
@@ -192,7 +192,7 @@ fn scalar_sources() -> Result<(String, String), std::fmt::Error> {
         )?;
         writeln!(
             checks,
-            "let entry=store.bind_global::<{rust}>(\"copy{i}\").unwrap();\nassert_eq!(store.global_get(entry).unwrap(),{expected});"
+            "let entry=store.global_state().bind::<{rust}>(\"copy{i}\").unwrap();\nassert_eq!(store.global_state().get(entry).unwrap(),{expected});"
         )?;
     }
     write!(source, "}}\nwhen {{ {reads} }}\n}}")?;
@@ -274,7 +274,7 @@ fn failure_sources(dir: &Path) -> Result<String, Box<dyn std::error::Error>> {
         writeln!(modules, "mod {name};")?;
         writeln!(
             calls,
-            "let mut registry=Registry::new();\n{name}::register(&mut registry).unwrap();\nlet description={name}::main(&registry).unwrap();\nlet mut store=Store::new();\nstore.provision_global_state();\nlet mut built=instantiate_complete(&description,&registry,&mut store).unwrap();\nlet failure=run_simulation(&mut built.graph,&mut store,&RunConfig {{ start_time:EngineTime::MIN_START,end_time:EngineTime::from_micros(10) }}).unwrap_err();\nassert!(format!(\"{{failure:?}}\").contains(\"absent_{phase}\"));"
+            "let mut registry=Registry::new();\n{name}::register(&mut registry).unwrap();\nlet description={name}::main(&registry).unwrap();\nlet mut store=Store::new();\nstore.global_state().provision();\nlet mut built=instantiate_complete(&description,&registry,&mut store).unwrap();\nlet failure=run_simulation(&mut built.graph,&mut store,&RunConfig {{ start_time:EngineTime::MIN_START,end_time:EngineTime::from_micros(10) }}).unwrap_err();\nassert!(format!(\"{{failure:?}}\").contains(\"absent_{phase}\"));"
         )?;
     }
     Ok(format!("{modules}\nfn missing_values() {{ {calls} }}"))

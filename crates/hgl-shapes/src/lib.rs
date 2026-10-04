@@ -18,6 +18,14 @@ pub trait Elements: Shape {
     /// Repeated child shape.
     type Child: Shape;
 }
+/// A complete ordinary value carried by one temporal endpoint.
+#[derive(Debug)]
+pub struct Atomic<T>(PhantomData<T>);
+impl<T: hgl_global_value::GlobalValue> Shape for Atomic<T> {
+    fn shape() -> TsType {
+        TsType::Atomic(T::schema())
+    }
+}
 /// Fixed temporal list marker.
 #[derive(Debug)]
 pub struct Fixed<S, const N: usize>(PhantomData<S>);
