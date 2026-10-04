@@ -263,6 +263,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "hgl-local-check"
+version = "0.0.0"
+dependencies = [
+ "hgl-endpoint-check",
+ "hgl-rust-ir",
+ "hgl-source",
+ "hgl-value-check",
+]
+
+[[package]]
 name = "hgl-native"
 version = "0.0.0"
 dependencies = [
@@ -303,6 +313,7 @@ dependencies = [
  "hgl-harness-ir",
  "hgl-library",
  "hgl-library-files",
+ "hgl-local-check",
  "hgl-rust",
  "hgl-rust-preparation",
  "hgl-source",
@@ -313,6 +324,7 @@ dependencies = [
  "hgl-value-check",
  "hgl-value-eval",
  "hgl-value-types",
+ "hgl-wiring-locals",
 ]
 
 [[package]]
@@ -608,6 +620,18 @@ dependencies = [
  "hgl-type-sizes",
  "hgl-value-access",
  "hgl-value-check",
+]
+
+[[package]]
+name = "hgl-wiring-locals"
+version = "0.0.0"
+dependencies = [
+ "hgl-local-check",
+ "hgl-rust-ir",
+ "hgl-source",
+ "hgl-value-access",
+ "hgl-value-check",
+ "hgl-value-eval",
 ]
 
 [[package]]

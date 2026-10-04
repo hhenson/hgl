@@ -57,3 +57,7 @@ EvalError::ContextRequired distinguishes missing construction context. Existing
 value/statement reject contextual recipes with that error; Unsupported remains a
 backend defect, never a request to defer. Constructed Literals never invoke the
 callback again. The existing source-line budget remains unchanged.
+
+`Evaluator` is cloneable for isolated cold branch checking. Cloning retains
+independent ordinary local values and authority; it does not duplicate runtime
+handles or execute effects. Only the selected branch's evaluator is retained.

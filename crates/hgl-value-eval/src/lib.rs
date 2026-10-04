@@ -48,7 +48,7 @@ pub fn constant(value: &Value) -> bool {
 }
 
 /// Lexical owning locals for one ordinary evaluation context.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Evaluator {
     locals: Vec<(usize, Value, bool)>,
 }

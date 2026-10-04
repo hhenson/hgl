@@ -301,3 +301,21 @@ retain supplied values once in written order and bind readonly lexical parameter
 locals. Omitted contextual defaults follow supplied arguments. Direct readonly
 composition aliases preserve already prepared configuration; new contextual
 construction inside composition and node hooks is explicitly unsupported.
+
+## Contextual local bindings
+
+Initialized local checking delegates to hgl-local-check (spec f5ed703).
+Composition tracks temporal var authority independently of the port's identity;
+compatible rebinding preserves earlier aliases and consumed connections. Scalar
+locals remain ordinary, including annotated i64-to-f64 widening. Assignments
+cannot cross categories through automatic lifting, even when unused. Temporal
+scalar binary expressions use existing checked arithmetic and ordinary nodes;
+compound assignments validate the resulting category and type. Node execution
+locals retain ordinary ownership and observation rules. Uninitialized declarations
+and temporal graph conditionals remain explicitly unsupported; this change does
+not claim definite-assignment or dynamic-branch lowering support. Ordinary wiring-time conditionals with connection assignments delegate to
+hgl-wiring-locals, retaining only the selected branch's values and binary nodes.
+Both branches check fixed categories and lexical authority. This narrow branch
+profile admits local declarations, name assignments and scalar/binary expressions;
+arbitrary calls remain explicitly unsupported. Existing ordinary-only blocks
+retain their broader established execution path.

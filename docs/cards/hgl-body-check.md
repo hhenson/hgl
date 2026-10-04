@@ -18,3 +18,7 @@ capability bindings, available execution phase, operand types and lexical scope.
 
 Acceptance: pinned generator and logging-value-helper examples, runtime/const
 phase diagnostics, lexical parser tests and literal-only yield text regressions.
+
+`composition_body(&mut Cursor) -> Result<Vec<Stmt>, String>` parses a block or
+concise return body and rejects trailing syntax. It does not select branches,
+resolve locals or evaluate expressions.
