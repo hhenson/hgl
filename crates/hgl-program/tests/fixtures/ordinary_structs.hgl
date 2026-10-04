@@ -145,3 +145,33 @@ fn primitive_fields(value: i64) -> bool {
 test ordinary_primitive_fields {
     assert eval(primitive_fields, [1, 2]) == [true, true]
 }
+
+struct Defaults<T> {
+    required: T
+    integer: i64 = 40 + 2
+    text: str = "default"
+    flag: bool = !false
+    real: f64 = -1.5
+    day: date = @2026-10-03
+    daytime: time = @12:34:56
+    instant: datetime = @2026-10-03T12:34:56Z
+    elapsed: duration = 2s + 3s
+}
+const fn default_at_wiring() -> i64 {
+    let value = Defaults<i64>(required: 1)
+    return value.integer
+}
+fn default_fields(value: i64) -> bool {
+    when {
+        var all = Defaults(required: value)
+        let saved = all
+        all.text += " changed"
+        let override = Defaults(text: "override", integer: 0, required: value)
+        let expected: Defaults<i64> = Defaults(required: value)
+        return saved.required == value && saved.integer == 42 && saved.text == "default" && saved.flag && saved.real == -1.5 && saved.day == @2026-10-03 && saved.daytime == @12:34:56 && saved.instant == @2026-10-03T12:34:56Z && saved.elapsed == 5s && all.text == "default changed" && override.integer == 0 && override.text == "override" && expected.integer == 42
+    }
+}
+test ordinary_default_fields {
+    assert default_at_wiring() == 42
+    assert eval(default_fields, [1, _, 2]) == [true, _, true]
+}

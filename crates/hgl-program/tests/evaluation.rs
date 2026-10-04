@@ -305,7 +305,7 @@ _ => panic!("unknown test image") } }
 }
 fn check_images(binary: &Path) -> Result<(), Box<dyn std::error::Error>> {
     for (name, success, message) in [
-        ("standard", true, "101 tests, 171 evaluations, 0 failures"),
+        ("standard", true, "104 tests, 176 evaluations, 0 failures"),
         ("source_operators", true, "0 failures"),
         (
             "replay_order_failure",

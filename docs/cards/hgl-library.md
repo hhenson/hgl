@@ -24,14 +24,18 @@ contexts; invalid context members; production helper isolation.
 
 `Role::Struct` indexes ordinary struct declarations without treating them as
 functions. `Decl::required_struct() -> Result<RequiredStruct, String>`
-parses the required-field subset, preserving source type names for
-frontend resolution. Duplicate fields, defaults, optional fields, inheritance
-and unsupported generic declarations are diagnosed when this subset is requested.
+parses finite nonrecursive fields, preserving source type names and checked
+non-null fixed scalar defaults for frontend resolution. Duplicate fields, optional
+fields, inheritance and unsupported generic declarations are diagnosed.
 
-`RequiredStruct { generics, fields, type_domain }` and `Decl::required_struct`
+`RequiredStruct { generics, fields, defaults, type_domain }` and `Decl::required_struct`
 retain ordered type parameters and the supported finite type-domain constraint.
-Type parameters are distinct; const parameters, defaults, optional fields,
-inheritance and unsupported constraints are diagnosed explicitly.
+`defaults` pairs declaration field indices with fixed scalar literals. Defaults
+use the existing source fixed-expression evaluator; other constant expressions
+remain unsupported. Concrete specialization checks each default against its field
+type even when construction supplies that field or constructs only a delta.
+Type parameters are distinct; const parameters, generic defaults, optional
+fields, inheritance and unsupported constraints are diagnosed explicitly.
 
 Explicit instantiate arguments preserve complete nested type syntax (including
 contextual delta<T>); wildcard `_` remains a retained generic argument. The

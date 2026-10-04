@@ -7,7 +7,9 @@ Public surface: identity, declaration, resolve, specialize, substitute, unify. N
 preserve qualified identity; ordinary lists preserve recursive element type and
 exact fixedness. Visibility and recursive-schema checks remain source checks.
 Type-generic required-field schemas retain the complete invariant specialization
-identity. Optional/default, recursive and const-generic schemas are not admitted.
+identity. Non-null fixed scalar field defaults are checked after substitution and do not
+change nominal identity or sparse publication shape. Optional, recursive and
+const-generic schemas are not admitted.
 
 Acceptance: existing imported/nominal struct checks and ordinary nested
 struct/list construction and global configuration fixtures in hgl-program.

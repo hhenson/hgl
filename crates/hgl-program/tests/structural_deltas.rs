@@ -201,3 +201,15 @@ fn with_std(body: &str) -> Vec<(String, String)> {
         ),
     ]
 }
+
+#[test]
+fn defaulted_delta_origins_check_defaults_without_filling_sparse_fields() {
+    for literal in ["delta<Box>(amount:1)", "delta<Box>()"] {
+        let source = format!(
+            "struct Box {{ amount:i64=true }}\nfn source()->i64 {{ start {{ let data={literal} }}\nwhen {{ return 1 }} }}\nfn main()->i64=>source()"
+        );
+        let error = check(&source).unwrap_err();
+        assert!(error.contains("default type mismatch"), "{error}");
+    }
+    check("struct Box { amount:i64=1 }\nfn source()->i64 { start { let empty=delta<Box>() }\nwhen { return 1 } }\nfn main()->i64=>source()").unwrap();
+}

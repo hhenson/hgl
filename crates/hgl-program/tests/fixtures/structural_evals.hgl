@@ -26,3 +26,15 @@ f11:i64
 f12:i64
 }
 test wide_struct {assert eval(identity,[delta<Wide>(f12:1,f0:2)]) == [delta<Wide>(f0:2,f12:1)]}
+
+struct Defaulted<T> {
+    required:T
+    fallback:i64=42
+    label:str="default"
+}
+fn defaulted(value:Defaulted<str>)->Defaulted<str> => identity(value)
+test generic_defaulted_sparse_fields {
+ assert eval(defaulted,[delta<Defaulted<str>>(required:""),_,delta<Defaulted<str>>(fallback:0),delta<Defaulted<str>>(label:""),delta<Defaulted<str>>(fallback:0)]) == [delta<Defaulted<str>>(required:""),_,delta<Defaulted<str>>(fallback:0),delta<Defaulted<str>>(label:""),delta<Defaulted<str>>(fallback:0)]
+ assert eval(defaulted,[_,_]) == [_,_]
+ assert eval(defaulted,[]) == []
+}

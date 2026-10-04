@@ -1,5 +1,5 @@
 //! Module parts, imports, declarations and test-scope indexing for HGL.
-use hgl_source::{Cursor, Expr, Token, lex};
+use hgl_source::{Cursor, Expr, Literal, Token, lex};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -77,6 +77,8 @@ pub struct RequiredStruct {
     pub generics: Vec<String>,
     /// Declaration-ordered source field types.
     pub fields: Vec<(String, String)>,
+    /// Declaration-indexed non-null fixed scalar defaults.
+    pub defaults: Vec<(usize, Literal)>,
     /// Supported finite type-domain constraint.
     pub type_domain: Option<(String, Vec<String>)>,
 }
@@ -278,7 +280,7 @@ fn add_import(
     Ok(())
 }
 impl Decl {
-    /// Parse the finite type-generic required-field struct subset.
+    /// Parse finite type-generic fields and non-null fixed scalar defaults.
     pub fn required_struct(&self) -> Result<RequiredStruct, String> {
         let mut c = Cursor::new(&self.tokens);
         c.take("export");
@@ -323,6 +325,7 @@ impl Decl {
             );
         }
         let mut fields = Vec::new();
+        let mut defaults = Vec::new();
         c.lines();
         while !c.take("}") {
             let name = c.name()?;
@@ -331,11 +334,18 @@ impl Decl {
             if fields.iter().any(|(field, _)| *field == name) {
                 return Err(format!("duplicate struct field {name}"));
             }
+            if c.take("=") {
+                let expr = c.expr()?;
+                if matches!(expr, Expr::Null) {
+                    return Err("struct field optionality is not supported".into());
+                }
+                let value = expr
+                    .fixed()
+                    .ok_or("struct defaults require supported non-null fixed scalar expressions")?;
+                defaults.push((fields.len(), value));
+            }
             if !c.at("}") && !c.at("\n") {
-                return Err(
-                    "ordinary structs currently require fields without defaults or optionality"
-                        .into(),
-                );
+                return Err("expected struct field end".into());
             }
             fields.push((name, ty));
             c.lines();
@@ -347,6 +357,7 @@ impl Decl {
         Ok(RequiredStruct {
             generics,
             fields,
+            defaults,
             type_domain,
         })
     }

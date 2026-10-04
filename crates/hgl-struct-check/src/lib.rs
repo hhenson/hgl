@@ -77,7 +77,9 @@ impl Constructor {
             }
             fields.push(index);
         }
-        if fields.len() != schema.fields.len() {
+        if (0..schema.fields.len()).any(|index| {
+            !fields.contains(&index) && !schema.defaults.iter().any(|(field, _)| *field == index)
+        }) {
             return Err("struct construction: missing or wrong-type argument".into());
         }
         Ok(Self {
@@ -197,7 +199,7 @@ impl Constructor {
             })
             .collect::<Result<Vec<_>, _>>()?;
         let ty = specialize(library, &self.declaration, arguments, &mut BTreeSet::new())?;
-        let fields = self
+        let mut fields = self
             .fields
             .into_iter()
             .zip(self.values)
@@ -207,6 +209,11 @@ impl Constructor {
                     .ok_or_else(|| "unchecked struct field".into())
             })
             .collect::<Result<Vec<_>, String>>()?;
+        for (index, default) in self.schema.defaults {
+            if !fields.iter().any(|(field, _)| *field == index) {
+                fields.push((index, Value::new(default.ty(), Kind::Literal(default))));
+            }
+        }
         Ok(Value::new(ty, Kind::Construct(fields)))
     }
 }
