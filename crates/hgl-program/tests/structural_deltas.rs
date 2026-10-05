@@ -217,3 +217,23 @@ fn defaulted_delta_origins_check_defaults_without_filling_sparse_fields() {
     }
     check("struct Box { amount:i64=1 }\nfn source()->i64 { start { let empty=delta<Box>() }\nwhen { return 1 } }\nfn main()->i64=>source()").unwrap();
 }
+
+#[test]
+fn inherited_list_size_expressions_keep_the_ancestor_scope() {
+    let base = "module sized\nconst fn size(value:i64)->i64 => value*2+1\nexport abstract struct Base<T>{value:list<T,size(1)>}";
+    let root = "module consumer\nuse sized as s\nconst fn size(value:i64)->i64 => value+1\nstruct Child<T>:s::Base<T>{extra:i64}\nfn main(){let items:list<i64,3> = [1,2,3]\nlet value=Child(value:items,extra:4)\nlet exact:Child<i64> = value}";
+    let sources = vec![
+        ("root.hgl".into(), root.into()),
+        ("base.hgl".into(), base.into()),
+    ];
+    let result = compile(&sources, "main");
+    assert!(result.is_ok(), "{result:?}");
+    let mut wrong = sources;
+    wrong[0].1 = root
+        .replace("[1,2,3]", "[1,2]")
+        .replace("list<i64,3>", "list<i64,2>");
+    assert!(
+        compile(&wrong, "main").is_err(),
+        "ancestor length must remain three"
+    );
+}

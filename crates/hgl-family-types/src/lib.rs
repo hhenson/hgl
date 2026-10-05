@@ -11,15 +11,6 @@ pub fn field_type(
     mut resolve: impl FnMut(&str, &str, &BTreeMap<String, Ty>) -> Result<Ty, String>,
 ) -> Result<Ty, String> {
     pattern.resolve(bindings, &mut |module, name, args| {
-        if let Some(size) = name.strip_prefix("list<").and_then(|s| s.strip_suffix('>')) {
-            return Ok(Ty::List(
-                Box::new(args[0].clone()),
-                Some(
-                    size.parse()
-                        .map_err(|error| format!("invalid list length: {error}"))?,
-                ),
-            ));
-        }
         let (name, bindings) = application_bindings(name, args);
         resolve(module, &name, &bindings)
     })
@@ -32,25 +23,13 @@ pub fn infer_field(
     mut unify: impl FnMut(&str, &str, &Ty, &[String], &mut BTreeMap<String, Ty>) -> Result<(), String>,
 ) -> Result<(), String> {
     pattern.infer(actual, bindings, &mut |module, name, count, actual| {
-        if let Some(size) = name.strip_prefix("list<").and_then(|s| s.strip_suffix('>')) {
-            if let Ty::List(child, Some(actual_size)) = actual
-                && size.parse::<usize>().ok() == Some(*actual_size)
-            {
-                return Ok(vec![*child.clone()]);
-            }
-            return Err("inherited list fixedness mismatch".into());
-        }
         if name == "atomic" && count == 1 {
             return Ok(vec![hgl_value_access::project(actual)]);
         }
         let parameters = (0..count)
             .map(|i| format!("Inherited{i}"))
             .collect::<Vec<_>>();
-        let spelling = if count == 0 {
-            name.into()
-        } else {
-            format!("{name}<{}>", parameters.join(","))
-        };
+        let spelling = spelling(name, &parameters);
         let mut inferred = BTreeMap::new();
         unify(module, &spelling, actual, &parameters, &mut inferred)?;
         parameters
@@ -69,18 +48,21 @@ fn application_bindings(name: &str, args: &[Ty]) -> (String, BTreeMap<String, Ty
         .enumerate()
         .map(|(i, ty)| (format!("Inherited{i}"), ty.clone()))
         .collect::<BTreeMap<_, _>>();
-    let spelling = if args.is_empty() {
+    let parameters = (0..args.len())
+        .map(|i| format!("Inherited{i}"))
+        .collect::<Vec<_>>();
+    let spelling = spelling(name, &parameters);
+    (spelling, bindings)
+}
+fn spelling(name: &str, args: &[String]) -> String {
+    if let Some(size) = name.strip_prefix("list<").and_then(|s| s.strip_suffix('>')) {
+        return format!("list<{},{}>", args[0], size);
+    }
+    if args.is_empty() {
         name.into()
     } else {
-        format!(
-            "{name}<{}>",
-            (0..args.len())
-                .map(|i| format!("Inherited{i}"))
-                .collect::<Vec<_>>()
-                .join(",")
-        )
-    };
-    (spelling, bindings)
+        format!("{name}<{}>", args.join(","))
+    }
 }
 /// Freeze every declared descendant compatible with one exact family specialization.
 pub fn resolve(

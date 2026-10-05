@@ -14,3 +14,8 @@ Every resolved ancestor declaration must be abstract, including imported aliases
 and generic applications. Concrete bases, cycles, incomplete ancestor applications
 and field redeclarations are diagnosed.
 No field projection, dispatch, cast or runtime nominal lookup is introduced.
+
+Fixed-list field patterns retain the size expression as scoped bound syntax,
+not as a nominal type argument. Pattern substitution resolves only the element;
+family field resolution and inference delegate the reconstructed list type to
+ordinary checked constant-size normalization in the ancestor's module.

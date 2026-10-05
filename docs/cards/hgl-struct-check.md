@@ -53,3 +53,6 @@ generic arguments before field checking. Widening itself belongs to family-value
 Unresolved inherited/direct generic field inference first recovers the canonical
 source argument schema. Ordinary field payloads remain projected; inferred and
 explicit nominal specializations retain identical nested atomic boundaries.
+schema_sizes traverses declared ancestors as well as own fields, retaining each
+ancestor module for checked constant-size expressions. Imported inherited list
+bounds therefore use the introducing declaration's helper scope.

@@ -64,7 +64,9 @@ fn pattern(module: &str, name: &str, bindings: &BTreeMap<String, Pattern>) -> Pa
     if let Some(value) = bindings.get(name) {
         return value.clone();
     }
-    if let Some((element, Some(size))) = Ty::list_parts(name) {
+    if let Some(("list", args)) = application(name)
+        && let [element, size] = args.as_slice()
+    {
         return Pattern::Named(
             module.into(),
             format!("list<{size}>"),

@@ -21,3 +21,7 @@ canonical declaration-owned nominal schemas before generic inference, including
 inside ordinary list/tuple/set/map arguments. The callback re-specializes an
 exact declaration and its invariant arguments; recursive schemas retain their
 existing finite batch resolver. This does not alter the projected payload.
+Inherited fixed-list patterns reconstruct list<Element,size-expression> before
+calling the checked resolver/unifier. Size expressions retain declaration scope
+and never participate as ordinary generic type arguments. Inference checks the
+same normalized length as explicit specialization.

@@ -338,7 +338,11 @@ fn schema_names(
         if !seen.insert(format!("{}::{}", decl.module, decl.name)) {
             return Ok(());
         }
-        for (_, field) in decl.required_struct()?.fields {
+        let schema = decl.required_struct()?;
+        if let Some(parent) = schema.parent {
+            schema_names(library, &decl.module, &parent, seen, sizes)?;
+        }
+        for (_, field) in schema.fields {
             let _normalized = hgl_type_sizes::normalize(&field, &mut |expr| {
                 if !library
                     .type_sizes
