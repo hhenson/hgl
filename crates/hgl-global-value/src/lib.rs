@@ -64,6 +64,14 @@ impl<T: GlobalValue> Debug for ValueSlot<T> {
     }
 }
 impl<T: GlobalValue> ValueSlot<T> {
+    /// Reconstruct a typed projection from compile-time selected field positions.
+    pub fn from_fields(fields: T::Slots) -> Self {
+        Self {
+            fields,
+            value: PhantomData,
+        }
+    }
+
     /// Bind the generated type's layout before any hooks execute.
     pub fn bind(layout: &mut &[usize]) -> Self {
         Self {

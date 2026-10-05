@@ -1,6 +1,6 @@
 //! Typed lowering of checked generator source control flow.
 use hgl_rust_ir::{Plan, Statement, Value};
-use hgl_rust_values::{condition_code, owned_type, statements};
+use hgl_rust_values::{condition_code, global_type, owned_type, statements};
 use hgl_source::Ty;
 use std::collections::BTreeMap;
 mod hoist;
@@ -75,6 +75,15 @@ impl Generator {
         };
         self.block(block)
     }
+    fn has_slots(&self) -> bool {
+        self.blocks.iter().any(|block| {
+            if let Block::Yield(_, value, _) = block {
+                hgl_rust_source_slots::projection(value, |_| String::new()).is_some()
+            } else {
+                false
+            }
+        })
+    }
     /// Emit concrete fields for the resume position, pending scalar and locals.
     pub fn fields(&self, result: &Ty) -> String {
         let mut code = vec![format!(
@@ -86,6 +95,16 @@ impl Generator {
                     .unwrap_or_else(|_| unreachable!("checked generator result"))
             )
         )];
+        if self.has_slots() {
+            let payload = result
+                .clone()
+                .delta()
+                .unwrap_or_else(|_| unreachable!("checked generator result"));
+            code.push(format!(
+                "generator_pending_slot: Option<hgl_store::ValueSlot<{}>>,\n",
+                global_type(&payload)
+            ));
+        }
         for (id, ty) in &self.locals {
             code.push(format!(
                 "generator_local{id}: Option<{}>,\n",
@@ -100,6 +119,9 @@ impl Generator {
             "generator_pc: {},\ngenerator_previous: None,\ngenerator_pending: None,\n",
             self.entry
         )];
+        if self.has_slots() {
+            code.push("generator_pending_slot: None,\n".into());
+        }
         for id in self.locals.keys() {
             code.push(format!("generator_local{id}: None,\n"));
         }
@@ -114,8 +136,13 @@ impl Generator {
     }
     /// Reset reconstructible storage and request the body's first evaluation.
     pub fn start(&self) -> String {
+        let clear_slot = if self.has_slots() {
+            "self.generator_pending_slot=None;"
+        } else {
+            ""
+        };
         format!(
-            "self.generator_pc = {};\nself.generator_previous = None;\nself.generator_pending = None;\n{} _ctx.alarm_in(hgl_types::EngineDelta::from_micros(0))?;\n",
+            "self.generator_pc = {};\nself.generator_previous = None;\nself.generator_pending = None;\n{clear_slot} {} _ctx.alarm_in(hgl_types::EngineDelta::from_micros(0))?;\n",
             self.entry,
             self.clear_locals()
         )
@@ -130,8 +157,19 @@ impl Generator {
             "publication",
         );
         let mut code = vec![format!(
-            "if let Some(publication) = self.generator_pending.take() {{ {publication} }}\nloop {{ match self.generator_pc {{\n",
+            "if let Some(publication) = self.generator_pending.take() {{ {publication} }}\n",
         )];
+        if self.has_slots() {
+            let payload = result
+                .clone()
+                .delta()
+                .unwrap_or_else(|_| unreachable!("checked generator result"));
+            code.push(format!(
+                "if let Some(publication)=self.generator_pending_slot.take() {{ {} }}\n",
+                slot_publication(&payload, "publication")
+            ));
+        }
+        code.push("loop { match self.generator_pc {\n".into());
         for (id, block) in self.blocks.iter().enumerate() {
             code.push(format!("{id} => {{\n"));
             self.emit_block(plan, block, &mut code);
@@ -171,10 +209,44 @@ fn timed_yield(plan: &Plan, time: &Value, payload: &Value, next: usize) -> Strin
         assert_eq!(time.ty, Ty::DateTime, "checked generator time operand");
         "time"
     };
-    let publish = hgl_rust_deltas::publish(&payload.ty, "payload");
+    let projection =
+        hgl_rust_source_slots::projection(payload, |value| condition_code(plan, value));
+    let (value, publish, pending) = projection.map_or_else(
+        || {
+            (
+                condition_code(plan, payload),
+                hgl_rust_deltas::publish(&payload.ty, "payload"),
+                "generator_pending",
+            )
+        },
+        |slot| {
+            (
+                slot,
+                slot_publication(&payload.ty, "payload"),
+                "generator_pending_slot",
+            )
+        },
+    );
     format!(
-        "let time = {};\nlet payload = {};\nlet now = _ctx.evaluation_time();\nlet target = {resolution};\nif self.generator_previous.is_some_and(|previous| target <= previous) {{ return Err(hgl_types::NodeError::new(\"generator yield times must strictly increase\")); }}\nself.generator_previous = Some(target);\nif target < now {{ self.generator_pc = {next}; continue; }}\nif target == now {{\n{publish} self.generator_pc = {next}; continue;\n}}\nlet delay = target.micros().checked_sub(now.micros()).ok_or_else(|| hgl_types::NodeError::new(\"generator target time difference overflow\"))?;\n_ctx.alarm_in(hgl_types::EngineDelta::from_micros(delay))?;\nself.generator_pending = Some(payload); self.generator_pc = {next}; return Ok(());\n",
+        "let time = {};\nlet payload = {};\nlet now = _ctx.evaluation_time();\nlet target = {resolution};\nif self.generator_previous.is_some_and(|previous| target <= previous) {{ return Err(hgl_types::NodeError::new(\"generator yield times must strictly increase\")); }}\nself.generator_previous = Some(target);\nif target < now {{ self.generator_pc = {next}; continue; }}\nif target == now {{\n{publish} self.generator_pc = {next}; continue;\n}}\nlet delay = target.micros().checked_sub(now.micros()).ok_or_else(|| hgl_types::NodeError::new(\"generator target time difference overflow\"))?;\n_ctx.alarm_in(hgl_types::EngineDelta::from_micros(delay))?;\nself.{pending} = Some(payload); self.generator_pc = {next}; return Ok(());\n",
         condition_code(plan, time),
-        condition_code(plan, payload)
+        value
     )
+}
+fn slot_publication(ty: &Ty, slot: &str) -> String {
+    let marker = global_type(ty);
+    if matches!(ty, Ty::Delta(_)) {
+        format!("{marker}::apply_slot(self._output,&self.configuration_columns,{slot},_ctx)?;")
+    } else if matches!(
+        ty,
+        Ty::Enum(_) | Ty::List(..) | Ty::Tuple(_) | Ty::Struct(..)
+    ) {
+        format!(
+            "_ctx.prepared().atomic_from::<{marker}>(&self.configuration_columns,{slot},self._output)?;"
+        )
+    } else {
+        format!(
+            "_ctx.prepared().scalar::<{marker}>(self._output.id(),self._output.generation(),self.configuration_columns.scalar::<{marker}>(({slot}).fields()))?;"
+        )
+    }
 }

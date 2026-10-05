@@ -37,3 +37,19 @@ checks use only pinned spec cases and HGL implementation.
 Structural generator pending owners use delta<result>, preserving exact
 sparse data across suspension. Publishing a pending value applies its prepared
 shape without reevaluating either operand or reconstructing held snapshots.
+
+Immutable configuration projection yields additionally use hgl-rust-source-slots.
+A generator with such paths stores generator_pending_slot:Option<ValueSlot<T>>
+for delta<result>, alongside the original pending owner for arbitrary ordinary
+expressions. Every reached yield still evaluates time then payload once. A parked
+configuration slot is copied into prepared output storage on resumption without
+extracting an owning payload or re-evaluating its path. Reset clears both pending
+forms. Mixed control-flow paths retain the existing ordinary generator behavior.
+
+Structural delta slots call their generated marker's apply_slot; complete atomic
+or enum slots use the prepared atomic_from facade; scalar slots borrow their typed
+scalar column and copy through the prepared scalar facade. The immutable node
+configuration owns every referenced descendant for the generator's whole lifetime.
+Acceptance includes emitted first/parked/repeated String publication and mixed
+projected/native scalar execution in debug/release, counting allocations around
+each complete Graph::evaluate call with no warm-up excluded.

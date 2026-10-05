@@ -42,3 +42,6 @@ and assigned member number; it never substitutes an ordinary integer.
 
 May use hgl-rust-enums. Expose whole_payload(&Ty) -> Option<&Ty> for an atomic
 payload or a declared enum scalar using a prepared complete-value endpoint.
+
+Nominal markers also delegate additive PreparedValue emission to
+hgl-rust-prepared-values, retaining exact identity in independently prepared slots.

@@ -81,3 +81,6 @@ not closed merely because they occur in membership/removal data.
 
 DeltaEntry::operands_mut exposes the same source-order traversal for cold IR
 rewrites, retaining typed keys alongside their payloads.
+
+`Node: Clone` supports cold suite-level layout collection; node state remains
+independent in every generated graph instance.

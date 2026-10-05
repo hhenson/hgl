@@ -9,4 +9,5 @@ line-budget = 350
 [lints]
 workspace = true
 [dependencies]
+hgl-scalar-copy = { path = "../hgl-scalar-copy" }
 hgl-types = { path = "../hgl-types" }

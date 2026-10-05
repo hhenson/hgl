@@ -14,6 +14,10 @@ pub trait Key: GlobalValue {
     fn id(keys: &Keys, value: &Self::Value) -> NodeResult<i64>;
     /// Retain the exact ordinary value during owning capture.
     fn value(keys: &Keys, id: i64) -> NodeResult<Self::Value>;
+    /// Visit the retained exact value without allocating an owning copy.
+    fn with_value<R>(keys: &Keys, id: i64, visit: impl FnOnce(&Self::Value) -> R) -> NodeResult<R> {
+        Ok(visit(&Self::value(keys, id)?))
+    }
     /// Complete finite key domain prepared before graph startup.
     fn ids(keys: &Keys) -> &[i64];
 }
@@ -259,6 +263,9 @@ impl Key for String {
     fn ids(keys: &Keys) -> &[i64] {
         &keys.strings.ids
     }
+    fn with_value<R>(keys: &Keys, id: i64, visit: impl FnOnce(&Self::Value) -> R) -> NodeResult<R> {
+        Ok(visit(keys.strings.get(id)?))
+    }
 }
 impl Key for ZoneId {
     fn prepare(keys: &mut Keys, value: &Self::Value) -> NodeResult {
@@ -275,6 +282,9 @@ impl Key for ZoneId {
     }
     fn ids(keys: &Keys) -> &[i64] {
         &keys.zones.ids
+    }
+    fn with_value<R>(keys: &Keys, id: i64, visit: impl FnOnce(&Self::Value) -> R) -> NodeResult<R> {
+        Ok(visit(keys.zones.get(id)?))
     }
 }
 impl Key for ZonedTime {
@@ -294,6 +304,9 @@ impl Key for ZonedTime {
     fn ids(keys: &Keys) -> &[i64] {
         &keys.zoned_times.ids
     }
+    fn with_value<R>(keys: &Keys, id: i64, visit: impl FnOnce(&Self::Value) -> R) -> NodeResult<R> {
+        Ok(visit(keys.zoned_times.get(id)?))
+    }
 }
 impl Key for ZonedDateTime {
     fn prepare(keys: &mut Keys, value: &Self::Value) -> NodeResult {
@@ -311,6 +324,9 @@ impl Key for ZonedDateTime {
     }
     fn ids(keys: &Keys) -> &[i64] {
         &keys.zoned_datetimes.ids
+    }
+    fn with_value<R>(keys: &Keys, id: i64, visit: impl FnOnce(&Self::Value) -> R) -> NodeResult<R> {
+        Ok(visit(keys.zoned_datetimes.get(id)?))
     }
 }
 #[cfg(test)]

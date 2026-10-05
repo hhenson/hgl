@@ -46,6 +46,13 @@ pub struct Ctx<'a> {
 }
 
 impl Ctx<'_> {
+    /// Typed prepared publication and disjoint source/record destination access.
+    pub fn prepared(&mut self) -> hgl_store::PreparedTick<'_, impl hgl_store::Wake> {
+        debug_assert!(self.phase == Phase::Eval, "NOD-22: writes only in eval");
+        self.store
+            .prepared()
+            .tick(self.now, self.node, self.schedule)
+    }
     /// Prepared ordinary capability operations, without hook-time key or type binding.
     pub fn global_state(&mut self) -> &mut GlobalState {
         self.store.global_state()
@@ -179,9 +186,6 @@ impl Ctx<'_> {
     pub fn request_stop(&mut self) {
         *self.stop_requested = true;
     }
-}
-
-impl Ctx<'_> {
     fn writes(&self, output: OutputId) {
         let endpoint = self.store.bindings().output(output);
         debug_assert!(self.phase == Phase::Eval, "NOD-22: writes only in eval");

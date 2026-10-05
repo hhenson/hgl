@@ -1,6 +1,9 @@
 //! Run-owned ordinary values, with names and types resolved before hooks run.
 pub use hgl_global_value::{Capacity, GlobalValue, Layouts, ValueColumns, ValueSlot};
-pub use hgl_list::{List, list_index, list_index_mut, list_len, list_push};
+pub use hgl_list::{
+    List, ListBounds, append_slot, commit_append, list_index, list_index_mut, list_len, list_push,
+};
+pub use hgl_prepared_value::PreparedValue;
 use hgl_types::{NodeError, NodeResult, OrdinaryType};
 use std::{collections::HashMap, fmt::Debug};
 
@@ -34,6 +37,38 @@ pub struct GlobalState {
     values: ValueColumns,
 }
 impl GlobalState {
+    /// Prepare an independent finite value before any handles are bound.
+    pub fn prepare_value<T: PreparedValue>(&mut self, key: &str, bounds: &T::Bounds) -> NodeResult {
+        self.prepare(key, T::schema())?;
+        if self.present[self.entries[key].1] {
+            return Err(NodeError::new("cannot prepare a present global"));
+        }
+        let slot = T::allocate(&mut self.values, bounds)?;
+        let (_, _, layout) = self
+            .entries
+            .get_mut(key)
+            .ok_or_else(|| NodeError::new("missing prepared global"))?;
+        ValueSlot::<T>::bind(&mut layout.as_slice()).release(&mut self.values);
+        slot.flatten(layout);
+        Ok(())
+    }
+    /// Prepared destination positions, without changing root presence.
+    pub fn destination<T: GlobalValue>(&self, handle: Global<T>) -> ValueSlot<T> {
+        debug_assert!(handle.entry < self.present.len(), "foreign global handle");
+        handle.slot
+    }
+    /// Publish ordinary presence after a complete successful write.
+    pub fn mark_present<T: GlobalValue>(&mut self, handle: Global<T>) {
+        self.present[handle.entry] = true;
+    }
+    /// Borrow ordinary columns for prepared source reads.
+    pub fn values(&self) -> &ValueColumns {
+        &self.values
+    }
+    /// Borrow independent prepared destinations for checked copying.
+    pub fn values_mut(&mut self) -> &mut ValueColumns {
+        &mut self.values
+    }
     /// Enable owner-supplied storage, preserving any existing entries.
     pub fn provision(&mut self) {
         self.provisioned = true;

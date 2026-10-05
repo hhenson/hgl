@@ -10,3 +10,4 @@ line-budget = 180
 workspace = true
 [dependencies]
 hgl-source = { path = "../hgl-source" }
+hgl-rust-prepared-values = { path = "../hgl-rust-prepared-values" }

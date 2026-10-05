@@ -338,3 +338,12 @@ The finite prepared evaluation profile has whole-cycle zero-allocation tests,
 including nested maps, partial bundle fields, held references and owning String,
 provider ZoneId and ZonedTime keys. Existing unprepared dynamic construction
 and runtime rebinding remain outside this finite-domain allocation guarantee.
+
+prepared()->PreparedStorage returns disjoint runtime borrows for cold setup and
+finite prepared copying. PreparedStorage, PreparedTick, Observation, PreparedValue,
+ListBounds, append_slot and commit_append are reexported. Existing dynamic APIs
+remain available; finite generated evaluation uses independently reserved storage
+and never replaces that capacity with source-owned aliases.
+
+Out::generation()->u32 exposes the original writing-token generation for the
+prepared publication facade; it never substitutes the current endpoint generation.

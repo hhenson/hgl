@@ -447,7 +447,7 @@ fn source_operator_image(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let generated = emit_tests(&compile_tests(&operators)?);
     assert!(generated.contains("hgraph.std::replay"));
     assert!(generated.contains("generator_pending"));
-    assert!(generated.contains("list_push"));
+    assert!(generated.contains("append_slot") && generated.contains("commit_append"));
     assert!(!generated.contains("self.replay_input") && !generated.contains("self.capture"));
     assert!(!generated.contains("match self.next"));
     module(dir, "source_operators", &generated)?;

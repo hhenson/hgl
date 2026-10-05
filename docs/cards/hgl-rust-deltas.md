@@ -39,3 +39,7 @@ and assigned member number; it never substitutes an ordinary integer.
 
 Typed set/map key operations are delegated to hgl-rust-keyed. Their ordinary
 sparse storage retains exact K; only prepared membership calls use internal IDs.
+
+Prepared finite execution delegates statically typed slot publication, sparse
+observation, and direct pass-through emission to `hgl-rust-observed`. Existing
+ordinary owning delta construction and post-run comparison remain available.

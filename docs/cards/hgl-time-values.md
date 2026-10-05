@@ -33,3 +33,8 @@ Derive Debug, Default, Clone, equality and Hash, without ordering. Its exact
 identity contains wall-clock microseconds and the original name only; no date,
 instant or resolved offset is invented. The validated native boundary and
 independent fallible ownership rules above apply identically.
+
+ZoneId, ZonedTime and ZonedDateTime additionally expose name_capacity()->usize,
+reserve_name(usize)->Result<(),TryReserveError> and copy_prepared(&Self). The
+latter copies exact validated fields into independent text capacity after the
+caller preflights name length; it performs no provider lookup or allocation.

@@ -79,7 +79,7 @@ pub(super) fn marker(ty: &Ty) -> String {
             application(ty)
         ),
     );
-    code
+    code + &hgl_rust_observed::methods(ty, shape_marker)
 }
 fn allocate(ty: &Ty) -> String {
     if let Ty::Set(key) = ty {

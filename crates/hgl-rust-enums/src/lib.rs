@@ -41,5 +41,5 @@ fn ids(keys:&hgl_store::Keys)->&[i64] {{<i64 as hgl_store::Key>::ids(keys)}}
 }}
 
 "
-    )
+    ) + &hgl_rust_prepared_values::enumeration(&name)
 }

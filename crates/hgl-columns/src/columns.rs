@@ -87,7 +87,7 @@ pub trait Column: Default {
 ///     }
 /// }
 /// ```
-pub trait Scalar: Clone + PartialEq + Debug + Column + 'static {
+pub trait Scalar: hgl_scalar_copy::ScalarCopy + PartialEq + Debug + Column + 'static {
     /// Independently copy an ordinary value, translating allocation failure.
     fn try_clone(&self) -> Result<Self, Box<hgl_types::NodeError>> {
         Ok(self.clone())

@@ -152,7 +152,7 @@ pub enum Statement {
     If(Value, Vec<Self>, Vec<Self>),
 }
 /// One resolved runtime node and its source-defined behavior.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Node {
     /// Qualified source name, combined with its plan index for registration.
     pub name: String,

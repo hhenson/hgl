@@ -1,0 +1,14 @@
+[package]
+name = "hgl-list-storage"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+[package.metadata.hgl]
+line-budget = 300
+[dependencies]
+hgl-prepared-value = { path = "../hgl-prepared-value" }
+hgl-types = { path = "../hgl-types" }
+hgl-global-value = { path = "../hgl-global-value" }
+[lints]
+workspace = true

@@ -1,4 +1,9 @@
 use crate::ir::{Kind, Node, Plan, Value};
+use std::fmt::Write as _;
+fn append(out: &mut String, args: std::fmt::Arguments<'_>) {
+    out.write_fmt(args)
+        .unwrap_or_else(|_| unreachable!("String formatting"));
+}
 use hgl_rust_generators::Generator;
 use hgl_rust_values::{
     condition_code, global_markers, global_schema, global_type, literal, owned_type, query,
@@ -18,8 +23,13 @@ fn node(plan: &Plan, n: &Node, index: usize, out: &mut Vec<String>) {
             global_type(ty)
         ));
     }
+    out.push("configuration_columns:hgl_store::ValueColumns,\n".into());
     for (id, value) in n.configuration.iter().enumerate() {
-        out.push(format!("configuration{id}: {},\n", owned_type(&value.ty)));
+        out.push(format!(
+            "configuration{id}: {},configuration_slot{id}:hgl_store::ValueSlot<{}>,\n",
+            owned_type(&value.ty),
+            global_type(&value.ty)
+        ));
     }
     for (i, (_, _, ty)) in n.inputs.iter().enumerate() {
         out.push(
@@ -95,31 +105,7 @@ fn node_build(
     generator: Option<&Generator>,
     out: &mut Vec<String>,
 ) {
-    out.push(format!("impl hgl_describe::Buildable for Node{index} {{\nfn node_type() -> hgl_types::NodeType {{\nhgl_types::NodeType {{ name: {:?}, inputs: vec![",format!("{}#{index}",n.name)));
-    for (name, _, ty) in &n.inputs {
-        out.push(format!("({name:?},{}),", shape(ty)));
-    }
-    out.push("],\n".to_owned());
-    if n.global_state {
-        out.push("uses_global_state: true,\nglobal_entries: vec![".into());
-        for (key, ty) in &n.globals {
-            out.push(format!("({key:?}, {}),", global_schema(ty)));
-        }
-        out.push("],\n".into());
-    }
-    if n.result != Ty::Void {
-        out.push(format!("output: Some({}),\n", shape(&n.result)));
-    }
-    if n.inputs.iter().any(|(_, _, t)| matches!(t, Ty::Ref(_))) {
-        out.push("schedule_on_start: true,\n".into());
-    }
-    if n.handlers.iter().any(|(guard, _)| guard.is_some()) {
-        out.push("valid_inputs: Some(vec![]),\n".into());
-    }
-    out.push(format!(
-        "uses_scheduler: {}, ..hgl_types::NodeType::default() }}\n}}\n",
-        n.alarm
-    ));
+    node_type(n, index, out);
     if node_prepared(n) {
         out.push(format!("fn build(_: &mut hgl_describe::Ports<'_>)->Result<Self,hgl_describe::BuildError> {{Err(hgl_describe::BuildError::InvalidNodeType {{node:{:?},what:\"prepared configuration required\".into()}})}} }}\nimpl Node{index} {{\nfn build_prepared(ports: &mut hgl_describe::Ports<'_>,{}) -> Result<Self,hgl_describe::BuildError> {{\n",n.name,n.configuration.iter().enumerate().map(|(id,v)|format!("configuration{id}:{}",owned_type(&v.ty))).collect::<Vec<_>>().join(",")));
     } else {
@@ -128,7 +114,13 @@ fn node_build(
     out.push(hgl_rust_keyed::node_preparation(n, |v| {
         condition_code(plan, v)
     }));
-    out.push("Ok(Self {\n".into());
+    out.push(hgl_rust_source_slots::initialize(
+        &n.configuration,
+        node_prepared(n),
+        &n.name,
+        |value| condition_code(plan, value),
+    ));
+    out.push("Ok(Self {configuration_columns,\n".into());
     if let Some(generator) = generator {
         out.push(generator.initialize());
     }
@@ -138,12 +130,8 @@ fn node_build(
             global_type(ty)
         ));
     }
-    for (id, value) in n.configuration.iter().enumerate() {
-        if node_prepared(n) {
-            out.push(format!("configuration{id},\n"));
-            continue;
-        }
-        out.push(format!("configuration{id}: (|| -> Result<{}, Box<hgl_types::NodeError>> {{ Ok({}) }})().map_err(|e| hgl_describe::BuildError::InvalidNodeType {{ node: {:?}, what: e.message }})?,\n", owned_type(&value.ty), condition_code(plan, value), n.name));
+    for id in 0..n.configuration.len() {
+        out.push(format!("configuration{id},configuration_slot{id},\n"));
     }
     for (i, (name, _, ty)) in n.inputs.iter().enumerate() {
         if hgl_rust_deltas::structural(ty) || whole_payload(ty).is_some() {
@@ -176,6 +164,33 @@ fn node_build(
     }
     out.push("})\n}\n}\n".to_owned());
 }
+fn node_type(n: &Node, index: usize, out: &mut Vec<String>) {
+    out.push(format!("impl hgl_describe::Buildable for Node{index} {{\nfn node_type() -> hgl_types::NodeType {{\nhgl_types::NodeType {{ name: {:?}, inputs: vec![",format!("{}#{index}",n.name)));
+    for (name, _, ty) in &n.inputs {
+        out.push(format!("({name:?},{}),", shape(ty)));
+    }
+    out.push("],\n".to_owned());
+    if n.global_state {
+        out.push("uses_global_state: true,\nglobal_entries: vec![".into());
+        for (key, ty) in &n.globals {
+            out.push(format!("({key:?}, {}),", global_schema(ty)));
+        }
+        out.push("],\n".into());
+    }
+    if n.result != Ty::Void {
+        out.push(format!("output: Some({}),\n", shape(&n.result)));
+    }
+    if n.inputs.iter().any(|(_, _, t)| matches!(t, Ty::Ref(_))) {
+        out.push("schedule_on_start: true,\n".into());
+    }
+    if n.handlers.iter().any(|(guard, _)| guard.is_some()) {
+        out.push("valid_inputs: Some(vec![]),\n".into());
+    }
+    out.push(format!(
+        "uses_scheduler: {}, ..hgl_types::NodeType::default() }}\n}}\n",
+        n.alarm
+    ));
+}
 fn comment(text: &str) -> String {
     let mut out = String::new();
     for c in text.chars() {
@@ -189,6 +204,25 @@ fn comment(text: &str) -> String {
 }
 /// Emit runtime nodes, selected native signatures and graph construction.
 pub fn emit(plan: &Plan) -> String {
+    emit_inner(plan, true)
+}
+/// Emit a graph using nominal layouts already emitted in its enclosing module.
+pub fn emit_shared(plan: &Plan) -> String {
+    emit_inner(plan, false)
+}
+/// Share exact nominal layouts across independently constructed evaluation cases.
+pub fn shared_layouts(plans: &[Plan]) -> String {
+    let nodes = plans
+        .iter()
+        .flat_map(|plan| plan.nodes.iter().cloned())
+        .collect();
+    let types = Plan {
+        nodes,
+        ..Plan::default()
+    };
+    global_markers(&types) + &hgl_rust_deltas::markers(&types)
+}
+fn emit_inner(plan: &Plan, layouts: bool) -> String {
     let mut out = vec![String::from("// Generated from checked HGL source.\n")];
     for doc in &plan.docs {
         for line in doc.lines() {
@@ -220,8 +254,10 @@ pub fn emit(plan: &Plan) -> String {
         out.push(format!("pub fn register(_: &mut hgl_describe::Registry) -> Result<(), hgl_describe::BuildError> {{ Ok(()) }}\npub fn main(_: &hgl_describe::Registry) -> Result<hgl_describe::GraphDescription, hgl_describe::BuildError> {{ Err(hgl_describe::BuildError::InvalidNodeType {{ node: \"hgl.program\", what: {error:?}.into() }}) }}\n"));
         return out.concat();
     }
-    out.push(global_markers(plan));
-    out.push(hgl_rust_deltas::markers(plan));
+    if layouts {
+        out.push(global_markers(plan));
+        out.push(hgl_rust_deltas::markers(plan));
+    }
     for (i, n) in plan.nodes.iter().enumerate() {
         node(plan, n, i, &mut out);
     }
@@ -246,6 +282,7 @@ pub fn emit(plan: &Plan) -> String {
         }
     }
     out.push("builder.finish()\n}\n".to_owned());
+    out.push(capacities(plan));
     out.concat()
 }
 
@@ -282,7 +319,8 @@ pub fn emit_test_body(plan: &Plan, expected: Option<&[Option<Value>]>) -> String
         out.push("Ok(())\n}\n".into());
         return out.concat();
     }
-    out.push("let mut store=hgl_store::Store::new();\nstore.global_state().provision();prepare_static(&mut store.keys)?;\nlet mut built=hgl_describe::instantiate_complete(&graph,&registry,&mut store).map_err(|e|format!(\"{e:?}\"))?;\n".into());
+    out.push("let mut store=hgl_store::Store::new();\nstore.global_state().provision();prepare_static(&mut store.keys)?;\nlet capacity=prepare_capacity(&[],&mut store,0)?;let mut built=hgl_describe::instantiate_complete(&graph,&registry,&mut store).map_err(|e|format!(\"{e:?}\"))?;\n".into());
+    out.push("prepare_outputs(&capacity,&mut store,&built).map_err(|e|e.message)?;\n".into());
     if let Some((key, ty)) = &plan.recording {
         out.push(format!(
             "let recording=store.global_state().bind::<{}>({key:?}).map_err(|e|format!(\"{{e:?}}\"))?;\n",
@@ -486,7 +524,8 @@ pub fn emit_prepared_test_body(plan: &Plan) -> String {
     } else {
         out.push("register(&mut registry).map_err(|e|format!(\"{e:?}\"))?;\n".into());
     }
-    out.push("let graph=main(&registry).map_err(|e|format!(\"{e:?}\"))?;\nlet mut store=hgl_store::Store::new();store.global_state().provision();prepare_static(&mut store.keys)?;prepare_values(&mut store.keys,&prepared.arguments)?;\nlet mut built=hgl_describe::instantiate_complete(&graph,&registry,&mut store).map_err(|e|format!(\"{e:?}\"))?;\n".into());
+    out.push("let graph=main(&registry).map_err(|e|format!(\"{e:?}\"))?;\nlet mut store=hgl_store::Store::new();store.global_state().provision();prepare_static(&mut store.keys)?;prepare_values(&mut store.keys,&prepared.arguments)?;\nlet capacity=prepare_capacity(&prepared.arguments,&mut store,prepared.input_length)?;let mut built=hgl_describe::instantiate_complete(&graph,&registry,&mut store).map_err(|e|format!(\"{e:?}\"))?;\n".into());
+    out.push("prepare_outputs(&capacity,&mut store,&built).map_err(|e|e.message)?;\n".into());
     if let Some((key, ty)) = &plan.recording {
         out.push(format!("let recording=store.global_state().bind::<{}>({key:?}).map_err(|e|format!(\"{{e:?}}\"))?;\n",global_type(ty)));
     }
@@ -505,4 +544,76 @@ pub fn emit_prepared_test_body(plan: &Plan) -> String {
     }
     out.push("}\n".into());
     out.concat()
+}
+fn capacities(plan: &Plan) -> String {
+    let capacity = hgl_rust_capacity::Capacity::new(plan);
+    let mut code = capacity.declaration();
+    code += "fn prepare_capacity(values:&[hgl_rust_ir::Value],store:&mut hgl_store::Store,horizon:usize)->Result<FiniteCapacity,String>{let mut capacity=FiniteCapacity::default();let mut cycles=horizon;";
+    let mut bindings = std::collections::BTreeMap::new();
+    for node in &plan.nodes {
+        for value in &node.configuration {
+            prepared_values(value, &mut bindings);
+        }
+    }
+    for (id, ty) in bindings {
+        append(
+            &mut code,
+            format_args!(
+                "let prepared{id}={};",
+                hgl_rust_preparation::decode(
+                    &ty,
+                    &format!("values.get({id}).ok_or(\"missing prepared value\")?")
+                )
+            ),
+        );
+    }
+    for node in &plan.nodes {
+        for value in &node.configuration {
+            append(
+                &mut code,
+                format_args!(
+                    "{{let value=(||->hgl_types::NodeResult<_>{{Ok({})}})().map_err(|e|e.message)?;{}",
+                    condition_code(plan, value),
+                    capacity.include(&value.ty, "&value")
+                ),
+            );
+            if matches!(value.ty, Ty::List(..)) {
+                code += "cycles=cycles.saturating_add(value.len());";
+            }
+            code += "}";
+        }
+    }
+    for node in &plan.nodes {
+        for (key, ty) in &node.globals {
+            append(
+                &mut code,
+                format_args!("{{let mut bounds={};", capacity.bounds(ty)),
+            );
+            if plan
+                .recording
+                .as_ref()
+                .is_some_and(|(record, _)| record == key)
+            {
+                code += "bounds.len=cycles.saturating_add(1);";
+            }
+            append(
+                &mut code,
+                format_args!(
+                    "store.global_state().prepare_value::<{}>({key:?},&bounds).map_err(|e|e.message)?;}}",
+                    global_type(ty)
+                ),
+            );
+        }
+    }
+    code += "Ok(capacity)}\nfn prepare_outputs(capacity:&FiniteCapacity,store:&mut hgl_store::Store,built:&hgl_describe::BuiltGraph)->hgl_types::NodeResult {";
+    for (i, node) in plan.nodes.iter().enumerate() {
+        if node.result.publication() {
+            code += &capacity.output(
+                &node.result,
+                &format!("built.outputs[{i}].expect(\"checked output\")"),
+            );
+        }
+    }
+    code += "Ok(())}\n";
+    code
 }

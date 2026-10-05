@@ -115,3 +115,15 @@ binds exact native prepared configurations before graph construction and encodes
 independent captures after teardown. May use hgl-rust-preparation for cold typed
 conversion; existing emit_test_body remains available. Prepared values never
 reach node hooks or control graph topology.
+
+`shared_layouts(&[Plan])` emits each exact nominal layout once across a test
+suite. `emit_shared(&Plan)` emits nodes against those enclosing markers; standalone
+`emit` retains self-contained output. Graph instances and payload stores remain
+independent. Sharing generated type definitions bounds compiler memory growth
+without changing execution or reducing test cases.
+
+Finite evaluation emits graph-local cold capacity maxima from already materialized
+configuration values. Before binding globals it allocates record slots, then after
+instantiation prepares scalar, atomic, and every finite keyed descendant output.
+Configuration source arenas own independent typed slots. Captures are extracted as
+owning values after simulation; generated hook recording copies into reserved slots.

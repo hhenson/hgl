@@ -38,3 +38,10 @@ and starts with no publication. Generated enum markers set PREPARED_SCALAR, so
 write skips generic payload preparation/reservation and commits to that typed
 slot directly. The compile-time marker selects this path; there is no per-value
 schema test, name lookup, allocation or invented published default member.
+
+prepare_output<T:PreparedValue>(&Bindings,OutputId,&T::Bounds)->NodeResult
+installs all finite descendants after endpoint construction and before start,
+without a publication. destination<T>(&Bindings,Output<Atomic<T>>)->NodeResult<ValueSlot<T>>
+validates token generation and requires installed storage without requiring a
+previous value tick. values_mut() permits complete-preflight independent copies;
+publication remains a separate final Bindings operation in hgl-prepared-store.

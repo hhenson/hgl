@@ -19,3 +19,5 @@ hgl-rust-ir = { path = "../hgl-rust-ir" }
 hgl-rust-values = { path = "../hgl-rust-values" }
 hgl-rust-generators = { path = "../hgl-rust-generators" }
 hgl-rust-preparation = { path = "../hgl-rust-preparation" }
+hgl-rust-capacity = { path = "../hgl-rust-capacity" }
+hgl-rust-source-slots = { path = "../hgl-rust-source-slots" }

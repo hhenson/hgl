@@ -42,3 +42,11 @@ arena capacity before infallible commit. Failure preserves all logical fields an
 presence; incidental physical capacity growth is permitted. Fixed host-supplied
 payload lengths are checked recursively before commit. Replacement reclaims old
 list descendants; repeated writes do not leak positions.
+
+prepare_value<T:PreparedValue>(key,&T::Bounds)->NodeResult installs independent
+finite capacities before any handle is bound. A present entry is rejected without
+mutation. Callers must finish preparation before bind; relocating later would
+invalidate existing typed projections. destination(handle)->ValueSlot<T> retrieves
+prepared positions even while absent. values()/values_mut() expose typed arenas;
+mark_present(handle) establishes ordinary presence only after a successful write.
+PreparedValue, ListBounds, append_slot and commit_append are reexported.

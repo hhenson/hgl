@@ -20,3 +20,5 @@ never a replacement for the ordinary key's typed identity.
 
 Tests cover cold ownership, aliases, zero/infinities, hash collisions, unknown
 keys and allocation-free first/repeated lookups after preparation.
+
+`Key::with_value` visits a retained typed key by reference; fixed inline values may use a stack temporary. Owning String and provider identities borrow their cold table entry. It performs no owning capture allocation.

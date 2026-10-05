@@ -15,3 +15,6 @@ repeated publications; generated shared HGL tests verify recursive enum capture.
 Markers also implement the hgl-store Key contract by delegating physical i64
 prepare/id/value/domain operations. The collection schema preserves the nominal
 enum identity independently of the membership token.
+
+Nominal markers also delegate additive PreparedValue emission to
+hgl-rust-prepared-values, retaining exact identity in independently prepared slots.

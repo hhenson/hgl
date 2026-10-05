@@ -70,3 +70,7 @@ They delegate typed slot operations to i64 while preserving the nominal schema.
 Only such enum roots are initialized physically during endpoint construction;
 no default enum member is published. Ordinary allocation recognizes Enum as one
 i64 physical leaf. Retention and complete nested payload rules remain unchanged.
+
+ValueSlot::from_fields(T::Slots)->Self reconstructs a typed projection from
+compile-time-selected immediate field positions. It does not inspect payloads or
+create ownership; the marker and arena identity remain caller contracts.

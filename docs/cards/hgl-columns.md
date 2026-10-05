@@ -24,3 +24,7 @@ String reserves fallibly before copying. Existing endpoint reads are unchanged.
 CivilDateTime, ZoneId, ZonedDateTime and ZonedTime are concrete typed scalar implementations.
 Zone-bearing values retain exact owned names fallibly at retention boundaries;
 prepared borrowed projections neither allocate nor consult a provider.
+
+Scalar inherits hgl-scalar-copy::ScalarCopy for statically selected cold byte
+reservation and prevalidated capacity-preserving copies. Existing fixed scalars
+remain direct copies. The sealed set of scalar storage types is unchanged.

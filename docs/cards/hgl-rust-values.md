@@ -63,3 +63,10 @@ structural children. Checked harness capture retains the original declaration
 and assigned member number; it never substitutes an ordinary integer.
 
 Re-export hgl-rust-layouts::whole_payload alongside existing layout helpers.
+
+Finite eval recording uses independently prepared destination slots. Direct
+publication observations copy through typed temporal tokens; record append fills
+an unpublished vacant slot before committing its length. Native field expressions
+are evaluated in source order before borrowing record storage. Unrelated ordinary
+global mutations retain their existing checked owning API. Direct finite eval
+pass-through publishes between typed prepared endpoints without an owning temporary.

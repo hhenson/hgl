@@ -331,3 +331,9 @@ factory receives Store and NodeId and runs only on fresh member allocation.
 `Ctx::set_atomic<T: GlobalValue>(Output<Atomic<T>>, T::Value) -> NodeResult`
 publishes a prepared complete ordinary value through Store and the existing
 wake mechanism. Failed preparation neither changes the held value nor ticks.
+
+Ctx::prepared()->PreparedTick binds the current evaluation time, writer and wake
+sink to Store's disjoint prepared access facade. It enforces the evaluation phase;
+the facade checks ownership/lifetime and performs complete-preflight publication.
+This keeps source observation, prepared record append and publication under one
+borrowed capability without adding per-value names or type dispatch.

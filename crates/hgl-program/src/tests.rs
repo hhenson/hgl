@@ -91,11 +91,11 @@ pub fn compile_tests(sources: &[(String, String)]) -> Result<Suite, String> {
 }
 /// Emit ordered test setup, prepared graph factories and owning capture comparison.
 pub fn emit_tests(suite: &Suite) -> String {
-    let mut out = Vec::<String>::new();
+    let mut out = vec![emit::shared_layouts(&suite.plans)];
     for (i, plan) in suite.plans.iter().enumerate() {
         out.push(format!(
-            "mod case{i} {{\n{}\n{}\n}}\n",
-            emit::emit(plan),
+            "mod case{i} {{ use super::*;\n{}\n{}\n}}\n",
+            emit::emit_shared(plan),
             emit::emit_prepared_test_body(plan)
         ));
     }
