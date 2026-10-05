@@ -1,6 +1,6 @@
 //! Closed ordinary replay data and pre-start publication admission.
+use hgl_composite_keys::{Key, key};
 use hgl_rust_ir::{DeltaEntry, Kind, Value};
-use hgl_scalar_keys::Key;
 use hgl_source::{Expr, Literal, Ty};
 use std::collections::{BTreeMap, BTreeSet};
 #[derive(Default)]
@@ -51,13 +51,13 @@ impl State {
                     .apply(child, value)?,
                 (Ty::List(child, _), DeltaEntry::Child(index, value)) => self
                     .children
-                    .entry(hgl_scalar_keys::key(&Literal::Int(*index))?)
+                    .entry(hgl_composite_keys::scalar(&Literal::Int(*index))?)
                     .or_default()
                     .apply(child, value)?,
                 (Ty::Tuple(children), DeltaEntry::Child(index, value)) => {
                     let index = usize::try_from(*index).map_err(|e| e.to_string())?;
                     self.children
-                        .entry(hgl_scalar_keys::key(&Literal::Int(
+                        .entry(hgl_composite_keys::scalar(&Literal::Int(
                             i64::try_from(index).map_err(|e| e.to_string())?,
                         ))?)
                         .or_default()
@@ -66,7 +66,7 @@ impl State {
                 (Ty::Struct(_, fields, _), DeltaEntry::Child(index, value)) => {
                     let position = usize::try_from(*index).map_err(|e| e.to_string())?;
                     self.children
-                        .entry(hgl_scalar_keys::key(&Literal::Int(*index))?)
+                        .entry(hgl_composite_keys::scalar(&Literal::Int(*index))?)
                         .or_default()
                         .apply(&fields[position].1, value)?;
                 }
@@ -75,12 +75,6 @@ impl State {
         }
         Ok(())
     }
-}
-fn key(value: &Value) -> Result<Key, String> {
-    let Kind::Literal(value) = &value.kind else {
-        return Err("delta key requires cold scalar materialization".into());
-    };
-    hgl_scalar_keys::key(value)
 }
 /// Turn present dense slots into owned ordinary timed entries; absence adds no data.
 pub fn timed(entry_type: Ty, slots: &[Option<Value>]) -> Result<Value, String> {

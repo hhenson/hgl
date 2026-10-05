@@ -1,0 +1,76 @@
+module hgraph.std part composite_key_values_tests
+
+struct PublicationKey {
+    number: i64
+    label: str
+}
+struct PublicationNestedKey {
+    pair: tuple<i64, str>
+    flag: bool = null
+}
+
+test {
+    fn tuple_members(value: set<tuple<i64, str>>) -> set<tuple<i64, str>> => pass_through(value)
+    fn tuple_keys(value: map<tuple<i64, str>, i64>) -> map<tuple<i64, str>, i64> => pass_through(value)
+    fn struct_members(value: set<PublicationKey>) -> set<PublicationKey> => pass_through(value)
+    fn struct_keys(value: map<PublicationKey, i64>) -> map<PublicationKey, i64> => pass_through(value)
+    fn nested_keys(value: map<PublicationNestedKey, i64>) -> map<PublicationNestedKey, i64> => pass_through(value)
+    fn complete_key_set(value: atomic<set<PublicationKey>>) -> atomic<set<PublicationKey>> => pass_through(value)
+    fn complete_key_map(value: atomic<map<PublicationKey, list<i64>>>) -> atomic<map<PublicationKey, list<i64>>> => pass_through(value)
+
+    test tuple_members_use_complete_equality_and_membership_lifecycle {
+        assert eval(tuple_members, [delta<set<tuple<i64, str>>>(added: [(1, "a")]), delta<set<tuple<i64, str>>>(added: [(2, "b")]), _, delta<set<tuple<i64, str>>>(removed: [(1, "a")]), delta<set<tuple<i64, str>>>(added: [(1, "a")])]) == [
+            delta<set<tuple<i64, str>>>(added: [(1, "a")]), delta<set<tuple<i64, str>>>(added: [(2, "b")]), _, delta<set<tuple<i64, str>>>(removed: [(1, "a")]), delta<set<tuple<i64, str>>>(added: [(1, "a")])
+        ]
+        assert eval(tuple_members, []) == []
+        assert eval(tuple_members, [_, _]) == [_, _]
+    }
+
+    test tuple_map_keys_keep_equal_child_updates_and_reinsertion {
+        assert eval(tuple_keys, [delta<map<tuple<i64, str>, i64>>(upsert: [(1, "a"): 1]), delta<map<tuple<i64, str>, i64>>(upsert: [(1, "a"): 1, (2, "b"): 2]), _, delta<map<tuple<i64, str>, i64>>(remove: [(1, "a")]), delta<map<tuple<i64, str>, i64>>(upsert: [(1, "a"): 3])]) == [
+            delta<map<tuple<i64, str>, i64>>(upsert: [(1, "a"): 1]), delta<map<tuple<i64, str>, i64>>(upsert: [(2, "b"): 2, (1, "a"): 1]), _, delta<map<tuple<i64, str>, i64>>(remove: [(1, "a")]), delta<map<tuple<i64, str>, i64>>(upsert: [(1, "a"): 3])
+        ]
+        assert eval(tuple_keys, []) == []
+        assert eval(tuple_keys, [_, _]) == [_, _]
+    }
+
+    test struct_members_compare_all_fields_of_exact_nominal_keys {
+        assert eval(struct_members, [delta<set<PublicationKey>>(added: [PublicationKey(number: 1, label: "a")]), delta<set<PublicationKey>>(added: [PublicationKey(number: 1, label: "b")]), _, delta<set<PublicationKey>>(removed: [PublicationKey(number: 1, label: "a")])]) == [
+            delta<set<PublicationKey>>(added: [PublicationKey(number: 1, label: "a")]), delta<set<PublicationKey>>(added: [PublicationKey(number: 1, label: "b")]), _, delta<set<PublicationKey>>(removed: [PublicationKey(number: 1, label: "a")])
+        ]
+        assert eval(struct_members, []) == []
+    }
+
+    test struct_map_keys_are_complete_values_not_sparse_deltas {
+        assert eval(struct_keys, [delta<map<PublicationKey, i64>>(upsert: [PublicationKey(number: 1, label: "a"): 7]), delta<map<PublicationKey, i64>>(upsert: [PublicationKey(number: 1, label: "a"): 7]), _, delta<map<PublicationKey, i64>>(remove: [PublicationKey(number: 1, label: "a")]), delta<map<PublicationKey, i64>>(upsert: [PublicationKey(number: 1, label: "a"): 9])]) == [
+            delta<map<PublicationKey, i64>>(upsert: [PublicationKey(number: 1, label: "a"): 7]), delta<map<PublicationKey, i64>>(upsert: [PublicationKey(number: 1, label: "a"): 7]), _, delta<map<PublicationKey, i64>>(remove: [PublicationKey(number: 1, label: "a")]), delta<map<PublicationKey, i64>>(upsert: [PublicationKey(number: 1, label: "a"): 9])
+        ]
+        assert eval(struct_keys, [_, _]) == [_, _]
+    }
+
+    test nested_key_identity_includes_optional_presence {
+        assert eval(nested_keys, [delta<map<PublicationNestedKey, i64>>(upsert: [PublicationNestedKey(pair: (1, "a")): 1, PublicationNestedKey(pair: (1, "a"), flag: false): 2]), _, delta<map<PublicationNestedKey, i64>>(remove: [PublicationNestedKey(pair: (1, "a"), flag: null)])]) == [
+            delta<map<PublicationNestedKey, i64>>(upsert: [PublicationNestedKey(pair: (1, "a"), flag: false): 2, PublicationNestedKey(pair: (1, "a"), flag: null): 1]), _, delta<map<PublicationNestedKey, i64>>(remove: [PublicationNestedKey(pair: (1, "a"))])
+        ]
+    }
+
+    test complete_containers_own_keys_before_source_bindings_change {
+        var key: PublicationKey = PublicationKey(number: 1, label: "first")
+        var items: list<i64> = []
+        push(items, 1)
+        let first_set: set<PublicationKey> = set<PublicationKey>(items: [key])
+        let first_map: map<PublicationKey, list<i64>> = map<PublicationKey, list<i64>>(items: [key: items])
+        key.number = 2
+        key.label = "second"
+        push(items, 2)
+        let second_map: map<PublicationKey, list<i64>> = map<PublicationKey, list<i64>>(items: [key: items])
+        key.label = "changed"
+        assert eval(complete_key_set, [first_set, _, set<PublicationKey>(items: []), first_set]) == [
+            set<PublicationKey>(items: [PublicationKey(number: 1, label: "first")]), _, set<PublicationKey>(items: []), first_set
+        ]
+        assert eval(complete_key_map, [first_map, second_map, _, map<PublicationKey, list<i64>>(items: [])]) == [
+            map<PublicationKey, list<i64>>(items: [PublicationKey(number: 1, label: "first"): [1]]),
+            map<PublicationKey, list<i64>>(items: [PublicationKey(number: 2, label: "second"): [1, 2]]), _, map<PublicationKey, list<i64>>(items: [])
+        ]
+    }
+}

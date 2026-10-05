@@ -1,6 +1,6 @@
 //! Check sparse ordinary delta formation without evaluating payload expressions.
+use hgl_composite_keys::{Key, key};
 use hgl_rust_ir::{DeltaEntry, Kind, Value};
-use hgl_scalar_keys::{Key, key};
 use hgl_source::{Expr, Literal, Ty};
 use std::collections::BTreeSet;
 
@@ -11,7 +11,7 @@ pub enum Part<'a> {
     Added(Value),
     /// Constant set member or map key removal.
     Removed(Value),
-    /// Exact scalar map key and unevaluated child payload.
+    /// Exact complete map key and unevaluated child payload.
     Keyed(Value, Ty, &'a Expr),
     /// Field/position, exact derived child type and unevaluated payload.
     Child(i64, Ty, &'a Expr),
@@ -20,7 +20,7 @@ pub enum Part<'a> {
 pub fn constructor<'a>(
     origin: &Ty,
     args: &'a [(Option<String>, Expr)],
-    mut fixed: impl FnMut(&Expr) -> Result<(Value, Option<Literal>), String>,
+    mut fixed: impl FnMut(&Expr, &Ty) -> Result<(Value, Option<Value>), String>,
 ) -> Result<Vec<Part<'a>>, String> {
     structural_origin(origin)?;
     let mut names = BTreeSet::new();
@@ -36,7 +36,7 @@ pub fn constructor<'a>(
         }
         match origin {
             Ty::Set(member) if matches!(name, "added" | "removed") => {
-                for value in members(expr, &mut fixed)? {
+                for value in members(expr, member, &mut fixed)? {
                     let keys = if name == "added" {
                         &mut added
                     } else {
@@ -51,7 +51,7 @@ pub fn constructor<'a>(
                 }
             }
             Ty::Map(member, _) if name == "remove" => {
-                for value in members(expr, &mut fixed)? {
+                for value in members(expr, member, &mut fixed)? {
                     remember(&value, member, &mut removed, "map key")?;
                     parts.push(Part::Removed(value.0));
                 }
@@ -104,7 +104,7 @@ pub fn constructor<'a>(
     Ok(parts)
 }
 fn remember(
-    value: &(Value, Option<Literal>),
+    value: &(Value, Option<Value>),
     expected: &Ty,
     keys: &mut BTreeSet<Key>,
     what: &str,
@@ -130,20 +130,26 @@ fn disjoint(added: &BTreeSet<Key>, removed: &BTreeSet<Key>) -> Result<(), String
 }
 fn members(
     expr: &Expr,
-    fixed: &mut impl FnMut(&Expr) -> Result<(Value, Option<Literal>), String>,
-) -> Result<Vec<(Value, Option<Literal>)>, String> {
+    member: &Ty,
+    fixed: &mut impl FnMut(&Expr, &Ty) -> Result<(Value, Option<Value>), String>,
+) -> Result<Vec<(Value, Option<Value>)>, String> {
     let Expr::Sequence(values) = expr else {
         return Err("delta membership/removal requires a constant literal list".into());
     };
     values
         .iter()
-        .map(|value| fixed(value.as_ref().ok_or("delta member cannot be absent")?))
+        .map(|value| {
+            fixed(
+                value.as_ref().ok_or("delta member cannot be absent")?,
+                member,
+            )
+        })
         .collect()
 }
 fn sparse<'a>(
     origin: &Ty,
     expr: &'a Expr,
-    fixed: &mut impl FnMut(&Expr) -> Result<(Value, Option<Literal>), String>,
+    fixed: &mut impl FnMut(&Expr, &Ty) -> Result<(Value, Option<Value>), String>,
     supplied: &mut BTreeSet<Key>,
     parts: &mut Vec<Part<'a>>,
 ) -> Result<(), String> {
@@ -154,19 +160,31 @@ fn sparse<'a>(
         return Err("delta child entries require sparse key:payload syntax".into());
     };
     for (position, payload) in entries {
-        let position = fixed(position)?;
+        let expected = if let Ty::Map(member, _) = origin {
+            member.as_ref()
+        } else {
+            &Ty::I64
+        };
+        let position = fixed(position, expected)?;
         if let Ty::Map(member, child) = origin {
             remember(&position, member, supplied, "map key")?;
             parts.push(Part::Keyed(position.0, child.clone().delta()?, payload));
             continue;
         }
-        let (_, Some(Literal::Int(index))) = position else {
+        let (
+            _,
+            Some(Value {
+                kind: Kind::Literal(Literal::Int(index)),
+                ..
+            }),
+        ) = position
+        else {
             return Err("delta index requires constant i64".into());
         };
         remember(
             &(
                 Value::new(Ty::I64, Kind::Literal(Literal::Int(index))),
-                Some(Literal::Int(index)),
+                Some(Value::new(Ty::I64, Kind::Literal(Literal::Int(index)))),
             ),
             &Ty::I64,
             supplied,
@@ -210,7 +228,7 @@ fn sparse<'a>(
     }
     Ok(())
 }
-/// Check payloads and retain every scalar key recipe in its written position.
+/// Check payloads and retain every complete key recipe in its written position.
 pub fn values(
     parts: Vec<Part<'_>>,
     mut check: impl FnMut(&Ty, &Expr) -> Result<Value, String>,
@@ -236,9 +254,6 @@ pub fn materialized(parts: &[DeltaEntry]) -> Result<(), String> {
             DeltaEntry::Add(value) | DeltaEntry::Keyed(value, _) => (value, &mut added),
             DeltaEntry::Remove(value) => (value, &mut removed),
             DeltaEntry::Child(..) => continue,
-        };
-        let Kind::Literal(value) = &value.kind else {
-            return Err("delta key requires a materialized constant scalar".into());
         };
         if !keys.insert(key(value)?) {
             return Err("duplicate delta key/member".into());

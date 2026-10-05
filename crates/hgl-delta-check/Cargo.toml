@@ -10,5 +10,5 @@ line-budget = 350
 workspace = true
 [dependencies]
 hgl-source = { path = "../hgl-source" }
-hgl-scalar-keys = { path = "../hgl-scalar-keys" }
+hgl-composite-keys = { path = "../hgl-composite-keys" }
 hgl-rust-ir = { path = "../hgl-rust-ir" }

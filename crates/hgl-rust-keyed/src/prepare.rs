@@ -55,7 +55,7 @@ fn collect(value: &Value, keys: &mut Vec<Value>, origins: &StaticValues) {
                 match part {
                     DeltaEntry::Add(k) | DeltaEntry::Remove(k) | DeltaEntry::Keyed(k, _) => {
                         if let Ok((_, Some(key))) = origins.key(k.clone()) {
-                            keys.push(Value::new(key.ty(), Kind::Literal(key)));
+                            keys.push(key);
                         }
                     }
                     DeltaEntry::Child(..) => {}

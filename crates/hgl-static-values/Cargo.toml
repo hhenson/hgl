@@ -14,3 +14,4 @@ hgl-library = { path = "../hgl-library" }
 hgl-source = { path = "../hgl-source" }
 hgl-value-eval = { path = "../hgl-value-eval" }
 hgl-value-constant = { path = "../hgl-value-constant" }
+hgl-composite-keys = { path = "../hgl-composite-keys" }

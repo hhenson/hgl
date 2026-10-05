@@ -136,6 +136,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "hgl-composite-keys"
+version = "0.0.0"
+dependencies = [
+ "hgl-rust-ir",
+ "hgl-scalar-keys",
+ "hgl-source",
+]
+
+[[package]]
 name = "hgl-deadlines"
 version = "0.0.0"
 dependencies = [
@@ -146,8 +155,8 @@ dependencies = [
 name = "hgl-delta-check"
 version = "0.0.0"
 dependencies = [
+ "hgl-composite-keys",
  "hgl-rust-ir",
- "hgl-scalar-keys",
  "hgl-source",
 ]
 
@@ -196,10 +205,10 @@ dependencies = [
 name = "hgl-eval-data"
 version = "0.0.0"
 dependencies = [
+ "hgl-composite-keys",
  "hgl-delta-check",
  "hgl-library",
  "hgl-rust-ir",
- "hgl-scalar-keys",
  "hgl-source",
  "hgl-value-eval",
 ]
@@ -837,6 +846,7 @@ dependencies = [
 name = "hgl-static-values"
 version = "0.0.0"
 dependencies = [
+ "hgl-composite-keys",
  "hgl-library",
  "hgl-rust-ir",
  "hgl-source",

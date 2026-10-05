@@ -1679,8 +1679,8 @@ impl Checker {
         if expected.is_some_and(|expected| *expected != ty) {
             return Err("delta originating shape mismatch".into());
         }
-        let parts = hgl_delta_check::constructor(&origin, args, |expr| {
-            let value = self.expression(module, expr, env, false)?;
+        let parts = hgl_delta_check::constructor(&origin, args, |expr, ty| {
+            let value = self.expected_expression(module, expr, env, false, Some(ty))?;
             self.static_values.key(value)
         })?;
         let entries = hgl_delta_check::values(parts, |ty, expr| {

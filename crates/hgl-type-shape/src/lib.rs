@@ -256,13 +256,13 @@ impl Ty {
             | Self::ZonedDateTime
             | Self::Duration => true,
             Self::Atomic(payload) => payload.atomic_payload(),
-            Self::Set(member) => member.scalar(),
+            Self::Set(member) => member.collection_key(),
             Self::List(child, Some(_)) => child.publication(),
             Self::Tuple(children) => children.iter().all(Self::publication),
             Self::Struct(_, fields, optional) => {
                 optional.is_empty() && fields.iter().all(|(_, child)| child.publication())
             }
-            Self::Map(key, child) => key.scalar() && child.publication(),
+            Self::Map(key, child) => key.collection_key() && child.publication(),
             Self::Family(_)
             | Self::Recursive(_)
             | Self::List(_, None)
@@ -300,17 +300,23 @@ impl Ty {
     }
     /// Whether an ordinary value belongs to the finite complete-payload profile.
     pub fn atomic_payload(&self) -> bool {
-        if matches!(self, Self::Recursive(_) | Self::Family(_)) {
-            return true;
-        }
         if let Self::List(child, _) = self {
-            return child.atomic_payload();
+            child.atomic_payload()
+        } else {
+            matches!(self, Self::Recursive(_) | Self::Family(_))
+                || self.components(Self::atomic_payload)
         }
+    }
+    /// Exact finite complete keys exclude recursive, family and collection components.
+    pub fn collection_key(&self) -> bool {
+        self.components(Self::collection_key)
+    }
+    fn components(&self, check: fn(&Self) -> bool) -> bool {
         if let Self::Tuple(children) = self {
-            return children.iter().all(Self::atomic_payload);
+            return children.iter().all(check);
         }
         if let Self::Struct(_, fields, _) = self {
-            return fields.iter().all(|(_, ty)| ty.atomic_payload());
+            return fields.iter().all(|(_, ty)| check(ty));
         }
         if let Self::Set(key) = self {
             return key.scalar();

@@ -5,11 +5,11 @@ origin shape. Dependencies: hgl-source, hgl-rust-ir and hgl-scalar-keys; budget 
 authority: spec443b92c scalar-collection-keys, ordinary-delta-types and contextual-collection-deltas.
 
 Public surface: `Part::{Added,Removed,Keyed,Child}` and `constructor(origin,args,fixed)`.
-Added/Removed hold retained checked scalar Values; Keyed holds an exact
+Added/Removed hold retained checked complete Values; Keyed holds an exact
 checked map key, child delta type and borrowed payload. Child retains only
 fixed i64 field/position indices, child delta type and borrowed payload AST.
 The returned parts preserve supplied argument and sparse-entry order. The
-callback returns (Value, Option<Literal>) for each constant expression: retained
+callback returns (Value, Option<Value>) for each constant expression: retained
 IR plus any known identity, without admitting runtime positions. Immutable cold
 aliases retain their Local IR; metadata must not replay an initializer.
 Before returning, validate the whole constructor: exact argument names,
@@ -25,8 +25,14 @@ source-order payload tests, independent of runtime publication.
 
 values(parts, check_payload) checks each child in written order and constructs
 DeltaEntry IR, retaining contextual key recipes without provider lookup.
-materialized(&[DeltaEntry]) checks resolved scalar identities for duplicate and
+materialized(&[DeltaEntry]) checks resolved complete identities for duplicate and
 overlap failure during cold evaluation, before publication. Known values use
-hgl-scalar-keys equality during checking; recipe text never establishes equality.
+hgl-composite-keys equality during checking; recipe text never establishes equality.
 Every collection member/key requires exact K with no numeric widening. NaN is
 explicitly unsupported. Fixed list/tuple indices remain bounded constant i64.
+
+The constructor callback receives (&Expr, &Ty) so ordinary tuple/struct key
+construction has exact contextual K. Known complete keys include nominal identity,
+field positions and optional presence; partial provider recipes defer identity.
+Only structural child positions require a known Literal::Int. Compound key fields
+are never treated as sparse delta children.

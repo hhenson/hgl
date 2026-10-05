@@ -34,3 +34,7 @@ that type, storage field and constructor length to cold capacity accumulation.
 emit serializes a known scalar constant. Already constructed node configuration
 keys are read cold, without provider or initializer replay. Payload expressions
 are traversed only for their checked shape/key metadata and never evaluated.
+
+Known key preparation consumes retained complete Values from StaticValues rather
+than reconstructing scalar literals. This preserves the full tuple/struct key
+schema and written-order contextual recipes for the separate cold materializer.

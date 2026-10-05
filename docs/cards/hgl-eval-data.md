@@ -66,3 +66,8 @@ TestStep::BindEval(name,Evaluation) parses inferred immutable eval bindings;
 unsupported annotated/mutable captures remain explicit errors. TestStep::If
 contains recursively parsed test step blocks, including assertions and evals.
 Ordinary statement parsing remains unchanged outside test-block dispatch.
+
+Fresh-trace membership uses hgl-composite-keys complete identities, including
+optional presence and exact nominal type. An independently equal key addresses
+the same child; redundant additions stay invalid. Parent removal resets its
+child trace state, and a later exact-key insertion begins fresh.

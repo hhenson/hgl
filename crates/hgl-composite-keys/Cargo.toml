@@ -1,17 +1,14 @@
 [package]
-name = "hgl-eval-data"
+name = "hgl-composite-keys"
 version = "0.0.0"
 edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
 [package.metadata.hgl]
-line-budget = 350
+line-budget = 150
 [lints]
 workspace = true
 [dependencies]
-hgl-value-eval = { path = "../hgl-value-eval" }
 hgl-source = { path = "../hgl-source" }
 hgl-rust-ir = { path = "../hgl-rust-ir" }
-hgl-library = { path = "../hgl-library" }
-hgl-composite-keys = { path = "../hgl-composite-keys" }
-hgl-delta-check = { path = "../hgl-delta-check" }
+hgl-scalar-keys = { path = "../hgl-scalar-keys" }

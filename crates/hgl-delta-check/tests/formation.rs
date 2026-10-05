@@ -1,10 +1,10 @@
 //! Sparse ordinary formation validates the whole schema and preserves payload order.
 use hgl_delta_check::{Part, constructor};
 use hgl_rust_ir::{Kind, Value};
-fn fixed(value: Literal) -> (Value, Option<Literal>) {
+fn fixed(value: Literal) -> (Value, Option<Value>) {
     (
         Value::new(value.ty(), Kind::Literal(value.clone())),
-        Some(value),
+        Some(Value::new(value.ty(), Kind::Literal(value))),
     )
 }
 use hgl_source::{Cursor, Expr, Literal, Ty, lex};
@@ -31,7 +31,7 @@ fn all_collection_forms_and_written_payload_order() {
         "delta<list<i64,0>>(items:[])",
     ] {
         let (ty, args) = parsed(source).unwrap();
-        let parts = constructor(&ty, &args, |expr| {
+        let parts = constructor(&ty, &args, |expr, _| {
             expr.fixed().map(fixed).ok_or("constant required".into())
         })
         .unwrap();
@@ -80,7 +80,7 @@ fn rejects_malformed_data_before_any_payload_is_evaluated() {
         ("delta<i64>()", "structural"),
     ] {
         let (ty, args) = parsed(source).unwrap();
-        let actual = constructor(&ty, &args, |expr| {
+        let actual = constructor(&ty, &args, |expr, _| {
             expr.fixed().map(fixed).ok_or("constant required".into())
         })
         .unwrap_err();
@@ -98,7 +98,7 @@ fn scalar_keys_are_exact_and_signed_zero_collisions_fail_during_checking() {
     ] {
         let (ty, args) = parsed(source).unwrap();
         assert!(
-            constructor(&ty, &args, |expr| expr
+            constructor(&ty, &args, |expr, _| expr
                 .fixed()
                 .map(fixed)
                 .ok_or("constant required".into()))
@@ -119,7 +119,7 @@ fn scalar_keys_are_exact_and_signed_zero_collisions_fail_during_checking() {
         ("delta<list<i64,2>>(items:[0.0:1])", "constant i64"),
     ] {
         let (ty, args) = parsed(source).unwrap();
-        let error = constructor(&ty, &args, |expr| {
+        let error = constructor(&ty, &args, |expr, _| {
             expr.fixed().map(fixed).ok_or("constant required".into())
         })
         .unwrap_err();
@@ -131,7 +131,7 @@ fn scalar_keys_are_exact_and_signed_zero_collisions_fail_during_checking() {
 fn provider_dependent_identities_are_retained_without_guessing_duplicate_names() {
     let (ty, args) =
         parsed("delta<set<timezone>>(added:[@[UTC],@[UTC]],removed:[@[UTC]])").unwrap();
-    let parts = constructor(&ty, &args, |expr| {
+    let parts = constructor(&ty, &args, |expr, _| {
         let Expr::TemporalLiteral(recipe) = expr else {
             return Err("expected contextual recipe".into());
         };

@@ -45,34 +45,47 @@ impl StaticValues {
     pub fn bind(&mut self, id: usize, value: &Value, mutable: bool) {
         let origin = self.key_origin(value).clone();
         self.cold_locals.remove(&id);
-        if !mutable
-            && (matches!(origin.kind, Kind::TemporalLiteral(_))
-                || hgl_value_constant::context_free(&origin))
-        {
+        if !mutable && self.eligible(&origin) {
             self.cold_locals.insert(id, origin);
         }
     }
-    /// Prove key eligibility without replacing a retained local or resolving a provider.
-    pub fn key(&self, value: Value) -> Result<(Value, Option<hgl_source::Literal>), String> {
-        let origin = self.key_origin(&value);
+    fn eligible(&self, value: &Value) -> bool {
+        let origin = self.key_origin(value);
+        if let Kind::Construct(fields) = &origin.kind {
+            return fields.iter().all(|(_, child)| self.eligible(child));
+        }
+        matches!(origin.kind, Kind::TemporalLiteral(_)) || hgl_value_constant::context_free(origin)
+    }
+    fn constant(&self, value: &Value) -> Result<Value, String> {
+        let origin = self.key_origin(value);
+        if let Kind::Construct(fields) = &origin.kind {
+            let fields = fields
+                .iter()
+                .map(|(i, child)| Ok((*i, self.constant(child)?)))
+                .collect::<Result<Vec<_>, String>>()?;
+            return Ok(Value::new(origin.ty.clone(), Kind::Construct(fields)));
+        }
         if matches!(origin.kind, Kind::TemporalLiteral(_)) {
-            return Ok((value, None));
+            return Ok(origin.clone());
         }
         if !hgl_value_constant::context_free(origin) {
-            return Err("delta position requires a constant scalar".into());
+            return Err("delta position requires a constant value".into());
         }
-        let known = hgl_value_eval::Evaluator::default()
+        hgl_value_eval::Evaluator::default()
             .value(origin)
-            .map_err(|e| format!("delta position requires a constant: {e}"))?;
-        let Kind::Literal(literal) = known.kind else {
-            return Err("delta position requires a constant scalar".into());
-        };
-        let retained = if matches!(value.kind, Kind::Local(_)) {
-            value
-        } else {
-            Value::new(value.ty, Kind::Literal(literal.clone()))
-        };
-        Ok((retained, Some(literal)))
+            .map_err(|e| format!("delta position requires a constant: {e}"))
+    }
+    /// Prove key eligibility while retaining local operands and contextual recipes.
+    pub fn key(&self, value: Value) -> Result<(Value, Option<Value>), String> {
+        let known = self.constant(&value)?;
+        let identity = hgl_composite_keys::known(&known)?;
+        let retained =
+            if identity.is_none() || matches!(value.kind, Kind::Local(_) | Kind::Construct(_)) {
+                value
+            } else {
+                known.clone()
+            };
+        Ok((retained, identity.map(|_| known)))
     }
     /// Map checked constant parameter origins into the source-order local slots.
     pub fn arguments(

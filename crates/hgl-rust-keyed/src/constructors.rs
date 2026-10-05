@@ -57,10 +57,7 @@ fn key(
     else {
         return None;
     };
-    Some(format!(
-        "&({})",
-        emit(&Value::new(literal.ty(), Kind::Literal(literal)))
-    ))
+    Some(format!("&({})", emit(&literal)))
 }
 fn paths(
     value: &Value,
