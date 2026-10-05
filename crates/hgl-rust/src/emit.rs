@@ -320,7 +320,9 @@ pub fn emit_test_body(plan: &Plan, expected: Option<&[Option<Value>]>) -> String
         return out.concat();
     }
     out.push("let mut store=hgl_store::Store::new();\nstore.global_state().provision();prepare_static(&mut store.keys)?;\nlet capacity=prepare_capacity(&[],&mut store,0)?;let mut built=hgl_describe::instantiate_complete(&graph,&registry,&mut store).map_err(|e|format!(\"{e:?}\"))?;\n".into());
-    out.push("prepare_outputs(&capacity,&mut store,&built).map_err(|e|e.message)?;\n".into());
+    out.push(
+        "prepare_outputs(&capacity,&mut store,&graph,&built).map_err(|e|e.message)?;\n".into(),
+    );
     if let Some((key, ty)) = &plan.recording {
         out.push(format!(
             "let recording=store.global_state().bind::<{}>({key:?}).map_err(|e|format!(\"{{e:?}}\"))?;\n",
@@ -525,7 +527,9 @@ pub fn emit_prepared_test_body(plan: &Plan) -> String {
         out.push("register(&mut registry).map_err(|e|format!(\"{e:?}\"))?;\n".into());
     }
     out.push("let graph=main(&registry).map_err(|e|format!(\"{e:?}\"))?;\nlet mut store=hgl_store::Store::new();store.global_state().provision();prepare_static(&mut store.keys)?;prepare_values(&mut store.keys,&prepared.arguments)?;\nlet capacity=prepare_capacity(&prepared.arguments,&mut store,prepared.input_length)?;let mut built=hgl_describe::instantiate_complete(&graph,&registry,&mut store).map_err(|e|format!(\"{e:?}\"))?;\n".into());
-    out.push("prepare_outputs(&capacity,&mut store,&built).map_err(|e|e.message)?;\n".into());
+    out.push(
+        "prepare_outputs(&capacity,&mut store,&graph,&built).map_err(|e|e.message)?;\n".into(),
+    );
     if let Some((key, ty)) = &plan.recording {
         out.push(format!("let recording=store.global_state().bind::<{}>({key:?}).map_err(|e|format!(\"{{e:?}}\"))?;\n",global_type(ty)));
     }
@@ -605,12 +609,12 @@ fn capacities(plan: &Plan) -> String {
             );
         }
     }
-    code += "Ok(capacity)}\nfn prepare_outputs(capacity:&FiniteCapacity,store:&mut hgl_store::Store,built:&hgl_describe::BuiltGraph)->hgl_types::NodeResult {";
+    code += "Ok(capacity)}\nfn prepare_outputs(capacity:&FiniteCapacity,store:&mut hgl_store::Store,graph:&hgl_describe::GraphDescription,built:&hgl_describe::BuiltGraph)->hgl_types::NodeResult {";
     for (i, node) in plan.nodes.iter().enumerate() {
         if node.result.publication() {
             code += &capacity.output(
                 &node.result,
-                &format!("built.outputs[{i}].expect(\"checked output\")"),
+                &format!("built.outputs[graph.nodes.iter().position(|node|node.implementation=={:?}).expect(\"checked node\")].expect(\"checked output\")",format!("{}#{i}",node.name)),
             );
         }
     }

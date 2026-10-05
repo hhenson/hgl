@@ -119,7 +119,8 @@ pub fn methods(ty: &Ty, shape: impl Fn(&Ty) -> String) -> String {
     let name = marker(ty);
     let shape_name = shape(ty);
     format!(
-        "impl {name} {{fn apply_slot(output:hgl_store::shapes::Output<{shape_name}>,source:&hgl_store::ValueColumns,slot:hgl_store::ValueSlot<Self>,_ctx:&mut hgl_kernel::Ctx<'_>)->hgl_types::NodeResult {{{}Ok(())}} fn observe_slot(input:hgl_store::shapes::Input<{shape_name}>,observation:hgl_store::Observation<'_>,now:hgl_types::EngineTime,columns:&mut hgl_store::ValueColumns,slot:hgl_store::ValueSlot<Self>)->hgl_types::NodeResult {{{}Ok(())}} fn pass(input:hgl_store::shapes::Input<{shape_name}>,output:hgl_store::shapes::Output<{shape_name}>,_ctx:&mut hgl_kernel::Ctx<'_>)->hgl_types::NodeResult {{{}Ok(())}}}}",
+        "impl {name} {{fn validate_slot(source:&hgl_store::ValueColumns,slot:hgl_store::ValueSlot<Self>)->hgl_types::NodeResult {{{}Ok(())}}fn apply_slot(output:hgl_store::shapes::Output<{shape_name}>,source:&hgl_store::ValueColumns,slot:hgl_store::ValueSlot<Self>,_ctx:&mut hgl_kernel::Ctx<'_>)->hgl_types::NodeResult {{Self::validate_slot(source,slot)?;{}Ok(())}} fn observe_slot(input:hgl_store::shapes::Input<{shape_name}>,observation:hgl_store::Observation<'_>,now:hgl_types::EngineTime,columns:&mut hgl_store::ValueColumns,slot:hgl_store::ValueSlot<Self>)->hgl_types::NodeResult {{{}Ok(())}} fn pass(input:hgl_store::shapes::Input<{shape_name}>,output:hgl_store::shapes::Output<{shape_name}>,_ctx:&mut hgl_kernel::Ctx<'_>)->hgl_types::NodeResult {{{}Ok(())}}}}",
+        validation(ty),
         application(ty),
         observation(ty),
         passing(ty)
@@ -252,4 +253,71 @@ fn passing(ty: &Ty) -> String {
         );
     }
     fields(ty).iter().enumerate().fold(String::new(),|mut code,(i,child)|{append(&mut code,format_args!("{{let source_child=input.field::<{i}>(_ctx.store().bindings());if _ctx.store().bindings().modified(source_child.id(),_ctx.evaluation_time()) {{let child=output.field::<{i}>(_ctx.store().bindings());{}}}}}",pass(child,"source_child","child")));code})
+}
+
+fn validation(ty: &Ty) -> String {
+    let list_len = |i| format!("source.list(slot.fields().{i}.fields()).len()");
+    let (nonempty, children) = if let Ty::Set(_) = ty {
+        (vec![0, 1], Vec::new())
+    } else if let Ty::Map(_, child) = ty {
+        (vec![0, 2], vec![(1, child.as_ref())])
+    } else if let Ty::List(child, _) = ty {
+        (vec![0], vec![(1, child.as_ref())])
+    } else {
+        (
+            (0..fields(ty).len()).collect(),
+            fields(ty).into_iter().enumerate().collect(),
+        )
+    };
+    let condition = nonempty
+        .iter()
+        .map(|i| format!("{}==0", list_len(*i)))
+        .collect::<Vec<_>>()
+        .join(" && ");
+    let mut code = format!(
+        "if {} {{return Err(hgl_types::NodeError::new(\"empty structural delta application is outside the supported profile\"));}}",
+        if condition.is_empty() {
+            "true"
+        } else {
+            &condition
+        }
+    );
+    if matches!(ty, Ty::Map(..) | Ty::List(..)) {
+        append(
+            &mut code,
+            format_args!(
+                "if {}!={} {{return Err(hgl_types::NodeError::new(\"malformed sparse delta\"));}}",
+                list_len(0),
+                list_len(1)
+            ),
+        );
+    }
+    for (i, child) in children {
+        if matches!(ty, Ty::Struct(..) | Ty::Tuple(_)) {
+            append(
+                &mut code,
+                format_args!(
+                    "if {}>1 {{return Err(hgl_types::NodeError::new(\"malformed sparse field\"));}}",
+                    list_len(i)
+                ),
+            );
+        }
+        if structural(child) {
+            append(
+                &mut code,
+                format_args!(
+                    "for index in 0..{} {{{}::validate_slot(source,{})?;}}",
+                    list_len(i),
+                    marker(child),
+                    element(
+                        &delta_type(child),
+                        &format!("slot.fields().{i}"),
+                        "index",
+                        "source"
+                    )
+                ),
+            );
+        }
+    }
+    code
 }
