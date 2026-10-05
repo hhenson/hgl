@@ -30,3 +30,7 @@ Recognized replay loops contribute through their retained configuration lengths;
 other loops remain unproved. This analysis never evaluates conditions, payloads,
 providers, or hooks. Capacity planning adds direct arrivals to the eval horizon
 for recording and duration-window storage before any source runs.
+
+The complete prepared adapter also requires an installation phase. A plan marked
+ordinary_instantiation always retains generic publication: finite source bounds
+alone do not imply that temporal destination slots have been reserved.

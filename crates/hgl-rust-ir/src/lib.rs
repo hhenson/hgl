@@ -198,6 +198,8 @@ pub struct Native {
 /// A closed graph with all source checks and eval wiring complete.
 #[derive(Debug, Default, Clone)]
 pub struct Plan {
+    /// Standalone registration has no finite evaluation preparation phase.
+    pub ordinary_instantiation: bool,
     /// Deterministic wiring operation failure reported during construction.
     pub construction_error: Option<String>,
     /// Nodes in construction order, addressed by index.

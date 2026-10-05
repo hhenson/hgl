@@ -139,3 +139,8 @@ introduced. Prepared allocation evidence applies only to the selected finite pat
 Entry points normalize immutable owning scalar aliases and literal delta operands
 with hgl-rust-direct-deltas before selecting the whole prepared adapter. The
 normalization is idempotent and never executes user code or provider recipes.
+
+The standalone emit entry point marks ordinary_instantiation on its backend clone.
+Its public register/graph-description API leaves instantiation to the caller and
+does not install finite evaluation capacity. Shared eval adapters retain their
+explicit preparation phase and allocation-free proved transport.

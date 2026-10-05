@@ -222,7 +222,9 @@ fn comment(text: &str) -> String {
 }
 /// Emit runtime nodes, selected native signatures and graph construction.
 pub fn emit(plan: &Plan) -> String {
-    emit_inner(plan, true)
+    let mut standalone = plan.clone();
+    standalone.ordinary_instantiation = true;
+    emit_inner(&standalone, true)
 }
 /// Emit a graph using nominal layouts already emitted in its enclosing module.
 pub fn emit_shared(plan: &Plan) -> String {

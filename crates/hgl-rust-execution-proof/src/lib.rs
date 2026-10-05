@@ -68,7 +68,8 @@ pub fn direct_arrivals(plan: &Plan) -> Option<usize> {
 /// Choose finite prepared transport only when membership, owning width and replay count are proved.
 /// Unknown plans retain the existing whole-adapter execution path; no hook is evaluated here.
 pub fn prepared(plan: &Plan) -> bool {
-    owning::finite(plan)
+    !plan.ordinary_instantiation
+        && owning::finite(plan)
         && direct_arrivals(plan).is_some()
         && plan.nodes.iter().all(|node| {
             std::iter::once(&node.start)

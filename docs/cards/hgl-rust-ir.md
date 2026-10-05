@@ -93,3 +93,7 @@ Plan and Native implement Clone for deterministic cold preparation passes. Inter
 Unary("family",operand) is a checked ordinary family widening; its cold canonical
 result is Construct([(member_index, concrete_value)]), retaining the exact concrete
 nominal type. No source cast or temporal projection is introduced.
+
+Plan.ordinary_instantiation marks standalone node registration whose external
+caller uses the ordinary graph instantiator. Such a plan has no generated finite
+capacity installation phase, even when its source schedule is provably finite.

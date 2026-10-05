@@ -57,3 +57,14 @@ fn unknown_generator_loop_keeps_the_generic_adapter() {
     assert_eq!(hgl_rust_execution_proof::direct_arrivals(&plan), None);
     assert!(!hgl_rust_execution_proof::prepared(&plan));
 }
+
+#[test]
+fn proved_schedule_requires_an_installed_preparation_phase() {
+    let plan = Plan {
+        ordinary_instantiation: true,
+        nodes: vec![source(vec![publication(), publication()])],
+        ..Plan::default()
+    };
+    assert_eq!(hgl_rust_execution_proof::direct_arrivals(&plan), Some(2));
+    assert!(!hgl_rust_execution_proof::prepared(&plan));
+}
