@@ -180,7 +180,7 @@ pub struct Node {
     pub handlers: Vec<(Option<Value>, Vec<Statement>)>,
 }
 /// One selected native signature used by the plan.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Native {
     /// Qualified HGL declaration name for emitted documentation.
     pub name: String,
@@ -194,7 +194,7 @@ pub struct Native {
     pub result: Ty,
 }
 /// A closed graph with all source checks and eval wiring complete.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Plan {
     /// Deterministic wiring operation failure reported during construction.
     pub construction_error: Option<String>,

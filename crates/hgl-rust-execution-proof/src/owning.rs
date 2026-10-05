@@ -80,6 +80,7 @@ fn statements(plan: &Plan, body: &[Statement], looping: bool) -> bool {
                 && statements(plan, yes, looping)
                 && statements(plan, no, looping)
         }
+        Statement::Return(source) if hgl_rust_direct_deltas::supported(source) => true,
         Statement::Let(_, source)
         | Statement::Var(_, source)
         | Statement::Borrow(_, source, _)

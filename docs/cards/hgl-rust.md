@@ -132,3 +132,7 @@ Prepared eval transport is selected as one complete path by
 `hgl-rust-execution-proof::prepared(plan)`. Unproved plans retain existing ordinary
 publication and recording behavior; no per-insertion fallback or hook replay is
 introduced. Prepared allocation evidence applies only to the selected finite path.
+
+Entry points normalize immutable owning scalar aliases and literal delta operands
+with hgl-rust-direct-deltas before selecting the whole prepared adapter. The
+normalization is idempotent and never executes user code or provider recipes.

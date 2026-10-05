@@ -1,10 +1,20 @@
 //! The complete generated replay, target and recording path must not allocate in ticks.
 use std::{fmt::Write as _, fs, process::Command, time::SystemTime};
 const SOURCE: &str = r#"module prepared_execution
+fn constructed_map(value:i64)->map<str,i64> {when {return delta<map<str,i64>>(upsert:["retained":value])}}
+test constructed_map {assert eval(constructed_map,value:[1,2]) == [delta<map<str,i64>>(upsert:["retained":1]),delta<map<str,i64>>(upsert:["retained":2])]}
 fn retained_key(value:i64)->map<str,i64> {when {let key="retained"
 let alias=key
 return delta<map<str,i64>>(upsert:[alias:value])}}
 test retained_key {assert eval(retained_key,value:[1,2]) == [delta<map<str,i64>>(upsert:["retained":1]),delta<map<str,i64>>(upsert:["retained":2])]}
+fn nested_constructor(value:str)->map<str,map<str,str>> {when {let outer="outer"
+let inner="inner"
+return delta<map<str,map<str,str>>>(upsert:[outer:delta<map<str,str>>(upsert:[inner:value])])}}
+test nested_constructor {assert eval(nested_constructor,value:["first","longer",_,"first"]) == [delta<map<str,map<str,str>>>(upsert:["outer":delta<map<str,str>>(upsert:["inner":"first"])]),delta<map<str,map<str,str>>>(upsert:["outer":delta<map<str,str>>(upsert:["inner":"longer"])]),_,delta<map<str,map<str,str>>>(upsert:["outer":delta<map<str,str>>(upsert:["inner":"first"])])]}
+fn alias_reinsert(value:i64)->map<str,i64> {when {let key="stable"
+let alias=key
+if value>0 {return delta<map<str,i64>>(upsert:[alias:value+1])} else {return delta<map<str,i64>>(remove:[alias])}}}
+test alias_reinsert {assert eval(alias_reinsert,value:[1,0,2]) == [delta<map<str,i64>>(upsert:["stable":2]),delta<map<str,i64>>(remove:["stable"]),delta<map<str,i64>>(upsert:["stable":3])]}
 native const fn configuration_marker(value:i64)->i64 throws
 native const fn configuration_marker(value:i64)->i64 throws {}
 struct ConfigRow {time:datetime
@@ -148,12 +158,6 @@ fn execute(
             .args(profile)
             .current_dir(&dir)
             .output()?;
-        for line in String::from_utf8_lossy(&output.stdout)
-            .lines()
-            .filter(|line| line.starts_with("prepared "))
-        {
-            println!("{line}");
-        }
         assert!(
             output.status.success(),
             "{}\n{}\n{}",
@@ -291,8 +295,6 @@ fn branch_source() -> String {
 }
 
 const COMPATIBILITY: &str = r#"module existing_execution
-fn constructed_map(value:i64)->map<str,i64> {when {return delta<map<str,i64>>(upsert:["retained":value])}}
-test constructed_map {assert eval(constructed_map,value:[1,2]) == [delta<map<str,i64>>(upsert:["retained":1]),delta<map<str,i64>>(upsert:["retained":2])]}
 fn input_limit(value:i64)->set<i64> {inject out
 when {var i=0
 while i<value {upsert(out,i)
@@ -319,7 +321,7 @@ i+=1}
 return text}}
 test text_loop {assert eval(text_loop,value:["a"]) == ["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]}
 "#;
-const COMPATIBILITY_RUNTIME: &str = r#"
+const COMPATIBILITY_RUNTIME: &str = r"
 struct Provider;
 mod native {
 static CALLS:std::sync::atomic::AtomicUsize=std::sync::atomic::AtomicUsize::new(0);
@@ -328,4 +330,4 @@ pub fn limit_i64(value:i64)->hgl_types::NodeResult<i64> {CALLS.fetch_add(1,std::
 pub fn begin_i64(_:i64)->hgl_types::NodeResult {assert_eq!(STARTS.fetch_add(1,std::sync::atomic::Ordering::SeqCst),0);Ok(())}
 pub fn end_i64(_:i64)->hgl_types::NodeResult {assert_eq!(CALLS.load(std::sync::atomic::Ordering::SeqCst),1);assert_eq!(STARTS.load(std::sync::atomic::Ordering::SeqCst),1);Ok(())}
 }
-"#;
+";

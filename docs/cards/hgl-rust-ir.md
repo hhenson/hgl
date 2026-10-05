@@ -84,3 +84,6 @@ rewrites, retaining typed keys alongside their payloads.
 
 `Node: Clone` supports cold suite-level layout collection; node state remains
 independent in every generated graph instance.
+
+Plan and Native are cloneable for deterministic backend normalization; a cloned
+plan contains checked expressions and signatures, never runtime provider state.

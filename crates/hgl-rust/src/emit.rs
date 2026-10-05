@@ -245,6 +245,8 @@ pub fn shared_layouts(plans: &[Plan]) -> String {
     global_markers(&types) + &hgl_rust_deltas::markers(&types)
 }
 fn emit_inner(plan: &Plan, layouts: bool) -> String {
+    let normalized = hgl_rust_direct_deltas::prepare(plan);
+    let plan = &normalized;
     let mut out = vec![String::from("// Generated from checked HGL source.\n")];
     for doc in &plan.docs {
         for line in doc.lines() {
@@ -306,6 +308,8 @@ fn emit_inner(plan: &Plan, layouts: bool) -> String {
 
 /// Emit execution and observation of one checked eval plan.
 pub fn emit_test_body(plan: &Plan, expected: Option<&[Option<Value>]>) -> String {
+    let normalized = hgl_rust_direct_deltas::prepare(plan);
+    let plan = &normalized;
     let mut out = vec![hgl_rust_keyed::preparation(plan), capacities(plan)];
     register_prepared(plan, &mut out);
     if !plan.natives.is_empty() {
@@ -552,6 +556,8 @@ fn register_prepared(plan: &Plan, out: &mut Vec<String>) {
 
 /// Emit fresh graph execution from already constructed owning arguments.
 pub fn emit_prepared_test_body(plan: &Plan) -> String {
+    let normalized = hgl_rust_direct_deltas::prepare(plan);
+    let plan = &normalized;
     let legacy = emit_test_body(plan, None);
     let adapters = legacy.split("pub fn test()").next().unwrap_or_default();
     let mut out=vec![adapters.into(),"pub fn run(prepared:hgl_harness_ir::PreparedEval)->Result<hgl_harness_ir::CapturedEval,String> {\nlet mut registry=hgl_describe::Registry::new();\n".into()];

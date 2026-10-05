@@ -17,3 +17,8 @@ mid-publication. Only proved plans prepare destinations, forward through prepare
 slots and append to prepared recording storage. Unproved plans preserve the
 previous dynamic execution and its existing allocation behavior; they carry no
 claim of allocation-free ticks.
+
+At a return boundary, hgl-rust-direct-deltas::supported certifies the exact sparse
+constructor lowering. The same expression at an arbitrary owning local boundary
+continues to require its ordinary storage proof; constructor support does not
+broaden all Delta expressions automatically.

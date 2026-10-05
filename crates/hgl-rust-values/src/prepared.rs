@@ -1,6 +1,9 @@
 use super::{Kind, Plan, Value, global_type, value};
 use hgl_source::Ty;
-pub(super) fn forward(value: &Value) -> Option<String> {
+pub(super) fn forward(plan: &Plan, value: &Value) -> Option<String> {
+    if let Some(code) = hgl_rust_direct_deltas::publish(value, |v| super::value(plan, v)) {
+        return Some(code);
+    }
     if let Some(code) = hgl_rust_observed::text(value) {
         return Some(code);
     }
