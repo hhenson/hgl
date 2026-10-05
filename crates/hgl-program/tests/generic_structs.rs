@@ -205,13 +205,30 @@ fn aliases_preserve_origin_and_different_origins_remain_nominal() {
 }
 
 #[test]
+fn optional_generic_fields_preserve_their_concrete_specialization() {
+    let types = "struct Box<T> { value:T =null }";
+    for body in [
+        "let item:Box<i64> =Box<i64>(value:1)",
+        "let item:Box<i64> =Box<i64>()",
+        "let item:Box<i64> =Box(value:null)",
+    ] {
+        let result = compile(&[("optional.hgl".into(), source(types, body))], "main");
+        assert!(result.is_ok(), "{body}: {result:?}");
+    }
+    let error = compile(
+        &[(
+            "optional.hgl".into(),
+            source(types, "let item:Box<i64> =Box(value:true)"),
+        )],
+        "main",
+    )
+    .expect_err("presence does not erase the field type");
+    assert!(error.contains("conflicting struct inference"), "{error}");
+}
+
+#[test]
 fn unsupported_generic_field_forms_are_explicitly_rejected() {
     for (types, body, expected) in [
-        (
-            "struct Box<T> { value:T =null }",
-            "let item=Box<i64>(value:1)",
-            "optionality",
-        ),
         (
             "struct Base<T> { value:T }\nstruct Child<T>:Base<T> { extra:i64 }",
             "let item=Child<i64>(value:1,extra:2)",
