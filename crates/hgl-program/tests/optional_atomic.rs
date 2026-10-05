@@ -21,7 +21,7 @@ fn sources(source: &str) -> Vec<(String, String)> {
 #[test]
 fn all_shared_optional_cases_typecheck() {
     let result = compile_tests(&sources(include_str!(
-        "fixtures/optional_atomic_values.hgl"
+        "../../../external/hgraph_std/hgl/hgraph/tests/optional_atomic_values.hgl"
     )));
     assert!(result.is_ok(), "{result:?}");
 }
@@ -61,7 +61,7 @@ fn run_shared(measure: bool) -> Result<(), Box<dyn std::error::Error>> {
     ));
     fs::create_dir_all(dir.join("src"))?;
     let suite = compile_tests(&sources(include_str!(
-        "fixtures/optional_atomic_values.hgl"
+        "../../../external/hgraph_std/hgl/hgraph/tests/optional_atomic_values.hgl"
     )))?;
     let mut code = hgl_program::emit_tests(&suite);
     if measure {

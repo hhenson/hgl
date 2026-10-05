@@ -20,13 +20,18 @@ fn sources(source: &str) -> Vec<(String, String)> {
 }
 #[test]
 fn shared_rolling_cases_typecheck() {
-    let result = compile_tests(&sources(include_str!("fixtures/rolling_atomic_values.hgl")));
+    let result = compile_tests(&sources(include_str!(
+        "../../../external/hgraph_std/hgl/hgraph/tests/rolling_values.hgl"
+    )));
     assert!(result.is_ok(), "{result:?}");
 }
 #[test]
 fn shared_rolling_cases_execute_without_tick_allocations() -> Result<(), Box<dyn std::error::Error>>
 {
-    run_shared(include_str!("fixtures/rolling_atomic_values.hgl"), true)
+    run_shared(
+        include_str!("../../../external/hgraph_std/hgl/hgraph/tests/rolling_values.hgl"),
+        true,
+    )
 }
 fn run_shared(source: &str, measure: bool) -> Result<(), Box<dyn std::error::Error>> {
     use std::{fmt::Write as _, fs, process::Command, time::SystemTime};

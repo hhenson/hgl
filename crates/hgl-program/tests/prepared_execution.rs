@@ -102,7 +102,7 @@ fn growing_list_publications_use_prepared_storage() -> Result<(), Box<dyn std::e
     execute(
         format!(
             "{}\n{}",
-            include_str!("fixtures/growing_list_values.hgl"),
+            include_str!("../../../external/hgraph_std/hgl/hgraph/tests/growing_list_values.hgl"),
             GROWING_CONSTRUCTORS
         ),
         RUNTIME,

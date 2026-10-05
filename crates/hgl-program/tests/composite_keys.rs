@@ -21,7 +21,8 @@ fn source(body: &str) -> Vec<(String, String)> {
 }
 #[test]
 fn all_shared_composite_cases_typecheck() -> Result<(), String> {
-    let shared = include_str!("fixtures/composite_key_values.hgl");
+    let shared =
+        include_str!("../../../external/hgraph_std/hgl/hgraph/tests/composite_key_values.hgl");
     let sources = vec![
         ("composite.hgl".into(), shared.into()),
         (

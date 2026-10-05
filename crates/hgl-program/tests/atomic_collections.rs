@@ -205,7 +205,8 @@ fn manifest(
 
 #[test]
 fn shared_complete_containers_retain_composite_keys() -> Result<(), Box<dyn std::error::Error>> {
-    let shared = include_str!("fixtures/composite_key_values.hgl");
+    let shared =
+        include_str!("../../../external/hgraph_std/hgl/hgraph/tests/composite_key_values.hgl");
     let header = shared
         .split("    test ")
         .next()
@@ -302,7 +303,10 @@ test equality {assert eval(compare,[1])==[true]}
 #[test]
 fn shared_sparse_composite_keys_execute_without_tick_allocations()
 -> Result<(), Box<dyn std::error::Error>> {
-    run_shared(include_str!("fixtures/composite_key_values.hgl"), true)
+    run_shared(
+        include_str!("../../../external/hgraph_std/hgl/hgraph/tests/composite_key_values.hgl"),
+        true,
+    )
 }
 #[test]
 fn composite_domains_are_shared_across_opposite_plan_and_key_orders()
