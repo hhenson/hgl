@@ -1,5 +1,6 @@
 use hgl_rust_ir::{Kind, Plan, Statement, Value};
-pub(super) fn collect(plan: &Plan) -> Vec<&Value> {
+/// Visit checked closed hook data without evaluating dynamic expressions.
+pub fn collect(plan: &Plan) -> Vec<&Value> {
     let mut result = Vec::new();
     for node in &plan.nodes {
         statements(&node.start, &mut result);

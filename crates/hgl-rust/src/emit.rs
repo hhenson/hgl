@@ -106,17 +106,13 @@ fn node_build(
     out: &mut Vec<String>,
 ) {
     node_type(n, index, out);
-    if node_prepared(n) {
-        out.push(format!("fn build(_: &mut hgl_describe::Ports<'_>)->Result<Self,hgl_describe::BuildError> {{Err(hgl_describe::BuildError::InvalidNodeType {{node:{:?},what:\"prepared configuration required\".into()}})}} }}\nimpl Node{index} {{\nfn build_prepared(ports: &mut hgl_describe::Ports<'_>,{}) -> Result<Self,hgl_describe::BuildError> {{\n",n.name,n.configuration.iter().enumerate().map(|(id,v)|format!("configuration{id}:{}",owned_type(&v.ty))).collect::<Vec<_>>().join(",")));
-    } else {
-        out.push("fn build(ports: &mut hgl_describe::Ports<'_>) -> Result<Self,hgl_describe::BuildError> {\n".into());
-    }
+    build_entry(plan, n, index, out);
     out.push(hgl_rust_keyed::node_preparation(n, |v| {
         condition_code(plan, v)
     }));
     out.push(hgl_rust_source_slots::initialize(
         &n.configuration,
-        node_prepared(n),
+        true,
         &n.name,
         |value| condition_code(plan, value),
     ));
@@ -163,6 +159,32 @@ fn node_build(
         ));
     }
     out.push("})\n}\n}\n".to_owned());
+}
+fn build_entry(plan: &Plan, node: &Node, index: usize, out: &mut Vec<String>) {
+    if node.configuration.is_empty() {
+        out.push(
+            "fn build(ports:&mut hgl_describe::Ports<'_>)->Result<Self,hgl_describe::BuildError> {"
+                .into(),
+        );
+        return;
+    }
+    let body = if node_prepared(node) {
+        format!(
+            "Err(hgl_describe::BuildError::InvalidNodeType {{node:{:?},what:\"prepared configuration required\".into()}})",
+            node.name
+        )
+    } else {
+        let args=node.configuration.iter().map(|value|format!("(||->hgl_types::NodeResult<_>{{Ok({})}})().map_err(|e|hgl_describe::BuildError::InvalidNodeType {{node:{:?},what:e.message}})?",condition_code(plan,value),node.name)).collect::<Vec<_>>().join(",");
+        format!("Self::build_prepared(ports,{args})")
+    };
+    let parameters = node
+        .configuration
+        .iter()
+        .enumerate()
+        .map(|(id, value)| format!("configuration{id}:{}", owned_type(&value.ty)))
+        .collect::<Vec<_>>()
+        .join(",");
+    out.push(format!("fn build(ports:&mut hgl_describe::Ports<'_>)->Result<Self,hgl_describe::BuildError>{{{body}}}}}impl Node{index} {{fn build_prepared(ports:&mut hgl_describe::Ports<'_>,{parameters})->Result<Self,hgl_describe::BuildError>{{"));
 }
 fn node_type(n: &Node, index: usize, out: &mut Vec<String>) {
     out.push(format!("impl hgl_describe::Buildable for Node{index} {{\nfn node_type() -> hgl_types::NodeType {{\nhgl_types::NodeType {{ name: {:?}, inputs: vec![",format!("{}#{index}",n.name)));
@@ -266,9 +288,6 @@ fn emit_inner(plan: &Plan, layouts: bool) -> String {
         out.push(format!("registry.register::<Node{i}>()?;\n"));
     }
     out.push("Ok(())\n}\n".into());
-    if plan.nodes.iter().any(node_prepared) {
-        register_prepared(plan, &mut out);
-    }
     out.push("/// Construct the checked entry graph without executing it.\npub fn main(registry: &hgl_describe::Registry) -> Result<hgl_describe::GraphDescription,hgl_describe::BuildError> {\nlet mut builder = hgl_describe::Builder::new(\"hgl.program\",registry);\n" .to_owned());
     for (i, n) in plan.nodes.iter().enumerate() {
         out.push(format!(
@@ -282,13 +301,13 @@ fn emit_inner(plan: &Plan, layouts: bool) -> String {
         }
     }
     out.push("builder.finish()\n}\n".to_owned());
-    out.push(capacities(plan));
     out.concat()
 }
 
 /// Emit execution and observation of one checked eval plan.
 pub fn emit_test_body(plan: &Plan, expected: Option<&[Option<Value>]>) -> String {
-    let mut out = vec![hgl_rust_keyed::preparation(plan)];
+    let mut out = vec![hgl_rust_keyed::preparation(plan), capacities(plan)];
+    register_prepared(plan, &mut out);
     if !plan.natives.is_empty() {
         out.push("impl Native for crate::Provider {\n".into());
     }
@@ -314,12 +333,12 @@ pub fn emit_test_body(plan: &Plan, expected: Option<&[Option<Value>]>) -> String
     if !plan.natives.is_empty() {
         out.push("}\n".into());
     }
-    out.push("pub fn test()->Result<(),String> {\nlet mut registry=hgl_describe::Registry::new();\nregister(&mut registry).map_err(|e|format!(\"{e:?}\"))?;\nlet graph=main(&registry).map_err(|e|format!(\"{e:?}\"))?;\n".into());
+    out.push("pub fn test()->Result<(),String> {\nlet mut registry=hgl_describe::Registry::new();\nlet configurations=prepare_configurations(&[])?;register_prepared(&mut registry,&configurations)?;\nlet graph=main(&registry).map_err(|e|format!(\"{e:?}\"))?;\n".into());
     if plan.construction_error.is_some() {
         out.push("Ok(())\n}\n".into());
         return out.concat();
     }
-    out.push("let mut store=hgl_store::Store::new();\nstore.global_state().provision();prepare_static(&mut store.keys)?;\nlet capacity=prepare_capacity(&[],&mut store,0)?;let mut built=hgl_describe::instantiate_complete(&graph,&registry,&mut store).map_err(|e|format!(\"{e:?}\"))?;\n".into());
+    out.push("let mut store=hgl_store::Store::new();\nstore.global_state().provision();prepare_static(&mut store.keys)?;\nlet capacity=prepare_capacity(&configurations,&mut store,0)?;let mut built=hgl_describe::instantiate_complete(&graph,&registry,&mut store).map_err(|e|format!(\"{e:?}\"))?;\n".into());
     out.push(
         "prepare_outputs(&capacity,&mut store,&graph,&built).map_err(|e|e.message)?;\n".into(),
     );
@@ -479,37 +498,58 @@ fn node_prepared(node: &Node) -> bool {
     !values.is_empty()
 }
 fn register_prepared(plan: &Plan, out: &mut Vec<String>) {
+    let fields = plan
+        .nodes
+        .iter()
+        .enumerate()
+        .flat_map(|(i, node)| {
+            node.configuration
+                .iter()
+                .enumerate()
+                .map(move |(id, value)| {
+                    format!("node{i}_configuration{id}:{},", owned_type(&value.ty))
+                })
+        })
+        .collect::<Vec<_>>()
+        .concat();
+    out.push(format!("struct Configurations {{{fields}}}fn prepare_configurations(values:&[hgl_rust_ir::Value])->Result<Configurations,String>{{"));
     let mut bindings = std::collections::BTreeMap::new();
     for node in &plan.nodes {
-        for v in &node.configuration {
-            prepared_values(v, &mut bindings);
+        for value in &node.configuration {
+            prepared_values(value, &mut bindings);
         }
     }
-    out.push("pub fn register_prepared(registry:&mut hgl_describe::Registry,values:&[hgl_rust_ir::Value])->Result<(),String> {\n".into());
     for (id, ty) in bindings {
         out.push(format!(
-            "let prepared{id}={};\n",
+            "let prepared{id}={};",
             hgl_rust_preparation::decode(
                 &ty,
                 &format!("values.get({id}).ok_or(\"missing prepared value\")?")
             )
         ));
     }
+    out.push("Ok(Configurations {".into());
     for (i, node) in plan.nodes.iter().enumerate() {
-        if !node_prepared(node) {
+        for (id, value) in node.configuration.iter().enumerate() {
+            out.push(format!("node{i}_configuration{id}:(||->hgl_types::NodeResult<_>{{Ok({})}})().map_err(|e|e.message)?,",condition_code(plan,value)));
+        }
+    }
+    out.push("})}fn register_prepared(registry:&mut hgl_describe::Registry,configurations:&Configurations)->Result<(),String>{".into());
+    for (i, node) in plan.nodes.iter().enumerate() {
+        if node.configuration.is_empty() {
             out.push(format!(
-                "registry.register::<Node{i}>().map_err(|e|format!(\"{{e:?}}\"))?;\n"
+                "registry.register::<Node{i}>().map_err(|e|format!(\"{{e:?}}\"))?;"
             ));
             continue;
         }
-        out.push("{\n".into());
-        for (id, v) in node.configuration.iter().enumerate() {
-            out.push(format!("let configuration{id}=(||->hgl_types::NodeResult<{}>{{Ok({})}})().map_err(|e|e.message)?;\n",owned_type(&v.ty),condition_code(plan,v)));
+        out.push("{".into());
+        for (id, value) in node.configuration.iter().enumerate() {
+            out.push(format!("let configuration{id}=<{} as hgl_store::GlobalValue>::retain(&configurations.node{i}_configuration{id}).map_err(|e|e.message)?;",global_type(&value.ty)));
         }
-        let args=node.configuration.iter().enumerate().map(|(id,v)|format!("<{} as hgl_store::GlobalValue>::retain(&configuration{id}).map_err(|e|hgl_describe::BuildError::InvalidNodeType {{node:{:?},what:e.message}})?",global_type(&v.ty),node.name)).collect::<Vec<_>>().join(",");
-        out.push(format!("registry.register_with(<Node{i} as hgl_describe::Buildable>::node_type(),move |ports|Node{i}::build_prepared(ports,{args})).map_err(|e|format!(\"{{e:?}}\"))?;\n}}\n"));
+        let args=node.configuration.iter().enumerate().map(|(id,value)|format!("<{} as hgl_store::GlobalValue>::retain(&configuration{id}).map_err(|e|hgl_describe::BuildError::InvalidNodeType {{node:{:?},what:e.message}})?",global_type(&value.ty),node.name)).collect::<Vec<_>>().join(",");
+        out.push(format!("registry.register_with(<Node{i} as hgl_describe::Buildable>::node_type(),move |ports|Node{i}::build_prepared(ports,{args})).map_err(|e|format!(\"{{e:?}}\"))?;}}"));
     }
-    out.push("Ok(())\n}\n".into());
+    out.push("Ok(())}".into());
 }
 
 /// Emit fresh graph execution from already constructed owning arguments.
@@ -521,12 +561,8 @@ pub fn emit_prepared_test_body(plan: &Plan) -> String {
         out.push("register(&mut registry).map_err(|e|format!(\"{e:?}\"))?; main(&registry).map_err(|e|format!(\"{e:?}\"))?; Ok(hgl_harness_ir::CapturedEval {length:prepared.input_length,ticks:Vec::new()}) }\n".into());
         return out.concat();
     }
-    if plan.nodes.iter().any(node_prepared) {
-        out.push("register_prepared(&mut registry,&prepared.arguments)?;\n".into());
-    } else {
-        out.push("register(&mut registry).map_err(|e|format!(\"{e:?}\"))?;\n".into());
-    }
-    out.push("let graph=main(&registry).map_err(|e|format!(\"{e:?}\"))?;\nlet mut store=hgl_store::Store::new();store.global_state().provision();prepare_static(&mut store.keys)?;prepare_values(&mut store.keys,&prepared.arguments)?;\nlet capacity=prepare_capacity(&prepared.arguments,&mut store,prepared.input_length)?;let mut built=hgl_describe::instantiate_complete(&graph,&registry,&mut store).map_err(|e|format!(\"{e:?}\"))?;\n".into());
+    out.push("let configurations=prepare_configurations(&prepared.arguments)?;register_prepared(&mut registry,&configurations)?;".into());
+    out.push("let graph=main(&registry).map_err(|e|format!(\"{e:?}\"))?;\nlet mut store=hgl_store::Store::new();store.global_state().provision();prepare_static(&mut store.keys)?;prepare_values(&mut store.keys,&prepared.arguments)?;\nlet capacity=prepare_capacity(&configurations,&mut store,prepared.input_length)?;let mut built=hgl_describe::instantiate_complete(&graph,&registry,&mut store).map_err(|e|format!(\"{e:?}\"))?;\n".into());
     out.push(
         "prepare_outputs(&capacity,&mut store,&graph,&built).map_err(|e|e.message)?;\n".into(),
     );
@@ -552,33 +588,14 @@ pub fn emit_prepared_test_body(plan: &Plan) -> String {
 fn capacities(plan: &Plan) -> String {
     let capacity = hgl_rust_capacity::Capacity::new(plan);
     let mut code = capacity.declaration();
-    code += "fn prepare_capacity(values:&[hgl_rust_ir::Value],store:&mut hgl_store::Store,horizon:usize)->Result<FiniteCapacity,String>{let mut capacity=FiniteCapacity::default();let mut cycles=horizon;";
-    let mut bindings = std::collections::BTreeMap::new();
-    for node in &plan.nodes {
-        for value in &node.configuration {
-            prepared_values(value, &mut bindings);
-        }
-    }
-    for (id, ty) in bindings {
-        append(
-            &mut code,
-            format_args!(
-                "let prepared{id}={};",
-                hgl_rust_preparation::decode(
-                    &ty,
-                    &format!("values.get({id}).ok_or(\"missing prepared value\")?")
-                )
-            ),
-        );
-    }
-    for node in &plan.nodes {
-        for value in &node.configuration {
+    code += "fn prepare_capacity(configurations:&Configurations,store:&mut hgl_store::Store,horizon:usize)->Result<FiniteCapacity,String>{let mut capacity=FiniteCapacity::default();let mut cycles=horizon;";
+    for (i, node) in plan.nodes.iter().enumerate() {
+        for (id, value) in node.configuration.iter().enumerate() {
             append(
                 &mut code,
                 format_args!(
-                    "{{let value=(||->hgl_types::NodeResult<_>{{Ok({})}})().map_err(|e|e.message)?;{}",
-                    condition_code(plan, value),
-                    capacity.include(&value.ty, "&value")
+                    "{{let value=&configurations.node{i}_configuration{id};{}",
+                    capacity.include(&value.ty, "value")
                 ),
             );
             if matches!(value.ty, Ty::List(..)) {
@@ -588,6 +605,8 @@ fn capacities(plan: &Plan) -> String {
         }
     }
     code += &capacity.constants(plan, |value| condition_code(plan, value));
+    code += &capacity.scalar_sets();
+    code += &capacity.native_limits(plan);
     for node in &plan.nodes {
         for (key, ty) in &node.globals {
             append(

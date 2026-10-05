@@ -1,6 +1,25 @@
 //! The complete generated replay, target and recording path must not allocate in ticks.
 use std::{fmt::Write as _, fs, process::Command, time::SystemTime};
 const SOURCE: &str = r#"module prepared_execution
+native const fn configuration_marker(value:i64)->i64 throws
+native const fn configuration_marker(value:i64)->i64 throws {}
+struct ConfigRow {time:datetime
+value:i64}
+const fn configuration_rows()->list<ConfigRow> {let value=configuration_marker(7)
+return [ConfigRow(time:@1970-01-01T00:00:00.000001Z,value:value)]}
+fn configured_events(const rows:list<ConfigRow>)->i64 {var index=0
+while index<len(rows) {yield rows[index].time:rows[index].value
+index+=1}}
+fn configured_context(tick:i64) {when {}}
+fn once_configuration(tick:i64)->i64 {configured_context(tick)
+configured_events(configuration_rows())}
+test once_configuration {assert eval(once_configuration,tick:[1]) == [7]}
+fn legacy_members(value:i64)->set<i64> {inject out
+when {if value>0 {upsert(out,value)} else {discard(out,-value)}}}
+fn legacy_bools(value:bool)->set<bool> {inject out
+when {upsert(out,value)}}
+test legacy_members {assert eval(legacy_members,value:[1,2,-1,1]) == [delta<set<i64>>(added:[1]),delta<set<i64>>(added:[2]),delta<set<i64>>(removed:[1]),delta<set<i64>>(added:[1])]}
+test legacy_bools {assert eval(legacy_bools,value:[true,false,true]) == [delta<set<bool>>(added:[true]),delta<set<bool>>(added:[false]),_]}
 fn text(value:str)->str {when {return delta_value(value)}}
 fn zone(value:timezone)->timezone {when {return delta_value(value)}}
 fn clock(value:zoned_time)->zoned_time {when {return delta_value(value)}}
@@ -62,6 +81,8 @@ fn finite_owning_publications_use_prepared_storage() -> Result<(), Box<dyn std::
         );
     code.push_str(r#"
 struct Provider;
+mod native {pub fn configuration_marker_i64(value:i64)->hgl_types::NodeResult<i64> {assert_eq!(super::CONFIGURATION_CALLS.fetch_add(1,std::sync::atomic::Ordering::SeqCst),0,"configuration initializer executed more than once");Ok(value)}}
+static CONFIGURATION_CALLS:std::sync::atomic::AtomicUsize=std::sync::atomic::AtomicUsize::new(0);
 #[global_allocator] static ALLOCATOR:hgl_alloc_count::CountingAllocator=hgl_alloc_count::CountingAllocator;
 fn verify_pool(store:&mut hgl_store::Store,built:&hgl_describe::BuiltGraph) {
  fn count(store:&hgl_store::Store,id:hgl_store::OutputId)->usize {let output=store.bindings().output(id);1+output.members.prepared.iter().map(|(_,child)|count(store,*child)).sum::<usize>()+output.fixed.iter().map(|child|count(store,*child)).sum::<usize>()}

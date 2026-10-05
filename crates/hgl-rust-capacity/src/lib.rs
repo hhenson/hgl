@@ -1,7 +1,5 @@
 //! Cold finite replay capacity planning with statically selected value layouts.
 use hgl_rust_ir::Plan;
-mod constants;
-mod topology;
 use hgl_rust_layouts::{delta_storage, delta_type, global_type, whole_payload};
 use hgl_source::Ty;
 use std::collections::BTreeMap;
@@ -34,6 +32,7 @@ fn collect(ty: &Ty, types: &mut BTreeMap<String, Ty>) {
 #[derive(Debug)]
 pub struct Capacity {
     types: BTreeMap<String, Ty>,
+    scalar_sets: Vec<Ty>,
 }
 impl Capacity {
     /// Collect ordinary payloads, configurations and global destinations.
@@ -52,10 +51,27 @@ impl Capacity {
                 }
             }
         }
-        for value in constants::collect(plan) {
+        for value in hgl_rust_finite_domains::constants(plan) {
             collect(&value.ty, &mut types);
         }
-        Self { types }
+        let scalar_sets = plan
+            .nodes
+            .iter()
+            .filter_map(|node| {
+                if let Ty::Set(key) = &node.result {
+                    if matches!(key.as_ref(), Ty::I64 | Ty::Bool)
+                        && node.inputs.iter().any(|(_, _, ty)| ty == key.as_ref())
+                    {
+                        Some((**key).clone())
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            })
+            .collect();
+        Self { types, scalar_sets }
     }
     fn index(&self, ty: &Ty) -> usize {
         self.types
@@ -76,7 +92,11 @@ impl Capacity {
         if !children.is_empty() || matches!(ty, Ty::Struct(..) | Ty::Tuple(_) | Ty::Delta(_)) {
             let mut extra = String::new();
             if let Ty::Delta(origin) = ty {
-                extra = topology::include(origin, value, &format!("capacity.topology{index}"));
+                extra = hgl_rust_finite_domains::include(
+                    origin,
+                    value,
+                    &format!("capacity.topology{index}"),
+                );
                 for i in 0..children.len() {
                     write!(extra,"capacity.width{index}_{i}=capacity.width{index}_{i}.max(({value}).{i}.len());").unwrap_or_else(|_|unreachable!("String formatting"));
                 }
@@ -88,14 +108,55 @@ impl Capacity {
                     .map(|(i, child)| self.include(child, &format!("&({value}).{i}")))
                     .collect::<String>();
         }
-        format!(
+        let mut result = format!(
             "<{} as hgl_store::PreparedValue>::include(&mut capacity.limit{index},{value});",
             global_type(ty)
-        )
+        );
+        if self.scalar_sets.contains(ty) {
+            let root = self.index(&Ty::Delta(Box::new(Ty::Set(Box::new(ty.clone())))));
+            let id = if *ty == Ty::Bool {
+                format!("i64::from(*({value}))")
+            } else {
+                format!("*({value})")
+            };
+            write!(
+                result,
+                "capacity.topology{root}.children.entry({id}).or_default();"
+            )
+            .unwrap_or_else(|_| unreachable!("String formatting"));
+            if *ty == Ty::I64 {
+                write!(
+                    result,
+                    "capacity.topology{root}.children.entry(({id}).wrapping_neg()).or_default();"
+                )
+                .unwrap_or_else(|_| unreachable!("String formatting"));
+            }
+        }
+        result
     }
     /// Merge checked compile-time constants without moving hook evaluation earlier.
     pub fn constants(&self, plan: &Plan, emit: impl Fn(&hgl_rust_ir::Value) -> String) -> String {
-        constants::collect(plan).into_iter().map(|value|format!("{{let value=(||->hgl_types::NodeResult<_>{{Ok({})}})().map_err(|e|e.message)?;{}}}",emit(value),self.include(&value.ty,"&value"))).collect::<Vec<_>>().concat()
+        hgl_rust_finite_domains::constants(plan).into_iter().map(|value|format!("{{let value=(||->hgl_types::NodeResult<_>{{Ok({})}})().map_err(|e|e.message)?;{}}}",emit(value),self.include(&value.ty,"&value"))).collect::<Vec<_>>().concat()
+    }
+    /// Retain finite primitive domains for the pre-existing scalar-to-set operators.
+    pub fn scalar_sets(&self) -> String {
+        self.scalar_sets.iter().map(|ty|{let index=self.index(&Ty::Delta(Box::new(Ty::Set(Box::new(ty.clone())))));let value=if *ty==Ty::Bool {"(key!=0)"}else{"key"};format!("for &key in capacity.topology{index}.children.keys() {{<{} as hgl_store::Key>::prepare(&mut store.keys,&{value}).map_err(|e|e.message)?;}}capacity.width{index}_0=capacity.width{index}_0.max(capacity.topology{index}.children.len());capacity.width{index}_1=capacity.width{index}_1.max(capacity.topology{index}.children.len());",global_type(ty))}).collect::<Vec<_>>().concat()
+    }
+    /// Reserve the fixed textual envelope of built-in scalar formatters.
+    pub fn native_limits(&self, plan: &Plan) -> String {
+        if plan.natives.iter().any(|native| {
+            native.name == "hgraph.native::as_str"
+                && native.result == Ty::Str
+                && native.args.as_slice() != [Ty::Str]
+        }) {
+            format!(
+                "capacity.limit{}=capacity.limit{}.max(64);",
+                self.index(&Ty::Str),
+                self.index(&Ty::Str)
+            )
+        } else {
+            String::new()
+        }
     }
     /// Assemble exact typed bounds; structural deltas include every possible changed member.
     pub fn bounds(&self, ty: &Ty) -> String {
@@ -174,7 +235,7 @@ impl Capacity {
             .collect::<String>();
         format!(
             "{}#[derive(Default)] struct FiniteCapacity {{{fields}{domains}}}\n",
-            topology::DECLARATION
+            hgl_rust_finite_domains::DECLARATION
         )
     }
     /// Prepare every concrete leaf, including inactive finite keyed descendants.

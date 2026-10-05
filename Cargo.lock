@@ -431,6 +431,7 @@ name = "hgl-rust-capacity"
 version = "0.0.0"
 dependencies = [
  "hgl-rust-deltas",
+ "hgl-rust-finite-domains",
  "hgl-rust-ir",
  "hgl-rust-layouts",
  "hgl-source",
@@ -461,6 +462,15 @@ name = "hgl-rust-enums"
 version = "0.0.0"
 dependencies = [
  "hgl-rust-prepared-values",
+ "hgl-source",
+]
+
+[[package]]
+name = "hgl-rust-finite-domains"
+version = "0.0.0"
+dependencies = [
+ "hgl-rust-ir",
+ "hgl-rust-layouts",
  "hgl-source",
 ]
 
