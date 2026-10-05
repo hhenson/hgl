@@ -80,6 +80,7 @@ fn text(value: &Value, locals: &BTreeMap<usize, Text>) -> Text {
         | Kind::Query(..)
         | Kind::Output
         | Kind::Capability
+        | Kind::Captured(..)
         | Kind::Void => Text::Width(1),
     }
 }

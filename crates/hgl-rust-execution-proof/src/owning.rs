@@ -17,6 +17,7 @@ fn owning(ty: &Ty) -> bool {
 }
 fn value(plan: &Plan, input: &Value, looping: bool) -> bool {
     match &input.kind {
+        Kind::Captured(..) => false,
         Kind::Native(index, args) => {
             (!owning(&input.ty) || plan.natives[*index].name == "hgraph.native::as_str")
                 && args.iter().all(|arg| value(plan, arg, looping))

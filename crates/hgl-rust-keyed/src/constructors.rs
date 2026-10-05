@@ -210,6 +210,7 @@ fn values(value: &Value, locals: &Locals, visit: &mut impl FnMut(&Value, &Locals
         | Kind::BorrowedLocal(..)
         | Kind::Literal(_)
         | Kind::TemporalLiteral(_)
+        | Kind::Captured(..)
         | Kind::Prepared(_)
         | Kind::Wire(_)
         | Kind::Input(..)

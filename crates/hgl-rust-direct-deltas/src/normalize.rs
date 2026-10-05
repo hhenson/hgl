@@ -117,6 +117,7 @@ fn rewrite(value: &mut Value, config: &mut Vec<Value>, aliases: &Aliases) {
         | Kind::MutableLocal(_)
         | Kind::Output
         | Kind::Capability
+        | Kind::Captured(..)
         | Kind::Void => {}
     }
 }

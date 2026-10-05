@@ -68,6 +68,7 @@ fn payload(value: &Value) -> bool {
                 | Kind::Query(..)
                 | Kind::Output
                 | Kind::Capability
+                | Kind::Captured(..)
                 | Kind::Void => false,
             }
 }

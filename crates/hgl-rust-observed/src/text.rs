@@ -43,6 +43,7 @@ fn text_parts(value: &Value, parts: &mut Vec<String>) -> Option<()> {
         | Kind::Query(..)
         | Kind::Output
         | Kind::Capability
+        | Kind::Captured(..)
         | Kind::Void => return None,
     }
     Some(())
