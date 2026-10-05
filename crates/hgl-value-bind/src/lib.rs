@@ -279,24 +279,22 @@ pub fn signature_types(
     let mut types = BTreeMap::new();
     for (index, value) in supplied {
         let parameter = &signature.parameters[index];
-        if parameter.ty == "signal" {
-            continue;
-        }
         let formal = parameter
             .ty
             .strip_prefix("ref<")
             .or_else(|| parameter.ty.strip_prefix("set<"))
             .and_then(|s| s.strip_suffix('>'))
             .unwrap_or(&parameter.ty);
-        if (parameter.constant || signature.value_function)
-            && hgl_value_types::substitute(
-                library,
-                module,
-                &parameter.ty,
-                &types,
-                &mut BTreeSet::new(),
-            )
-            .is_ok_and(|ty| hgl_value_access::project(&ty) == value.ty)
+        if parameter.ty == "signal"
+            || ((parameter.constant || signature.value_function)
+                && hgl_value_types::substitute(
+                    library,
+                    module,
+                    &parameter.ty,
+                    &types,
+                    &mut BTreeSet::new(),
+                )
+                .is_ok_and(|ty| hgl_value_access::project(&ty) == value.ty))
         {
             continue;
         }
