@@ -48,3 +48,6 @@ pub fn allocation(key: &Ty, shape: &str, child: &str) -> String {
         "let keys=<{marker} as hgl_store::Key>::ids(&store.keys).to_vec();let output=store.add_prepared_output(owner,<{shape} as hgl_store::shapes::Shape>::shape(),Vec::new());store.prepare_collection(output,&keys,|store,owner|{{{child}}});output"
     )
 }
+
+mod constructors;
+pub use constructors::constructors;

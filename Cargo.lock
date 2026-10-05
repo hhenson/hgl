@@ -435,6 +435,7 @@ dependencies = [
  "hgl-rust-deltas",
  "hgl-rust-finite-domains",
  "hgl-rust-ir",
+ "hgl-rust-keyed",
  "hgl-rust-layouts",
  "hgl-rust-pure-bounds",
  "hgl-source",

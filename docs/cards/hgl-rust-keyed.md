@@ -25,3 +25,12 @@ node construction, preserving callers that instantiate outside the eval harness.
 May use hgl-static-values to follow immutable constant lexical origins during
 cold key-domain discovery. Prepare known keys, never emit an initializer replay
 or a provider call. Runtime constructor operands retain their original locals.
+
+constructors(plan, root, width, emit) emits known constructor topology paths and
+per-field widths from checked sparse source data, including immutable key
+aliases. root maps a retained exact Delta type to Some(topology expression), or None
+when that constructor has no retained destination in this plan; width maps
+that type, storage field and constructor length to cold capacity accumulation.
+emit serializes a known scalar constant. Already constructed node configuration
+keys are read cold, without provider or initializer replay. Payload expressions
+are traversed only for their checked shape/key metadata and never evaluated.

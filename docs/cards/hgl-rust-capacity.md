@@ -30,3 +30,7 @@ Capacity emission requires `hgl-rust-execution-proof::prepared(plan)`. Unknown
 membership or owning-width bounds preserve the existing complete adapter instead
 of reserving a guessed pool. This preserves input/native-controlled loop behavior
 without claiming allocation-free execution for that existing generic path.
+
+May use hgl-rust-keyed::constructors to include statically known constructor
+key paths and storage widths even when child payload expressions execute in
+hooks. Cold preparation never evaluates those runtime child payloads.

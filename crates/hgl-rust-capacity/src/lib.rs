@@ -121,7 +121,23 @@ impl Capacity {
     }
     /// Merge checked compile-time constants without moving hook evaluation earlier.
     pub fn constants(&self, plan: &Plan, emit: impl Fn(&hgl_rust_ir::Value) -> String) -> String {
-        hgl_rust_finite_domains::constants(plan).into_iter().map(|value|format!("{{let value=(||->hgl_types::NodeResult<_>{{Ok({})}})().map_err(|e|e.message)?;{}}}",emit(value),self.include(&value.ty,"&value"))).collect::<Vec<_>>().concat()
+        let constants = hgl_rust_finite_domains::constants(plan).into_iter().map(|value|format!("{{let value=(||->hgl_types::NodeResult<_>{{Ok({})}})().map_err(|e|e.message)?;{}}}",emit(value),self.include(&value.ty,"&value"))).collect::<Vec<_>>().concat();
+        constants
+            + &hgl_rust_keyed::constructors(
+                plan,
+                |ty| {
+                    self.types
+                        .contains_key(&global_type(ty))
+                        .then(|| format!("capacity.topology{}", self.index(ty)))
+                },
+                |ty, field, count| {
+                    let index = self.index(ty);
+                    format!(
+                        "capacity.width{index}_{field}=capacity.width{index}_{field}.max({count});"
+                    )
+                },
+                emit,
+            )
     }
     /// Retain finite primitive domains for the pre-existing scalar-to-set operators.
     pub fn scalar_sets(&self, plan: &Plan) -> String {

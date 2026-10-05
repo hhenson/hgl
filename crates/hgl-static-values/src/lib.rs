@@ -17,10 +17,16 @@ impl StaticValues {
     /// Follow known static origins without evaluating their expressions.
     pub fn resolve<'a>(&'a self, value: &'a Value) -> &'a Value {
         if let Kind::Prepared(id) = value.kind {
-            return self.resolve(&self.prepared[id]);
+            return self
+                .prepared
+                .get(id)
+                .map_or(value, |origin| self.resolve(origin));
         }
         if let Kind::Configuration(id) = value.kind {
-            return self.resolve(&self.configuration[id]);
+            return self
+                .configuration
+                .get(id)
+                .map_or(value, |origin| self.resolve(origin));
         }
         if let Kind::Local(id) = value.kind {
             return self.locals.get(&id).map_or(value, |v| self.resolve(v));

@@ -2,25 +2,7 @@ use hgl_rust_ir::{DeltaEntry, Kind, Plan, Statement, Value};
 use hgl_static_values::StaticValues;
 /// Seed literal domains when a generated node is constructed outside the eval harness.
 pub fn node_preparation(node: &hgl_rust_ir::Node, emit: impl Fn(&Value) -> String) -> String {
-    let mut keys = Vec::new();
-    let origins = StaticValues {
-        configuration: node.configuration.clone(),
-        ..StaticValues::default()
-    };
-    for value in &node.configuration {
-        collect(value, &mut keys, &origins);
-    }
-    statements(&node.start, &mut keys, &mut origins.clone());
-    statements(&node.stop, &mut keys, &mut origins.clone());
-    if let Some(body) = &node.generator {
-        statements(body, &mut keys, &mut origins.clone());
-    }
-    for (guard, body) in &node.handlers {
-        if let Some(guard) = guard {
-            collect(guard, &mut keys, &origins);
-        }
-        statements(body, &mut keys, &mut origins.clone());
-    }
+    let keys = node_keys(node);
     keys.iter().map(|key| format!(
         "<{} as hgl_store::Key>::prepare(ports.keys(),&({})).map_err(|e|hgl_describe::BuildError::InvalidNodeType {{node:{:?},what:e.message}})?;",
         hgl_rust_layouts::global_type(&key.ty),emit(key),node.name
@@ -28,27 +10,7 @@ pub fn node_preparation(node: &hgl_rust_ir::Node, emit: impl Fn(&Value) -> Strin
 }
 /// Emit exclusively cold traversal and static domain preparation for this plan.
 pub fn preparation(plan: &Plan) -> String {
-    let mut keys = Vec::new();
-    for node in &plan.nodes {
-        let origins = StaticValues {
-            configuration: node.configuration.clone(),
-            ..StaticValues::default()
-        };
-        for value in &node.configuration {
-            collect(value, &mut keys, &origins);
-        }
-        statements(&node.start, &mut keys, &mut origins.clone());
-        statements(&node.stop, &mut keys, &mut origins.clone());
-        if let Some(body) = &node.generator {
-            statements(body, &mut keys, &mut origins.clone());
-        }
-        for (guard, body) in &node.handlers {
-            if let Some(guard) = guard {
-                collect(guard, &mut keys, &origins);
-            }
-            statements(body, &mut keys, &mut origins.clone());
-        }
-    }
+    let keys = plan.nodes.iter().flat_map(node_keys).collect::<Vec<_>>();
     let constants = keys
         .iter()
         .map(|key| format!("prepare_key(keys,&{})?;", hgl_rust_checked_data::value(key)))
@@ -183,4 +145,27 @@ fn statements(body: &[Statement], keys: &mut Vec<Value>, origins: &mut StaticVal
             Statement::Exit => {}
         }
     }
+}
+
+fn node_keys(node: &hgl_rust_ir::Node) -> Vec<Value> {
+    let mut keys = Vec::new();
+    let origins = StaticValues {
+        configuration: node.configuration.clone(),
+        ..StaticValues::default()
+    };
+    for value in &node.configuration {
+        collect(value, &mut keys, &origins);
+    }
+    statements(&node.start, &mut keys, &mut origins.clone());
+    statements(&node.stop, &mut keys, &mut origins.clone());
+    if let Some(body) = &node.generator {
+        statements(body, &mut keys, &mut origins.clone());
+    }
+    for (guard, body) in &node.handlers {
+        if let Some(guard) = guard {
+            collect(guard, &mut keys, &origins);
+        }
+        statements(body, &mut keys, &mut origins.clone());
+    }
+    keys
 }

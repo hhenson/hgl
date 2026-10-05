@@ -15,3 +15,4 @@ hgl-rust-ir = { path = "../hgl-rust-ir" }
 hgl-rust-layouts = { path = "../hgl-rust-layouts" }
 hgl-rust-deltas = { path = "../hgl-rust-deltas" }
 hgl-rust-finite-domains = { path = "../hgl-rust-finite-domains" }
+hgl-rust-keyed = { path = "../hgl-rust-keyed" }
