@@ -31,7 +31,7 @@ per-field widths from checked sparse source data, including immutable key
 aliases. root maps a retained exact Delta type to Some(topology expression), or None
 when that constructor has no retained destination in this plan; width maps
 that type, storage field and constructor length to cold capacity accumulation.
-emit serializes a known scalar constant. Already constructed node configuration
+emit serializes a known complete key constant. Already constructed node configuration
 keys are read cold, without provider or initializer replay. Payload expressions
 are traversed only for their checked shape/key metadata and never evaluated.
 
@@ -39,3 +39,8 @@ Known key preparation consumes retained complete Values from StaticValues rather
 than reconstructing scalar literals. This preserves the full tuple/struct key
 schema and written-order contextual recipes for the separate cold materializer.
 Constructor topology treats growing removed indices as the third sparse storage field, preserving written operands and parent-specific child paths.
+
+Cold prepared-value traversal decodes exact admitted composite key schemas before
+calling their statically selected Key implementation. Every provider recipe has
+already been materialized by ordered harness preparation; decoding cannot replay
+it. Set key types are ordinary values, not child temporal publication shapes.

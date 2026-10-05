@@ -1,5 +1,6 @@
-use hgl_rust_ir::{DeltaEntry, Kind, Plan, Statement, Value};
-use hgl_static_values::StaticValues;
+use hgl_rust_ir::{Plan, Value};
+use hgl_rust_key_origins::node_keys;
+use std::fmt::Write as _;
 /// Seed literal domains when a generated node is constructed outside the eval harness.
 pub fn node_preparation(node: &hgl_rust_ir::Node, emit: impl Fn(&Value) -> String) -> String {
     let keys = node_keys(node);
@@ -19,7 +20,26 @@ pub fn preparation(plan: &Plan) -> String {
     let mut code = format!(
         "fn prepare_static(keys:&mut hgl_store::Keys)->Result<(),String> {{{constants} Ok(())}}\n"
     );
-    code += r#"fn prepare_key(keys:&mut hgl_store::Keys,value:&hgl_rust_ir::Value)->Result<(),String> {let hgl_rust_ir::Kind::Literal(value)=&value.kind else {return Err("unmaterialized collection key".into())}; match value {"#;
+    code +=
+        "fn prepare_key(keys:&mut hgl_store::Keys,value:&hgl_rust_ir::Value)->Result<(),String> {";
+    for ty in hgl_rust_layouts::global_types(plan).values() {
+        if let hgl_source::Ty::Struct(name, fields, _) = ty
+            && ty.collection_key()
+        {
+            let ty = if name.source_name().starts_with("\0tuple<") {
+                hgl_source::Ty::Tuple(fields.iter().map(|(_, ty)| ty.clone()).collect())
+            } else {
+                ty.clone()
+            };
+            write!(code,
+                "if value.ty=={} {{return <{} as hgl_store::Key>::prepare(keys,&({})).map_err(|e|e.message);}}",
+                hgl_rust_checked_data::ty(&ty),
+                hgl_rust_layouts::global_type(&ty),
+                hgl_rust_value_convert::decode(&ty, "value")
+            ).unwrap_or_else(|_| unreachable!("String formatting"));
+        }
+    }
+    code += r#"let hgl_rust_ir::Kind::Literal(value)=&value.kind else {return Err("unmaterialized collection key".into())}; match value {"#;
     code += "hgl_source::Literal::Bool(v)=><bool as hgl_store::Key>::prepare(keys,v),";
     code += "hgl_source::Literal::Int(v)=><i64 as hgl_store::Key>::prepare(keys,v),";
     code += "hgl_source::Literal::Float(v)=><f64 as hgl_store::Key>::prepare(keys,v),";
@@ -47,126 +67,4 @@ hgl_rust_ir::DeltaEntry::Child(_,v)=>prepare_value(keys,v)?,
 }Ok(())}
 ";
     code
-}
-fn collect(value: &Value, keys: &mut Vec<Value>, origins: &StaticValues) {
-    match &value.kind {
-        Kind::Delta(parts) => {
-            for part in parts {
-                match part {
-                    DeltaEntry::Add(k) | DeltaEntry::Remove(k) | DeltaEntry::Keyed(k, _) => {
-                        if let Ok((_, Some(key))) = origins.key(k.clone()) {
-                            keys.push(key);
-                        }
-                    }
-                    DeltaEntry::Child(..) => {}
-                }
-                for value in part.operands() {
-                    collect(value, keys, origins);
-                }
-            }
-        }
-        Kind::List(values) | Kind::Native(_, values) | Kind::Query(_, values) => {
-            for value in values {
-                collect(value, keys, origins);
-            }
-        }
-        Kind::Construct(values) => {
-            for (_, value) in values {
-                collect(value, keys, origins);
-            }
-        }
-        Kind::ValueCall(values, body) => {
-            for value in values {
-                collect(value, keys, origins);
-            }
-            let mut scope = StaticValues {
-                configuration: origins.configuration.clone(),
-                prepared: origins.prepared.clone(),
-                ..StaticValues::default()
-            };
-            for (id, value) in values.iter().enumerate() {
-                scope.bind(id, origins.resolve(value), false);
-            }
-            statements(body, keys, &mut scope);
-        }
-        Kind::Field(v, _)
-        | Kind::GlobalSet(_, v)
-        | Kind::Length(v)
-        | Kind::Unary(_, v)
-        | Kind::IsPresent(v)
-        | Kind::Present(v) => collect(v, keys, origins),
-        Kind::Index(a, b) | Kind::Push(a, b) | Kind::Binary(_, a, b) => {
-            collect(a, keys, origins);
-            collect(b, keys, origins);
-        }
-        Kind::ObservedLocal(_)
-        | Kind::WiringFailure(_)
-        | Kind::Configuration(_)
-        | Kind::GlobalGet(_)
-        | Kind::BorrowedLocal(..)
-        | Kind::Literal(_)
-        | Kind::TemporalLiteral(_)
-        | Kind::Captured(..)
-        | Kind::Prepared(_)
-        | Kind::Wire(_)
-        | Kind::Input(..)
-        | Kind::Cache(_)
-        | Kind::GeneratorLocal(_)
-        | Kind::Local(_)
-        | Kind::MutableLocal(_)
-        | Kind::Output
-        | Kind::Capability
-        | Kind::Void => {}
-    }
-}
-fn statements(body: &[Statement], keys: &mut Vec<Value>, origins: &mut StaticValues) {
-    for statement in body {
-        match statement {
-            Statement::Let(id, v) | Statement::Var(id, v) => {
-                collect(v, keys, origins);
-                origins.bind(*id, v, matches!(statement, Statement::Var(..)));
-            }
-            Statement::Borrow(_, v, _)
-            | Statement::Return(v)
-            | Statement::Yield(v)
-            | Statement::Call(v) => collect(v, keys, origins),
-            Statement::TimedYield(a, b) | Statement::Assign(a, b) => {
-                collect(a, keys, origins);
-                collect(b, keys, origins);
-            }
-            Statement::While(v, body) | Statement::For(_, v, body) => {
-                collect(v, keys, origins);
-                statements(body, keys, &mut origins.clone());
-            }
-            Statement::If(v, a, b) => {
-                collect(v, keys, origins);
-                statements(a, keys, &mut origins.clone());
-                statements(b, keys, &mut origins.clone());
-            }
-            Statement::Exit => {}
-        }
-    }
-}
-
-fn node_keys(node: &hgl_rust_ir::Node) -> Vec<Value> {
-    let mut keys = Vec::new();
-    let origins = StaticValues {
-        configuration: node.configuration.clone(),
-        ..StaticValues::default()
-    };
-    for value in &node.configuration {
-        collect(value, &mut keys, &origins);
-    }
-    statements(&node.start, &mut keys, &mut origins.clone());
-    statements(&node.stop, &mut keys, &mut origins.clone());
-    if let Some(body) = &node.generator {
-        statements(body, &mut keys, &mut origins.clone());
-    }
-    for (guard, body) in &node.handlers {
-        if let Some(guard) = guard {
-            collect(guard, &mut keys, &origins);
-        }
-        statements(body, &mut keys, &mut origins.clone());
-    }
-    keys
 }

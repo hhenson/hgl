@@ -6,3 +6,7 @@ Statically typed publication transport for prepared finite evaluations. `methods
 concatenation, validating byte length and inputs before one publication.
 
 Growing typed slot application and pass-through validate canonical ranges against destination length before mutation. Capture retains changed child publications and the complete removed tail, including shrink to a valid empty root.
+Composite key application resolves component IDs directly from prepared fields.
+Capture copies retained scalar leaves and optional presence into reserved typed
+slots, without materializing an owning composite intermediary. Generated exact
+key methods own domain selection; observation performs no type/name lookup.

@@ -6,7 +6,7 @@ use hgl_types::{
 };
 use std::collections::{HashMap, HashSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
-/// A prepared exact scalar key representation; endpoint metadata owns nominal identity.
+/// A prepared exact ordinary key representation; endpoint metadata owns nominal identity.
 pub trait Key: GlobalValue {
     /// Retain a constant key before graph startup.
     fn prepare(keys: &mut Keys, value: &Self::Value) -> NodeResult;
@@ -106,6 +106,7 @@ impl<T: PartialEq + Hash> Table<T> {
 /// Run-owned exact typed key domains, populated exclusively before graph startup.
 #[derive(Debug, Default)]
 pub struct Keys {
+    composites: Vec<Table<Vec<i64>>>,
     bools: Domain,
     integers: Domain,
     floats: Domain,
@@ -352,3 +353,5 @@ mod tests {
         Ok(())
     }
 }
+
+mod composite;

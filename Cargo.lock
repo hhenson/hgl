@@ -599,6 +599,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "hgl-rust-composite-keys"
+version = "0.0.0"
+dependencies = [
+ "hgl-source",
+]
+
+[[package]]
 name = "hgl-rust-deltas"
 version = "0.0.0"
 dependencies = [
@@ -679,12 +686,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "hgl-rust-key-origins"
+version = "0.0.0"
+dependencies = [
+ "hgl-rust-ir",
+ "hgl-static-values",
+]
+
+[[package]]
 name = "hgl-rust-keyed"
 version = "0.0.0"
 dependencies = [
  "hgl-rust-checked-data",
  "hgl-rust-ir",
+ "hgl-rust-key-origins",
  "hgl-rust-layouts",
+ "hgl-rust-value-convert",
  "hgl-source",
  "hgl-static-values",
 ]
@@ -694,6 +711,7 @@ name = "hgl-rust-layouts"
 version = "0.0.0"
 dependencies = [
  "hgl-rust-collections",
+ "hgl-rust-composite-keys",
  "hgl-rust-enums",
  "hgl-rust-families",
  "hgl-rust-ir",
@@ -715,6 +733,7 @@ dependencies = [
 name = "hgl-rust-observed"
 version = "0.0.0"
 dependencies = [
+ "hgl-rust-composite-keys",
  "hgl-rust-ir",
  "hgl-rust-layouts",
  "hgl-rust-windows",

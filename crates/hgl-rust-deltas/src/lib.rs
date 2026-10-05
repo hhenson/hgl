@@ -268,7 +268,7 @@ fn origin(ty: &Ty, types: &mut BTreeSet<Ty>) {
         return;
     }
     types.insert(ty.clone());
-    if let Ty::List(child, _) | Ty::Set(child) | Ty::Map(_, child) = ty {
+    if let Ty::List(child, _) | Ty::Map(_, child) = ty {
         origin(child, types);
     }
     if let Ty::Struct(_, fields, _) = ty {

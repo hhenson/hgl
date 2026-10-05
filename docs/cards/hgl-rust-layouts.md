@@ -65,3 +65,8 @@ is specified by the hgl-rust-families card.
 
 Ordinary Set/Map layouts use exact schema markers emitted by hgl-rust-collections with independently retained Vec members or key/value pairs. Reachable pair and nested payload layouts are collected with other ordinary descendants.
 Growing delta storage has index, child-publication and removed-index vectors, retaining its exact synthetic nominal origin.
+
+Shared marker emission assigns composite key domain ordinals once across the
+complete shared plan set. Each exact marker's preparation provisions its own
+ordinal in independently built stores, preserving identity across discovery and
+insertion order. Per-plan code never recomputes those domain ordinals.

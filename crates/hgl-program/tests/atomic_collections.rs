@@ -298,3 +298,55 @@ fn compare(tick:i64)->bool {when {
 test equality {assert eval(compare,[1])==[true]}
 "#.replace(">=","> =").as_str(),false)
 }
+
+#[test]
+fn shared_sparse_composite_keys_execute_without_tick_allocations()
+-> Result<(), Box<dyn std::error::Error>> {
+    run_shared(include_str!("fixtures/composite_key_values.hgl"), true)
+}
+#[test]
+fn composite_domains_are_shared_across_opposite_plan_and_key_orders()
+-> Result<(), Box<dyn std::error::Error>> {
+    run_shared(
+        r#"module hgraph.std part domain_order
+struct A {number:i64
+label:str}
+struct Z {nested:tuple<str,f64>
+text:str=null}
+test {
+ fn pass<T>(value:T)->T {when {return delta_value(value)}}
+ test opposite_domains {
+  let z=Z(nested:("z",-0.0))
+  let a=A(number:7,label:"a")
+  assert eval(pass,[delta<map<Z,i64>>(upsert:[z:1,Z(nested:("z",0.0),text:""):2])])==[delta<map<Z,i64>>(upsert:[Z(nested:("z",0.0),text:""):2,z:1])]
+  assert eval(pass,[delta<set<A>>(added:[a,A(number:8,label:"b")])])==[delta<set<A>>(added:[A(number:8,label:"b"),a])]
+  assert eval(pass,[delta<set<A>>(added:[A(number:8,label:"b"),a])])==[delta<set<A>>(added:[a,A(number:8,label:"b")])]
+  assert eval(pass,[delta<map<Z,i64>>(upsert:[Z(nested:("z",0.0),text:""):2,z:1]),delta<map<Z,i64>>(remove:[z])])==[delta<map<Z,i64>>(upsert:[z:1,Z(nested:("z",0.0),text:""):2]),delta<map<Z,i64>>(remove:[Z(nested:("z",0.0))])]
+ }
+}
+"#,
+        true,
+    )
+}
+#[test]
+fn composite_scalar_leaves_keep_enum_and_provider_identity()
+-> Result<(), Box<dyn std::error::Error>> {
+    run_shared(
+        r#"module hgraph.std part composite_scalars
+enum E {first=-7,second=11}
+struct Key {tag:E
+zone:timezone
+nested:tuple<date,time,duration>
+label:str=null}
+test {
+ fn pass<T>(value:T)->T {when {return delta_value(value)}}
+ test leaves {
+  let alias=Key(tag:E::first,zone:@[US/Eastern],nested:(@2026-01-01,@12:00,1s),label:"retained")
+  let canonical=Key(tag:E::first,zone:@[America/New_York],nested:(@2026-01-01,@12:00,1s),label:"retained")
+  assert eval(pass,[delta<set<Key>>(added:[alias,canonical]),delta<set<Key>>(removed:[alias]),delta<set<Key>>(added:[alias])])==[delta<set<Key>>(added:[canonical,alias]),delta<set<Key>>(removed:[alias]),delta<set<Key>>(added:[alias])]
+ }
+}
+"#,
+        true,
+    )
+}

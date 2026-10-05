@@ -105,7 +105,8 @@ pub fn global_types(plan: &Plan) -> BTreeMap<String, Ty> {
 pub fn global_markers(plan: &Plan) -> String {
     global_types(plan)
         .values()
-        .map(|ty| {
+        .enumerate()
+        .map(|(domain, ty)| {
             if let Ty::Family(family) = ty {
                 hgl_rust_structs::marker(&crate::family_storage(family), global_type, global_schema)
             } else if matches!(ty, Ty::Set(_) | Ty::Map(..)) {
@@ -114,6 +115,11 @@ pub fn global_markers(plan: &Plan) -> String {
                 hgl_rust_enums::marker(identity)
             } else {
                 hgl_rust_structs::marker(ty, global_type, global_schema)
+                    + &if hgl_rust_composite_keys::composite(ty) {
+                        hgl_rust_composite_keys::implementation(ty, domain, global_type)
+                    } else {
+                        String::new()
+                    }
             }
         })
         .collect()

@@ -98,9 +98,8 @@ pub fn pass(ty: &Ty, input: &str, output: &str) -> String {
 fn key(ty: &Ty, list: &str) -> String {
     let slot = element(ty, list, "index", "source");
     format!(
-        "<{} as hgl_store::Key>::id(&_ctx.store().keys,source.scalar::<{}>(({slot}).fields()))?",
-        global_type(ty),
-        rust_type(ty)
+        "{{let keys=&_ctx.store().keys;{}}}",
+        hgl_rust_composite_keys::slot_id(ty, &slot, global_type)
     )
 }
 fn append_native(ty: &Ty, list: &str, value: &str) -> String {
@@ -110,10 +109,10 @@ fn append_native(ty: &Ty, list: &str, value: &str) -> String {
     )
 }
 fn append_key(ty: &Ty, list: &str) -> String {
+    let marker = global_type(ty);
     format!(
-        "<{} as hgl_store::Key>::with_value(observation.keys,key,|value|->hgl_types::NodeResult {{{}Ok(())}})??;",
-        global_type(ty),
-        append_native(ty, list, "value")
+        "{{let keys=observation.keys;let destination=hgl_store::append_slot::<{marker}>(columns,{list})?;{}hgl_store::commit_append::<{marker}>(columns,{list});}}",
+        hgl_rust_composite_keys::copy(ty, "key", "destination", global_type)
     )
 }
 fn append_child(ty: &Ty, list: &str) -> String {

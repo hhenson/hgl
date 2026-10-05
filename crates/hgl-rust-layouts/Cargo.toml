@@ -20,3 +20,4 @@ hgl-rust-scalars = { path = "../hgl-rust-scalars" }
 hgl-rust-enums = { path = "../hgl-rust-enums" }
 hgl-rust-prepared-values = { path = "../hgl-rust-prepared-values" }
 hgl-rust-families = { path = "../hgl-rust-families" }
+hgl-rust-composite-keys = { path = "../hgl-rust-composite-keys" }

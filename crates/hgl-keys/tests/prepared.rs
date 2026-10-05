@@ -47,3 +47,26 @@ fn ieee_keys_share_zero_and_preserve_infinities() -> NodeResult {
     assert!(f64::prepare(&mut keys, &f64::NAN).is_err());
     Ok(())
 }
+#[test]
+fn composite_domains_retain_full_tokens_and_presence_without_lookup_allocations() -> NodeResult {
+    let mut keys = Keys::default();
+    let mut source = [1, 7, 0, 0];
+    keys.prepare_composite(5, &source)?;
+    keys.prepare_composite(5, &[1, 7, 1, 0])?;
+    keys.prepare_composite(1, &[1, 8, 0, 0])?;
+    source[1] = 99;
+    let (result, allocations) = count_in(|| -> NodeResult {
+        for _ in 0..100 {
+            assert_eq!(keys.composite_id(5, &[1, 7, 0, 0])?, 0);
+            assert_eq!(keys.composite_id(5, &[1, 7, 1, 0])?, 1);
+            assert_eq!(keys.composite_parts(5, 0)?, &[1, 7, 0, 0]);
+            assert_eq!(keys.composite_ids(1), &[0]);
+        }
+        Ok(())
+    });
+    result?;
+    assert_eq!(allocations, 0);
+    assert!(keys.composite_id(5, &source).is_err());
+    assert!(keys.composite_id(1, &[1, 7, 0, 0]).is_err());
+    Ok(())
+}

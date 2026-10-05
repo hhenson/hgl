@@ -13,3 +13,4 @@ hgl-rust-ir = { path = "../hgl-rust-ir" }
 hgl-rust-windows = { path = "../hgl-rust-windows" }
 hgl-source = { path = "../hgl-source" }
 hgl-rust-layouts = { path = "../hgl-rust-layouts" }
+hgl-rust-composite-keys = { path = "../hgl-rust-composite-keys" }
