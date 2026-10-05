@@ -114,12 +114,8 @@ impl Ty {
             return Ok((id, fields, optional));
         }
         if let Self::Recursive(batch) = self {
-            let definition = batch.definition(batch.identity())?;
-            return Ok((
-                definition.identity(),
-                definition.fields(),
-                definition.optional(),
-            ));
+            let schema = batch.definition(batch.identity())?;
+            return Ok((schema.identity(), schema.fields(), schema.optional()));
         }
         Err("ordinary struct required".into())
     }
@@ -275,10 +271,8 @@ impl Ty {
     /// Form the exact ordinary publication type, reducing scalar origins.
     pub fn delta(self) -> Result<Self, String> {
         if !self.publication() {
-            return Err(format!(
-                "delta: unsupported publication shape {}",
-                self.source_name()
-            ));
+            let name = self.source_name();
+            return Err(format!("delta: unsupported publication shape {name}"));
         }
         if let Self::Atomic(payload) = self {
             return Ok(*payload);
@@ -300,6 +294,12 @@ impl Ty {
     }
     /// Whether an ordinary value belongs to the finite complete-payload profile.
     pub fn atomic_payload(&self) -> bool {
+        if let Self::Set(key) = self {
+            return key.collection_key();
+        }
+        if let Self::Map(key, child) = self {
+            return key.collection_key() && child.atomic_payload();
+        }
         if let Self::List(child, _) = self {
             child.atomic_payload()
         } else {
@@ -317,12 +317,6 @@ impl Ty {
         }
         if let Self::Struct(_, fields, _) = self {
             return fields.iter().all(|(_, ty)| check(ty));
-        }
-        if let Self::Set(key) = self {
-            return key.scalar();
-        }
-        if let Self::Map(key, child) = self {
-            return key.scalar() && child.atomic_payload();
         }
         self.scalar()
     }

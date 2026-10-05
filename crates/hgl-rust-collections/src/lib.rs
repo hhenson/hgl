@@ -71,11 +71,7 @@ pub fn construct(
             (value, None)
         };
         append(&mut code, format_args!("let key={};", emit(key)));
-        if key.ty == Ty::F64 {
-            code.push_str(
-                "if key.is_nan() {return Err(hgl_types::NodeError::new(\"NaN collection key\"));}",
-            );
-        }
+        code.push_str(&key_checks(&key.ty, "key"));
         let field = if child.is_some() { "&item.0" } else { "item" };
         append(
             &mut code,
@@ -156,4 +152,34 @@ pub fn retained(source: &str, ty: &Ty, global_type: fn(&Ty) -> String) -> String
     } else {
         format!("({source})")
     }
+}
+
+fn key_checks(ty: &Ty, value: &str) -> String {
+    if *ty == Ty::F64 {
+        return format!(
+            "if ({value}).is_nan() {{return Err(hgl_types::NodeError::new(\"NaN collection key\"));}}"
+        );
+    }
+    let (fields, optional) = if let Ty::Tuple(fields) = ty {
+        (fields.iter().collect::<Vec<_>>(), &[][..])
+    } else if let Ty::Struct(_, fields, optional) = ty {
+        (
+            fields.iter().map(|(_, ty)| ty).collect(),
+            optional.as_slice(),
+        )
+    } else {
+        return String::new();
+    };
+    fields
+        .iter()
+        .enumerate()
+        .map(|(i, ty)| {
+            let field = format!("({value}).{i}");
+            if optional.contains(&i) {
+                format!("if let Some(key)=&{field} {{{}}}", key_checks(ty, "key"))
+            } else {
+                key_checks(ty, &field)
+            }
+        })
+        .collect()
 }

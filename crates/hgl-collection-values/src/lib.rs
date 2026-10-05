@@ -1,12 +1,9 @@
 //! Ordered construction and unordered identity of complete ordinary collections.
 use hgl_rust_ir::{Kind, Value};
 use hgl_source::Ty;
-/// Validate one retained scalar key, including the non-NaN boundary.
-pub fn key(value: &Value) -> Result<hgl_scalar_keys::Key, String> {
-    let Kind::Literal(value) = &value.kind else {
-        return Err("ordinary collection requires a scalar key".into());
-    };
-    hgl_scalar_keys::key(value)
+/// Validate a complete retained key, preserving optional presence and exact types.
+pub fn key(value: &Value) -> Result<hgl_composite_keys::Key, String> {
+    hgl_composite_keys::key(value)
 }
 /// Retain each key before checking duplicates, and each map value only afterwards.
 pub fn evaluate<E: From<String>>(

@@ -16,3 +16,5 @@ Acceptance: generated debug/release shared snapshots and complete nested
 retention, equal empty publications, replay/record and sparse atomic children.
 
 retained(&str,&Ty,fn(&Ty)->String)->String emits independent owning reads through exact composite markers and the existing scalar copy contract. The layout callback selects the concrete marker without runtime type tests.
+
+Constructor key validation walks finite tuple/concrete struct fields, preserving optional presence and rejecting every present NaN leaf before the associated map value executes. Native key equality uses complete exact typed components; keys cannot contain collections, recursive values or abstract families.

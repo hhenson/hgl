@@ -78,7 +78,7 @@ specializations. Its source identity is the exact applied abstract declaration;
 structural family publication remains unsupported. Family fields are not exposed
 through Ty::structure. This is the nonrecursive family slice of spec97c791f.
 
-atomic_payload also admits ordinary Set of scalar K and Map of scalar K with recursively admitted ordinary V. This does not change their unwrapped temporal publication shapes or admit composite ordinary keys.
+atomic_payload also admits ordinary Set and Map whose K satisfies collection_key, with recursively admitted ordinary V. This does not change their unwrapped temporal publication shapes.
 collection_key() admits scalar leaves, finite positional tuples and concrete
 structs recursively, including optional fields. Recursive/family/collection/ref
 components remain excluded. Temporal Set/Map publication uses this same complete

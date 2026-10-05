@@ -20,14 +20,10 @@ fn source(body: &str) -> Vec<(String, String)> {
     )])
 }
 #[test]
-fn first_five_shared_structural_cases_typecheck() -> Result<(), String> {
+fn all_shared_composite_cases_typecheck() -> Result<(), String> {
     let shared = include_str!("fixtures/composite_key_values.hgl");
-    let structural = shared
-        .split("    test complete_containers_own_keys_before_source_bindings_change")
-        .next()
-        .ok_or("missing shared cases")?;
     let sources = vec![
-        ("composite.hgl".into(), format!("{structural}}}")),
+        ("composite.hgl".into(), shared.into()),
         (
             "pass.hgl".into(),
             "module hgraph.std\nfn pass_through<T>(value:T)->T {when {return delta_value(value)}}"

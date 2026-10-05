@@ -202,3 +202,76 @@ fn manifest(
     fs::write(dir.join("Cargo.toml"), manifest)?;
     Ok(())
 }
+
+#[test]
+fn shared_complete_containers_retain_composite_keys() -> Result<(), Box<dyn std::error::Error>> {
+    let shared = include_str!("fixtures/composite_key_values.hgl");
+    let header = shared
+        .split("    test ")
+        .next()
+        .ok_or("missing declarations")?;
+    let (_, case) = shared
+        .split_once("    test complete_containers_own_keys_before_source_bindings_change")
+        .ok_or("missing ordinary container case")?;
+    run_shared(
+        &format!(
+            "{header}    test complete_containers_own_keys_before_source_bindings_change{case}"
+        ),
+        true,
+    )
+}
+#[test]
+fn ordinary_composite_duplicates_and_wrong_nominals_are_rejected() {
+    for expression in [
+        "set<Key>(items:[Key(n:1),Key(n:1,present:null)])",
+        "map<Key,i64>(items:[Key(n:1):1,Key(n:1):2])",
+        "set<tuple<f64,str>>(items:[(0.0,\"a\"),(-0.0,\"a\")])",
+        "set<Key>(items:[Other(n:1)])",
+        "set<tuple<list<i64>>>(items:[])",
+    ] {
+        let source = format!(
+            "module wrong\nstruct Key {{n:i64\npresent:i64=null}}\nstruct Other {{n:i64}}\ntest bad {{let value={expression}\nassert true}}"
+        );
+        assert!(compile_tests(&sources(&source)).is_err(), "{expression}");
+    }
+}
+
+#[test]
+fn complete_optional_keys_preserve_presence_and_runtime_nan_stops_value()
+-> Result<(), Box<dyn std::error::Error>> {
+    run_shared(
+        r"module hgraph.std part optional_ordinary_keys
+struct Key {number:i64
+flag:bool=null}
+test { fn pass(v:atomic<set<Key>>)->atomic<set<Key>> =>pass_through(v)
+test presence {
+ let unset=Key(number:1)
+ let present=Key(number:1,flag:false)
+ let both=set<Key>(items:[unset,present])
+ assert eval(pass,[both])==[set<Key>(items:[present,unset])]
+ assert both!=set<Key>(items:[present])
+}}
+",
+        true,
+    )?;
+    let source = r"module nan_key
+struct Key {part:f64=null}
+native const fn mark(value:f64)->f64 throws
+native const fn mark(value:f64)->f64 throws {}
+native const fn value(item:i64)->i64 throws
+native const fn value(item:i64)->i64 throws {}
+fn observe(tick:i64) {when {let result=map<Key,i64>(items:[Key(part:mark(0.0)):value(tick)])}}
+test reject {eval(observe,[1])}
+";
+    let provider = r#"mod native {
+pub fn mark_f64(_:f64)->hgl_types::NodeResult<f64> {println!("MARKnan");Ok(f64::NAN)}
+pub fn value_i64(v:i64)->hgl_types::NodeResult<i64> {println!("MARKvalue");Ok(v)}
+}"#;
+    run_program(
+        source,
+        false,
+        provider,
+        Some("NaN collection key"),
+        &["MARKnan"],
+    )
+}

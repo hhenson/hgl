@@ -113,9 +113,9 @@ dependencies = [
 name = "hgl-collection-values"
 version = "0.0.0"
 dependencies = [
+ "hgl-composite-keys",
  "hgl-family-values",
  "hgl-rust-ir",
- "hgl-scalar-keys",
  "hgl-source",
 ]
 
