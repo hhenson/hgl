@@ -57,3 +57,8 @@ Role::Enum indexes enum declarations as nominal types, including export visibili
 RequiredStruct.defaults now stores Expr, retaining a qualified enum member name
 until declaration-owned resolution. Other defaults retain the existing closed
 scalar and contextual temporal profile.
+
+`RequiredStruct::optional: Vec<usize>` records fields introduced with a null
+default; `defaults` retains that Expr::Null along with existing scalar defaults.
+The parser admits optional ordinary fields without admitting inheritance or
+new default-expression operations. Field types remain their declared types.

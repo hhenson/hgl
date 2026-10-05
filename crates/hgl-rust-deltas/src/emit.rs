@@ -9,7 +9,7 @@ pub(super) fn marker(ty: &Ty) -> String {
     let mut code = String::new();
     let fields = children(ty);
     if matches!(ty, Ty::Struct(..) | Ty::Tuple(_)) {
-        let names = if let Ty::Struct(_, fields) = ty {
+        let names = if let Ty::Struct(_, fields, _) = ty {
             fields.iter().map(|(n, _)| n.clone()).collect::<Vec<_>>()
         } else {
             (0..fields.len()).map(|i| i.to_string()).collect()

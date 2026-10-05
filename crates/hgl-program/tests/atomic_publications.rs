@@ -46,7 +46,7 @@ fn atomic_shape_profile_rejects_excluded_payloads() {
         ("", "atomic<map<i64,i64>>"),
         ("", "atomic<ref<i64>>"),
         ("", "atomic<delta<list<i64,2>>>"),
-        ("struct Optional {value:i64=null}", "atomic<Optional>"),
+        ("struct Optional {value:ref<i64>=null}", "atomic<Optional>"),
         ("struct Recursive {value:Recursive}", "atomic<Recursive>"),
     ] {
         let body = format!(

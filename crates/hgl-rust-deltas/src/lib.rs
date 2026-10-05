@@ -142,7 +142,7 @@ fn allocation(ty: &Ty) -> String {
 }
 fn children(ty: &Ty) -> Vec<&Ty> {
     match ty {
-        Ty::Struct(_, fields) => fields.iter().map(|(_, t)| t).collect(),
+        Ty::Struct(_, fields, _) => fields.iter().map(|(_, t)| t).collect(),
         Ty::Tuple(children) => children.iter().collect(),
         Ty::Atomic(_)
         | Ty::Map(..)
@@ -168,7 +168,7 @@ fn children(ty: &Ty) -> Vec<&Ty> {
     }
 }
 fn empty(ty: &Ty) -> String {
-    let Ty::Struct(_, fields) = delta_storage(ty) else {
+    let Ty::Struct(_, fields, _) = delta_storage(ty) else {
         unreachable!()
     };
     if fields.is_empty() {
@@ -268,7 +268,7 @@ fn origin(ty: &Ty, types: &mut BTreeSet<Ty>) {
     types.insert(ty.clone());
     match ty {
         Ty::List(child, _) | Ty::Set(child) | Ty::Map(_, child) => origin(child, types),
-        Ty::Struct(_, fields) => {
+        Ty::Struct(_, fields, _) => {
             for (_, child) in fields {
                 origin(child, types);
             }
@@ -302,7 +302,7 @@ fn collect(ty: &Ty, types: &mut BTreeSet<Ty>) {
     match ty {
         Ty::Delta(ty) => origin(ty, types),
         Ty::List(child, _) => collect(child, types),
-        Ty::Struct(_, fields) => {
+        Ty::Struct(_, fields, _) => {
             for (_, child) in fields {
                 collect(child, types);
             }

@@ -126,14 +126,21 @@ pub fn specialize(
             return Err("ordinary struct fields require ordinary value types".into());
         }
         for (_, value) in schema.defaults.iter().filter(|(field, _)| *field == index) {
-            if hgl_enums::default(library, &decl.module, value)?.ty() != ty {
+            if !matches!(value, hgl_source::Expr::Null)
+                && hgl_enums::default(library, &decl.module, value)?.ty()
+                    != hgl_value_access::project(&ty)
+            {
                 return Err(format!("struct field {name}: default type mismatch"));
             }
         }
         fields.push((name, ty));
     }
     active.remove(&origin);
-    Ok(Ty::Struct(Nominal { origin, arguments }, fields))
+    Ok(Ty::Struct(
+        Nominal { origin, arguments },
+        fields,
+        schema.optional,
+    ))
 }
 /// Unify one declaration-owned type pattern against a checked source type.
 pub fn unify(
@@ -202,7 +209,7 @@ pub fn unify(
         }
         let decl = declaration(library, module, base)?
             .ok_or_else(|| format!("unresolved ordinary type {base}"))?;
-        let Ty::Struct(identity, _) = actual else {
+        let Ty::Struct(identity, _, _) = actual else {
             return Err("struct field type mismatch".into());
         };
         if identity.origin != format!("{}::{}", decl.module, decl.name)
@@ -270,7 +277,7 @@ fn unify_delta(
 }
 
 fn source_argument(library: &Library, ty: &Ty) -> Result<Ty, String> {
-    if let Ty::Struct(identity, _) = ty {
+    if let Ty::Struct(identity, _, _) = ty {
         let decl = library
             .declarations
             .iter()

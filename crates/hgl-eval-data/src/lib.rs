@@ -63,7 +63,7 @@ impl State {
                         .or_default()
                         .apply(&children[index], value)?;
                 }
-                (Ty::Struct(_, fields), DeltaEntry::Child(index, value)) => {
+                (Ty::Struct(_, fields, _), DeltaEntry::Child(index, value)) => {
                     let position = usize::try_from(*index).map_err(|e| e.to_string())?;
                     self.children
                         .entry(hgl_scalar_keys::key(&Literal::Int(*index))?)

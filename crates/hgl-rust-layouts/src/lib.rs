@@ -17,8 +17,15 @@ pub fn owned_type(ty: &Ty) -> String {
     if let Ty::List(element, _) = ty {
         return format!("Vec<{}>", owned_type(element));
     }
-    if let Ty::Struct(_, fields) = ty {
-        return globals::tuple(fields.iter().map(|(_, ty)| owned_type(ty)));
+    if let Ty::Struct(_, fields, optional) = ty {
+        return globals::tuple(fields.iter().enumerate().map(|(i, (_, ty))| {
+            let ty = owned_type(ty);
+            if optional.contains(&i) {
+                format!("Option<{ty}>")
+            } else {
+                ty
+            }
+        }));
     }
     rust_type(ty).into()
 }
@@ -32,6 +39,7 @@ fn tuple_storage(children: &[Ty]) -> Ty {
             .enumerate()
             .map(|(i, ty)| (i.to_string(), ty.clone()))
             .collect(),
+        Vec::new(),
     )
 }
 

@@ -54,7 +54,7 @@ fn value(plan: &Plan, v: &Value) -> String {
         Kind::Push(parent, item) => push(plan, parent, item),
         Kind::ValueCall(args, body) => direct_call(plan, &v.ty, args, body),
         Kind::Configuration(id) => retained(&format!("self.configuration{id}"), &v.ty),
-        Kind::Construct(fields) => construct(plan, fields),
+        Kind::Construct(fields) => construct(plan, &v.ty, fields),
         Kind::Index(..) | Kind::Field(..) | Kind::BorrowedLocal(..) => {
             if let Some(slot) = borrowed_place(plan, v) {
                 format!("{{ let slot = {slot}; _ctx.global_state().read(slot)? }}")
@@ -123,16 +123,33 @@ fn unary(plan: &Plan, op: &str, operand: &Value) -> String {
         format!("({op}{value})")
     }
 }
-fn construct(plan: &Plan, fields: &[(usize, Value)]) -> String {
-    if fields.is_empty() {
+fn construct(plan: &Plan, ty: &Ty, fields: &[(usize, Value)]) -> String {
+    let (count, optional) = if let Ty::Struct(_, all, optional) = ty {
+        (all.len(), optional.as_slice())
+    } else if let Ty::Tuple(all) = ty {
+        (all.len(), &[][..])
+    } else {
+        unreachable!("aggregate constructor")
+    };
+    if count == 0 {
         return "()".into();
     }
     let mut code = vec!["{ ".to_owned()];
     for (index, argument) in fields {
         code.push(format!("let field{index} = {}; ", value(plan, argument)));
     }
-    let fields = (0..fields.len())
-        .map(|index| format!("field{index}"))
+    let fields = (0..count)
+        .map(|index| {
+            if optional.contains(&index) {
+                if fields.iter().any(|(i, _)| *i == index) {
+                    format!("Some(field{index})")
+                } else {
+                    "None".into()
+                }
+            } else {
+                format!("field{index}")
+            }
+        })
         .collect::<Vec<_>>()
         .join(",");
     code.push(format!("({fields},) }}"));
@@ -172,18 +189,11 @@ fn retained(source: &str, ty: &Ty) -> String {
             global_type(ty)
         );
     }
-    if let Ty::Struct(_, fields) = ty {
-        let fields = fields
-            .iter()
-            .enumerate()
-            .map(|(i, (_, ty))| retained(&format!("source.{i}"), ty))
-            .collect::<Vec<_>>()
-            .join(",");
-        return if fields.is_empty() {
-            format!("{{ let _ = &({source}); () }}")
-        } else {
-            format!("{{ let source = &({source}); ({fields},) }}")
-        };
+    if matches!(ty, Ty::Struct(..)) {
+        return format!(
+            "<{} as hgl_store::GlobalValue>::retain(&({source}))?",
+            global_type(ty)
+        );
     }
     if matches!(
         ty,

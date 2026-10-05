@@ -26,3 +26,8 @@ and assigned member number; it never substitutes an ordinary integer.
 Map Keyed(Value,Value) entries and Add/Remove(Value) decode materialized ordinary
 keys by exact K; capture re-encodes complete typed keys independently of runtime
 membership IDs. Field and fixed-list Child indices remain i64.
+
+Optional struct encode/decode preserves missing field indices as unset and
+present fields as independently retained payloads. Decode rejects missing
+required fields. Encoding an all-unset struct still creates a present Construct;
+only dense eval silence remains an absent sequence cell.

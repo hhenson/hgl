@@ -73,13 +73,15 @@ pub struct Signature {
     pub requirement: Option<(String, Vec<String>, String)>,
 }
 #[derive(Debug, Clone)]
-/// Required-field struct contract before specialization.
+/// Concrete ordinary struct contract before specialization.
 pub struct RequiredStruct {
     /// Ordered distinct type parameters.
     pub generics: Vec<String>,
     /// Declaration-ordered source field types.
     pub fields: Vec<(String, String)>,
-    /// Declaration-indexed non-null fixed scalar defaults.
+    /// Fields whose introducing default is null.
+    pub optional: Vec<usize>,
+    /// Declaration-indexed fixed defaults; null marks absence.
     pub defaults: Vec<(usize, Expr)>,
     /// Supported finite type-domain constraint.
     pub type_domain: Option<(String, Vec<String>)>,
@@ -285,7 +287,7 @@ fn add_import(
     Ok(())
 }
 impl Decl {
-    /// Parse finite type-generic fields and non-null fixed scalar defaults.
+    /// Parse finite type-generic fields, optionality and fixed scalar defaults.
     pub fn required_struct(&self) -> Result<RequiredStruct, String> {
         let mut c = Cursor::new(&self.tokens);
         c.take("export");
@@ -325,12 +327,11 @@ impl Decl {
         };
         c.lines();
         if !c.take("{") {
-            return Err(
-                "ordinary structs currently require required fields without inheritance".into(),
-            );
+            return Err("ordinary structs currently require fields without inheritance".into());
         }
         let mut fields = Vec::new();
         let mut defaults = Vec::new();
+        let mut optional = Vec::new();
         c.lines();
         while !c.take("}") {
             let name = c.name()?;
@@ -340,11 +341,10 @@ impl Decl {
                 return Err(format!("duplicate struct field {name}"));
             }
             if c.take("=") {
-                let expr = c.expr()?;
-                if matches!(expr, Expr::Null) {
-                    return Err("struct field optionality is not supported".into());
+                let value = scalar_default(c.expr()?)?;
+                if matches!(value, Expr::Null) {
+                    optional.push(fields.len());
                 }
-                let value = scalar_default(expr)?;
                 defaults.push((fields.len(), value));
             }
             if !c.at("}") && !c.at("\n") {
@@ -360,6 +360,7 @@ impl Decl {
         Ok(RequiredStruct {
             generics,
             fields,
+            optional,
             defaults,
             type_domain,
         })
@@ -551,7 +552,7 @@ fn parse_native_requirement(c: &mut Cursor<'_>) -> Result<(String, Vec<String>, 
 }
 
 fn scalar_default(expr: Expr) -> Result<Expr, String> {
-    if matches!(&expr, Expr::TemporalLiteral(_) | Expr::Name(_)) {
+    if matches!(&expr, Expr::Null | Expr::TemporalLiteral(_) | Expr::Name(_)) {
         return Ok(expr);
     }
     expr.fixed()

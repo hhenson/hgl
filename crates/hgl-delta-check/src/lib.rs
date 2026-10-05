@@ -62,7 +62,7 @@ pub fn constructor<'a>(
             Ty::List(..) | Ty::Tuple(_) if name == "items" => {
                 sparse(origin, expr, &mut fixed, &mut added, &mut parts)?;
             }
-            Ty::Struct(_, fields) => {
+            Ty::Struct(_, fields, _) => {
                 let (index, (_, child)) = fields
                     .iter()
                     .enumerate()

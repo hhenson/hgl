@@ -38,3 +38,9 @@ remain unchanged. Contexts without provider construction reject recipe use.
 
 Resolve retained enum member defaults with their declaration module through
 hgl-enums before constructing an omitted ordinary field. May use hgl-enums.
+
+Optional field positions come from declaration metadata. Reject explicit null
+for required fields before evaluating any constructor argument. Omitted or
+explicitly null optional fields contribute no payload to Kind::Construct;
+present fields retain their normal exact type and written evaluation order.
+An empty Construct for an all-optional schema is a present complete value.

@@ -3,7 +3,7 @@ use hgl_rust_ir::{Kind, Value};
 use hgl_source::Ty;
 /// Whether the checked type admits ordinary owning retention.
 pub fn ordinary(ty: &Ty) -> bool {
-    if let Ty::Struct(_, fields) = ty {
+    if let Ty::Struct(_, fields, _) = ty {
         return fields.iter().all(|(_, ty)| ordinary(&project(ty)));
     }
     if let Ty::Tuple(children) = ty {
@@ -43,7 +43,7 @@ pub fn writable(value: &Value) -> bool {
 }
 /// Resolve a declared ordinary field without changing its parent's authority.
 pub fn field(parent: Value, name: &str) -> Result<Value, String> {
-    let Ty::Struct(_, fields) = &parent.ty else {
+    let Ty::Struct(_, fields, optional) = &parent.ty else {
         return Err("field access requires an ordinary struct or direct injected clock".into());
     };
     if matches!(parent.kind, Kind::Input(..) | Kind::Wire(_) | Kind::Output) {
@@ -56,6 +56,9 @@ pub fn field(parent: Value, name: &str) -> Result<Value, String> {
         .enumerate()
         .find(|(_, (field, _))| field == name)
         .ok_or_else(|| format!("unknown struct field {name}"))?;
+    if optional.contains(&index) {
+        return Err("optional field access is outside the admitted value profile".into());
+    }
     Ok(Value::new(ty.clone(), Kind::Field(Box::new(parent), index)))
 }
 /// Return the entry and access mode carried by an aggregate view.
@@ -140,13 +143,14 @@ pub fn project(ty: &Ty) -> Ty {
     if let Ty::Atomic(payload) = ty {
         return project(payload);
     }
-    if let Ty::Struct(identity, fields) = ty {
+    if let Ty::Struct(identity, fields, optional) = ty {
         return Ty::Struct(
             identity.clone(),
             fields
                 .iter()
                 .map(|(name, ty)| (name.clone(), project(ty)))
                 .collect(),
+            optional.clone(),
         );
     }
     if let Ty::List(child, size) = ty {

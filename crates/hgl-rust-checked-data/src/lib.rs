@@ -35,8 +35,8 @@ pub fn ty(t: &Ty) -> String {
         Ty::Map(k, v) => format!("Map(Box::new({}),Box::new({}))", ty(k), ty(v)),
         Ty::List(t, n) => format!("List(Box::new({}),{n:?})", ty(t)),
         Ty::Tuple(ts) => format!("Tuple({})", list(ts, ty)),
-        Ty::Struct(n, fields) => format!(
-            "Struct(hgl_source::Nominal {{origin:{:?}.into(),arguments:{}}},{})",
+        Ty::Struct(n, fields, optional) => format!(
+            "Struct(hgl_source::Nominal {{origin:{:?}.into(),arguments:{}}},{},vec!{optional:?})",
             n.origin,
             list(&n.arguments, ty),
             list(fields, |(name, t)| format!("({name:?}.into(),{})", ty(t)))

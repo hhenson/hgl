@@ -79,3 +79,8 @@ introduced. Prepared allocation evidence applies only to the selected finite pat
 Supported returned sparse constructors use hgl-rust-direct-deltas to evaluate
 scalar operands once, retain constant key aliases cold, and publish directly
 into prepared child endpoints. No intermediate delta vectors are constructed.
+
+Struct construction emits supplied payloads in written order, then assembles
+all declaration positions, inserting Some/None only at optional fields.
+Struct retention delegates to its generated GlobalValue marker so field
+presence survives owning boundaries. This introduces no optional read syntax.

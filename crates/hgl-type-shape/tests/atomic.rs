@@ -23,8 +23,8 @@ fn complete_payload_and_structural_delta_are_different_types() {
         Ty::List(Box::new(Ty::I64), None),
         Ty::List(Box::new(Ty::I64), Some(0)),
         Ty::Tuple(vec![Ty::I64]),
-        Ty::Struct("Empty".into(), vec![]),
-        Ty::Struct("Single".into(), vec![("value".into(), Ty::I64)]),
+        Ty::Struct("Empty".into(), vec![], vec![]),
+        Ty::Struct("Single".into(), vec![("value".into(), Ty::I64)], vec![]),
     ] {
         let atomic = payload.clone().atomic();
         assert_ne!(atomic, payload);

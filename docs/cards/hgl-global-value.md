@@ -74,3 +74,7 @@ i64 physical leaf. Retention and complete nested payload rules remain unchanged.
 ValueSlot::from_fields(T::Slots)->Self reconstructs a typed projection from
 compile-time-selected immediate field positions. It does not inspect payloads or
 create ownership; the marker and arena identity remain caller contracts.
+
+Construction-time allocation recognizes OptionalField as one initially empty
+presence descriptor. Optional payload representation and typed operations are
+owned by hgl-optional; unset fields allocate no descendant payload.

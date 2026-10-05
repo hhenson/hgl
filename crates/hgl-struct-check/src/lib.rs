@@ -47,7 +47,7 @@ impl Constructor {
                 );
             }
         }
-        if let Some(Ty::Struct(identity, _)) = expected
+        if let Some(Ty::Struct(identity, _, _)) = expected
             && !schema.generics.is_empty()
         {
             if identity.origin != format!("{}::{}", declaration.module, declaration.name) {
@@ -63,7 +63,7 @@ impl Constructor {
             }
         }
         let mut fields = Vec::new();
-        for (name, _) in args {
+        for (name, expr) in args {
             let name = name
                 .as_ref()
                 .ok_or("struct construction requires named fields")?;
@@ -74,6 +74,9 @@ impl Constructor {
                 .ok_or_else(|| format!("unknown argument {name}"))?;
             if fields.contains(&index) {
                 return Err(format!("duplicate struct field {name}"));
+            }
+            if matches!(expr, Expr::Null) && !schema.optional.contains(&index) {
+                return Err("null supplied to required struct field".into());
             }
             fields.push(index);
         }
@@ -107,6 +110,9 @@ impl Constructor {
             specialize(library, &self.declaration, arguments, &mut BTreeSet::new())?;
         }
         for (index, (_, expr)) in args.iter().enumerate() {
+            if matches!(expr, Expr::Null) {
+                continue;
+            }
             if self.values[index].is_none() {
                 self.literal_evidence(
                     library,
@@ -115,8 +121,9 @@ impl Constructor {
                 )?;
             }
         }
-        for index in 0..self.fields.len() {
+        for (index, (_, expr)) in args.iter().enumerate() {
             if self.values[index].is_none()
+                && !matches!(expr, Expr::Null)
                 && let Ok(ty) = substitute(
                     library,
                     &self.declaration.module,
@@ -132,7 +139,7 @@ impl Constructor {
             .values
             .iter()
             .enumerate()
-            .filter(|(_, value)| value.is_none())
+            .filter(|(index, value)| value.is_none() && !matches!(args[*index].1, Expr::Null))
             .map(|(index, _)| index)
             .collect::<Vec<_>>();
         if let Some(index) = pending
@@ -218,6 +225,7 @@ impl Constructor {
             .fields
             .into_iter()
             .zip(self.values)
+            .filter(|(index, value)| value.is_some() || !self.schema.optional.contains(index))
             .map(|(index, value)| {
                 value
                     .map(|value| (index, value))
@@ -225,6 +233,9 @@ impl Constructor {
             })
             .collect::<Result<Vec<_>, String>>()?;
         for (index, default) in self.schema.defaults {
+            if matches!(default, Expr::Null) {
+                continue;
+            }
             if !fields.iter().any(|(field, _)| *field == index) {
                 let default = hgl_enums::default(library, &self.declaration.module, &default)?;
                 let ty = default.ty();

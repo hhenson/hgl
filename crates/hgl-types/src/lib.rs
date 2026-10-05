@@ -187,6 +187,8 @@ impl TsType {
 /// An exact ordinary entry type, including nominal identity and required fields.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum OrdinaryType {
+    /// Internal field presence and its ordinary payload; not a source type.
+    OptionalField(Box<OrdinaryType>),
     /// Exact module-qualified enum identity, backed by a declared i64 member.
     Enum(&'static str),
     /// One of the eight owning primitive values.

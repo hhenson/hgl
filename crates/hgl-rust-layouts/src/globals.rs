@@ -21,7 +21,7 @@ pub fn global_type(ty: &Ty) -> String {
             size.map_or(-1_i128, |size| size as i128)
         );
     }
-    if let Ty::Struct(name, _) = ty {
+    if let Ty::Struct(name, _, _) = ty {
         let identity = name
             .source_name()
             .bytes()
@@ -71,7 +71,16 @@ pub fn global_markers(plan: &Plan) -> String {
             collect(ty, &mut types);
         }
     }
-    types.values().map(marker).collect()
+    types
+        .values()
+        .map(|ty| {
+            if let Ty::Enum(identity) = ty {
+                hgl_rust_enums::marker(identity)
+            } else {
+                hgl_rust_structs::marker(ty, global_type, global_schema)
+            }
+        })
+        .collect()
 }
 fn collect(ty: &Ty, types: &mut BTreeMap<String, Ty>) {
     if let Ty::Enum(identity) = ty {
@@ -86,7 +95,7 @@ fn collect(ty: &Ty, types: &mut BTreeMap<String, Ty>) {
     if let Ty::List(element, _) = ty {
         collect(element, types);
     }
-    if let Ty::Struct(name, fields) = ty {
+    if let Ty::Struct(name, fields, _) = ty {
         types.insert(name.source_name(), ty.clone());
         for (_, ty) in fields {
             collect(ty, types);
@@ -98,86 +107,6 @@ pub(super) fn tuple(fields: impl Iterator<Item = String>) -> String {
         [] => "()".into(),
         fields => format!("({},)", fields.join(",")),
     }
-}
-fn marker(ty: &Ty) -> String {
-    if let Ty::Enum(identity) = ty {
-        return hgl_rust_enums::marker(identity);
-    }
-    let Ty::Struct(identity, fields) = ty else {
-        unreachable!("collected structs")
-    };
-    let identity = identity.source_name();
-    let name = global_type(ty);
-    let value = tuple(
-        fields
-            .iter()
-            .map(|(_, ty)| format!("<{} as hgl_store::GlobalValue>::Value", global_type(ty))),
-    );
-    let slots = tuple(
-        fields
-            .iter()
-            .map(|(_, ty)| format!("hgl_store::ValueSlot<{}>", global_type(ty))),
-    );
-    let schema = marker_schema(&identity, fields);
-    let bind = tuple(
-        fields
-            .iter()
-            .map(|(_, ty)| format!("hgl_store::ValueSlot::<{}>::bind(layout)", global_type(ty))),
-    );
-    let retain = tuple(fields.iter().enumerate().map(|(i, (_, ty))| {
-        format!(
-            "<{} as hgl_store::GlobalValue>::retain(&value.{i})?",
-            global_type(ty)
-        )
-    }));
-    let read = tuple(
-        fields
-            .iter()
-            .enumerate()
-            .map(|(i, _)| format!("slots.{i}.read(columns)?")),
-    );
-    let commit = fields
-        .iter()
-        .enumerate()
-        .map(|(i, _)| format!("slots.{i}.commit(columns, value.{i}, layouts);"))
-        .collect::<Vec<_>>()
-        .concat();
-    let widths = fields
-        .iter()
-        .map(|(_, ty)| format!("<{} as hgl_store::GlobalValue>::WIDTH", global_type(ty)))
-        .collect::<Vec<_>>();
-    let width = if widths.is_empty() {
-        "0".into()
-    } else {
-        widths.join("+")
-    };
-    let prepare = fields
-        .iter()
-        .enumerate()
-        .map(|(i, (_, ty))| {
-            format!(
-                "<{} as hgl_store::GlobalValue>::prepare(&value.{i}, capacity, layouts)?;",
-                global_type(ty)
-            )
-        })
-        .collect::<Vec<_>>()
-        .concat();
-    let install = tuple(fields.iter().enumerate().map(|(i, (_, ty))| {
-        format!(
-            "hgl_store::ValueSlot::<{}>::install(columns,value.{i},layouts)",
-            global_type(ty)
-        )
-    }));
-    let release = fields
-        .iter()
-        .enumerate()
-        .map(|(i, _)| format!("slots.{i}.release(columns);"))
-        .collect::<Vec<_>>()
-        .concat();
-    let flatten = widths.iter().enumerate().map(|(i,width)| format!("let (field, rest) = layout.split_at_mut({width}); slots.{i}.flatten(field); let layout = rest;")).collect::<Vec<_>>().concat();
-    format!(
-        "#[derive(Debug)]\nstruct {name};\nimpl hgl_store::GlobalValue for {name} {{\ntype Value = {value};\ntype Slots = {slots};\nconst WIDTH: usize = {width};\nfn prepare(value: &Self::Value, capacity: &mut hgl_store::Capacity, layouts: &mut hgl_store::Layouts) -> hgl_types::NodeResult {{ {prepare} Ok(()) }}\nfn install(columns: &mut hgl_store::ValueColumns, value: Self::Value, layouts: &mut hgl_store::Layouts) -> Self::Slots {{ {install} }}\nfn release(columns: &mut hgl_store::ValueColumns, slots: Self::Slots) {{ {release} }}\nfn flatten(slots: Self::Slots, layout: &mut [usize]) {{ {flatten} }}\nfn schema() -> hgl_types::OrdinaryType {{ {schema} }}\nfn slots(layout: &mut &[usize]) -> Self::Slots {{ {bind} }}\nfn retain(value: &Self::Value) -> Result<Self::Value, Box<hgl_types::NodeError>> {{ Ok({retain}) }}\nfn read(columns: &hgl_store::ValueColumns, slots: Self::Slots) -> Result<Self::Value, Box<hgl_types::NodeError>> {{ Ok({read}) }}\nfn commit(columns: &mut hgl_store::ValueColumns, slots: Self::Slots, value: Self::Value, layouts: &mut hgl_store::Layouts) {{ {commit} }}\n}}\n"
-    ) + &hgl_rust_prepared_values::structure(&name, fields, global_type)
 }
 
 fn statement_types(statements: &[hgl_rust_ir::Statement], types: &mut BTreeMap<String, Ty>) {
@@ -263,26 +192,5 @@ fn value_types(value: &hgl_rust_ir::Value, types: &mut BTreeMap<String, Ty>) {
         | Kind::TemporalLiteral(_)
         | Kind::Prepared(_)
         | Kind::Void => {}
-    }
-}
-
-fn marker_schema(identity: &str, fields: &[(String, Ty)]) -> String {
-    let positional = identity.starts_with("\0tuple<");
-    let values = fields
-        .iter()
-        .map(|(name, ty)| {
-            let ty = global_schema(ty);
-            if positional {
-                ty
-            } else {
-                format!("({name:?}, {ty})")
-            }
-        })
-        .collect::<Vec<_>>()
-        .join(",");
-    if positional {
-        format!("hgl_types::OrdinaryType::Tuple(vec![{values}])")
-    } else {
-        format!("hgl_types::OrdinaryType::Struct({identity:?}, vec![{values}])")
     }
 }

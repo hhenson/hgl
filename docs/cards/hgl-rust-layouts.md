@@ -45,3 +45,8 @@ payload or a declared enum scalar using a prepared complete-value endpoint.
 
 Nominal markers also delegate additive PreparedValue emission to
 hgl-rust-prepared-values, retaining exact identity in independently prepared slots.
+
+May use hgl-rust-structs for concrete nominal GlobalValue emission. Optional
+positions become Option payloads and Optional field markers; marker collection
+retains exact nominal identity and existing declaration indices. Tuple and
+delta storage schemas remain required-field forms.

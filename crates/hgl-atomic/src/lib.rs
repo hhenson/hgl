@@ -146,7 +146,10 @@ impl Arena {
 }
 fn width(ty: &OrdinaryType) -> usize {
     match ty {
-        OrdinaryType::Enum(_) | OrdinaryType::Scalar(_) | OrdinaryType::List(..) => 1,
+        OrdinaryType::Enum(_)
+        | OrdinaryType::Scalar(_)
+        | OrdinaryType::List(..)
+        | OrdinaryType::OptionalField(_) => 1,
         OrdinaryType::Tuple(fields) => fields.iter().map(width).sum(),
         OrdinaryType::Struct(_, fields) => fields.iter().map(|(_, ty)| width(ty)).sum(),
     }

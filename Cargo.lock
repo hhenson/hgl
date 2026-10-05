@@ -343,6 +343,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "hgl-optional"
+version = "0.0.0"
+dependencies = [
+ "hgl-global-value",
+ "hgl-types",
+]
+
+[[package]]
 name = "hgl-plan"
 version = "0.0.0"
 dependencies = [
@@ -539,6 +547,7 @@ dependencies = [
  "hgl-rust-ir",
  "hgl-rust-prepared-values",
  "hgl-rust-scalars",
+ "hgl-rust-structs",
  "hgl-source",
 ]
 
@@ -600,6 +609,13 @@ version = "0.0.0"
 dependencies = [
  "hgl-rust-ir",
  "hgl-rust-layouts",
+]
+
+[[package]]
+name = "hgl-rust-structs"
+version = "0.0.0"
+dependencies = [
+ "hgl-source",
 ]
 
 [[package]]
@@ -705,6 +721,7 @@ dependencies = [
  "hgl-global",
  "hgl-keys",
  "hgl-literals",
+ "hgl-optional",
  "hgl-prepared-store",
  "hgl-shapes",
  "hgl-store-build",

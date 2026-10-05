@@ -53,3 +53,12 @@ Scalar-collection-keys (spec06e576a) admits every built-in scalar and declared e
 as the exact K of set<K> and map<K,S>. Composite/reference/native keys remain
 outside the profile. f64 value restrictions belong to key checking, not type
 formation. No key normalization changes the declared source type.
+
+apply identically; enum keys and set members remain excluded.
+
+Optional atomic structs retain `Ty::Struct(Nominal, Vec<(String,Ty)>, Vec<usize>)`;
+the final vector contains optional declaration positions. It is schema metadata,
+not a nullable source type. Ordinary projection preserves it. Complete atomic
+payload admission permits optional fields recursively; structural publication
+roots with optional fields remain outside this admission. Delta of an atomic
+struct is its complete ordinary value, including field presence.

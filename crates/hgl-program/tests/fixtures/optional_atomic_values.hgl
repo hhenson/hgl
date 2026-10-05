@@ -1,0 +1,105 @@
+module hgraph.std part optional_atomic_values_tests
+
+struct OptionalPublication {
+    count: i64 = null
+    label: str = null
+    items: list<i64> = null
+}
+
+struct OptionalPublicationEnvelope {
+    value: OptionalPublication
+    note: str
+}
+
+test {
+    fn optional_snapshot(value: atomic<OptionalPublication>) -> atomic<OptionalPublication> => pass_through(value)
+    fn optional_envelope(value: atomic<OptionalPublicationEnvelope>) -> atomic<OptionalPublicationEnvelope> => pass_through(value)
+    fn optional_list(value: atomic<list<OptionalPublication>>) -> atomic<list<OptionalPublication>> => pass_through(value)
+    fn optional_child(value: list<atomic<OptionalPublication>, 2>) -> list<atomic<OptionalPublication>, 2> => pass_through(value)
+
+    # Null is an unset field. A complete struct with every field unset is still data.
+    test optional_fields_preserve_unset_and_present_empty_values {
+        let unset: OptionalPublication = OptionalPublication()
+        let explicit: OptionalPublication = OptionalPublication(count: null, label: null, items: null)
+        let zero: OptionalPublication = OptionalPublication(count: 0)
+        let empty_label: OptionalPublication = OptionalPublication(label: "")
+        let empty_items: OptionalPublication = OptionalPublication(items: [])
+        assert eval(optional_snapshot, [unset, explicit, _, zero, empty_label, empty_items, unset]) == [
+            explicit, unset, _, zero, empty_label, empty_items, explicit
+        ]
+        assert eval(optional_snapshot, []) == []
+        assert eval(optional_snapshot, [_, _, _]) == [_, _, _]
+    }
+
+    # Each complete snapshot replaces field presence; it does not merge with the old one.
+    test optional_snapshot_replacement_clears_previously_present_fields {
+        let full: OptionalPublication = OptionalPublication(count: 7, label: "saved", items: [1, 2])
+        let partial: OptionalPublication = OptionalPublication(label: "next")
+        let empty: OptionalPublication = OptionalPublication()
+        assert eval(optional_snapshot, [full, full, partial, _, empty, empty, full]) == [
+            full, full, partial, _, empty, empty, full
+        ]
+    }
+
+    test optional_present_children_are_independent_owned_values {
+        var items: list<i64> = []
+        push(items, 1)
+        let first: OptionalPublication = OptionalPublication(items: items)
+        push(items, 2)
+        let second: OptionalPublication = OptionalPublication(items: items)
+        push(items, 3)
+        assert eval(optional_snapshot, [first, second, _, first]) == [
+            OptionalPublication(items: [1]), OptionalPublication(items: [1, 2]), _, OptionalPublication(items: [1])
+        ]
+    }
+
+    test optional_fields_nest_in_complete_structs_and_lists {
+        let absent: OptionalPublication = OptionalPublication()
+        let present: OptionalPublication = OptionalPublication(count: 0, items: [])
+        let first: OptionalPublicationEnvelope = OptionalPublicationEnvelope(value: absent, note: "a")
+        let second: OptionalPublicationEnvelope = OptionalPublicationEnvelope(value: present, note: "b")
+        assert eval(optional_envelope, [first, second, _, first]) == [first, second, _, first]
+        var values: list<OptionalPublication> = []
+        push(values, absent)
+        let retained: list<OptionalPublication> = values
+        push(values, present)
+        let empty: list<OptionalPublication> = []
+        assert eval(optional_list, [retained, values, empty, _, retained]) == [retained, values, empty, _, retained]
+    }
+
+    test optional_complete_children_are_present_in_sparse_publications {
+        let present: OptionalPublication = OptionalPublication(count: 1)
+        let unset: OptionalPublication = OptionalPublication()
+        assert eval(optional_child, [delta<list<atomic<OptionalPublication>, 2>>(items: [1: present]), _, delta<list<atomic<OptionalPublication>, 2>>(items: [1: unset])]) == [
+            delta<list<atomic<OptionalPublication>, 2>>(items: [1: present]), _, delta<list<atomic<OptionalPublication>, 2>>(items: [1: unset])
+        ]
+    }
+
+    fn optional_replay_context(tick: i64) { when { } }
+    fn optional_replayed(tick: i64, const samples: list<TimedValue<atomic<OptionalPublication>>>) -> atomic<OptionalPublication> {
+        optional_replay_context(tick)
+        replay(samples)
+    }
+    test optional_timed_replay_retains_presence_and_values_across_runs {
+        var items: list<i64> = []
+        push(items, 1)
+        var sample: TimedValue<atomic<OptionalPublication>> = TimedValue<atomic<OptionalPublication>>(
+            time: @1970-01-01T00:00:00.000001Z, value: OptionalPublication(items: items)
+        )
+        var samples: list<TimedValue<atomic<OptionalPublication>>> = []
+        push(samples, sample)
+        push(items, 2)
+        sample.time = @1970-01-01T00:00:00.000003Z
+        sample.value = OptionalPublication()
+        push(samples, sample)
+        sample.value = OptionalPublication(count: 9, items: items)
+        assert eval(optional_replayed, tick: [1, 1, 1, 1], samples: samples) == [
+            OptionalPublication(items: [1]), _, OptionalPublication(), _
+        ]
+        assert eval(optional_replayed, tick: [1, 1, 1, 1], samples: samples) == [
+            OptionalPublication(items: [1]), _, OptionalPublication(), _
+        ]
+        let empty: list<TimedValue<atomic<OptionalPublication>>> = []
+        assert eval(optional_replayed, tick: [1, 1], samples: empty) == [_, _]
+    }
+}

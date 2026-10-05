@@ -68,8 +68,8 @@ pub enum Ty {
     Delta(Box<Self>),
     /// Ordinary list element and optional exact fixed length.
     List(Box<Self>, Option<usize>),
-    /// Qualified nominal identity and required ordinary field types.
-    Struct(Nominal, Vec<(String, Self)>),
+    /// Qualified identity, declared field types, and optional field positions.
+    Struct(Nominal, Vec<(String, Self)>, Vec<usize>),
     /// Signed integer.
     I64,
     /// Binary floating point.
@@ -190,7 +190,7 @@ impl Ty {
     pub fn source_name(&self) -> String {
         match self {
             Self::Enum(ty) => ty.origin.clone(),
-            Self::Struct(identity, _) => identity.source_name(),
+            Self::Struct(identity, _, _) => identity.source_name(),
             Self::Delta(origin) => format!("delta<{}>", origin.source_name()),
             Self::Tuple(children) => format!(
                 "tuple<{}>",
@@ -245,7 +245,9 @@ impl Ty {
             Self::Set(member) => member.scalar(),
             Self::List(child, Some(_)) => child.publication(),
             Self::Tuple(children) => children.iter().all(Self::publication),
-            Self::Struct(_, fields) => fields.iter().all(|(_, child)| child.publication()),
+            Self::Struct(_, fields, optional) => {
+                optional.is_empty() && fields.iter().all(|(_, child)| child.publication())
+            }
             Self::Map(key, child) => key.scalar() && child.publication(),
             Self::List(_, None)
             | Self::Delta(_)
@@ -288,7 +290,7 @@ impl Ty {
         if let Self::Tuple(children) = self {
             return children.iter().all(Self::atomic_payload);
         }
-        if let Self::Struct(_, fields) = self {
+        if let Self::Struct(_, fields, _) = self {
             return fields.iter().all(|(_, ty)| ty.atomic_payload());
         }
         self.scalar()

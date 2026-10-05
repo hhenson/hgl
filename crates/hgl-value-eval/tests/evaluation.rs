@@ -108,7 +108,7 @@ fn nested_push_and_owning_assignment_retain_independent_values() {
 
 #[test]
 fn fields_beneath_indexed_elements_are_writable_but_not_replaceable() {
-    let ty = Ty::Struct("Box".into(), vec![("amount".into(), Ty::I64)]);
+    let ty = Ty::Struct("Box".into(), vec![("amount".into(), Ty::I64)], vec![]);
     let item = Value::new(ty.clone(), Kind::Construct(vec![(0, int(1))]));
     let items = list(vec![item.clone()], ty.clone());
     let mut evaluator = Evaluator::default();
@@ -211,7 +211,11 @@ fn bounds_fail_when_evaluated_and_failed_push_preserves_receiver() {
 #[test]
 fn constructors_evaluate_written_field_order_and_retain_children() {
     let items = list(vec![int(1)], Ty::I64);
-    let ty = Ty::Struct("Lists".into(), vec![("items".into(), items.ty.clone())]);
+    let ty = Ty::Struct(
+        "Lists".into(),
+        vec![("items".into(), items.ty.clone())],
+        vec![],
+    );
     let mut evaluator = Evaluator::default();
     evaluator
         .statement(&Statement::Var(0, items.clone()))
@@ -230,6 +234,7 @@ fn constructors_evaluate_written_field_order_and_retain_children() {
         Ty::Struct(
             "Pair".into(),
             vec![("a".into(), Ty::I64), ("b".into(), Ty::I64)],
+            vec![],
         ),
         Kind::Construct(vec![
             (1, binary("%", int(1), int(0), Ty::I64)),

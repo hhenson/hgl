@@ -160,7 +160,7 @@ pub fn allocate(
                 allocate(field, columns, slots)?;
             }
         }
-        OrdinaryType::List(_, _) => {
+        OrdinaryType::List(_, _) | OrdinaryType::OptionalField(_) => {
             let mut capacity = Capacity::default();
             capacity.list();
             columns.reserve(&capacity)?;

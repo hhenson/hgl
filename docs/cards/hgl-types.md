@@ -188,3 +188,7 @@ identity is never interchangeable with an ordinary integer or another enum.
 KeyedDictionary(OrdinaryType, Box<TsType>) and KeyedSet(OrdinaryType) retain
 exact scalar/enum key identity for prepared finite collections. Dictionary
 remains the i64 compatibility shape; Set remains built-in scalar membership.
+
+`OrdinaryType::OptionalField(Box<OrdinaryType>)` is an internal field-presence
+descriptor, distinct from its present payload and required fields. It is never
+an HGL annotation or a whole temporal-null publication type.

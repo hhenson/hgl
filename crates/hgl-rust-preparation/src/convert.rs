@@ -3,7 +3,7 @@ use super::ty;
 use hgl_source::Ty;
 fn fields(t: &Ty) -> Vec<Ty> {
     match t {
-        Ty::Struct(_, fields) => fields.iter().map(|(_, t)| t.clone()).collect(),
+        Ty::Struct(_, fields, _) => fields.iter().map(|(_, t)| t.clone()).collect(),
         Ty::Tuple(ts) => ts.clone(),
         Ty::Atomic(_)
         | Ty::Map(..)
@@ -38,7 +38,12 @@ pub fn decode(t: &Ty, expression: &str) -> String {
             decode(child, "item")
         ),
         Ty::Tuple(_) | Ty::Struct(..) => {
-            let values=fields(t).iter().enumerate().map(|(i,t)|format!("{},",decode(t,&format!("items.iter().find(|(id,_)|*id=={i}).map(|(_,v)|v).ok_or(\"prepared field missing\")?")))).collect::<Vec<_>>().concat();
+            let optional = if let Ty::Struct(_, _, optional) = t { optional.as_slice() } else { &[] };
+            let values=fields(t).iter().enumerate().map(|(i,t)| {
+                let found=format!("items.iter().find(|(id,_)|*id=={i}).map(|(_,v)|v)");
+                if optional.contains(&i) { format!("{found}.map(|field|Ok::<_,String>({})).transpose()?,",decode(t,"field")) }
+                else {format!("{},",decode(t,&format!("{found}.ok_or(\"prepared field missing\")?")))}
+            }).collect::<Vec<_>>().concat();
             format!(
                 "let hgl_rust_ir::Kind::Construct(items)=&v.kind else {{return Err(\"prepared aggregate required\".into())}}; ({values})"
             )
@@ -105,15 +110,29 @@ pub fn encode(t: &Ty, expression: &str) -> String {
             "hgl_rust_ir::Kind::List(v.iter().map(|item|{}).collect())",
             encode(child, "item")
         ),
-        Ty::Struct(..) | Ty::Tuple(_) => format!(
-            "hgl_rust_ir::Kind::Construct(vec![{}])",
-            fields(t)
+        Ty::Struct(..) | Ty::Tuple(_) => {
+            let optional = if let Ty::Struct(_, _, optional) = t {
+                optional.as_slice()
+            } else {
+                &[]
+            };
+            let entries = fields(t)
                 .iter()
                 .enumerate()
-                .map(|(i, t)| format!("({i},{}),", encode(t, &format!("&v.{i}"))))
+                .map(|(i, t)| {
+                    if optional.contains(&i) {
+                        format!(
+                            "if let Some(field)=&v.{i} {{ fields.push(({i},{})); }}",
+                            encode(t, "field")
+                        )
+                    } else {
+                        format!("fields.push(({i},{}));", encode(t, &format!("&v.{i}")))
+                    }
+                })
                 .collect::<Vec<_>>()
-                .concat()
-        ),
+                .concat();
+            format!("{{let mut fields=Vec::new(); {entries} hgl_rust_ir::Kind::Construct(fields)}}")
+        }
         Ty::Bool
         | Ty::I64
         | Ty::F64

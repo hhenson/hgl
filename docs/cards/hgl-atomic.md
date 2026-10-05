@@ -45,3 +45,7 @@ without a publication. destination<T>(&Bindings,Output<Atomic<T>>)->NodeResult<V
 validates token generation and requires installed storage without requiring a
 previous value tick. values_mut() permits complete-preflight independent copies;
 publication remains a separate final Bindings operation in hgl-prepared-store.
+
+OptionalField contributes one descriptor position to the root layout. Complete
+snapshot replacement delegates presence retention and reclamation to the
+optional field marker; an all-unset struct remains a valid published root.

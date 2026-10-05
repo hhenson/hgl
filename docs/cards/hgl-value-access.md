@@ -25,3 +25,8 @@ retention, typed alias and helper-escape checking tests.
 Re-export hgl-static-values::StaticValues for existing callers. Provenance and
 closed-key validation belong to that crate; ordinary runtime access authority
 remains here. May depend on hgl-static-values.
+
+Ordinary projection preserves struct optional-position metadata. Access to an
+optional field is explicitly rejected in this publication slice; required
+fields and whole-value owning bindings keep existing behavior. No optional
+clearing or mutation surface follows from admitting complete snapshots.

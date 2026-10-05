@@ -64,7 +64,7 @@ fn scalar_replay_and_record_use_ordinary_prepared_values() {
     let Ty::List(entry, None) = &replay.configuration[0].ty else {
         panic!("ordinary unbounded list")
     };
-    let Ty::Struct(identity, fields) = entry.as_ref() else {
+    let Ty::Struct(identity, fields, _) = entry.as_ref() else {
         panic!("ordinary timed entry")
     };
     assert_eq!(identity.origin, "hgraph.std::TimedValue");
