@@ -196,13 +196,7 @@ impl<W: Wake> PreparedTick<'_, W> {
         measure: impl FnOnce(Observation<'_>) -> NodeResult<usize>,
         compose: impl FnOnce(&mut String, Observation<'_>),
     ) -> NodeResult {
-        validate_write(
-            self.storage.bindings,
-            output,
-            generation,
-            self.now,
-            self.writer,
-        );
+        self.authorize(output, generation);
         let observation = Observation {
             columns: self.storage.columns,
             bindings: self.storage.bindings,
