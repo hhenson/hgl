@@ -20,7 +20,7 @@ pub fn initializer(value: Value, annotation: Option<&Ty>) -> Result<Value, Strin
         return Err("statement operation has no initializer value".into());
     }
     if !matches!(value.ty, Ty::Nullable(_)) {
-        require_payload(&value)?;
+        owning_payload(&value)?;
     }
     let value = if let Some(ty) = annotation {
         widen(value, ty)
@@ -43,7 +43,7 @@ pub fn statement(
     annotated: bool,
 ) -> Result<(Value, Statement), String> {
     if mutable {
-        require_payload(&value)?;
+        owning_payload(&value)?;
         if !ordinary(&value.ty) {
             return Err("mutable locals currently require an ordinary scalar or struct".into());
         }
@@ -87,7 +87,7 @@ pub fn assignment(target: Value, value: Value) -> Result<Statement, String> {
     if expected != value.ty || !ordinary(&expected) {
         return Err("assignment type mismatch".into());
     }
-    require_payload(&value)?;
+    owning_payload(&value)?;
     Ok(Statement::Assign(target, value))
 }
 
@@ -220,4 +220,11 @@ pub fn graph_result(mut output: Value, result: &Ty) -> Result<Value, String> {
     }
     output.ty = result.clone();
     Ok(output)
+}
+
+fn owning_payload(value: &Value) -> Result<(), String> {
+    if matches!(value.ty, Ty::Set(_)) && matches!(value.kind, Kind::Input(..) | Kind::Output) {
+        return Err("structural endpoint payload requires delta_value observation".into());
+    }
+    require_payload(value)
 }
