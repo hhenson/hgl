@@ -288,7 +288,7 @@ pub fn statements(plan: &Plan, body: &[Statement], out: &mut Vec<String>) {
             Statement::For(id,collection,body)=> {
                 let Kind::Input(input, _)=collection.kind else {unreachable!("checked collection")};
                 let Ty::Set(element)=&collection.ty else {unreachable!("checked collection")};
-                let mut code=vec![format!("let mut index{id}=0;\nwhile let Some(key{id})=_ctx.store().bindings().changed_keys(self.input{input}.id()).get(index{id}).copied() {{\nindex{id}+=1;\nif _ctx.store().bindings().input(self.input{input}.id()).members.initial.get(&key{id})==Some(&false) && _ctx.store().bindings().child_input(self.input{input}.id(),key{id}).is_some() {{\nlet local{id}={};\n",if **element==Ty::Bool {format!("key{id}!=0")} else {format!("key{id}")})];
+                let mut code=vec![format!("let mut index{id}=0;\nwhile let Some(key{id})=_ctx.store().bindings().changed_keys(self.input{input}.id()).get(index{id}).copied() {{\nindex{id}+=1;\nif _ctx.store().bindings().input(self.input{input}.id()).members.initial.get(key{id})==Some(&false) && _ctx.store().bindings().child_input(self.input{input}.id(),key{id}).is_some() {{\nlet local{id}={};\n",if **element==Ty::Bool {format!("key{id}!=0")} else {format!("key{id}")})];
                 statements(plan,body,&mut code);code.push("}\n}\n".into());code.concat()
             }
             Statement::Assign(target,v) => assignment(plan, target, v),

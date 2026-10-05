@@ -29,6 +29,7 @@ pub use hgl_bindings::Kind;
 pub use hgl_bindings::{BindError, InputId, OutputId, Reference, ScopeId, Wake};
 pub use hgl_columns::Columns;
 pub use hgl_columns::Scalar;
+pub use hgl_keys::{Key, Keys};
 mod atomic;
 mod fixed;
 pub use hgl_shapes as shapes;
@@ -71,6 +72,8 @@ impl<T: Scalar> In<T> {
 /// Every value and binding of a run, shared by its graph scopes.
 #[derive(Debug, Default)]
 pub struct Store {
+    /// Exact cold key domains retained for this run.
+    pub keys: Keys,
     columns: Columns,
     bindings: Bindings,
     globals: GlobalState,
@@ -113,15 +116,7 @@ impl Store {
     }
     /// Allocate a scalar output in the current graph scope.
     pub fn add_output<T: Scalar>(&mut self, owner: NodeId) -> Out<T> {
-        let (id, fresh) = self.bindings.add_output(
-            owner,
-            Kind::Ts(T::TYPE),
-            u32::try_from(T::column(&self.columns).len())
-                .unwrap_or_else(|_| unreachable!("column capacity exceeded")),
-        );
-        if fresh {
-            T::column_mut(&mut self.columns).push(T::default());
-        }
+        let id = hgl_store_build::scalar::<T>(&mut self.bindings, &mut self.columns, owner);
         Out {
             id,
             generation: self.bindings.output(id).generation,

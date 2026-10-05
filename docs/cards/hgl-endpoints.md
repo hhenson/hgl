@@ -68,3 +68,16 @@ records construction claims, released by `Scopes::reclaim(now, fresh_run, items)
 `Reference::same_items(other)` compares both slot and generation for assemblies;
 its generation field names the peer or assembly lifetime. `Endpoints::storage_counts`
 accepts the scope count and reports the existing four diagnostic counts.
+
+## Prepared membership records
+
+May additionally use hgl-member-table. `Members<I: Copy>` exposes `prepare`,
+`prepared_child`, `insert` and `remove`; live, removed and initial records use
+reusable `Table` occupancy. `prepared` permanently owns the cold child pool;
+`changed` reserves the finite domain capacity. Pool ownership alone confers no
+membership or validity.
+
+`Endpoints::reset_prepared(OutputId)` clears descendant membership, timestamps,
+validity and held input observations after the removal cycle while retaining
+prepared storage and subscriptions. It advances endpoint generations; exhaustion
+fails explicitly and never wraps. Pooled future children remain absent.

@@ -66,9 +66,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "hgl-binding-build"
+version = "0.0.0"
+dependencies = [
+ "hgl-endpoints",
+ "hgl-types",
+]
+
+[[package]]
 name = "hgl-bindings"
 version = "0.0.0"
 dependencies = [
+ "hgl-binding-build",
  "hgl-endpoints",
  "hgl-types",
 ]
@@ -145,6 +154,7 @@ dependencies = [
 name = "hgl-endpoints"
 version = "0.0.0"
 dependencies = [
+ "hgl-member-table",
  "hgl-types",
 ]
 
@@ -240,6 +250,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "hgl-keys"
+version = "0.0.0"
+dependencies = [
+ "hgl-alloc-count",
+ "hgl-global-value",
+ "hgl-types",
+]
+
+[[package]]
 name = "hgl-lex"
 version = "0.0.0"
 
@@ -280,6 +299,10 @@ dependencies = [
  "hgl-source",
  "hgl-value-check",
 ]
+
+[[package]]
+name = "hgl-member-table"
+version = "0.0.0"
 
 [[package]]
 name = "hgl-native"
@@ -458,6 +481,7 @@ version = "0.0.0"
 dependencies = [
  "hgl-bindings",
  "hgl-global-value",
+ "hgl-keys",
  "hgl-types",
 ]
 
@@ -503,7 +527,21 @@ dependencies = [
  "hgl-bindings",
  "hgl-columns",
  "hgl-global",
+ "hgl-keys",
+ "hgl-literals",
  "hgl-shapes",
+ "hgl-store-build",
+ "hgl-time-context",
+ "hgl-types",
+]
+
+[[package]]
+name = "hgl-store-build"
+version = "0.0.0"
+dependencies = [
+ "hgl-atomic",
+ "hgl-bindings",
+ "hgl-columns",
  "hgl-types",
 ]
 

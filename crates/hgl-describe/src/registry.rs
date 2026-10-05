@@ -129,13 +129,10 @@ impl Ports<'_> {
     /// output was taken already.
     pub fn output<T: Scalar>(&mut self) -> Result<Out<T>, BuildError> {
         let label = &self.description.label;
-        let Some(TsType::Ts(declared)) = self.node_type.output else {
+        let (None, Some(TsType::Ts(declared))) = (self.output, &self.node_type.output) else {
             return Err(BuildError::no_output(label));
         };
-        if self.output.is_some() {
-            return Err(BuildError::no_output(label));
-        }
-        if declared != T::TYPE {
+        if *declared != T::TYPE {
             return Err(BuildError::wrong_type(label, "output"));
         }
         let output = self.store.add_output(self.node);
@@ -175,6 +172,10 @@ impl Ports<'_> {
         let id = self.store.add_shaped_output(self.node, kind.clone());
         self.output = Some(id);
         Ok(id)
+    }
+    /// Finite key domains retained before node hooks can execute.
+    pub fn keys(&mut self) -> &mut hgl_store::Keys {
+        &mut self.store.keys
     }
     /// Shared projection and typed-handle reads during construction.
     pub fn store(&self) -> &Store {

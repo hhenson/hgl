@@ -10,13 +10,12 @@ pub fn project<'a>(kind: &'a TsType, path: &[Step], keyed: bool) -> Result<&'a T
             Step::Index(n) => {
                 (matches!(kind, TsType::List(..)) && *n < kind.len()).then(|| kind.child(*n))
             }
-            Step::Key => {
-                if let TsType::Dictionary(child) = kind {
-                    keyed.then_some(child.as_ref())
-                } else {
-                    None
-                }
+            Step::Key
+                if keyed && matches!(kind, TsType::Dictionary(_) | TsType::KeyedDictionary(..)) =>
+            {
+                kind.member()
             }
+            Step::Key => None,
         }
         .ok_or_else(|| BuildError::InvalidPath(format!("{step:?}")))
     })
@@ -25,10 +24,11 @@ pub fn project<'a>(kind: &'a TsType, path: &[Step], keyed: bool) -> Result<&'a T
 /// Reject ambiguous field names anywhere in a recursive shape.
 pub fn check_shape(kind: &TsType) -> Result<(), BuildError> {
     match kind {
-        TsType::Ts(_) | TsType::Atomic(_) | TsType::Set(_) => Ok(()),
-        TsType::Dictionary(child) | TsType::Reference(child) | TsType::List(child, _) => {
-            check_shape(child)
-        }
+        TsType::Ts(_) | TsType::Atomic(_) | TsType::Set(_) | TsType::KeyedSet(_) => Ok(()),
+        TsType::Dictionary(child)
+        | TsType::KeyedDictionary(_, child)
+        | TsType::Reference(child)
+        | TsType::List(child, _) => check_shape(child),
         TsType::Bundle(fields) => {
             for (n, (name, child)) in fields.iter().enumerate() {
                 if fields[..n].iter().any(|(previous, _)| previous == name) {

@@ -184,3 +184,7 @@ the corresponding concrete data types. May use hgl-time-values; the existing
 OrdinaryType::Enum(&'static str) describes a declared enum by its canonical
 module-qualified identity. Its physical value is a checked assigned i64; enum
 identity is never interchangeable with an ordinary integer or another enum.
+
+KeyedDictionary(OrdinaryType, Box<TsType>) and KeyedSet(OrdinaryType) retain
+exact scalar/enum key identity for prepared finite collections. Dictionary
+remains the i64 compatibility shape; Set remains built-in scalar membership.

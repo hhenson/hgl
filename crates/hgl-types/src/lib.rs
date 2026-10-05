@@ -100,6 +100,10 @@ pub enum TsType {
     Atomic(OrdinaryType),
     /// An i64 keyed dictionary.
     Dictionary(Box<TsType>),
+    /// A prepared dictionary with exact scalar key identity.
+    KeyedDictionary(OrdinaryType, Box<TsType>),
+    /// A prepared set with exact nominal enum member identity.
+    KeyedSet(OrdinaryType),
     /// A set of scalar values; bool and i64 membership is currently implemented.
     Set(ScalarType),
     /// A designation to this shape.
@@ -122,8 +126,8 @@ impl TsType {
     /// Stored member shape: dictionary values or set occupancy markers.
     pub fn member(&self) -> Option<&Self> {
         match self {
-            Self::Dictionary(child) => Some(child),
-            Self::Set(_) => Some(&Self::Ts(ScalarType::Bool)),
+            Self::Dictionary(child) | Self::KeyedDictionary(_, child) => Some(child),
+            Self::Set(_) | Self::KeyedSet(_) => Some(&Self::Ts(ScalarType::Bool)),
             Self::Ts(_)
             | Self::Atomic(_)
             | Self::Reference(_)
@@ -138,6 +142,8 @@ impl TsType {
             Self::Bundle(fields) => fields.len(),
             Self::Ts(_)
             | Self::Atomic(_)
+            | Self::KeyedDictionary(..)
+            | Self::KeyedSet(_)
             | Self::Dictionary(_)
             | Self::Set(_)
             | Self::Reference(_) => 0,
@@ -154,6 +160,8 @@ impl TsType {
             Self::Bundle(fields) => &fields[position].1,
             Self::Ts(_)
             | Self::Atomic(_)
+            | Self::KeyedDictionary(..)
+            | Self::KeyedSet(_)
             | Self::Dictionary(_)
             | Self::Set(_)
             | Self::Reference(_)

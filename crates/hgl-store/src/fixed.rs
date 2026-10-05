@@ -1,6 +1,6 @@
 //! Construction of recursive endpoints; scalar evaluation stays typed.
 use crate::{BindError, In, InputId, Kind, Out, OutputId, Reference, Scalar, Store, Wake};
-use hgl_types::{CivilDateTime, EngineTime, NodeId, ScalarType, ZonedDateTime, ZonedTime};
+use hgl_types::{EngineTime, NodeId};
 use std::marker::PhantomData;
 impl Store {
     /// Adapt a statically prepared scalar input, without a repeated type test.
@@ -34,29 +34,28 @@ impl Store {
     }
     /// Construct an output and its fixed descendants in the current scope.
     pub fn add_shaped_output(&mut self, owner: NodeId, kind: Kind) -> OutputId {
-        if let Kind::Atomic(ty) = kind {
-            return self.atomic.add_output(&mut self.bindings, owner, ty);
-        }
-        if let Kind::Ts(t) = kind {
-            return match t {
-                ScalarType::Bool => self.add_output::<bool>(owner).id(),
-                ScalarType::I64 => self.add_output::<i64>(owner).id(),
-                ScalarType::F64 => self.add_output::<f64>(owner).id(),
-                ScalarType::Date => self.add_output::<hgl_types::Date>(owner).id(),
-                ScalarType::Time => self.add_output::<hgl_types::Time>(owner).id(),
-                ScalarType::DateTime => self.add_output::<EngineTime>(owner).id(),
-                ScalarType::Duration => self.add_output::<hgl_types::EngineDelta>(owner).id(),
-                ScalarType::CivilDateTime => self.add_output::<CivilDateTime>(owner).id(),
-                ScalarType::TimeZone => self.add_output::<hgl_types::ZoneId>(owner).id(),
-                ScalarType::ZonedTime => self.add_output::<ZonedTime>(owner).id(),
-                ScalarType::ZonedDateTime => self.add_output::<ZonedDateTime>(owner).id(),
-                ScalarType::Text => self.add_output::<String>(owner).id(),
-            };
-        }
-        let children = (0..kind.len())
-            .map(|n| self.add_shaped_output(owner, kind.child(n).clone()))
-            .collect();
-        self.add_prepared_output(owner, kind, children)
+        hgl_store_build::output(
+            &mut self.bindings,
+            &mut self.columns,
+            &mut self.atomic,
+            owner,
+            kind,
+        )
+    }
+    /// Prebuild a finite domain before wiring and publication.
+    pub fn prepare_collection(
+        &mut self,
+        root: OutputId,
+        keys: &[i64],
+        mut create: impl FnMut(&mut Self, NodeId) -> OutputId,
+    ) {
+        let owner = self.bindings.output(root).owner;
+        let children = keys.iter().map(|&key| (key, create(self, owner))).collect();
+        self.bindings.prepare_collection(root, children);
+    }
+    /// Prepare stable member views and cycle work buffers after all graph bindings.
+    pub fn prepare_collection_inputs(&mut self) {
+        self.bindings.prepare_collection_inputs();
     }
     /// Construct an unbound view with stable fixed child slots.
     pub fn add_shaped_input(&mut self, owner: NodeId, kind: Kind, active: bool) -> InputId {
@@ -126,7 +125,8 @@ impl Store {
         }
         let id = self
             .bindings
-            .restorable_output(dict, key)
+            .prepared_output(dict, key)
+            .or_else(|| self.bindings.restorable_output(dict, key))
             .unwrap_or_else(|| create(self, self.bindings.output(dict).owner));
         let result = self.bindings.insert(dict, key, id, now, wake);
         debug_assert!(result.is_ok());

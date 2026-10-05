@@ -176,3 +176,24 @@ identity is valid before its payload; retired generations read empty.
 `input_reference` reads a REF input's designation, or an ordinary input's peer.
 Set membership reuses dictionary removal/delta bookkeeping with occupancy
 children. No set element equality checks are added to scalar publication.
+
+## Prepared finite domains
+
+May use hgl-binding-build for cold input/projection construction.
+`prepare_collection(OutputId,Vec<(i64,OutputId)>)` registers permanently retained
+absent children; `prepared_output(OutputId,i64)` retrieves a pool child and
+rejects unknown keys in a prepared domain. `prepare_collection_inputs()` prepares
+all bound projections and reserves cycle work queues before execution.
+
+Prepared membership uses reusable occupancy tables, not per-cycle BTree nodes.
+Input synchronization traverses live members directly without temporary vectors.
+Removal-cycle retention remains unchanged; the next boundary resets prepared
+children and descendants, advances generations, and clears held input validity.
+Scope teardown still expires pooled children. Active/passive changes include
+future projections; unbinding releases their subscriptions. Unknown future keys
+and inactive children are never exposed by membership or all-valid observations.
+KeyedDictionary and KeyedSet metadata preserve the exact ordinary key type.
+
+The zero-allocation guarantee covers the finite prepared publication profile,
+including its first insertion and repeated removal/reinsertion. Unprepared
+dynamic allocation and runtime rewiring keep their existing semantics.

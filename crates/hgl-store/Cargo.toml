@@ -17,8 +17,14 @@ hgl-bindings = { path = "../hgl-bindings" }
 hgl-types = { path = "../hgl-types" }
 hgl-global = { path = "../hgl-global" }
 
+hgl-keys = { path = "../hgl-keys" }
+hgl-store-build = { path = "../hgl-store-build" }
+
 [dev-dependencies]
+hgl-time-context = { path = "../hgl-time-context" }
+hgl-literals = { path = "../hgl-literals" }
 hgl-alloc-count = { path = "../hgl-alloc-count" }
+
 
 [lints]
 workspace = true

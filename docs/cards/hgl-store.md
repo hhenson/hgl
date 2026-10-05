@@ -312,3 +312,29 @@ owning reads. `set_atomic<T, W: Wake>(Output<Atomic<T>>, T::Value, EngineTime,
 and wakes the existing binding. Validity and modification remain in Bindings.
 
 `globals() -> &GlobalState` provides immutable access to the same run-owned store.
+
+## Finite collection preparation
+
+May additionally use hgl-keys and hgl-store-build. `Key` and `Keys` are
+re-exported; `Store::keys: Keys` retains exact typed ordinary key values before
+instantiation. Runtime endpoints use opaque stable i64 domain tokens, without
+coercing the ordinary key identity.
+
+`prepare_collection(root, &[i64], FnMut(&mut Store,NodeId)->OutputId)` cold
+allocates every possible child through the statically selected factory. Factories
+may recursively prepare nested collections. `prepare_collection_inputs()` runs
+once after complete wiring and before target startup, preparing all projections
+and cycle work capacities. Both follow the existing infallible construction
+contract; invalid domain/shape assumptions fail explicitly.
+
+Prepared children are absent and invalid until insertion. First insertion,
+removal, subsequent reinsertion and projection synchronization reuse storage.
+The removal cycle retains values; its next boundary resets descendant validity,
+nested membership and generations, so old references/writers cannot revive
+stale fields. Active membership traversal ignores never-used domain slots.
+Generation exhaustion fails explicitly rather than wrapping a designation.
+
+The finite prepared evaluation profile has whole-cycle zero-allocation tests,
+including nested maps, partial bundle fields, held references and owning String,
+provider ZoneId and ZonedTime keys. Existing unprepared dynamic construction
+and runtime rebinding remain outside this finite-domain allocation guarantee.

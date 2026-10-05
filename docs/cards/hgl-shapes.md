@@ -31,3 +31,8 @@ Input/Output tokens and generation checks, without structural field projection.
 CivilDateTime, ZoneId, ZonedDateTime and ZonedTime are concrete typed scalar implementations.
 Zone-bearing values retain exact owned names fallibly at retention boundaries;
 prepared borrowed projections neither allocate nor consult a provider.
+
+Map<S,K=i64> and Set<K> require the statically selected hgl-keys Key contract.
+Map keeps the i64 compatibility schema; other keys use KeyedDictionary with
+exact ordinary identity. Set uses scalar or nominal KeyedSet metadata. Typed
+projections continue to use prepared internal membership IDs.

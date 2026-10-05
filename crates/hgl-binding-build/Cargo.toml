@@ -1,19 +1,13 @@
 [package]
-name = "hgl-bindings"
+name = "hgl-binding-build"
 version = "0.0.0"
 edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
-description = "Endpoint identity, collection membership, reference binding and scoped notifications."
-
 [package.metadata.hgl]
-line-budget = 1100
-
+line-budget = 160
+[lints]
+workspace = true
 [dependencies]
 hgl-endpoints = { path = "../hgl-endpoints" }
 hgl-types = { path = "../hgl-types" }
-
-hgl-binding-build = { path = "../hgl-binding-build" }
-
-[lints]
-workspace = true

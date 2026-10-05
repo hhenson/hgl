@@ -3,6 +3,29 @@ use crate::{BindError, Bindings, InputId, Kind, OutputId, Reference, Wake};
 use hgl_types::EngineTime;
 
 impl Bindings {
+    /// Retain a finite absent output domain during graph construction.
+    pub fn prepare_collection(&mut self, root: OutputId, children: Vec<(i64, OutputId)>) {
+        hgl_binding_build::collection(&mut self.endpoints, root, children);
+    }
+    /// Prebuild every member projection and reserve all cycle work queues.
+    pub fn prepare_collection_inputs(&mut self) {
+        hgl_binding_build::projections(&mut self.endpoints, &mut self.scopes);
+        self.dirty_outputs.reserve(self.endpoints.outputs.len());
+        self.dirty_inputs.reserve(self.endpoints.inputs.len());
+        self.retired.reserve(self.endpoints.outputs.len());
+    }
+    /// Statically allocated output for a prepared domain; absent for legacy collections.
+    /// # Panics
+    /// A prepared collection must contain the requested key in its domain.
+    pub fn prepared_output(&self, id: OutputId, key: i64) -> Option<OutputId> {
+        let members = &self.output(id).members;
+        let child = members.prepared_child(key);
+        assert!(
+            !members.live.prepared() || child.is_some(),
+            "key outside prepared collection domain"
+        );
+        child
+    }
     fn touch_output(&mut self, id: OutputId, now: EngineTime) {
         if self.output(id).members.epoch != now {
             self.endpoints.outputs[id.0 as usize].members.epoch = now;
@@ -27,15 +50,15 @@ impl Bindings {
     }
     /// The live child of an output dictionary, independent of child validity.
     pub fn child_output(&self, id: OutputId, key: i64) -> Option<OutputId> {
-        self.output(id).members.live.get(&key).copied()
+        self.output(id).members.live.get(key).copied()
     }
     /// A child view; membership is independent of validity.
     pub fn child_input(&self, id: InputId, key: i64) -> Option<InputId> {
-        self.input(id).members.live.get(&key).copied()
+        self.input(id).members.live.get(key).copied()
     }
     /// The retained removed child, available only in its removal cycle.
     pub fn removed_output(&self, id: OutputId, key: i64) -> Option<OutputId> {
-        self.output(id).members.removed.get(&key).copied()
+        self.output(id).members.removed.get(key).copied()
     }
     /// A removed output whose writer is still alive and can retain ownership.
     pub fn restorable_output(&self, id: OutputId, key: i64) -> Option<OutputId> {
@@ -44,7 +67,7 @@ impl Bindings {
     }
     /// Retained removed input view.
     pub fn removed_input(&self, id: InputId, key: i64) -> Option<InputId> {
-        self.input(id).members.removed.get(&key).copied()
+        self.input(id).members.removed.get(key).copied()
     }
     /// Current input keys, including invalid children.
     pub fn keys(&self, id: InputId) -> impl Iterator<Item = i64> + '_ {
@@ -59,14 +82,14 @@ impl Bindings {
         let m = &self.input(id).members;
         m.initial
             .iter()
-            .filter_map(|(&k, &was)| (!was && m.live.contains_key(&k)).then_some(k))
+            .filter_map(|(&k, &was)| (!was && m.live.contains_key(k)).then_some(k))
     }
     /// Removed keys exclude same-cycle restoration.
     pub fn removed_keys(&self, id: InputId) -> impl Iterator<Item = i64> + '_ {
         let m = &self.input(id).members;
         m.initial
             .iter()
-            .filter_map(|(&k, &was)| (was && !m.live.contains_key(&k)).then_some(k))
+            .filter_map(|(&k, &was)| (was && !m.live.contains_key(k)).then_some(k))
     }
     /// A dictionary is all valid iff it and each immediate live child are valid.
     pub fn all_valid(&self, id: InputId) -> bool {
@@ -112,12 +135,9 @@ impl Bindings {
         }
         self.begin_cycle(now);
         self.touch_output(dict, now);
-        let m = &mut self.endpoints.outputs[dict.0 as usize].members;
-        let was = m.removed.contains_key(&key);
-        m.initial.entry(key).or_insert(was);
-        m.removed.remove(&key);
-        m.live.insert(key, child);
-        m.changed.reserve(m.live.len() + m.removed.len());
+        self.endpoints.outputs[dict.0 as usize]
+            .members
+            .insert(key, child);
         let c = &mut self.endpoints.outputs[child.0 as usize];
         c.parent = Some((dict, key));
         c.retired_at = EngineTime::NEVER;
@@ -133,10 +153,7 @@ impl Bindings {
             return;
         };
         self.touch_output(dict, now);
-        let m = &mut self.endpoints.outputs[dict.0 as usize].members;
-        m.initial.entry(key).or_insert(true);
-        m.live.remove(&key);
-        m.removed.insert(key, child);
+        self.endpoints.outputs[dict.0 as usize].members.remove(key);
         self.retire(child, now);
         self.sync_watchers(dict, key, now);
         self.publish(dict, now, wake);
@@ -158,14 +175,11 @@ impl Bindings {
     ) {
         self.touch_input(input, now);
         let Some(output) = output else {
-            let m = &mut self.endpoints.inputs[input.0 as usize].members;
-            if let Some(child) = m.live.remove(&key) {
-                m.initial.entry(key).or_insert(true);
-                m.removed.insert(key, child);
-            }
+            self.endpoints.inputs[input.0 as usize].members.remove(key);
             return;
         };
-        let child = self.ensure_child_input(input, key);
+        let child =
+            hgl_binding_build::member_input(&mut self.endpoints, &mut self.scopes, input, key);
         self.endpoints.inputs[child.0 as usize].parent = Some((input, key));
         if self.input(child).source != Some(output) {
             self.detach(child);
@@ -192,58 +206,48 @@ impl Bindings {
         }
     }
     pub(crate) fn sync_members(&mut self, input: InputId, now: EngineTime) {
-        if !matches!(self.input(input).kind, Kind::Dictionary(_) | Kind::Set(_)) {
+        if !matches!(
+            self.input(input).kind,
+            Kind::Dictionary(_) | Kind::Set(_) | Kind::KeyedDictionary(..) | Kind::KeyedSet(_)
+        ) {
             return;
         }
         self.touch_input(input, now);
         let source = self.input(input).source;
         let sampled = self.input(input).sampled_at == now && now != EngineTime::NEVER;
-        let old: Vec<_> = self.input(input).members.live.keys().copied().collect();
-        for key in old {
+        let mut position = 0;
+        let mut previous = None;
+        loop {
+            let members = &self.input(input).members.live;
+            let next = if members.prepared() {
+                members.item(position)
+            } else {
+                members.dynamic_after(previous)
+            };
+            let Some((key, _)) = next else { break };
+            previous = Some(key);
             if source.is_none_or(|s| self.child_output(s, key).is_none()) {
                 self.sync_key(input, key, None, now, sampled);
+            } else {
+                position += 1;
             }
         }
         if let Some(source) = source {
-            let live: Vec<_> = self
-                .output(source)
-                .members
-                .live
-                .iter()
-                .map(|(&key, &output)| (key, output))
-                .collect();
-            for (key, output) in live {
+            let mut previous = None;
+            for position in 0..self.output(source).members.live.len() {
+                let members = &self.output(source).members.live;
+                let (key, &output) = if members.prepared() {
+                    members.item(position)
+                } else {
+                    members.dynamic_after(previous)
+                }
+                .unwrap_or_else(|| unreachable!());
+                previous = Some(key);
                 self.sync_key(input, key, Some(output), now, sampled);
             }
         } else {
             self.endpoints.inputs[input.0 as usize].withdrawal = now;
         }
-    }
-    fn ensure_child_input(&mut self, input: InputId, key: i64) -> InputId {
-        if let Some(child) = self.child_input(input, key) {
-            return child;
-        }
-        let child = self.endpoints.inputs[input.0 as usize]
-            .members
-            .removed
-            .remove(&key)
-            .unwrap_or_else(|| {
-                let i = self.input(input);
-                let (owner, active, scope) = (i.owner, i.active, i.scope);
-                let kind = i
-                    .kind
-                    .member()
-                    .unwrap_or_else(|| unreachable!("membership input"))
-                    .clone();
-                let previous = self.enter_scope(scope);
-                let child = self.add_input(owner, kind, active);
-                self.enter_scope(previous);
-                child
-            });
-        let m = &mut self.endpoints.inputs[input.0 as usize].members;
-        m.initial.entry(key).or_insert(false);
-        m.live.insert(key, child);
-        child
     }
     pub(crate) fn clear_members(&mut self) {
         while let Some(id) = self.dirty_outputs.pop() {
@@ -253,6 +257,9 @@ impl Bindings {
             m.changed.clear();
         }
         while let Some(id) = self.dirty_inputs.pop() {
+            if self.input(id).members.live.prepared() {
+                self.endpoints.inputs[id.0 as usize].members.removed.clear();
+            }
             while let Some((_, child)) = self.endpoints.inputs[id.0 as usize]
                 .members
                 .removed
