@@ -196,12 +196,12 @@ fn place(plan: &Plan, v: &Value) -> String {
 }
 
 fn binary(plan: &Plan, result: &Ty, op: &str, a: &Value, b: &Value) -> String {
-    if matches!(a.ty, Ty::Set(_) | Ty::Map(..)) && matches!(op, "==" | "!=") {
+    if matches!(a.ty, Ty::Set(_) | Ty::Map(..) | Ty::Family(_)) && matches!(op, "==" | "!=") {
         return format!(
             "{{let left={};let right={};({})=={}}}",
             value(plan, a),
             value(plan, b),
-            hgl_rust_collections::equal(&a.ty, "&left", "&right"),
+            hgl_rust_collections::equal(&a.ty, "&left", "&right", global_type),
             op == "=="
         );
     }

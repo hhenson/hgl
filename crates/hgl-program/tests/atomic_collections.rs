@@ -275,3 +275,26 @@ pub fn value_i64(v:i64)->hgl_types::NodeResult<i64> {println!("MARKvalue");Ok(v)
         &["MARKnan"],
     )
 }
+
+#[test]
+fn native_collection_equality_preserves_optional_family_and_recursive_descendants()
+-> Result<(), Box<dyn std::error::Error>> {
+    run_shared(r#"module nested_equality
+struct Node {tags:set<i64>
+next:atomic<Node> =null}
+struct Optional {tags:set<i64>=null}
+abstract struct Event {label:str}
+struct Member:Event {tags:set<i64>}
+fn compare(tick:i64)->bool {when {
+ let left=map<str,Node>(items:["row":Node(tags:set<i64>(items:[1,2]),next:Node(tags:set<i64>(items:[3,4])))])
+ let right=map<str,Node>(items:["row":Node(tags:set<i64>(items:[2,1]),next:Node(tags:set<i64>(items:[4,3])))])
+ let a=map<str,Optional>(items:["row":Optional(tags:set<i64>(items:[1,2]))])
+ let b=map<str,Optional>(items:["row":Optional(tags:set<i64>(items:[2,1]))])
+ let missing=map<str,Optional>(items:["row":Optional()])
+ let first:Event=Member(label:"same",tags:set<i64>(items:[1,2]))
+ let second:Event=Member(label:"same",tags:set<i64>(items:[2,1]))
+ return left==right && a==b && a!=missing && first==second
+}}
+test equality {assert eval(compare,[1])==[true]}
+"#.replace(">=","> =").as_str(),false)
+}

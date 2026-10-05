@@ -10,7 +10,7 @@ copies to List storage of the selected item. No type-erased runtime lookup.
 
 `construct(&Ty,&[Value],emit:impl Fn(&Value)->String,owned:fn(&Ty)->String)` emits
 source-ordered native construction with immediate key validation and duplicate
-checking before each map value. `equal(&Ty,&str,&str)->String` recursively emits
+checking before each map value. `equal(&Ty,&str,&str,fn(&Ty)->String)->String` recursively emits
 unordered collection comparison and ordered descendant comparison.
 Acceptance: generated debug/release shared snapshots and complete nested
 retention, equal empty publications, replay/record and sparse atomic children.
@@ -18,3 +18,5 @@ retention, equal empty publications, replay/record and sparse atomic children.
 retained(&str,&Ty,fn(&Ty)->String)->String emits independent owning reads through exact composite markers and the existing scalar copy contract. The layout callback selects the concrete marker without runtime type tests.
 
 Constructor key validation walks finite tuple/concrete struct fields, preserving optional presence and rejecting every present NaN leaf before the associated map value executes. Native key equality uses complete exact typed components; keys cannot contain collections, recursive values or abstract families.
+
+Native equality preserves optional field presence and family discriminators. Recursive descendants invoke generated typed marker comparison methods, so recursion follows only finite present payloads and never allocates or expands schemas during emission.

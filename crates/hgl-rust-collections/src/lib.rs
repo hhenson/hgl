@@ -91,9 +91,15 @@ pub fn construct(
     code + "items}"
 }
 /// Recursive native equality with unordered complete set and map children.
-pub fn equal(ty: &Ty, a: &str, b: &str) -> String {
+pub fn equal(ty: &Ty, a: &str, b: &str, marker: fn(&Ty) -> String) -> String {
+    if matches!(ty, Ty::Recursive(_)) {
+        return format!("{}::ordinary_equal({a},{b})", marker(ty));
+    }
+    if let Ty::Family(family) = ty {
+        return equal(&hgl_rust_families::family_storage(family), a, b, marker);
+    }
     if let Some(item) = element(ty) {
-        let compare = equal(&item, "left", "right");
+        let compare = equal(&item, "left", "right", marker);
         return if matches!(ty, Ty::Set(_) | Ty::Map(..)) {
             format!(
                 "({a}).len()==({b}).len() && ({a}).iter().all(|left|({b}).iter().any(|right|{compare}))"
@@ -104,18 +110,22 @@ pub fn equal(ty: &Ty, a: &str, b: &str) -> String {
             )
         };
     }
-    let fields = if let Ty::Tuple(fields) = ty {
-        fields.iter().collect::<Vec<_>>()
-    } else if let Ty::Struct(_, fields, _) = ty {
-        fields.iter().map(|(_, ty)| ty).collect()
+    let (fields, optional) = if let Ty::Tuple(fields) = ty {
+        (fields.iter().collect::<Vec<_>>(), &[][..])
+    } else if let Ty::Struct(_, fields, optional) = ty {
+        (
+            fields.iter().map(|(_, ty)| ty).collect(),
+            optional.as_slice(),
+        )
     } else {
         return format!("({a})==({b})");
     };
-    let checks = fields
-        .iter()
-        .enumerate()
-        .map(|(i, t)| equal(t, &format!("&({a}).{i}"), &format!("&({b}).{i}")))
-        .collect::<Vec<_>>();
+    let checks = fields.iter().enumerate().map(|(i, t)| {
+        let (left,right)=(format!("&({a}).{i}"),format!("&({b}).{i}"));
+        if optional.contains(&i) {
+            format!("match (({left}).as_ref(),({right}).as_ref()) {{(Some(left),Some(right))=>{},(None,None)=>true,_=>false}}",equal(t,"left","right",marker))
+        } else {equal(t,&left,&right,marker)}
+    }).collect::<Vec<_>>();
     if checks.is_empty() {
         "true".into()
     } else {

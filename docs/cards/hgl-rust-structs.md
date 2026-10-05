@@ -23,3 +23,5 @@ identities. Optional internal edges select Optional<Recursive<T>> markers;
 ordinary nonrecursive fields retain their existing storage markers. Typed owning
 retention recurses through finite present values; prepared bounds and copies use
 the same declared field positions without schema lookup.
+
+Generated recursive markers include typed ordinary_equal methods. Comparison visits complete finite present fields and delegates nested collection equality to hgl-rust-collections, ignoring collection entry order without weakening nominal identity or optional presence.

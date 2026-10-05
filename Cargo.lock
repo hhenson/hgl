@@ -574,6 +574,7 @@ dependencies = [
 name = "hgl-rust-collections"
 version = "0.0.0"
 dependencies = [
+ "hgl-rust-families",
  "hgl-rust-ir",
  "hgl-rust-prepared-values",
  "hgl-source",
@@ -760,6 +761,7 @@ dependencies = [
 name = "hgl-rust-structs"
 version = "0.0.0"
 dependencies = [
+ "hgl-rust-collections",
  "hgl-rust-prepared-values",
  "hgl-source",
 ]

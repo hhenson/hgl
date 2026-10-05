@@ -73,7 +73,7 @@ pub fn marker(ty: &Ty, global_type: fn(&Ty) -> String, global_schema: fn(&Ty) ->
             .enumerate()
             .map(|(i, (_, ty))| field_marker(ty, optional.contains(&i), global_type))
             .collect::<Vec<_>>(),
-    )
+    ) + &recursive_equality(ty, global_type)
 }
 
 fn marker_schema(
@@ -185,4 +185,19 @@ fn representation(ty: &Ty, global_type: fn(&Ty) -> String) -> (String, String, S
         String::new()
     };
     (value, prefix, declaration)
+}
+
+fn recursive_equality(ty: &Ty, marker: fn(&Ty) -> String) -> String {
+    if !matches!(ty, Ty::Recursive(_)) {
+        return String::new();
+    }
+    let (name, fields, optional) = ty
+        .structure()
+        .unwrap_or_else(|_| unreachable!("recursive root"));
+    let schema = Ty::Struct(name.clone(), fields.to_vec(), optional.to_vec());
+    let name = marker(ty);
+    let comparison = hgl_rust_collections::equal(&schema, "left", "right", marker);
+    format!(
+        "impl {name} {{ fn ordinary_equal(left:&Owned{name},right:&Owned{name})->bool {{{comparison}}} }}"
+    )
 }
