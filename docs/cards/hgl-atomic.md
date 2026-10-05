@@ -53,3 +53,5 @@ optional field marker; an all-unset struct remains a valid published root.
 RecursiveReference is one descriptor position when calculating finite root
 widths. Concrete recursive payload operations remain compiler-selected typed
 GlobalValue/PreparedValue implementations with exact nominal schemas.
+
+Complete Set/Map schemas have one descriptor root; typed owning/prepared marker operations retain all descendants before whole publication.

@@ -40,9 +40,13 @@ fn as_float(value: i64) -> f64 {
 }
 /// Evaluate a checked ordinary scalar or family equality operation.
 pub fn binary(op: &str, a: &Value, b: &Value) -> Result<Value, EvalError> {
-    if matches!(a.ty, hgl_source::Ty::Family(_)) && matches!(op, "==" | "!=") {
+    if matches!(
+        a.ty,
+        hgl_source::Ty::Set(_) | hgl_source::Ty::Map(..) | hgl_source::Ty::Family(_)
+    ) && matches!(op, "==" | "!=")
+    {
         return Ok(value(Literal::Bool(
-            hgl_family_values::equal(a, b) == (op == "=="),
+            hgl_collection_values::equal(a, b) == (op == "=="),
         )));
     }
     let (a, b) = (scalar(a)?, scalar(b)?);

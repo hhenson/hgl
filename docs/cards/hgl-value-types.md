@@ -61,3 +61,5 @@ inputs. Single inheritance uses hgl-inheritance scoped patterns; field_type
 resolves those patterns with the existing exact ordinary type resolver. Family
 formation uses hgl-family-types and rejects recursive family expansion. Explicit
 ancestor identities preserve subfamily-to-ancestor nominal membership.
+
+concrete(&Library,&str,&str,&BTreeMap<String,Ty>)->Result<Ty,String> resolves a specialization with a fresh recursive resolution scope.

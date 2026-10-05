@@ -197,3 +197,5 @@ OrdinaryType::RecursiveReference(&'static str) is internal schema metadata for a
 exact fully applied nominal edge. Concrete root schemas retain their existing
 Struct identity and finite field descriptions; recursive targets never expand
 while forming schema metadata. It adds no source reference or nullable type.
+
+OrdinaryType::Set(Box<OrdinaryType>) and Map(Box<OrdinaryType>,Box<OrdinaryType>) retain complete ordinary schema identity separately from temporal keyed shapes.

@@ -43,3 +43,5 @@ sparse storage retains exact K; only prepared membership calls use internal IDs.
 Prepared finite execution delegates statically typed slot publication, sparse
 observation, and direct pass-through emission to `hgl-rust-observed`. Existing
 ordinary owning delta construction and post-run comparison remain available.
+
+publish accepts complete ordinary Set/Map payloads through atomic whole-value transport, separately from Kind::Delta sparse mutation data.

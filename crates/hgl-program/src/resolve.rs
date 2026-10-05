@@ -1635,6 +1635,12 @@ impl Checker {
         {
             return self.delta_constructor(module, (origin, args), env, runtime, expected);
         }
+        if hgl_source::application(&name).is_some_and(|(base, _)| matches!(base, "set" | "map")) {
+            let ty = hgl_value_types::concrete(&self.library, module, &name, &self.types)?;
+            return hgl_collection_check::constructor(ty, args, |expr, ty| {
+                self.expected_expression(module, expr, env, runtime, Some(ty))
+            });
+        }
         let mut check = hgl_struct_check::Constructor::new(
             &self.library,
             module,
@@ -1668,13 +1674,7 @@ impl Checker {
         runtime: bool,
         expected: Option<&Ty>,
     ) -> Result<Value, String> {
-        let origin = hgl_value_types::substitute(
-            &self.library,
-            module,
-            origin,
-            &self.types,
-            &mut BTreeSet::new(),
-        )?;
+        let origin = hgl_value_types::concrete(&self.library, module, origin, &self.types)?;
         let ty = origin.clone().delta()?;
         if expected.is_some_and(|expected| *expected != ty) {
             return Err("delta originating shape mismatch".into());

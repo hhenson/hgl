@@ -380,7 +380,7 @@ pub fn binary_type(op: &str, a: &Ty, b: &Ty) -> Result<Ty, String> {
         {
             Ty::Bool
         }
-        "==" | "!=" if matches!(a, Ty::Family(_)) => Ty::Bool,
+        "==" | "!=" if matches!(a, Ty::Family(_) | Ty::Set(_) | Ty::Map(..)) => Ty::Bool,
         "==" | "!="
             if !matches!(
                 *a,

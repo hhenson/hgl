@@ -246,6 +246,8 @@ fn slot_publication(ty: &Ty, slot: &str) -> String {
             | Ty::Family(_)
             | Ty::Enum(_)
             | Ty::List(..)
+            | Ty::Set(_)
+            | Ty::Map(..)
             | Ty::Tuple(_)
             | Ty::Struct(..)
     ) {

@@ -24,8 +24,8 @@ fn collect(ty: &Ty, types: &mut BTreeMap<String, Ty>) {
     if types.insert(global_type(ty), ty.clone()).is_some() {
         return;
     }
-    if let Ty::List(child, _) = ty {
-        collect(child, types);
+    if let Some(child) = hgl_rust_collections::element(ty) {
+        collect(&child, types);
     }
     for child in fields(ty) {
         collect(&child, types);
@@ -91,10 +91,10 @@ impl Capacity {
     /// Include one already materialized configuration, recursively and without recipes.
     pub fn include(&self, ty: &Ty, value: &str) -> String {
         let index = self.index(ty);
-        if let Ty::List(child, _) = ty {
+        if let Some(child) = hgl_rust_collections::element(ty) {
             return format!(
                 "capacity.limit{index}=capacity.limit{index}.max(({value}).len());for value in ({value}).iter() {{{}}}",
-                self.include(child, "value")
+                self.include(&child, "value")
             );
         }
         let children = fields(ty);
@@ -236,14 +236,19 @@ impl Capacity {
                 .join(",");
             return format!("PreparedBounds{} {{{args}}}", global_type(ty));
         }
-        if let Ty::List(child, size) = ty {
+        if let Some(child) = hgl_rust_collections::element(ty) {
+            let size = if let Ty::List(_, size) = ty {
+                *size
+            } else {
+                None
+            };
             return format!(
                 "hgl_store::ListBounds {{len:{},element:{}}}",
                 size.map_or_else(
                     || format!("capacity.limit{}", self.index(ty)),
                     |n| n.to_string()
                 ),
-                self.bounds(child)
+                self.bounds(&child)
             );
         }
         if matches!(ty, Ty::Family(_) | Ty::Struct(..) | Ty::Tuple(_)) {

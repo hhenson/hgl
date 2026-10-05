@@ -12,6 +12,7 @@ line-budget = 2200
 workspace = true
 
 [dependencies]
+hgl-collection-check = { path = "../hgl-collection-check" }
 hgl-family-values = { path = "../hgl-family-values" }
 hgl-library-files = { path = "../hgl-library-files" }
 hgl-source = { path = "../hgl-source" }

@@ -18,3 +18,5 @@ fixed collections, atomic values and structural map removal/reinsertion.
 Generated nominal bounds additionally implement Clone for cold independent
 capacity allocation. Recursive fields terminate bounds at absent Optional entries;
 boxes in present edge bounds follow actual finite payload depth.
+
+delegate(&str,&str)->String emits PreparedValue operations for a generated marker using an existing physically compatible marker. enumeration delegates to i64 through that function.

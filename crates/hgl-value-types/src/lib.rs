@@ -19,6 +19,15 @@ pub fn resolve(
 pub fn resolve_ordinary(library: &Library, module: &str, name: &str) -> Result<Ty, String> {
     resolve(library, module, name, &mut BTreeSet::new()).map(|ty| hgl_value_access::project(&ty))
 }
+/// Resolve a concrete specialization from a fresh recursive resolution scope.
+pub fn concrete(
+    library: &Library,
+    module: &str,
+    name: &str,
+    bindings: &BTreeMap<String, Ty>,
+) -> Result<Ty, String> {
+    substitute(library, module, name, bindings, &mut BTreeSet::new())
+}
 /// Substitute declared type parameters through finite ordinary source shapes.
 pub fn substitute(
     library: &Library,

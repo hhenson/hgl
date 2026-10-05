@@ -312,6 +312,12 @@ impl Ty {
         if let Self::Struct(_, fields, _) = self {
             return fields.iter().all(|(_, ty)| ty.atomic_payload());
         }
+        if let Self::Set(key) = self {
+            return key.scalar();
+        }
+        if let Self::Map(key, child) = self {
+            return key.scalar() && child.atomic_payload();
+        }
         self.scalar()
     }
     fn scalar(&self) -> bool {

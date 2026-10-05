@@ -29,3 +29,5 @@ Step::If evaluates one ordinary condition and executes exactly one lexical
 branch, preserving outer writes and releasing branch locals even on failure.
 The returned count includes only executed assertions and evaluations (including
 bound evaluations); skipped branches never contribute successful counts.
+
+Complete set/map comparison delegates to hgl-collection-values, preserving exact key/value identities while ignoring entry order.

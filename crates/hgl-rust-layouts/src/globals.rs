@@ -8,6 +8,9 @@ pub fn global_type(ty: &Ty) -> String {
     if let Ty::Family(family) = ty {
         return global_type(&crate::family_storage(family));
     }
+    if matches!(ty, Ty::Set(_) | Ty::Map(..)) {
+        return nominal_marker(&format!("\0{}", ty.source_name()).into());
+    }
     if let Ty::Enum(identity) = ty {
         return hgl_rust_enums::marker_type(identity);
     }
@@ -61,6 +64,8 @@ pub fn global_schema(ty: &Ty) -> String {
             | Ty::Delta(_)
             | Ty::Struct(..)
             | Ty::List(..)
+            | Ty::Set(_)
+            | Ty::Map(..)
     ) {
         format!("<{} as hgl_store::GlobalValue>::schema()", global_type(ty))
     } else {
@@ -103,6 +108,8 @@ pub fn global_markers(plan: &Plan) -> String {
         .map(|ty| {
             if let Ty::Family(family) = ty {
                 hgl_rust_structs::marker(&crate::family_storage(family), global_type, global_schema)
+            } else if matches!(ty, Ty::Set(_) | Ty::Map(..)) {
+                hgl_rust_collections::marker(ty, global_type, global_schema)
             } else if let Ty::Enum(identity) = ty {
                 hgl_rust_enums::marker(identity)
             } else {
@@ -150,8 +157,11 @@ fn collect(ty: &Ty, types: &mut BTreeMap<String, Ty>) {
     if let Ty::Delta(origin) = ty {
         collect(&delta_storage(origin), types);
     }
-    if let Ty::List(element, _) = ty {
-        collect(element, types);
+    if matches!(ty, Ty::Set(_) | Ty::Map(..)) {
+        types.insert(ty.source_name(), ty.clone());
+    }
+    if let Some(element) = hgl_rust_collections::element(ty) {
+        collect(&element, types);
     }
     if let Ty::Struct(name, fields, _) = ty {
         types.insert(name.source_name(), ty.clone());

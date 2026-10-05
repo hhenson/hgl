@@ -49,6 +49,9 @@ fn value(plan: &Plan, v: &Value) -> String {
         }
         Kind::Delta(_) => hgl_rust_deltas::construct(v, |v| value(plan, v)),
         Kind::ObservedLocal(id) => hgl_rust_deltas::observe(&v.ty, &format!("local{id}")),
+        Kind::List(values) if matches!(v.ty, Ty::Set(_) | Ty::Map(..)) => {
+            hgl_rust_collections::construct(&v.ty, values, |v| value(plan, v), owned_type)
+        }
         Kind::List(values) => list_value(plan, &v.ty, values),
         Kind::Length(parent) => length(plan, parent),
         Kind::Push(parent, item) => push(plan, parent, item),
@@ -195,7 +198,10 @@ fn retained(source: &str, ty: &Ty) -> String {
     if matches!(ty, Ty::Nullable(_)) {
         return format!("({source}).as_ref().map(hgl_store::Scalar::try_clone).transpose()?");
     }
-    if matches!(ty, Ty::Tuple(_) | Ty::List(..) | Ty::Delta(_)) {
+    if matches!(
+        ty,
+        Ty::Tuple(_) | Ty::List(..) | Ty::Set(_) | Ty::Map(..) | Ty::Delta(_)
+    ) {
         return format!(
             "<{} as hgl_store::GlobalValue>::retain(&({source}))?",
             global_type(ty)
@@ -218,6 +224,15 @@ fn retained(source: &str, ty: &Ty) -> String {
 }
 
 fn binary(plan: &Plan, result: &Ty, op: &str, a: &Value, b: &Value) -> String {
+    if matches!(a.ty, Ty::Set(_) | Ty::Map(..)) && matches!(op, "==" | "!=") {
+        return format!(
+            "{{let left={};let right={};({})=={}}}",
+            value(plan, a),
+            value(plan, b),
+            hgl_rust_collections::equal(&a.ty, "&left", "&right"),
+            op == "=="
+        );
+    }
     let a = if a.ty == Ty::Str {
         native_argument(plan, a)
     } else {

@@ -79,17 +79,21 @@ impl hgl_store::PreparedValue for {name} {{
 }
 /// Reuse the i64 physical copy operations while keeping the nominal marker.
 pub fn enumeration(name: &str) -> String {
+    delegate(name, "i64")
+}
+/// Reuse a compatible physical marker while preserving exact source schema.
+pub fn delegate(name: &str, marker: &str) -> String {
     format!(
         r"
 impl hgl_store::PreparedValue for {name} {{
- type Bounds=<i64 as hgl_store::PreparedValue>::Bounds;
- fn include(bounds:&mut Self::Bounds,value:&Self::Value) {{ <i64 as hgl_store::PreparedValue>::include(bounds,value); }}
- fn allocate(columns:&mut hgl_store::ValueColumns,bounds:&Self::Bounds)->hgl_types::NodeResult<hgl_store::ValueSlot<Self>> {{Ok(hgl_store::ValueSlot::from_fields(<i64 as hgl_store::PreparedValue>::allocate(columns,bounds)?.fields()))}}
- fn check_native(columns:&hgl_store::ValueColumns,destination:hgl_store::ValueSlot<Self>,value:&Self::Value)->hgl_types::NodeResult {{ <i64 as hgl_store::PreparedValue>::check_native(columns,hgl_store::ValueSlot::from_fields(destination.fields()),value) }}
- fn check_slots(source:&hgl_store::ValueColumns,from:hgl_store::ValueSlot<Self>,destination:&hgl_store::ValueColumns,to:hgl_store::ValueSlot<Self>)->hgl_types::NodeResult {{ <i64 as hgl_store::PreparedValue>::check_slots(source,hgl_store::ValueSlot::from_fields(from.fields()),destination,hgl_store::ValueSlot::from_fields(to.fields())) }}
- fn copy_native(columns:&mut hgl_store::ValueColumns,destination:hgl_store::ValueSlot<Self>,value:&Self::Value) {{ <i64 as hgl_store::PreparedValue>::copy_native(columns,hgl_store::ValueSlot::from_fields(destination.fields()),value); }}
- fn copy_between(source:&hgl_store::ValueColumns,from:hgl_store::ValueSlot<Self>,destination:&mut hgl_store::ValueColumns,to:hgl_store::ValueSlot<Self>) {{ <i64 as hgl_store::PreparedValue>::copy_between(source,hgl_store::ValueSlot::from_fields(from.fields()),destination,hgl_store::ValueSlot::from_fields(to.fields())); }}
- fn copy_within(columns:&mut hgl_store::ValueColumns,from:hgl_store::ValueSlot<Self>,to:hgl_store::ValueSlot<Self>) {{ <i64 as hgl_store::PreparedValue>::copy_within(columns,hgl_store::ValueSlot::from_fields(from.fields()),hgl_store::ValueSlot::from_fields(to.fields())); }}
+ type Bounds=<{marker} as hgl_store::PreparedValue>::Bounds;
+ fn include(bounds:&mut Self::Bounds,value:&Self::Value) {{ <{marker} as hgl_store::PreparedValue>::include(bounds,value); }}
+ fn allocate(columns:&mut hgl_store::ValueColumns,bounds:&Self::Bounds)->hgl_types::NodeResult<hgl_store::ValueSlot<Self>> {{Ok(hgl_store::ValueSlot::from_fields(<{marker} as hgl_store::PreparedValue>::allocate(columns,bounds)?.fields()))}}
+ fn check_native(columns:&hgl_store::ValueColumns,destination:hgl_store::ValueSlot<Self>,value:&Self::Value)->hgl_types::NodeResult {{ <{marker} as hgl_store::PreparedValue>::check_native(columns,hgl_store::ValueSlot::from_fields(destination.fields()),value) }}
+ fn check_slots(source:&hgl_store::ValueColumns,from:hgl_store::ValueSlot<Self>,destination:&hgl_store::ValueColumns,to:hgl_store::ValueSlot<Self>)->hgl_types::NodeResult {{ <{marker} as hgl_store::PreparedValue>::check_slots(source,hgl_store::ValueSlot::from_fields(from.fields()),destination,hgl_store::ValueSlot::from_fields(to.fields())) }}
+ fn copy_native(columns:&mut hgl_store::ValueColumns,destination:hgl_store::ValueSlot<Self>,value:&Self::Value) {{ <{marker} as hgl_store::PreparedValue>::copy_native(columns,hgl_store::ValueSlot::from_fields(destination.fields()),value); }}
+ fn copy_between(source:&hgl_store::ValueColumns,from:hgl_store::ValueSlot<Self>,destination:&mut hgl_store::ValueColumns,to:hgl_store::ValueSlot<Self>) {{ <{marker} as hgl_store::PreparedValue>::copy_between(source,hgl_store::ValueSlot::from_fields(from.fields()),destination,hgl_store::ValueSlot::from_fields(to.fields())); }}
+ fn copy_within(columns:&mut hgl_store::ValueColumns,from:hgl_store::ValueSlot<Self>,to:hgl_store::ValueSlot<Self>) {{ <{marker} as hgl_store::PreparedValue>::copy_within(columns,hgl_store::ValueSlot::from_fields(from.fields()),hgl_store::ValueSlot::from_fields(to.fields())); }}
 }}
 "
     )

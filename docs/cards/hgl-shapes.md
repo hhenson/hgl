@@ -36,3 +36,5 @@ Map<S,K=i64> and Set<K> require the statically selected hgl-keys Key contract.
 Map keeps the i64 compatibility schema; other keys use KeyedDictionary with
 exact ordinary identity. Set uses scalar or nominal KeyedSet metadata. Typed
 projections continue to use prepared internal membership IDs.
+
+The exhaustive ordinary-schema carrier includes Set/Map variants; source key admission remains the frontend contract.

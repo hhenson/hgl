@@ -74,3 +74,5 @@ nullable Void and an out-of-range read is an Operation error. IsPresent observes
 absence and Present consumes the existing checker proof; absent extraction
 still fails. scoped(body) releases new bindings on success or error while
 preserving outer variable writes and provider execution order.
+
+List IR with exact Set/Map type executes through hgl-collection-values: every key is independently retained and checked before its map value. Captures retain complete owned descendants, and duplicate failure returns no partial container.

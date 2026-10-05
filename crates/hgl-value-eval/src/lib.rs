@@ -87,15 +87,7 @@ impl Execution<'_, '_> {
             Kind::Delta(parts) => self.delta(parts)?,
             Kind::WiringFailure(message) => return Err(EvalError::Operation(message.clone())),
             Kind::Captured(..) | Kind::Literal(_) | Kind::Void => return Ok(value.clone()),
-            Kind::List(items) => {
-                length(items.len())?;
-                Kind::List(
-                    items
-                        .iter()
-                        .map(|item| self.value(item))
-                        .collect::<Result<_, _>>()?,
-                )
-            }
+            Kind::List(items) => self.collection(&value.ty, items)?,
             Kind::Construct(fields) => Kind::Construct(
                 fields
                     .iter()
@@ -161,6 +153,17 @@ impl Execution<'_, '_> {
             }
         };
         Ok(Value::new(value.ty.clone(), kind))
+    }
+    fn collection(&mut self, ty: &Ty, items: &[Value]) -> Result<Kind, EvalError> {
+        length(items.len())?;
+        Ok(Kind::List(if matches!(ty, Ty::Set(_) | Ty::Map(..)) {
+            hgl_collection_values::evaluate(ty, items, |item| self.value(item))?
+        } else {
+            items
+                .iter()
+                .map(|item| self.value(item))
+                .collect::<Result<_, _>>()?
+        }))
     }
     fn indexed(&mut self, parent: &Value, offset: &Value, ty: &Ty) -> Result<Value, EvalError> {
         let parent = self.value(parent)?;

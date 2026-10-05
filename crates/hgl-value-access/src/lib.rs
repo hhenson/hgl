@@ -12,6 +12,9 @@ pub fn ordinary(ty: &Ty) -> bool {
     if let Ty::Tuple(children) = ty {
         return children.iter().all(ordinary);
     }
+    if matches!(ty, Ty::Set(_) | Ty::Map(..)) {
+        return ty.atomic_payload();
+    }
     if let Ty::List(element, _) = ty {
         return ordinary(element);
     }
@@ -167,6 +170,8 @@ fn aggregate(ty: &Ty) -> bool {
     matches!(
         ty,
         Ty::Family(_)
+            | Ty::Set(_)
+            | Ty::Map(..)
             | Ty::Recursive(_)
             | Ty::Struct(..)
             | Ty::List(..)

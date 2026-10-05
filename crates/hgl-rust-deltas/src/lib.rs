@@ -72,6 +72,8 @@ pub fn publish(ty: &Ty, payload: &str) -> String {
             | Ty::Recursive(_)
             | Ty::Family(_)
             | Ty::List(..)
+            | Ty::Set(_)
+            | Ty::Map(..)
             | Ty::Tuple(_)
             | Ty::Struct(..)
     ) {

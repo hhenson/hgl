@@ -149,6 +149,8 @@ fn width(ty: &OrdinaryType) -> usize {
         OrdinaryType::Enum(_)
         | OrdinaryType::Scalar(_)
         | OrdinaryType::List(..)
+        | OrdinaryType::Set(_)
+        | OrdinaryType::Map(..)
         | OrdinaryType::OptionalField(_)
         | OrdinaryType::RecursiveReference(_) => 1,
         OrdinaryType::Tuple(fields) => fields.iter().map(width).sum(),

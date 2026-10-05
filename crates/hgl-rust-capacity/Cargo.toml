@@ -10,6 +10,7 @@ line-budget = 400
 workspace = true
 [dependencies]
 hgl-rust-pure-bounds = { path = "../hgl-rust-pure-bounds" }
+hgl-rust-collections = { path = "../hgl-rust-collections" }
 hgl-source = { path = "../hgl-source" }
 hgl-rust-ir = { path = "../hgl-rust-ir" }
 hgl-rust-layouts = { path = "../hgl-rust-layouts" }

@@ -321,7 +321,8 @@ impl<'a> Cursor<'a> {
         if !self.take("(") {
             return Ok(Expr::Name(name));
         }
-        let args = self.call_arguments(applied && name.starts_with("delta<"))?;
+        let args = self
+            .call_arguments(applied && (name.starts_with("delta<") || name.starts_with("map<")))?;
         Ok(if applied {
             Expr::Applied(name, args)
         } else {

@@ -1,5 +1,5 @@
 //! Exact owning conversions at cold preparation and capture boundaries.
-use super::ty;
+use hgl_rust_checked_data::ty;
 use hgl_source::Ty;
 fn fields(t: &Ty) -> Vec<Ty> {
     if let Ty::Tuple(fields) = t {
@@ -14,6 +14,17 @@ fn fields(t: &Ty) -> Vec<Ty> {
 }
 /// Decode a constructed checked value into its exact native owning representation.
 pub fn decode(t: &Ty, expression: &str) -> String {
+    if matches!(t, Ty::Set(_) | Ty::Map(..)) {
+        return decode(
+            &Ty::List(
+                Box::new(
+                    hgl_rust_collections::element(t).unwrap_or_else(|| unreachable!("collection")),
+                ),
+                None,
+            ),
+            expression,
+        );
+    }
     if let Ty::Family(family) = t {
         return hgl_rust_families::decode(family, expression, decode);
     }
@@ -53,37 +64,7 @@ pub fn decode(t: &Ty, expression: &str) -> String {
         | Ty::TimeZone
         | Ty::ZonedTime
         | Ty::ZonedDateTime => {
-            let (variant, result) = match t {
-                Ty::Bool => ("Bool", "*item"),
-                Ty::I64 => ("Int", "*item"),
-                Ty::F64 => ("Float", "*item"),
-                Ty::Str => ("Str", "item.clone()"),
-                Ty::Date => ("Date", "hgl_types::Date(*item)"),
-                Ty::Time => ("Time", "hgl_types::Time(*item)"),
-                Ty::DateTime => ("DateTime", "hgl_types::EngineTime::from_micros(*item)"),
-                Ty::Duration => ("Duration", "hgl_types::EngineDelta::from_micros(*item)"),
-                Ty::CivilDateTime => (
-                    "CivilDateTime",
-                    "hgl_types::CivilDateTime::from_micros(*item)",
-                ),
-                Ty::TimeZone => ("TimeZone", "item.clone()"),
-                Ty::ZonedTime => ("ZonedTime", "item.clone()"),
-                Ty::ZonedDateTime => ("ZonedDateTime", "item.clone()"),
-                Ty::Enum(_)
-                | Ty::Atomic(_)
-                | Ty::Map(..)
-                | Ty::Tuple(_)
-                | Ty::Delta(_)
-                | Ty::List(..)
-                | Ty::Struct(..)
-                | Ty::Ref(_)
-                | Ty::Set(_)
-                | Ty::Nullable(_)
-                | Ty::Recursive(_) | Ty::Family(_) | Ty::Void => unreachable!("checked scalar"),
-            };
-            format!(
-                "let hgl_rust_ir::Kind::Literal(hgl_source::Literal::{variant}(item))=&v.kind else {{return Err(\"prepared scalar type mismatch\".into())}}; {result}"
-            )
+            scalar_decode(t)
         }
         Ty::Atomic(_) | Ty::Map(..) | Ty::Set(_) | Ty::Ref(_) | Ty::Nullable(_) | Ty::Recursive(_) | Ty::Family(_) | Ty::Void => {
             unreachable!("checked prepared ordinary type")
@@ -93,6 +74,22 @@ pub fn decode(t: &Ty, expression: &str) -> String {
 }
 /// Encode an independently owned native capture as its exact checked value.
 pub fn encode(t: &Ty, expression: &str) -> String {
+    if matches!(t, Ty::Set(_) | Ty::Map(..)) {
+        return format!(
+            "{{let mut value={};value.ty={};value}}",
+            encode(
+                &Ty::List(
+                    Box::new(
+                        hgl_rust_collections::element(t)
+                            .unwrap_or_else(|| unreachable!("collection"))
+                    ),
+                    None
+                ),
+                expression
+            ),
+            ty(t)
+        );
+    }
     if let Ty::Family(family) = t {
         return hgl_rust_families::encode(family, expression, encode);
     }
@@ -124,36 +121,7 @@ pub fn encode(t: &Ty, expression: &str) -> String {
         | Ty::CivilDateTime
         | Ty::TimeZone
         | Ty::ZonedTime
-        | Ty::ZonedDateTime => {
-            let (variant, expression) = match t {
-                Ty::Bool => ("Bool", "*v"),
-                Ty::I64 => ("Int", "*v"),
-                Ty::F64 => ("Float", "*v"),
-                Ty::Str => ("Str", "v.clone()"),
-                Ty::Date => ("Date", "v.0"),
-                Ty::Time => ("Time", "v.0"),
-                Ty::DateTime => ("DateTime", "v.micros()"),
-                Ty::Duration => ("Duration", "v.micros()"),
-                Ty::CivilDateTime => ("CivilDateTime", "v.micros()"),
-                Ty::TimeZone => ("TimeZone", "v.clone()"),
-                Ty::ZonedTime => ("ZonedTime", "v.clone()"),
-                Ty::ZonedDateTime => ("ZonedDateTime", "v.clone()"),
-                Ty::Enum(_)
-                | Ty::Atomic(_)
-                | Ty::Map(..)
-                | Ty::Tuple(_)
-                | Ty::Delta(_)
-                | Ty::List(..)
-                | Ty::Struct(..)
-                | Ty::Ref(_)
-                | Ty::Set(_)
-                | Ty::Nullable(_)
-                | Ty::Recursive(_)
-                | Ty::Family(_)
-                | Ty::Void => unreachable!("checked scalar"),
-            };
-            format!("hgl_rust_ir::Kind::Literal(hgl_source::Literal::{variant}({expression}))")
-        }
+        | Ty::ZonedDateTime => scalar_encode(t),
         Ty::Atomic(_)
         | Ty::Map(..)
         | Ty::Set(_)
@@ -272,4 +240,71 @@ fn encode_fields(t: &Ty) -> String {
         .collect::<Vec<_>>()
         .concat();
     format!("{{let mut fields=Vec::new(); {entries} hgl_rust_ir::Kind::Construct(fields)}}")
+}
+
+fn scalar_decode(t: &Ty) -> String {
+    let (variant, result) = match t {
+        Ty::Bool => ("Bool", "*item"),
+        Ty::I64 => ("Int", "*item"),
+        Ty::F64 => ("Float", "*item"),
+        Ty::Str => ("Str", "item.clone()"),
+        Ty::Date => ("Date", "hgl_types::Date(*item)"),
+        Ty::Time => ("Time", "hgl_types::Time(*item)"),
+        Ty::DateTime => ("DateTime", "hgl_types::EngineTime::from_micros(*item)"),
+        Ty::Duration => ("Duration", "hgl_types::EngineDelta::from_micros(*item)"),
+        Ty::CivilDateTime => (
+            "CivilDateTime",
+            "hgl_types::CivilDateTime::from_micros(*item)",
+        ),
+        Ty::TimeZone => ("TimeZone", "item.clone()"),
+        Ty::ZonedTime => ("ZonedTime", "item.clone()"),
+        Ty::ZonedDateTime => ("ZonedDateTime", "item.clone()"),
+        Ty::Enum(_)
+        | Ty::Atomic(_)
+        | Ty::Map(..)
+        | Ty::Tuple(_)
+        | Ty::Delta(_)
+        | Ty::List(..)
+        | Ty::Struct(..)
+        | Ty::Ref(_)
+        | Ty::Set(_)
+        | Ty::Nullable(_)
+        | Ty::Recursive(_)
+        | Ty::Family(_)
+        | Ty::Void => unreachable!("checked scalar"),
+    };
+    format!(
+        "let hgl_rust_ir::Kind::Literal(hgl_source::Literal::{variant}(item))=&v.kind else {{return Err(\"prepared scalar type mismatch\".into())}}; {result}"
+    )
+}
+
+fn scalar_encode(t: &Ty) -> String {
+    let (variant, expression) = match t {
+        Ty::Bool => ("Bool", "*v"),
+        Ty::I64 => ("Int", "*v"),
+        Ty::F64 => ("Float", "*v"),
+        Ty::Str => ("Str", "v.clone()"),
+        Ty::Date => ("Date", "v.0"),
+        Ty::Time => ("Time", "v.0"),
+        Ty::DateTime => ("DateTime", "v.micros()"),
+        Ty::Duration => ("Duration", "v.micros()"),
+        Ty::CivilDateTime => ("CivilDateTime", "v.micros()"),
+        Ty::TimeZone => ("TimeZone", "v.clone()"),
+        Ty::ZonedTime => ("ZonedTime", "v.clone()"),
+        Ty::ZonedDateTime => ("ZonedDateTime", "v.clone()"),
+        Ty::Enum(_)
+        | Ty::Atomic(_)
+        | Ty::Map(..)
+        | Ty::Tuple(_)
+        | Ty::Delta(_)
+        | Ty::List(..)
+        | Ty::Struct(..)
+        | Ty::Ref(_)
+        | Ty::Set(_)
+        | Ty::Nullable(_)
+        | Ty::Recursive(_)
+        | Ty::Family(_)
+        | Ty::Void => unreachable!("checked scalar"),
+    };
+    format!("hgl_rust_ir::Kind::Literal(hgl_source::Literal::{variant}({expression}))")
 }

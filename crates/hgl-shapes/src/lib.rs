@@ -63,6 +63,8 @@ impl<K: hgl_keys::Key> Shape for Set<K> {
             | hgl_types::OrdinaryType::OptionalField(_)
             | hgl_types::OrdinaryType::Enum(_)
             | hgl_types::OrdinaryType::List(..)
+            | hgl_types::OrdinaryType::Set(_)
+            | hgl_types::OrdinaryType::Map(..)
             | hgl_types::OrdinaryType::Tuple(_)
             | hgl_types::OrdinaryType::Struct(..)) => TsType::KeyedSet(identity),
         }

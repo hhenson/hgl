@@ -1,0 +1,14 @@
+[package]
+name = "hgl-rust-collections"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+[package.metadata.hgl]
+line-budget = 250
+[lints]
+workspace = true
+[dependencies]
+hgl-source = { path = "../hgl-source" }
+hgl-rust-ir = { path = "../hgl-rust-ir" }
+hgl-rust-prepared-values = { path = "../hgl-rust-prepared-values" }

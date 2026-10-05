@@ -99,6 +99,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "hgl-collection-check"
+version = "0.0.0"
+dependencies = [
+ "hgl-collection-values",
+ "hgl-rust-ir",
+ "hgl-source",
+ "hgl-value-constant",
+ "hgl-value-eval",
+]
+
+[[package]]
+name = "hgl-collection-values"
+version = "0.0.0"
+dependencies = [
+ "hgl-family-values",
+ "hgl-rust-ir",
+ "hgl-scalar-keys",
+ "hgl-source",
+]
+
+[[package]]
 name = "hgl-columns"
 version = "0.0.0"
 dependencies = [
@@ -252,6 +273,7 @@ dependencies = [
 name = "hgl-harness"
 version = "0.0.0"
 dependencies = [
+ "hgl-collection-values",
  "hgl-eval-data",
  "hgl-family-values",
  "hgl-harness-ir",
@@ -437,6 +459,7 @@ name = "hgl-program"
 version = "0.0.0"
 dependencies = [
  "hgl-body-check",
+ "hgl-collection-check",
  "hgl-delta-check",
  "hgl-documentation",
  "hgl-endpoint-check",
@@ -517,6 +540,7 @@ dependencies = [
 name = "hgl-rust-capacity"
 version = "0.0.0"
 dependencies = [
+ "hgl-rust-collections",
  "hgl-rust-deltas",
  "hgl-rust-finite-domains",
  "hgl-rust-ir",
@@ -534,6 +558,15 @@ dependencies = [
  "hgl-rust-enums",
  "hgl-rust-ir",
  "hgl-rust-type-data",
+ "hgl-source",
+]
+
+[[package]]
+name = "hgl-rust-collections"
+version = "0.0.0"
+dependencies = [
+ "hgl-rust-ir",
+ "hgl-rust-prepared-values",
  "hgl-source",
 ]
 
@@ -630,6 +663,7 @@ dependencies = [
 name = "hgl-rust-layouts"
 version = "0.0.0"
 dependencies = [
+ "hgl-rust-collections",
  "hgl-rust-enums",
  "hgl-rust-families",
  "hgl-rust-ir",
@@ -662,10 +696,12 @@ version = "0.0.0"
 dependencies = [
  "hgl-harness-ir",
  "hgl-rust-checked-data",
+ "hgl-rust-collections",
  "hgl-rust-families",
  "hgl-rust-ir",
  "hgl-rust-layouts",
  "hgl-rust-recursive-convert",
+ "hgl-rust-value-convert",
  "hgl-rust-values",
  "hgl-source",
 ]
@@ -728,9 +764,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "hgl-rust-value-convert"
+version = "0.0.0"
+dependencies = [
+ "hgl-rust-checked-data",
+ "hgl-rust-collections",
+ "hgl-rust-families",
+ "hgl-rust-layouts",
+ "hgl-source",
+]
+
+[[package]]
 name = "hgl-rust-values"
 version = "0.0.0"
 dependencies = [
+ "hgl-rust-collections",
  "hgl-rust-deltas",
  "hgl-rust-direct-deltas",
  "hgl-rust-finite-domains",
@@ -975,6 +1023,7 @@ dependencies = [
 name = "hgl-value-eval"
 version = "0.0.0"
 dependencies = [
+ "hgl-collection-values",
  "hgl-delta-check",
  "hgl-family-values",
  "hgl-rust-ir",
@@ -994,6 +1043,7 @@ dependencies = [
 name = "hgl-value-operations"
 version = "0.0.0"
 dependencies = [
+ "hgl-collection-values",
  "hgl-family-values",
  "hgl-rust-ir",
  "hgl-source",

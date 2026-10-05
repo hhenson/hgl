@@ -47,3 +47,5 @@ Family capacity includes every declared concrete member schema. Its fixed tagged
 storage bounds combine the existing scalar/child maxima and source/configuration
 construction recipes; membership is never narrowed to members observed in inputs.
 Prepared optional member slots remain inactive until the exact member is copied.
+
+Complete ordinary sets/maps contribute a maximum length and recursively typed retained item bounds. Map items are exact key/value tuple bounds, separate from sparse temporal topology.

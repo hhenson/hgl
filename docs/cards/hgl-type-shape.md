@@ -77,3 +77,5 @@ payload retaining declaration-fixed concrete members and explicit ancestor
 specializations. Its source identity is the exact applied abstract declaration;
 structural family publication remains unsupported. Family fields are not exposed
 through Ty::structure. This is the nonrecursive family slice of spec97c791f.
+
+atomic_payload also admits ordinary Set of scalar K and Map of scalar K with recursively admitted ordinary V. This does not change their unwrapped temporal publication shapes or admit composite ordinary keys.

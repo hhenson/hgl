@@ -21,8 +21,8 @@ pub fn owned_type(ty: &Ty) -> String {
     if let Ty::Delta(origin) = ty {
         return owned_type(&delta_storage(origin));
     }
-    if let Ty::List(element, _) = ty {
-        return format!("Vec<{}>", owned_type(element));
+    if let Some(element) = hgl_rust_collections::element(ty) {
+        return format!("Vec<{}>", owned_type(&element));
     }
     if let Ty::Struct(_, fields, optional) = ty {
         return globals::tuple(fields.iter().enumerate().map(|(i, (_, ty))| {

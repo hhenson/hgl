@@ -9,6 +9,7 @@ line-budget = 250
 [lints]
 workspace = true
 [dependencies]
+hgl-collection-values = { path = "../hgl-collection-values" }
 hgl-family-values = { path = "../hgl-family-values" }
 hgl-harness-ir = { path = "../hgl-harness-ir" }
 hgl-value-eval = { path = "../hgl-value-eval" }

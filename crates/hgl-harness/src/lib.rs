@@ -176,6 +176,9 @@ fn equal(a: &Value, b: &Value) -> bool {
     if a.ty != b.ty {
         return false;
     }
+    if matches!(a.ty, hgl_source::Ty::Set(_) | hgl_source::Ty::Map(..)) {
+        return hgl_collection_values::equal(a, b);
+    }
     match (&a.kind, &b.kind) {
         (Kind::Literal(a), Kind::Literal(b)) => a == b,
         (Kind::List(a), Kind::List(b)) => {

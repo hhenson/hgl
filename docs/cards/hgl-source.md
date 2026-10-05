@@ -99,3 +99,5 @@ Reexports RecursiveType and NominalDefinition alongside Ty and Nominal. Recursiv
 batch formation belongs to semantic resolution; syntax introduces no new type.
 
 Reexports FamilyType with the other exact checked nominal carriers.
+
+Typed map constructors accept ordered expression-colon-expression entries only within their argument lists. Existing untyped list and harness grammars remain unchanged; exact items-only admission belongs to hgl-collection-check.

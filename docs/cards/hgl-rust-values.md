@@ -88,3 +88,5 @@ presence survives owning boundaries. This introduces no optional read syntax.
 Internal family widening preserves tuple-valued expression parentheses and exact
 discriminators. Returning immutable configuration payloads uses typed prepared
 slot publication, avoiding an owning clone in the evaluation hook.
+
+Complete ordinary set/map construction delegates key-first validation to hgl-rust-collections; retention uses the exact GlobalValue marker and comparison is recursively unordered.

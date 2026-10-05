@@ -43,3 +43,5 @@ branch invokes its callback. Preserve one result per named lexical test.
 
 Family decode/encode delegate to hgl-rust-families with recursive child converters.
 Captures retain the actual concrete member tag and its optional/owning fields.
+
+decode and encode are reexported from hgl-rust-value-convert. This crate owns lexical runner callback emission and recursive-marker assembly.

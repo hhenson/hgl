@@ -201,6 +201,10 @@ pub enum OrdinaryType {
     Struct(&'static str, Vec<(&'static str, OrdinaryType)>),
     /// Homogeneous ordinary elements and an optional exact fixed length.
     List(Box<OrdinaryType>, Option<usize>),
+    /// Unordered complete ordinary scalar members.
+    Set(Box<OrdinaryType>),
+    /// Unordered complete ordinary key/value entries.
+    Map(Box<OrdinaryType>, Box<OrdinaryType>),
 }
 impl From<ScalarType> for OrdinaryType {
     fn from(value: ScalarType) -> Self {

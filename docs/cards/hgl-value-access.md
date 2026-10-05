@@ -30,3 +30,5 @@ Ordinary projection preserves struct optional-position metadata. Access to an
 optional field is explicitly rejected in this publication slice; required
 fields and whole-value owning bindings keep existing behavior. No optional
 clearing or mutation surface follows from admitting complete snapshots.
+
+Ordinary sets/maps are owning aggregates at existing retention and borrow boundaries. This adds no element projection or mutation syntax.

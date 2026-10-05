@@ -58,3 +58,4 @@ Prepared eval transport is selected as one complete path by
 `hgl-rust-execution-proof::prepared(plan)`. Unproved plans retain existing ordinary
 publication and recording behavior; no per-insertion fallback or hook replay is
 introduced. Prepared allocation evidence applies only to the selected finite path.
+Complete ordinary Set/Map pending payloads and prepared slots publish through atomic whole-value transport.

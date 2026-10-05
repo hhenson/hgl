@@ -83,3 +83,5 @@ Schema-driven allocate rejects a bare RecursiveReference with an unresolved-edge
 error. Admitted recursive fields place the reference beneath OptionalField;
 actual descendants are installed by statically typed Recursive markers, never by
 looking up a name during evaluation.
+
+Schema-driven Set/Map root allocation creates one ordinary descriptor, using the same typed descendant ownership protocol as lists.

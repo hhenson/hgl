@@ -1,9 +1,7 @@
 //! Cold typed conversion and lexical test execution emission.
 use hgl_harness_ir::{Step, Test};
-use hgl_rust_checked_data::ty;
 use hgl_rust_ir::Plan;
-mod convert;
-pub use convert::{decode, encode};
+pub use hgl_rust_value_convert::{decode, encode};
 /// Cold recursive conversion methods for complete reachable nominal batches.
 pub fn recursive_markers(plan: &Plan) -> String {
     hgl_rust_recursive_convert::markers(plan, decode, encode)

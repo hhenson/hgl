@@ -22,6 +22,11 @@ impl fmt::Display for EvalError {
     }
 }
 impl std::error::Error for EvalError {}
+impl From<String> for EvalError {
+    fn from(message: String) -> Self {
+        Self::Operation(message)
+    }
+}
 fn unsupported(message: &str) -> EvalError {
     EvalError::Unsupported(message.into())
 }
