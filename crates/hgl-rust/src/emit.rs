@@ -587,6 +587,7 @@ fn capacities(plan: &Plan) -> String {
             code += "}";
         }
     }
+    code += &capacity.constants(plan, |value| condition_code(plan, value));
     for node in &plan.nodes {
         for (key, ty) in &node.globals {
             append(
@@ -609,7 +610,7 @@ fn capacities(plan: &Plan) -> String {
             );
         }
     }
-    code += "Ok(capacity)}\nfn prepare_outputs(capacity:&FiniteCapacity,store:&mut hgl_store::Store,graph:&hgl_describe::GraphDescription,built:&hgl_describe::BuiltGraph)->hgl_types::NodeResult {";
+    code += "Ok(capacity)}\nfn prepare_outputs(capacity:&FiniteCapacity,store:&mut hgl_store::Store,graph:&hgl_describe::GraphDescription,built:&hgl_describe::BuiltGraph)->hgl_types::NodeResult {let empty=FiniteTopology::default();";
     for (i, node) in plan.nodes.iter().enumerate() {
         if node.result.publication() {
             code += &capacity.output(

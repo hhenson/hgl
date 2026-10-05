@@ -1,35 +1,24 @@
 //! Cold finite replay capacity planning with statically selected value layouts.
 use hgl_rust_ir::Plan;
+mod constants;
+mod topology;
 use hgl_rust_layouts::{delta_storage, delta_type, global_type, whole_payload};
 use hgl_source::Ty;
 use std::collections::BTreeMap;
+use std::fmt::Write as _;
 fn fields(ty: &Ty) -> Vec<Ty> {
-    match ty {
-        Ty::Struct(_, fields) => fields.iter().map(|(_, ty)| ty.clone()).collect(),
-        Ty::Tuple(fields) => fields.clone(),
-        Ty::Delta(origin) => fields(&delta_storage(origin)),
-        Ty::Enum(_)
-        | Ty::Atomic(_)
-        | Ty::Map(..)
-        | Ty::List(..)
-        | Ty::I64
-        | Ty::F64
-        | Ty::Bool
-        | Ty::Str
-        | Ty::Duration
-        | Ty::Date
-        | Ty::Time
-        | Ty::DateTime
-        | Ty::CivilDateTime
-        | Ty::TimeZone
-        | Ty::ZonedTime
-        | Ty::ZonedDateTime
-        | Ty::Ref(_)
-        | Ty::Set(_)
-        | Ty::Nullable(_)
-        | Ty::Void => Vec::new(),
+    if let Ty::Struct(_, fields) = ty {
+        return fields.iter().map(|(_, ty)| ty.clone()).collect();
     }
+    if let Ty::Tuple(fields) = ty {
+        return fields.clone();
+    }
+    if let Ty::Delta(origin) = ty {
+        return fields(&delta_storage(origin));
+    }
+    Vec::new()
 }
+
 fn collect(ty: &Ty, types: &mut BTreeMap<String, Ty>) {
     if types.insert(global_type(ty), ty.clone()).is_some() {
         return;
@@ -63,6 +52,9 @@ impl Capacity {
                 }
             }
         }
+        for value in constants::collect(plan) {
+            collect(&value.ty, &mut types);
+        }
         Self { types }
     }
     fn index(&self, ty: &Ty) -> usize {
@@ -82,51 +74,41 @@ impl Capacity {
         }
         let children = fields(ty);
         if !children.is_empty() || matches!(ty, Ty::Struct(..) | Ty::Tuple(_) | Ty::Delta(_)) {
-            return children
-                .iter()
-                .enumerate()
-                .map(|(i, child)| self.include(child, &format!("&({value}).{i}")))
-                .collect();
+            let mut extra = String::new();
+            if let Ty::Delta(origin) = ty {
+                extra = topology::include(origin, value, &format!("capacity.topology{index}"));
+                for i in 0..children.len() {
+                    write!(extra,"capacity.width{index}_{i}=capacity.width{index}_{i}.max(({value}).{i}.len());").unwrap_or_else(|_|unreachable!("String formatting"));
+                }
+            }
+            return extra
+                + &children
+                    .iter()
+                    .enumerate()
+                    .map(|(i, child)| self.include(child, &format!("&({value}).{i}")))
+                    .collect::<String>();
         }
         format!(
             "<{} as hgl_store::PreparedValue>::include(&mut capacity.limit{index},{value});",
             global_type(ty)
         )
     }
+    /// Merge checked compile-time constants without moving hook evaluation earlier.
+    pub fn constants(&self, plan: &Plan, emit: impl Fn(&hgl_rust_ir::Value) -> String) -> String {
+        constants::collect(plan).into_iter().map(|value|format!("{{let value=(||->hgl_types::NodeResult<_>{{Ok({})}})().map_err(|e|e.message)?;{}}}",emit(value),self.include(&value.ty,"&value"))).collect::<Vec<_>>().concat()
+    }
     /// Assemble exact typed bounds; structural deltas include every possible changed member.
     pub fn bounds(&self, ty: &Ty) -> String {
         if let Ty::Delta(origin) = ty {
             let children = fields(ty);
-            let lengths = match origin.as_ref() {
-                Ty::List(_, Some(n)) => vec![n.to_string(); children.len()],
-                Ty::Map(key, _) | Ty::Set(key) => vec![
-                    format!(
-                        "<{} as hgl_store::Key>::ids(&store.keys).len()",
-                        global_type(key)
-                    );
-                    children.len()
-                ],
-                Ty::Enum(_)
-                | Ty::Atomic(_)
-                | Ty::Tuple(_)
-                | Ty::Delta(_)
-                | Ty::List(_, None)
-                | Ty::Struct(..)
-                | Ty::I64
-                | Ty::F64
-                | Ty::Bool
-                | Ty::Str
-                | Ty::Duration
-                | Ty::Date
-                | Ty::Time
-                | Ty::DateTime
-                | Ty::CivilDateTime
-                | Ty::TimeZone
-                | Ty::ZonedTime
-                | Ty::ZonedDateTime
-                | Ty::Ref(_)
-                | Ty::Nullable(_)
-                | Ty::Void => vec!["1".into(); children.len()],
+            let lengths = if let Ty::List(_, Some(n)) = origin.as_ref() {
+                vec![n.to_string(); children.len()]
+            } else if matches!(origin.as_ref(), Ty::Map(..) | Ty::Set(_)) {
+                (0..children.len())
+                    .map(|i| format!("capacity.width{}_{i}", self.index(ty)))
+                    .collect()
+            } else {
+                vec!["1".into(); children.len()]
             };
             let args = children
                 .iter()
@@ -172,10 +154,39 @@ impl Capacity {
             .map(|i| format!("limit{i}:usize,"))
             .collect::<Vec<_>>()
             .concat();
-        format!("#[derive(Default)] struct FiniteCapacity {{{fields}}}\n")
+        let domains = self
+            .types
+            .values()
+            .enumerate()
+            .filter_map(|(index, ty)| {
+                if matches!(ty, Ty::Delta(_)) {
+                    Some(format!(
+                        "topology{index}:FiniteTopology,{}",
+                        (0..self::fields(ty).len())
+                            .map(|i| format!("width{index}_{i}:usize,"))
+                            .collect::<Vec<_>>()
+                            .concat()
+                    ))
+                } else {
+                    None
+                }
+            })
+            .collect::<String>();
+        format!(
+            "{}#[derive(Default)] struct FiniteCapacity {{{fields}{domains}}}\n",
+            topology::DECLARATION
+        )
     }
     /// Prepare every concrete leaf, including inactive finite keyed descendants.
     pub fn output(&self, ty: &Ty, id: &str) -> String {
+        let domain = if hgl_rust_deltas::structural(ty) {
+            format!("&capacity.topology{}", self.index(&delta_type(ty)))
+        } else {
+            "&empty".into()
+        };
+        self.output_with(ty, id, &domain)
+    }
+    fn output_with(&self, ty: &Ty, id: &str, domain: &str) -> String {
         if let Some(payload) = whole_payload(ty) {
             return format!(
                 "{{let bounds={};let storage=store.prepared();storage.atomic.prepare_output::<{}>(storage.bindings,{id},&bounds)?;}}",
@@ -184,27 +195,21 @@ impl Capacity {
             );
         }
         match ty {
-            Ty::Map(key, child) => format!(
-                "{{let output={id};let keys=<{} as hgl_store::Key>::ids(&store.keys).to_vec();store.prepare_collection(output,&keys,|store,owner|store.add_shaped_output(owner,<{} as hgl_store::shapes::Shape>::shape()));for index in 0..store.bindings().output(output).members.prepared.len() {{let child=store.bindings().output(output).members.prepared[index].1;{}}}}}",
-                global_type(key),
-                hgl_rust_deltas::shape_marker(child),
-                self.output(child, "child")
+            Ty::Map(_, child) => format!(
+                "{{let output={id};let domain={domain};let keys=domain.children.keys().copied().collect::<Vec<_>>();store.prepare_collection(output,&keys,|store,owner|store.add_shaped_output(owner,<{} as hgl_store::shapes::Shape>::shape()));for (&key,domain) in &domain.children {{let child=store.bindings().prepared_output(output,key).expect(\"prepared domain child\");{}}}}}",hgl_rust_deltas::shape_marker(child),self.output_with(child,"child","domain")
             ),
-            Ty::Set(key) => format!(
-                "{{let output={id};let keys=<{} as hgl_store::Key>::ids(&store.keys).to_vec();store.prepare_collection(output,&keys,|store,owner|store.add_output::<bool>(owner).id());}}",
-                global_type(key)
-            ),
+            Ty::Set(_) => format!("{{let output={id};let domain={domain};let keys=domain.children.keys().copied().collect::<Vec<_>>();store.prepare_collection(output,&keys,|store,owner|store.add_output::<bool>(owner).id());}}"),
             Ty::List(child, Some(_)) => format!(
-                "{{let output={id};for index in 0..store.bindings().output(output).fixed.len() {{let child=store.bindings().output(output).fixed[index];{}}}}}",
-                self.output(child, "child")
+                "{{let output={id};let domain={domain};for index in 0..store.bindings().output(output).fixed.len() {{let child=store.bindings().output(output).fixed[index];let domain=domain.children.get(&(index as i64)).unwrap_or(&empty);{}}}}}",
+                self.output_with(child, "child","domain")
             ),
             Ty::Struct(_, children) => children
                 .iter()
                 .enumerate()
                 .map(|(i, (_, child))| {
                     format!(
-                        "{{let child=store.bindings().output({id}).fixed[{i}];{}}}",
-                        self.output(child, "child")
+                        "{{let child=store.bindings().output({id}).fixed[{i}];let domain=({domain}).children.get(&{i}).unwrap_or(&empty);{}}}",
+                        self.output_with(child, "child","domain")
                     )
                 })
                 .collect::<Vec<_>>()
@@ -214,8 +219,8 @@ impl Capacity {
                 .enumerate()
                 .map(|(i, child)| {
                     format!(
-                        "{{let child=store.bindings().output({id}).fixed[{i}];{}}}",
-                        self.output(child, "child")
+                        "{{let child=store.bindings().output({id}).fixed[{i}];let domain=({domain}).children.get(&{i}).unwrap_or(&empty);{}}}",
+                        self.output_with(child, "child","domain")
                     )
                 })
                 .collect::<Vec<_>>()

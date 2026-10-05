@@ -36,7 +36,10 @@ fn finite_owning_publications_use_prepared_storage() -> Result<(), Box<dyn std::
         .ok_or("crate parent")?
         .parent()
         .ok_or("workspace parent")?;
-    let mut sources = vec![("prepared_execution.hgl".into(), SOURCE.into())];
+    let mut sources = vec![(
+        "prepared_execution.hgl".into(),
+        format!("{SOURCE}{}", scaling_source()),
+    )];
     for file in ["replay_record.hgl", "impl/replay_record.hgl"] {
         sources.push((
             file.into(),
@@ -52,10 +55,26 @@ fn finite_owning_publications_use_prepared_storage() -> Result<(), Box<dyn std::
     ));
     fs::create_dir_all(dir.join("src"))?;
     let mut code = hgl_program::emit_tests(&suite)
-        .replace("hgl_kernel::run_simulation(", "crate::measured_simulation(");
+        .replace("hgl_kernel::run_simulation(", "crate::measured_simulation(")
+        .replace(
+            "store.prepare_collection_inputs();",
+            "crate::verify_pool(&mut store,&built);store.prepare_collection_inputs();",
+        );
     code.push_str(r#"
 struct Provider;
 #[global_allocator] static ALLOCATOR:hgl_alloc_count::CountingAllocator=hgl_alloc_count::CountingAllocator;
+fn verify_pool(store:&mut hgl_store::Store,built:&hgl_describe::BuiltGraph) {
+ fn count(store:&hgl_store::Store,id:hgl_store::OutputId)->usize {let output=store.bindings().output(id);1+output.members.prepared.iter().map(|(_,child)|count(store,*child)).sum::<usize>()+output.fixed.iter().map(|child|count(store,*child)).sum::<usize>()}
+ let Some(root)=built.outputs.iter().flatten().copied().find(|id|store.bindings().output(*id).members.prepared.len()>=8) else{return;};
+ let n=store.bindings().output(root).members.prepared.len();let mut depth=0;let mut node=root;
+ while let Some((_,child))=store.bindings().output(node).members.prepared.first() {depth+=1;node=*child;}
+ let descendants=built.outputs.iter().flatten().map(|id|count(store,*id)).sum::<usize>();
+ assert_eq!(descendants,2*(1+n*depth),"finite topology must preserve per-parent reachability");
+ let (scalars,lists)=store.global_state().values().slot_counts();let rows=6*n+1;
+ assert!(scalars<=rows*(depth+3)+1,"record scalar pool grew beyond finite recipe bounds: {scalars}");
+ assert!(lists<=rows*3*depth+2,"record list pool grew beyond finite recipe bounds: {lists}");
+ println!("prepared scaling N={n} depth={depth}: temporal endpoints={descendants}, record scalar slots={scalars}, record list slots={lists}");
+}
 fn measured_simulation(graph:&mut hgl_kernel::Graph, store:&mut hgl_store::Store, config:&hgl_kernel::RunConfig)->Result<u64,hgl_kernel::EngineError> {
  graph.start(store,config.start_time).map_err(hgl_kernel::EngineError::Node)?;
  let mut cycles=0; let mut total=0; let mut now=config.start_time;
@@ -66,6 +85,35 @@ fn measured_simulation(graph:&mut hgl_kernel::Graph, store:&mut hgl_store::Store
 }
 "#);
     fs::write(dir.join("src/main.rs"), code)?;
+    manifest(root, &dir)?;
+    for profile in [vec![], vec!["--release"]] {
+        let output = Command::new(env!("CARGO"))
+            .args(["run", "--offline", "--quiet"])
+            .args(profile)
+            .current_dir(&dir)
+            .output()?;
+        for line in String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .filter(|line| line.starts_with("prepared scaling"))
+        {
+            println!("{line}");
+        }
+        assert!(
+            output.status.success(),
+            "{}\n{}\n{}",
+            dir.display(),
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    fs::remove_dir_all(dir)?;
+    Ok(())
+}
+
+fn manifest(
+    root: &std::path::Path,
+    dir: &std::path::Path,
+) -> Result<(), Box<dyn std::error::Error>> {
     let mut manifest = String::from(
         "[package]\nname=\"prepared-execution\"\nversion=\"0.0.0\"\nedition=\"2024\"\n[workspace]\n[dependencies]\n",
     );
@@ -83,27 +131,52 @@ fn measured_simulation(graph:&mut hgl_kernel::Graph, store:&mut hgl_store::Store
         "hgl-time-context",
         "hgl-testkit",
     ] {
-        writeln!(
-            manifest,
-            "{name}={{path={:?}}}",
-            root.join("crates").join(name)
-        )?;
+        let path = root
+            .join("crates")
+            .join(name)
+            .to_string_lossy()
+            .replace('\\', "\\\\")
+            .replace('"', "\\\"");
+        writeln!(manifest, "{name}={{path=\"{path}\"}}")?;
     }
     fs::write(dir.join("Cargo.toml"), manifest)?;
-    for profile in [vec![], vec!["--release"]] {
-        let output = Command::new(env!("CARGO"))
-            .args(["run", "--offline", "--quiet"])
-            .args(profile)
-            .current_dir(&dir)
-            .output()?;
-        assert!(
-            output.status.success(),
-            "{}\n{}\n{}",
-            dir.display(),
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        );
-    }
-    fs::remove_dir_all(dir)?;
     Ok(())
+}
+
+fn scaling_source() -> String {
+    fn ty(depth: usize) -> String {
+        if depth == 0 {
+            "str".into()
+        } else {
+            format!("map<str,{}>", ty(depth - 1))
+        }
+    }
+    fn value(depth: usize, index: usize, payload: &str) -> String {
+        if depth == 0 {
+            format!("{payload:?}")
+        } else {
+            format!(
+                "delta<{}>(upsert:[\"level{depth}-{index}\":{}])",
+                ty(depth),
+                value(depth - 1, index, payload)
+            )
+        }
+    }
+    let mut source = String::new();
+    for depth in [2, 3] {
+        for n in [8, 32] {
+            let mut rows = Vec::new();
+            for index in 0..n {
+                rows.push(value(depth, index, "first"));
+                rows.push(format!(
+                    "delta<{}>(remove:[\"level{depth}-{index}\"])",
+                    ty(depth)
+                ));
+                rows.push(value(depth, index, "longer independent retained payload"));
+            }
+            let rows = rows.join(",");
+            write!(source,"\nfn scale_{depth}_{n}(value:{})->{} {{when {{return delta_value(value)}}}}\ntest scale_{depth}_{n} {{assert eval(scale_{depth}_{n},value:[{rows}]) == [{rows}]}}\n",ty(depth),ty(depth)).unwrap_or_else(|_|unreachable!("String formatting"));
+        }
+    }
+    source
 }
