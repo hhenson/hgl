@@ -108,6 +108,14 @@ pub fn replacement(target: &Value, value: Value, mutable_port: bool) -> Result<V
 
 /// Build ordinary binary IR or a temporal scalar node from checked operands.
 pub fn binary(op: &str, mut values: [Value; 2], plan: &mut Plan) -> Result<Value, String> {
+    if values.iter().any(|value| {
+        matches!(value.ty, Ty::Set(_) | Ty::Map(..))
+            && matches!(value.kind, Kind::Wire(_) | Kind::Input(..) | Kind::Output)
+    }) {
+        return Err(format!(
+            "unsupported binary operation {op} on structural collection endpoints"
+        ));
+    }
     let temporal = values.iter().any(|v| matches!(v.kind, Kind::Wire(_)));
     let mut node = Node {
         name: format!("binary_{op}"),

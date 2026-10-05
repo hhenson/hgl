@@ -114,7 +114,6 @@ fn unsupported_set_shapes_fail_before_emission() {
         "set<set<i64>>",
         "set<void>",
         "set<list<str,2>>",
-        "set<tuple<f64>>",
         "ref<set<ref<i64>>>",
     ] {
         let text = format!(
@@ -207,5 +206,31 @@ fn nonfinite_literals_fail_before_emission() {
                     .contains("finite f64 range")
             );
         }
+    }
+}
+
+#[test]
+fn composite_set_shapes_are_admitted() -> Result<(), String> {
+    compile(
+        &[(
+            "key.hgl".into(),
+            "module example\nfn source()->set<tuple<f64>> {when {}}\nexport fn main(){source()}"
+                .into(),
+        )],
+        "main",
+    )?;
+    Ok(())
+}
+#[test]
+fn structural_collection_endpoints_cannot_be_aliased_as_complete_values() {
+    for ty in ["set<i64>", "map<i64,i64>"] {
+        let text = format!(
+            "module example\nfn source()->{ty} {{when {{}}}}\nfn compare(lhs:{ty},rhs:{ty})->bool {{when {{let a=lhs\nreturn a==rhs}}}}\nexport fn main() {{compare(source(),source())}}"
+        );
+        let error = compile(&[("alias.hgl".into(), text)], "main").unwrap_err();
+        assert!(
+            error.contains("structural endpoint payload requires delta_value"),
+            "{error}"
+        );
     }
 }
