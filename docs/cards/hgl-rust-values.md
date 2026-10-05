@@ -70,3 +70,8 @@ an unpublished vacant slot before committing its length. Native field expression
 are evaluated in source order before borrowing record storage. Unrelated ordinary
 global mutations retain their existing checked owning API. Direct finite eval
 pass-through publishes between typed prepared endpoints without an owning temporary.
+
+Prepared eval transport is selected as one complete path by
+`hgl-rust-execution-proof::prepared(plan)`. Unproved plans retain existing ordinary
+publication and recording behavior; no per-insertion fallback or hook replay is
+introduced. Prepared allocation evidence applies only to the selected finite path.

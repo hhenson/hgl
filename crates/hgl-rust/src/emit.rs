@@ -338,10 +338,8 @@ pub fn emit_test_body(plan: &Plan, expected: Option<&[Option<Value>]>) -> String
         out.push("Ok(())\n}\n".into());
         return out.concat();
     }
-    out.push("let mut store=hgl_store::Store::new();\nstore.global_state().provision();prepare_static(&mut store.keys)?;\nlet capacity=prepare_capacity(&configurations,&mut store,0)?;let mut built=hgl_describe::instantiate_complete(&graph,&registry,&mut store).map_err(|e|format!(\"{e:?}\"))?;\n".into());
-    out.push(
-        "prepare_outputs(&capacity,&mut store,&graph,&built).map_err(|e|e.message)?;\n".into(),
-    );
+    out.push("let mut store=hgl_store::Store::new();\nstore.global_state().provision();prepare_static(&mut store.keys)?;\n".into());
+    out.push(instantiate(plan, "0"));
     if let Some((key, ty)) = &plan.recording {
         out.push(format!(
             "let recording=store.global_state().bind::<{}>({key:?}).map_err(|e|format!(\"{{e:?}}\"))?;\n",
@@ -562,10 +560,8 @@ pub fn emit_prepared_test_body(plan: &Plan) -> String {
         return out.concat();
     }
     out.push("let configurations=prepare_configurations(&prepared.arguments)?;register_prepared(&mut registry,&configurations)?;".into());
-    out.push("let graph=main(&registry).map_err(|e|format!(\"{e:?}\"))?;\nlet mut store=hgl_store::Store::new();store.global_state().provision();prepare_static(&mut store.keys)?;prepare_values(&mut store.keys,&prepared.arguments)?;\nlet capacity=prepare_capacity(&configurations,&mut store,prepared.input_length)?;let mut built=hgl_describe::instantiate_complete(&graph,&registry,&mut store).map_err(|e|format!(\"{e:?}\"))?;\n".into());
-    out.push(
-        "prepare_outputs(&capacity,&mut store,&graph,&built).map_err(|e|e.message)?;\n".into(),
-    );
+    out.push("let graph=main(&registry).map_err(|e|format!(\"{e:?}\"))?;\nlet mut store=hgl_store::Store::new();store.global_state().provision();prepare_static(&mut store.keys)?;prepare_values(&mut store.keys,&prepared.arguments)?;\n".into());
+    out.push(instantiate(plan, "prepared.input_length"));
     if let Some((key, ty)) = &plan.recording {
         out.push(format!("let recording=store.global_state().bind::<{}>({key:?}).map_err(|e|format!(\"{{e:?}}\"))?;\n",global_type(ty)));
     }
@@ -586,6 +582,9 @@ pub fn emit_prepared_test_body(plan: &Plan) -> String {
     out.concat()
 }
 fn capacities(plan: &Plan) -> String {
+    if !hgl_rust_finite_domains::prepared(plan) {
+        return String::new();
+    }
     let capacity = hgl_rust_capacity::Capacity::new(plan);
     let mut code = capacity.declaration();
     code += "fn prepare_capacity(configurations:&Configurations,store:&mut hgl_store::Store,horizon:usize)->Result<FiniteCapacity,String>{let mut capacity=FiniteCapacity::default();let mut cycles=horizon;";
@@ -640,5 +639,19 @@ fn capacities(plan: &Plan) -> String {
         }
     }
     code += "Ok(())}\n";
+    code
+}
+
+fn instantiate(plan: &Plan, horizon: &str) -> String {
+    let finite = hgl_rust_finite_domains::prepared(plan);
+    let mut code = if finite {
+        format!("let capacity=prepare_capacity(&configurations,&mut store,{horizon})?;")
+    } else {
+        String::new()
+    };
+    code += "let mut built=hgl_describe::instantiate_complete(&graph,&registry,&mut store).map_err(|e|format!(\"{e:?}\"))?;\n";
+    if finite {
+        code += "prepare_outputs(&capacity,&mut store,&graph,&built).map_err(|e|e.message)?;\n";
+    }
     code
 }

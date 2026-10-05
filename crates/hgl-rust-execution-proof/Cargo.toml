@@ -1,5 +1,5 @@
 [package]
-name = "hgl-rust-finite-domains"
+name = "hgl-rust-execution-proof"
 version = "0.0.0"
 edition.workspace = true
 rust-version.workspace = true
@@ -11,6 +11,4 @@ workspace = true
 [dependencies]
 hgl-source = { path = "../hgl-source" }
 hgl-rust-ir = { path = "../hgl-rust-ir" }
-hgl-rust-layouts = { path = "../hgl-rust-layouts" }
 hgl-rust-mutation-bounds = { path = "../hgl-rust-mutation-bounds" }
-hgl-rust-execution-proof = { path = "../hgl-rust-execution-proof" }

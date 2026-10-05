@@ -26,8 +26,7 @@ Downstream projections and cycle work queues are allocated cold. Per-cycle recor
 width remains separate from total distinct-key capacity, avoiding quadratic
 record pools. `text_limits(plan)` widens retained text for pure local concatenations.
 
-Constant integer induction loops have exact finite mutation bounds. Other runtime
-while bodies retain a single-traversal estimate: neither an input-dependent nor
-a native-dependent loop receives a general iteration proof from the replay
-horizon. Such loops can exhaust the prepared pool, a remaining behavioral
-limitation distinct from the validated finite publication matrix.
+Capacity emission requires `hgl-rust-execution-proof::prepared(plan)`. Unknown
+membership or owning-width bounds preserve the existing complete adapter instead
+of reserving a guessed pool. This preserves input/native-controlled loop behavior
+without claiming allocation-free execution for that existing generic path.

@@ -209,8 +209,11 @@ fn timed_yield(plan: &Plan, time: &Value, payload: &Value, next: usize) -> Strin
         assert_eq!(time.ty, Ty::DateTime, "checked generator time operand");
         "time"
     };
-    let projection =
-        hgl_rust_source_slots::projection(payload, |value| condition_code(plan, value));
+    let projection = if hgl_rust_finite_domains::prepared(plan) {
+        hgl_rust_source_slots::projection(payload, |value| condition_code(plan, value))
+    } else {
+        None
+    };
     let (value, publish, pending) = projection.map_or_else(
         || {
             (

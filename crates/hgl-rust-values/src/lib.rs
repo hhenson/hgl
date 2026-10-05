@@ -278,7 +278,7 @@ pub fn statements(plan: &Plan, body: &[Statement], out: &mut Vec<String>) {
             },
             Statement::Var(i, v) => format!("let mut local{i} = {};\n", condition_code(plan, v)),
             Statement::Return(v) => {
-                if plan.recording.is_some() && let Some(code)=prepared::forward(v) {out.push(code);continue;}
+                if hgl_rust_finite_domains::prepared(plan) && plan.recording.is_some() && let Some(code)=prepared::forward(v) {out.push(code);continue;}
                 let publish = if matches!(v.ty, Ty::Ref(_)) { "_ctx.set_reference(self._output, publication)?;" } else { "" };
                 let publish = if publish.is_empty() { hgl_rust_deltas::publish(&v.ty,"publication") } else { publish.into() };
                 format!("let publication = {};\n{publish}\nreturn Ok(());\n", condition_code(plan, v))
@@ -566,10 +566,11 @@ fn list_value(plan: &Plan, ty: &Ty, values: &[Value]) -> String {
     code.concat()
 }
 fn push(plan: &Plan, parent: &Value, item: &Value) -> String {
-    if plan
-        .recording
-        .as_ref()
-        .is_some_and(|(_, ty)| ty == &parent.ty)
+    if hgl_rust_finite_domains::prepared(plan)
+        && plan
+            .recording
+            .as_ref()
+            .is_some_and(|(_, ty)| ty == &parent.ty)
         && let Some(slot) = borrowed_place(plan, parent)
     {
         return prepared::append(plan, item, &slot);

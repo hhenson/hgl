@@ -130,17 +130,31 @@ fn text_statements(body: &[Statement], locals: &mut BTreeMap<usize, Text>, maxim
         }
     }
 }
-/// Conservative byte multiplier for pure local text concatenations in a finite hook.
-pub fn text_factor(plan: &Plan) -> usize {
-    let mut factor = 1usize;
-    for node in &plan.nodes {
-        let mut maximum = 1;
-        let mut locals = BTreeMap::new();
-        text_statements(&node.start, &mut locals, &mut maximum);
-        for (_, body) in &node.handlers {
-            text_statements(body, &mut BTreeMap::new(), &mut maximum);
-        }
-        factor = factor.saturating_mul(maximum);
+fn node_factor(plan: &Plan, index: usize, factors: &mut [Option<usize>]) -> usize {
+    if let Some(factor) = factors[index] {
+        return factor;
     }
+    let node = &plan.nodes[index];
+    let input = node
+        .inputs
+        .iter()
+        .map(|(_, source, _)| node_factor(plan, *source, factors))
+        .max()
+        .unwrap_or(1);
+    let mut maximum = 1;
+    text_statements(&node.start, &mut BTreeMap::new(), &mut maximum);
+    for (_, body) in &node.handlers {
+        text_statements(body, &mut BTreeMap::new(), &mut maximum);
+    }
+    let factor = input.saturating_mul(maximum);
+    factors[index] = Some(factor);
     factor
+}
+/// Byte multiplier along real dependencies for a plan with a separately established finite proof.
+pub fn text_factor(plan: &Plan) -> usize {
+    let mut factors = vec![None; plan.nodes.len()];
+    (0..plan.nodes.len())
+        .map(|index| node_factor(plan, index, &mut factors))
+        .max()
+        .unwrap_or(1)
 }

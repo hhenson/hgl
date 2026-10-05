@@ -85,15 +85,28 @@ assert eval(atomic_pair,value:[first,Pair(label:"longer retained value",values:[
 "#;
 #[test]
 fn finite_owning_publications_use_prepared_storage() -> Result<(), Box<dyn std::error::Error>> {
+    execute(
+        format!("{SOURCE}{}{}", scaling_source(), branch_source()),
+        RUNTIME,
+        true,
+    )
+}
+#[test]
+fn unknown_finite_bounds_keep_existing_evaluation_semantics()
+-> Result<(), Box<dyn std::error::Error>> {
+    execute(COMPATIBILITY.into(), COMPATIBILITY_RUNTIME, false)
+}
+fn execute(
+    source: String,
+    runtime: &str,
+    measured: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .ok_or("crate parent")?
         .parent()
         .ok_or("workspace parent")?;
-    let mut sources = vec![(
-        "prepared_execution.hgl".into(),
-        format!("{SOURCE}{}{}", scaling_source(), branch_source()),
-    )];
+    let mut sources = vec![("prepared_execution.hgl".into(), source)];
     for file in ["replay_record.hgl", "impl/replay_record.hgl"] {
         sources.push((
             file.into(),
@@ -108,13 +121,21 @@ fn finite_owning_publications_use_prepared_storage() -> Result<(), Box<dyn std::
             .as_nanos()
     ));
     fs::create_dir_all(dir.join("src"))?;
-    let mut code = hgl_program::emit_tests(&suite)
-        .replace("hgl_kernel::run_simulation(", "crate::measured_simulation(")
-        .replace(
-            "store.prepare_collection_inputs();",
-            "crate::verify_pool(&mut store,&built,&graph);store.prepare_collection_inputs();",
+    let mut code = hgl_program::emit_tests(&suite);
+    if measured {
+        code = code
+            .replace("hgl_kernel::run_simulation(", "crate::measured_simulation(")
+            .replace(
+                "store.prepare_collection_inputs();",
+                "crate::verify_pool(&mut store,&built,&graph);store.prepare_collection_inputs();",
+            );
+    } else {
+        assert!(
+            !code.contains("let capacity=prepare_capacity"),
+            "unknown adapter must preserve generic execution"
         );
-    code.push_str(RUNTIME);
+    }
+    code.push_str(runtime);
     fs::write(dir.join("src/main.rs"), code)?;
     manifest(root, &dir)?;
     for profile in [vec![], vec!["--release"]] {
@@ -264,3 +285,43 @@ fn branch_source() -> String {
     }
     source
 }
+
+const COMPATIBILITY: &str = r#"module existing_execution
+fn constructed_map(value:i64)->map<str,i64> {when {return delta<map<str,i64>>(upsert:["retained":value])}}
+test constructed_map {assert eval(constructed_map,value:[1,2]) == [delta<map<str,i64>>(upsert:["retained":1]),delta<map<str,i64>>(upsert:["retained":2])]}
+fn input_limit(value:i64)->set<i64> {inject out
+when {var i=0
+while i<value {upsert(out,i)
+i+=1}}}
+test input_limit {assert eval(input_limit,value:[5]) == [delta<set<i64>>(added:[0,1,2,3,4])]}
+native const fn limit(value:i64)->i64 throws
+native const fn limit(value:i64)->i64 throws {}
+native const fn begin(value:i64) throws
+native const fn begin(value:i64) throws {}
+native const fn end(value:i64) throws
+native const fn end(value:i64) throws {}
+fn native_limit(value:i64)->set<i64> {inject out
+start {begin(0)}
+stop {end(0)}
+when {let count=limit(value)
+var i=0
+while i<count {upsert(out,i)
+i+=1}}}
+test native_limit {assert eval(native_limit,value:[5]) == [delta<set<i64>>(added:[0,1,2,3,4])]}
+fn text_loop(value:str)->str {when {var text=value
+var i=0
+while i<5 {text=text+text
+i+=1}
+return text}}
+test text_loop {assert eval(text_loop,value:["a"]) == ["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]}
+"#;
+const COMPATIBILITY_RUNTIME: &str = r#"
+struct Provider;
+mod native {
+static CALLS:std::sync::atomic::AtomicUsize=std::sync::atomic::AtomicUsize::new(0);
+static STARTS:std::sync::atomic::AtomicUsize=std::sync::atomic::AtomicUsize::new(0);
+pub fn limit_i64(value:i64)->hgl_types::NodeResult<i64> {CALLS.fetch_add(1,std::sync::atomic::Ordering::SeqCst);Ok(value)}
+pub fn begin_i64(_:i64)->hgl_types::NodeResult {assert_eq!(STARTS.fetch_add(1,std::sync::atomic::Ordering::SeqCst),0);Ok(())}
+pub fn end_i64(_:i64)->hgl_types::NodeResult {assert_eq!(CALLS.load(std::sync::atomic::Ordering::SeqCst),1);assert_eq!(STARTS.load(std::sync::atomic::Ordering::SeqCst),1);Ok(())}
+}
+"#;

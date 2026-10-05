@@ -16,5 +16,5 @@ finite replay horizon to reserve primitive runtime-key slots.
 mutation sites add, branches take maximum, and each added-element loop multiplies
 its own input publication width. Independent nodes never multiply one another.
 Constant integer induction loops use exact iteration counts from
-`hgl-rust-mutation-bounds`; other while bodies still have a single-traversal
-estimate and remain outside this proof.
+`hgl-rust-mutation-bounds`; unknown mutation loop bounds select existing whole-adapter
+execution via the reexported `prepared(plan)` proof decision.

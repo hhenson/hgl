@@ -417,6 +417,7 @@ version = "0.0.0"
 dependencies = [
  "hgl-rust-capacity",
  "hgl-rust-deltas",
+ "hgl-rust-finite-domains",
  "hgl-rust-generators",
  "hgl-rust-ir",
  "hgl-rust-keyed",
@@ -467,9 +468,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "hgl-rust-execution-proof"
+version = "0.0.0"
+dependencies = [
+ "hgl-rust-ir",
+ "hgl-rust-mutation-bounds",
+ "hgl-source",
+]
+
+[[package]]
 name = "hgl-rust-finite-domains"
 version = "0.0.0"
 dependencies = [
+ "hgl-rust-execution-proof",
  "hgl-rust-ir",
  "hgl-rust-layouts",
  "hgl-rust-mutation-bounds",
@@ -481,6 +492,7 @@ name = "hgl-rust-generators"
 version = "0.0.0"
 dependencies = [
  "hgl-rust-deltas",
+ "hgl-rust-finite-domains",
  "hgl-rust-ir",
  "hgl-rust-source-slots",
  "hgl-rust-values",
@@ -580,6 +592,7 @@ name = "hgl-rust-values"
 version = "0.0.0"
 dependencies = [
  "hgl-rust-deltas",
+ "hgl-rust-finite-domains",
  "hgl-rust-ir",
  "hgl-rust-layouts",
  "hgl-rust-observed",

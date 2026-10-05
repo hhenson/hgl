@@ -127,3 +127,8 @@ configuration values. Before binding globals it allocates record slots, then aft
 instantiation prepares scalar, atomic, and every finite keyed descendant output.
 Configuration source arenas own independent typed slots. Captures are extracted as
 owning values after simulation; generated hook recording copies into reserved slots.
+
+Prepared eval transport is selected as one complete path by
+`hgl-rust-execution-proof::prepared(plan)`. Unproved plans retain existing ordinary
+publication and recording behavior; no per-insertion fallback or hook replay is
+introduced. Prepared allocation evidence applies only to the selected finite path.

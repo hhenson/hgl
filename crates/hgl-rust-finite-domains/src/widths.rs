@@ -13,6 +13,7 @@ fn body(statements: &[Statement], node: &Node) -> String {
         };
         format!("width{}", node.inputs[input].1)
     })
+    .unwrap_or_else(|| unreachable!("finite mutation proof required"))
 }
 
 fn node(

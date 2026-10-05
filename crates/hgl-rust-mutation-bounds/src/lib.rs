@@ -122,7 +122,7 @@ fn width(
     body: &[Statement],
     source: &impl Fn(&Value) -> String,
     constants: &mut Constants,
-) -> String {
+) -> Option<String> {
     let mut parts = Vec::new();
     for statement in body {
         let part = match statement {
@@ -132,22 +132,25 @@ fn width(
             }) if op == "set_upsert" || op == "set_discard" => "1usize".into(),
             Statement::If(_, yes, no) => format!(
                 "({}).max({})",
-                width(yes, source, &mut constants.clone()),
-                width(no, source, &mut constants.clone())
+                width(yes, source, &mut constants.clone())?,
+                width(no, source, &mut constants.clone())?
             ),
             Statement::For(_, collection, body) => format!(
                 "({}).checked_mul({}).ok_or(\"prepared loop width overflow\")?",
                 source(collection),
-                width(body, source, &mut constants.clone())
+                width(body, source, &mut constants.clone())?
             ),
             Statement::While(condition, body) => {
                 let count = iterations(condition, body, constants);
+                if count.is_none() && mutations(body) > 0 {
+                    return None;
+                }
                 let mut inner = constants.clone();
                 invalidate(body, &mut inner);
                 format!(
                     "{}usize.checked_mul({}).ok_or(\"prepared loop width overflow\")?",
                     count.map_or(1, |(_, count)| count),
-                    width(body, source, &mut inner)
+                    width(body, source, &mut inner)?
                 )
             }
             Statement::Exit
@@ -192,12 +195,36 @@ fn width(
             | Statement::If(..) => invalidate(std::slice::from_ref(statement), constants),
         }
     }
-    parts.into_iter().fold("0usize".into(), |left, right| {
+    Some(parts.into_iter().fold("0usize".into(), |left, right| {
         format!("({left}).checked_add({right}).ok_or(\"prepared mutation width overflow\")?")
-    })
+    }))
 }
 /// Bound membership mutations in checked branches, added-element loops and constant induction loops.
 /// No expression outside integer literals, retained local constants and arithmetic is evaluated.
-pub fn mutation_width(body: &[Statement], source: impl Fn(&Value) -> String) -> String {
+pub fn mutation_width(body: &[Statement], source: impl Fn(&Value) -> String) -> Option<String> {
     width(body, &source, &mut Constants::new())
+}
+
+/// Maximum syntactic membership mutations in a single handler traversal.
+/// Set-element loops inherit their source's publication-width bound in capacity planning.
+pub fn mutations(body: &[Statement]) -> usize {
+    body.iter()
+        .map(|statement| match statement {
+            Statement::Call(Value {
+                kind: Kind::Query(op, _),
+                ..
+            }) if op == "set_upsert" || op == "set_discard" => 1,
+            Statement::If(_, yes, no) => mutations(yes).max(mutations(no)),
+            Statement::For(_, _, body) | Statement::While(_, body) => mutations(body),
+            Statement::Exit
+            | Statement::Let(..)
+            | Statement::Var(..)
+            | Statement::Borrow(..)
+            | Statement::Return(_)
+            | Statement::TimedYield(..)
+            | Statement::Yield(_)
+            | Statement::Call(_)
+            | Statement::Assign(..) => 0,
+        })
+        .sum()
 }

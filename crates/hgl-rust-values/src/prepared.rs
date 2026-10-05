@@ -67,7 +67,9 @@ pub(super) fn append(plan: &Plan, item: &Value, list: &str) -> String {
 }
 
 pub(super) fn set(plan: &Plan, id: usize, v: &Value) -> String {
-    if plan.recording.as_ref().is_none_or(|(_, ty)| ty != &v.ty) {
+    if !hgl_rust_finite_domains::prepared(plan)
+        || plan.recording.as_ref().is_none_or(|(_, ty)| ty != &v.ty)
+    {
         return format!(
             "{{let value={};_ctx.global_state().set(self.global{id},&value)?;}}",
             value(plan, v)
