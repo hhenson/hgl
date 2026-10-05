@@ -474,7 +474,8 @@ fn prepared_values(value: &Value, out: &mut std::collections::BTreeMap<usize, Ty
             prepared_values(a, out);
             prepared_values(b, out);
         }
-        Kind::Literal(_)
+        Kind::Captured(..)
+        | Kind::Literal(_)
         | Kind::TemporalLiteral(_)
         | Kind::WiringFailure(_)
         | Kind::ObservedLocal(_)

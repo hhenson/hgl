@@ -89,6 +89,7 @@ fn value<'a>(v: &'a Value, out: &mut Vec<&'a Value>) {
         | Kind::BorrowedLocal(..)
         | Kind::Literal(_)
         | Kind::TemporalLiteral(_)
+        | Kind::Captured(..)
         | Kind::Prepared(_)
         | Kind::Wire(_)
         | Kind::Input(..)

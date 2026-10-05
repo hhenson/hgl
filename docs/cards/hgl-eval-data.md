@@ -61,3 +61,8 @@ scalar collection identities, including normalized f64 signed zero and complete
 enum/zoned identities. Keyed map children remain separate from indexed positions.
 Materialized duplicate/overlap validation precedes stateful canonical membership
 checking; contextual recipes cannot enter this closed-data admission function.
+
+TestStep::BindEval(name,Evaluation) parses inferred immutable eval bindings;
+unsupported annotated/mutable captures remain explicit errors. TestStep::If
+contains recursively parsed test step blocks, including assertions and evals.
+Ordinary statement parsing remains unchanged outside test-block dispatch.

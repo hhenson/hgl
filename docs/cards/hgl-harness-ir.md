@@ -25,3 +25,8 @@ publications and the dense logical horizon. Silent gaps never allocate cells.
 
 Dense parameter retains the declared parameter name for existing named-input
 and zero-based position diagnostics; it does not select a runtime type.
+
+Step::BindEval(binding, sequence_type, Evaluation) retains the owned returned
+horizon/publications under an immutable local; sequence_type is the existing
+contextual List<Nullable<payload>> checker representation. Step::If(condition,
+yes,no) contains lexical step blocks. Neither form changes graph composition.

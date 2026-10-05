@@ -2067,3 +2067,41 @@ mod nullable_tests;
 #[cfg(test)]
 #[path = "../tests/support/eval_composition.rs"]
 mod eval_composition_tests;
+
+pub(crate) struct TestChecker {
+    pub library: Library,
+    pub module: String,
+}
+impl hgl_harness_check::Check for TestChecker {
+    fn statement(
+        &mut self,
+        statement: &Stmt,
+        scope: &mut PreparedLexicalScope,
+    ) -> Result<Statement, String> {
+        prepared_statement(self.library.clone(), &self.module, statement, scope)
+    }
+    fn boolean(&mut self, expr: &Expr, scope: &PreparedLexicalScope) -> Result<Value, String> {
+        prepared_assertion(self.library.clone(), &self.module, expr, scope)
+    }
+    fn evaluation(
+        &mut self,
+        call: &hgl_eval_data::Evaluation,
+        scope: &PreparedLexicalScope,
+    ) -> Result<(Plan, Vec<hgl_harness_ir::Argument>), String> {
+        prepare_evaluation(
+            self.library.clone(),
+            &self.module,
+            &call.function,
+            &call.arguments,
+            scope,
+        )
+    }
+    fn expected(
+        &mut self,
+        ty: &Ty,
+        slots: &[Option<Expr>],
+        scope: &PreparedLexicalScope,
+    ) -> Result<Vec<Option<Value>>, String> {
+        prepared_expected(self.library.clone(), &self.module, ty, slots, scope)
+    }
+}

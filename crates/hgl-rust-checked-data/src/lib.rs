@@ -2,77 +2,14 @@
 use hgl_harness_ir::{Argument, Step, Test};
 use hgl_rust_enums::metadata as enum_data;
 use hgl_rust_ir::{DeltaEntry, Kind, Statement, Value};
-use hgl_source::{Literal, TemporalLiteral, Ty};
+use hgl_source::{Literal, TemporalLiteral};
 fn list<T>(items: &[T], f: impl Fn(&T) -> String) -> String {
     format!(
         "vec![{}]",
         items.iter().map(f).collect::<Vec<_>>().join(",")
     )
 }
-fn nominal(n: &hgl_source::Nominal) -> String {
-    format!(
-        "hgl_source::Nominal {{origin:{:?}.into(),arguments:{}}}",
-        n.origin,
-        list(&n.arguments, ty)
-    )
-}
-fn recursive(batch: &hgl_source::RecursiveType) -> String {
-    if batch.definitions().is_empty() {
-        return format!(
-            "hgl_source::RecursiveType::reference({})",
-            nominal(batch.identity())
-        );
-    }
-    let definitions = list(batch.definitions(), |d| {
-        format!(
-            "hgl_source::NominalDefinition::new({},{},vec!{:?})",
-            nominal(d.identity()),
-            list(d.fields(), |(name, t)| format!(
-                "({name:?}.into(),{})",
-                ty(t)
-            )),
-            d.optional()
-        )
-    });
-    format!(
-        "hgl_source::RecursiveType::new({},{definitions}).unwrap_or_else(|_|unreachable!(\"checked nominal batch\"))",
-        nominal(batch.identity())
-    )
-}
-/// Emit exact checked source type metadata.
-pub fn ty(t: &Ty) -> String {
-    let inner = match t {
-        Ty::Recursive(batch) => format!("Recursive({})", recursive(batch)),
-        Ty::Enum(e) => format!("Enum({})", enum_data(e)),
-        Ty::Atomic(t) => format!("Atomic(Box::new({}))", ty(t)),
-        Ty::Ref(t) => format!("Ref(Box::new({}))", ty(t)),
-        Ty::Nullable(t) => format!("Nullable(Box::new({}))", ty(t)),
-        Ty::Set(t) => format!("Set(Box::new({}))", ty(t)),
-        Ty::Delta(t) => format!("Delta(Box::new({}))", ty(t)),
-        Ty::Map(k, v) => format!("Map(Box::new({}),Box::new({}))", ty(k), ty(v)),
-        Ty::List(t, n) => format!("List(Box::new({}),{n:?})", ty(t)),
-        Ty::Tuple(ts) => format!("Tuple({})", list(ts, ty)),
-        Ty::Struct(n, fields, optional) => format!(
-            "Struct({},{},vec!{optional:?})",
-            nominal(n),
-            list(fields, |(name, t)| format!("({name:?}.into(),{})", ty(t)))
-        ),
-        Ty::I64
-        | Ty::F64
-        | Ty::Bool
-        | Ty::Str
-        | Ty::Date
-        | Ty::Time
-        | Ty::DateTime
-        | Ty::Duration
-        | Ty::CivilDateTime
-        | Ty::TimeZone
-        | Ty::ZonedTime
-        | Ty::ZonedDateTime
-        | Ty::Void => format!("{t:?}"),
-    };
-    format!("hgl_source::Ty::{inner}")
-}
+pub use hgl_rust_type_data::ty;
 fn literal(l: &Literal) -> String {
     let inner = match l {
         Literal::Enum(e, number) => format!("Enum({}, {number})", enum_data(e)),
@@ -132,6 +69,12 @@ fn part(p: &DeltaEntry) -> String {
 /// Emit one exact checked expression for cold preparation.
 pub fn value(v: &Value) -> String {
     let kind = match &v.kind {
+        Kind::Captured(n, vs) => format!(
+            "Captured({n},{})",
+            list(vs, |(i, v)| format!("({i},{})", value(v)))
+        ),
+        Kind::IsPresent(v) => format!("IsPresent(Box::new({}))", value(v)),
+        Kind::Present(v) => format!("Present(Box::new({}))", value(v)),
         Kind::Literal(l) => format!("Literal({})", literal(l)),
         Kind::TemporalLiteral(r) => format!("TemporalLiteral({})", recipe(r)),
         Kind::Delta(ps) => format!("Delta({})", list(ps, part)),
@@ -163,8 +106,6 @@ pub fn value(v: &Value) -> String {
         | Kind::GlobalGet(_)
         | Kind::BorrowedLocal(..)
         | Kind::GlobalSet(..)
-        | Kind::IsPresent(_)
-        | Kind::Present(_)
         | Kind::GeneratorLocal(_)
         | Kind::Wire(_)
         | Kind::Input(..)
@@ -227,25 +168,31 @@ fn argument(a: &Argument) -> String {
     };
     format!("hgl_harness_ir::Argument::{a}")
 }
+fn evaluation(e: &hgl_harness_ir::Evaluation) -> String {
+    format!(
+        "hgl_harness_ir::Evaluation {{case:{},arguments:{},expected:{}}}",
+        e.case,
+        list(&e.arguments, argument),
+        e.expected
+            .as_ref()
+            .map_or_else(|| "None".into(), |vs| format!("Some({})", slots(vs)))
+    )
+}
+fn step(s: &Step) -> String {
+    let s = match s {
+        Step::Ordinary(s) => format!("Ordinary({})", statement(s)),
+        Step::Assert(v) => format!("Assert({})", value(v)),
+        Step::Eval(e) => format!("Eval({})", evaluation(e)),
+        Step::BindEval(id, t, e) => format!("BindEval({id},{},{})", ty(t), evaluation(e)),
+        Step::If(v, a, b) => format!("If({},{},{})", value(v), list(a, step), list(b, step)),
+    };
+    format!("hgl_harness_ir::Step::{s}")
+}
 /// Emit checked lexical test data without evaluating any expression.
 pub fn test(test: &Test) -> String {
-    let steps = list(&test.steps, |s| {
-        let s = match s {
-            Step::Ordinary(s) => format!("Ordinary({})", statement(s)),
-            Step::Assert(v) => format!("Assert({})", value(v)),
-            Step::Eval(e) => format!(
-                "Eval(hgl_harness_ir::Evaluation {{case:{},arguments:{},expected:{}}})",
-                e.case,
-                list(&e.arguments, argument),
-                e.expected
-                    .as_ref()
-                    .map_or_else(|| "None".into(), |vs| format!("Some({})", slots(vs)))
-            ),
-        };
-        format!("hgl_harness_ir::Step::{s}")
-    });
     format!(
-        "hgl_harness_ir::Test {{name:{:?}.into(),steps:{steps}}}",
-        test.name
+        "hgl_harness_ir::Test {{name:{:?}.into(),steps:{}}}",
+        test.name,
+        list(&test.steps, step)
     )
 }

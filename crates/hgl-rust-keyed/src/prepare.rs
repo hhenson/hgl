@@ -106,6 +106,7 @@ fn collect(value: &Value, keys: &mut Vec<Value>, origins: &StaticValues) {
         | Kind::BorrowedLocal(..)
         | Kind::Literal(_)
         | Kind::TemporalLiteral(_)
+        | Kind::Captured(..)
         | Kind::Prepared(_)
         | Kind::Wire(_)
         | Kind::Input(..)

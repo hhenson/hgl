@@ -1,5 +1,5 @@
 use crate::{emit, index, resolve};
-use hgl_harness_ir::{Evaluation, Step, Test};
+use hgl_harness_ir::Test;
 
 /// Checked lexical tests and independently selected graph plans.
 #[derive(Debug)]
@@ -24,62 +24,16 @@ pub fn compile_tests(sources: &[(String, String)]) -> Result<Suite, String> {
         if !names.insert(name.clone()) {
             return Err(format!("duplicate test {name}"));
         }
-        let mut scope = hgl_static_values::PreparedLexicalScope::default();
-        let mut steps = Vec::new();
-        for step in hgl_eval_data::steps(&decl.tokens)? {
-            match step {
-                hgl_eval_data::TestStep::Ordinary(statement) => {
-                    if let hgl_source::Stmt::Let(name, _, _) | hgl_source::Stmt::Var(name, _, _) =
-                        &statement
-                        && scope.bindings.contains_key(name)
-                    {
-                        return Err(format!("duplicate test local {name}"));
-                    }
-                    steps.push(Step::Ordinary(resolve::prepared_statement(
-                        library.clone(),
-                        &decl.module,
-                        &statement,
-                        &mut scope,
-                    )?));
-                }
-                hgl_eval_data::TestStep::Assert(expr) => steps.push(Step::Assert(
-                    resolve::prepared_assertion(library.clone(), &decl.module, &expr, &scope)?,
-                )),
-                hgl_eval_data::TestStep::Eval(call) => {
-                    let (plan, arguments) = resolve::prepare_evaluation(
-                        library.clone(),
-                        &decl.module,
-                        &call.function,
-                        &call.arguments,
-                        &scope,
-                    )
-                    .map_err(|e| format!("{name}: {e}"))?;
-                    let expected = call
-                        .expected
-                        .map(|slots| {
-                            let (_, ty) = plan
-                                .output
-                                .as_ref()
-                                .ok_or("outputless eval cannot be compared")?;
-                            resolve::prepared_expected(
-                                library.clone(),
-                                &decl.module,
-                                ty,
-                                &slots,
-                                &scope,
-                            )
-                            .map_err(|e| format!("{name}: expected output: {e}"))
-                        })
-                        .transpose()?;
-                    steps.push(Step::Eval(Evaluation {
-                        case: suite.plans.len(),
-                        arguments,
-                        expected,
-                    }));
-                    suite.plans.push(plan);
-                }
-            }
-        }
+        let steps = hgl_harness_check::block(
+            hgl_eval_data::steps(&decl.tokens)?,
+            &mut hgl_static_values::PreparedLexicalScope::default(),
+            &mut suite.plans,
+            &mut resolve::TestChecker {
+                library: library.clone(),
+                module: decl.module.clone(),
+            },
+        )
+        .map_err(|e| format!("{name}: {e}"))?;
         suite.tests.push(Test { name, steps });
     }
     if suite.tests.is_empty() {

@@ -106,7 +106,9 @@ fn value(plan: &Plan, v: &Value) -> String {
             }
         }
         Kind::Output => "_ctx.output_value(self._output).expect(\"valid output\")".into(),
-        Kind::Wire(_) | Kind::Void | Kind::Capability => unreachable!("checked runtime value"),
+        Kind::Captured(..) | Kind::Wire(_) | Kind::Void | Kind::Capability => {
+            unreachable!("checked runtime value")
+        }
     }
 }
 fn unary(plan: &Plan, op: &str, operand: &Value) -> String {
@@ -493,6 +495,7 @@ fn native_argument(plan: &Plan, v: &Value) -> String {
             "_ctx.store().output_ref(self._output).expect(\"valid output\").as_str()".into()
         }
         Kind::TemporalLiteral(_)
+        | Kind::Captured(..)
         | Kind::Prepared(_)
         | Kind::Delta(_)
         | Kind::ObservedLocal(_)

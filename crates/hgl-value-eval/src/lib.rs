@@ -1,30 +1,8 @@
 //! Direct ordinary evaluation of checked IR without runtime capabilities.
 use hgl_rust_ir::{DeltaEntry, Kind, Statement, Value};
 use hgl_source::{Literal, TemporalLiteral, Ty};
-use std::fmt;
-mod operators;
-
-/// Failure during ordinary evaluation, separated from an unsupported operation.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum EvalError {
-    /// An admitted operation failed when evaluated.
-    Operation(String),
-    /// A provider-dependent value needs the host construction context.
-    ContextRequired,
-    /// The checked IR cannot be executed by this ordinary evaluator.
-    Unsupported(String),
-}
-impl fmt::Display for EvalError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Operation(message) | Self::Unsupported(message) => f.write_str(message),
-            Self::ContextRequired => {
-                f.write_str("temporal literal requires a construction context")
-            }
-        }
-    }
-}
-impl std::error::Error for EvalError {}
+use hgl_value_operations as operators;
+pub use hgl_value_operations::EvalError;
 fn unsupported(message: &str) -> EvalError {
     EvalError::Unsupported(message.into())
 }
@@ -54,6 +32,13 @@ pub struct Evaluator {
 }
 type Materialize<'a> = dyn FnMut(&TemporalLiteral) -> Result<Literal, EvalError> + 'a;
 impl Evaluator {
+    /// Execute a lexical scope, releasing its bindings while retaining outer writes.
+    pub fn scoped<T, E>(&mut self, body: impl FnOnce(&mut Self) -> Result<T, E>) -> Result<T, E> {
+        let start = self.locals.len();
+        let result = body(self);
+        self.locals.truncate(start);
+        result
+    }
     /// Preserve a checked unavailable wiring result while later source checks continue.
     pub fn bind_failed(&mut self, id: usize, value: Value, writable: bool) {
         self.locals.push((id, value, writable));
@@ -101,7 +86,7 @@ impl Execution<'_, '_> {
             Kind::TemporalLiteral(recipe) => Kind::Literal((self.materialize)(recipe)?),
             Kind::Delta(parts) => self.delta(parts)?,
             Kind::WiringFailure(message) => return Err(EvalError::Operation(message.clone())),
-            Kind::Literal(_) | Kind::Void => return Ok(value.clone()),
+            Kind::Captured(..) | Kind::Literal(_) | Kind::Void => return Ok(value.clone()),
             Kind::List(items) => {
                 length(items.len())?;
                 Kind::List(
@@ -127,14 +112,10 @@ impl Execution<'_, '_> {
             Kind::Field(parent, field) => {
                 return field_value(&self.value(parent)?, *field).cloned();
             }
-            Kind::Index(parent, offset) => {
-                let parent = self.value(parent)?;
-                let offset = index(&self.value(offset)?)?;
-                return list(&parent)?.get(offset).cloned().ok_or_else(bounds);
-            }
-            Kind::Length(parent) => {
-                Kind::Literal(Literal::Int(length(list(&self.value(parent)?)?.len())?))
-            }
+            Kind::Index(parent, offset) => return self.indexed(parent, offset, &value.ty),
+            Kind::Length(parent) => Kind::Literal(Literal::Int(length(sequence_length(
+                &self.value(parent)?,
+            )?)?)),
             Kind::Push(parent, item) => {
                 self.push(parent, item)?;
                 Kind::Void
@@ -144,13 +125,22 @@ impl Execution<'_, '_> {
             Kind::Unary(op, operand) => {
                 return operators::unary(op, &self.value(operand)?);
             }
+            Kind::IsPresent(operand) => Kind::Literal(Literal::Bool(!matches!(
+                self.value(operand)?.kind,
+                Kind::Void
+            ))),
+            Kind::Present(operand) => {
+                let payload = self.value(operand)?;
+                if matches!(payload.kind, Kind::Void) {
+                    return Err(unsupported("absent nullable payload"));
+                }
+                return Ok(payload);
+            }
             Kind::Prepared(_)
             | Kind::Configuration(_)
             | Kind::GlobalGet(_)
             | Kind::BorrowedLocal(..)
             | Kind::GlobalSet(..)
-            | Kind::IsPresent(_)
-            | Kind::Present(_)
             | Kind::ObservedLocal(_)
             | Kind::GeneratorLocal(_)
             | Kind::Wire(_)
@@ -166,6 +156,23 @@ impl Execution<'_, '_> {
             }
         };
         Ok(Value::new(value.ty.clone(), kind))
+    }
+    fn indexed(&mut self, parent: &Value, offset: &Value, ty: &Ty) -> Result<Value, EvalError> {
+        let parent = self.value(parent)?;
+        let offset = index(&self.value(offset)?)?;
+        if let Kind::Captured(size, slots) = &parent.kind {
+            if offset >= *size {
+                return Err(bounds());
+            }
+            return Ok(slots
+                .binary_search_by_key(&offset, |(i, _)| *i)
+                .ok()
+                .map_or_else(
+                    || Value::new(ty.clone(), Kind::Void),
+                    |i| slots[i].1.clone(),
+                ));
+        }
+        list(&parent)?.get(offset).cloned().ok_or_else(bounds)
     }
     fn binary(&mut self, op: &str, a: &Value, b: &Value) -> Result<Value, EvalError> {
         let a = self.value(a)?;
@@ -351,4 +358,12 @@ fn field_value(value: &Value, id: usize) -> Result<&Value, EvalError> {
         .find(|(field, _)| *field == id)
         .map(|(_, value)| value)
         .ok_or_else(|| unsupported("ordinary struct field is absent"))
+}
+
+fn sequence_length(value: &Value) -> Result<usize, EvalError> {
+    if let Kind::Captured(size, _) = value.kind {
+        Ok(size)
+    } else {
+        Ok(list(value)?.len())
+    }
 }

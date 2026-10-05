@@ -13,3 +13,4 @@ hgl-rust-enums={path="../hgl-rust-enums"}
 hgl-source={path="../hgl-source"}
 hgl-rust-ir={path="../hgl-rust-ir"}
 hgl-harness-ir={path="../hgl-harness-ir"}
+hgl-rust-type-data = { path = "../hgl-rust-type-data" }

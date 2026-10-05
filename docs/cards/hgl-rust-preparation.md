@@ -36,3 +36,7 @@ recursive_markers(plan)->String delegates typed cold recursive conversion method
 to hgl-rust-recursive-convert, an allowed dependency. decode/encode dispatch
 recursive ordinary values to their statically selected member methods; recursion
 occurs through finite payloads, never recursive schema expansion.
+
+Enumerate callbacks recursively through conditional steps, including bound evals.
+Callbacks remain statically selected by checked plan index; only an executed
+branch invokes its callback. Preserve one result per named lexical test.

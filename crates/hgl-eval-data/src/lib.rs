@@ -312,29 +312,66 @@ pub enum TestStep {
     Assert(Expr),
     /// Eval call with optional dense expected values.
     Eval(Evaluation),
+    /// Inferred immutable binding of the returned dense logical sequence.
+    BindEval(String, Evaluation),
+    /// Lexical branches containing setup, assertions and graph runs.
+    If(Expr, Vec<Self>, Vec<Self>),
 }
 /// Parse a test declaration's ordered setup, assertions and eval calls.
 pub fn steps(tokens: &[hgl_source::Token]) -> Result<Vec<TestStep>, String> {
     let mut cursor = hgl_source::Cursor::new(tokens);
     cursor.need("test")?;
     cursor.name()?;
+    step_block(&mut cursor)
+}
+fn step_block(cursor: &mut hgl_source::Cursor<'_>) -> Result<Vec<TestStep>, String> {
     cursor.need("{")?;
     cursor.lines();
     let mut steps = Vec::new();
     while !cursor.take("}") {
-        if !cursor.at("assert") && !cursor.at("eval") {
-            steps.push(TestStep::Ordinary(statement(&mut cursor)?));
-        } else {
-            let assertion = cursor.take("assert");
-            let expr = cursor.expr()?;
-            let eval = matches!(&expr,Expr::Binary(_,left,_) if matches!(left.as_ref(),Expr::Call(name,_) if name=="eval"));
-            steps.push(if assertion && !eval {
-                TestStep::Assert(expr)
-            } else {
-                TestStep::Eval(evaluation(expr, assertion)?)
-            });
-        }
+        steps.push(step(cursor)?);
         cursor.lines();
     }
     Ok(steps)
+}
+fn step(cursor: &mut hgl_source::Cursor<'_>) -> Result<TestStep, String> {
+    if cursor.take("if") {
+        let condition = cursor.expr()?;
+        let yes = step_block(cursor)?;
+        cursor.lines();
+        let no = if cursor.take("else") {
+            if cursor.at("if") {
+                vec![step(cursor)?]
+            } else {
+                step_block(cursor)?
+            }
+        } else {
+            Vec::new()
+        };
+        return Ok(TestStep::If(condition, yes, no));
+    }
+    if !cursor.at("assert") && !cursor.at("eval") {
+        let ordinary = statement(cursor)?;
+        if let hgl_source::Stmt::Let(name, annotation, expr)
+        | hgl_source::Stmt::Var(name, annotation, expr) = &ordinary
+            && matches!(expr, Expr::Call(name, _) if name == "eval")
+        {
+            if annotation.is_some() || matches!(ordinary, hgl_source::Stmt::Var(..)) {
+                return Err("eval result requires an inferred immutable let binding".into());
+            }
+            return Ok(TestStep::BindEval(
+                name.clone(),
+                evaluation(expr.clone(), false)?,
+            ));
+        }
+        return Ok(TestStep::Ordinary(ordinary));
+    }
+    let assertion = cursor.take("assert");
+    let expr = cursor.expr()?;
+    let eval = matches!(&expr,Expr::Binary(_,left,_) if matches!(left.as_ref(),Expr::Call(name,_) if name=="eval"));
+    if assertion && !eval {
+        Ok(TestStep::Assert(expr))
+    } else {
+        Ok(TestStep::Eval(evaluation(expr, assertion)?))
+    }
 }

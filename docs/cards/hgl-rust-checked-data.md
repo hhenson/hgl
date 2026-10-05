@@ -24,3 +24,7 @@ cold finite collection key seeding owner.
 Serialize complete recursive root batches and nominal internal edges explicitly.
 Definitions remain canonical and immutable when reconstructed. May use
 hgl-rust-enums::metadata for exact enum metadata shared by type/literal emission.
+
+Delegate exact checked type metadata to hgl-rust-type-data and re-export ty.
+Serialize BindEval and recursive If steps, presence tests/extractions and closed
+sparse Captured data without evaluating any branch or expression.

@@ -334,3 +334,9 @@ checked parts to typed key/payload IR, preserving source argument order.
 Prepared test operations share hgl-static-values::PreparedLexicalScope, retaining
 immutable key origins across setup, arguments and expectations. Source checking
 proves key eligibility without substituting local initializers into constructors.
+
+Delegate ordered lexical step checking to hgl-harness-check through a plain
+frontend adapter. Bound evals require an output; retained captures use ordinary
+index/length checking and existing binding-specific presence refinement.
+Conditional test branches use fresh binding identities and nested lexical
+scope. Named-test reporting fails on any executed nested assertion/eval error.

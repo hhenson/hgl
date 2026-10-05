@@ -1,20 +1,17 @@
 [package]
-name = "hgl-value-eval"
+name = "hgl-harness-check"
 version = "0.0.0"
 edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
-
 [package.metadata.hgl]
-line-budget = 500
-
+line-budget = 180
 [lints]
 workspace = true
-
 [dependencies]
 hgl-source = { path = "../hgl-source" }
 hgl-rust-ir = { path = "../hgl-rust-ir" }
-hgl-delta-check = { path = "../hgl-delta-check" }
-hgl-value-operations = { path = "../hgl-value-operations" }
-[dev-dependencies]
-hgl-time-values = { path = "../hgl-time-values" }
+hgl-harness-ir = { path = "../hgl-harness-ir" }
+hgl-eval-data = { path = "../hgl-eval-data" }
+hgl-static-values = { path = "../hgl-static-values" }
+hgl-flow-check = { path = "../hgl-flow-check" }

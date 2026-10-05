@@ -25,6 +25,7 @@ fn expression(value: &Value, locals: &BTreeSet<usize>) -> bool {
             args.iter().all(|v| expression(v, locals)) && block(body, &(0..args.len()).collect())
         }
         Kind::TemporalLiteral(_)
+        | Kind::Captured(..)
         | Kind::Prepared(_)
         | Kind::Configuration(_)
         | Kind::GlobalGet(_)

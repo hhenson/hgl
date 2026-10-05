@@ -66,3 +66,11 @@ Cold Delta evaluation materializes typed Add/Remove/Keyed expressions once in
 written order, with each map key preceding its payload. It validates resolved
 duplicates, signed-zero identity, overlaps and NaN through hgl-delta-check before
 returning closed data. Already retained scalar keys do not invoke a provider.
+
+May use hgl-value-operations for scalar unary/binary execution and re-export its
+EvalError unchanged. Sparse Captured values execute ordinary length/index
+operations without constructing dense storage; an absent in-range read is
+nullable Void and an out-of-range read is an Operation error. IsPresent observes
+absence and Present consumes the existing checker proof; absent extraction
+still fails. scoped(body) releases new bindings on success or error while
+preserving outer variable writes and provider execution order.

@@ -1,6 +1,6 @@
 //! Execute checked ordinary setup before and between independent graph runs.
 use hgl_harness_ir::{Argument, CapturedEval, PreparedEval, Step, Test};
-use hgl_rust_ir::{DeltaEntry, Kind, Value};
+use hgl_rust_ir::{DeltaEntry, Kind, Statement, Value};
 use hgl_source::{Literal, TemporalLiteral};
 use hgl_value_eval::{EvalError, Evaluator};
 
@@ -10,13 +10,25 @@ pub fn execute(
     mut materialize: impl FnMut(&TemporalLiteral) -> Result<Literal, EvalError>,
     mut eval: impl FnMut(usize, PreparedEval) -> Result<CapturedEval, String>,
 ) -> Result<usize, String> {
-    let mut evaluator = Evaluator::default();
+    steps(
+        &test.steps,
+        &mut Evaluator::default(),
+        &mut materialize,
+        &mut eval,
+    )
+}
+fn steps(
+    body: &[Step],
+    evaluator: &mut Evaluator,
+    materialize: &mut impl FnMut(&TemporalLiteral) -> Result<Literal, EvalError>,
+    eval: &mut impl FnMut(usize, PreparedEval) -> Result<CapturedEval, String>,
+) -> Result<usize, String> {
     let mut count = 0;
-    for step in &test.steps {
+    for step in body {
         match step {
             Step::Ordinary(statement) => {
                 if evaluator
-                    .statement_with(statement, &mut materialize)
+                    .statement_with(statement, materialize)
                     .map_err(|e| e.to_string())?
                     .is_some()
                 {
@@ -25,27 +37,50 @@ pub fn execute(
             }
             Step::Assert(value) => {
                 let value = evaluator
-                    .value_with(value, &mut materialize)
+                    .value_with(value, materialize)
                     .map_err(|e| e.to_string())?;
                 if !matches!(value.kind, Kind::Literal(Literal::Bool(true))) {
                     return Err("ordinary assertion failed".into());
                 }
                 count += 1;
             }
-            Step::Eval(evaluation) => {
-                let prepared = prepare(&mut evaluator, &evaluation.arguments, &mut materialize)?;
+            Step::If(condition, yes, no) => {
+                let value = evaluator
+                    .value_with(condition, materialize)
+                    .map_err(|e| e.to_string())?;
+                let Kind::Literal(Literal::Bool(condition)) = value.kind else {
+                    return Err("test condition requires bool".into());
+                };
+                count += evaluator.scoped(|evaluator| {
+                    steps(
+                        if condition { yes } else { no },
+                        evaluator,
+                        materialize,
+                        eval,
+                    )
+                })?;
+            }
+            Step::Eval(evaluation) | Step::BindEval(_, _, evaluation) => {
+                let prepared = prepare(evaluator, &evaluation.arguments, materialize)?;
                 let actual = eval(evaluation.case, prepared)?;
                 if let Some(expected) = &evaluation.expected {
                     let expected = expected
                         .iter()
                         .map(|slot| {
                             slot.as_ref()
-                                .map(|value| evaluator.value_with(value, &mut materialize))
+                                .map(|value| evaluator.value_with(value, materialize))
                                 .transpose()
                         })
                         .collect::<Result<Vec<_>, _>>()
                         .map_err(|e| e.to_string())?;
                     compare(&expected, &actual)?;
+                }
+                if let Step::BindEval(id, ty, _) = step {
+                    let retained =
+                        Value::new(ty.clone(), Kind::Captured(actual.length, actual.ticks));
+                    evaluator
+                        .statement_with(&Statement::Let(*id, retained), materialize)
+                        .map_err(|e| e.to_string())?;
                 }
                 count += 1;
             }

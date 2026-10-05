@@ -408,6 +408,7 @@ fn values(value: &Value, types: &mut BTreeSet<Ty>) {
         | Kind::Output
         | Kind::Capability
         | Kind::TemporalLiteral(_)
+        | Kind::Captured(..)
         | Kind::Prepared(_)
         | Kind::Void => {}
     }

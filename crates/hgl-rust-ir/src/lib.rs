@@ -18,6 +18,8 @@ impl Value {
 /// Checked expressions and frontend-only binding markers.
 #[derive(Debug, Clone)]
 pub enum Kind {
+    /// Closed harness sequence with dense horizon and only present owned slots.
+    Captured(usize, Vec<(usize, Value)>),
     /// Ordered sparse constructor parts with exact originating type in Value.ty.
     Delta(Vec<DeltaEntry>),
     /// Evaluation-local readonly publication observation, without ownership.
@@ -219,7 +221,9 @@ impl Value {
             Kind::Delta(parts) => parts.iter().all(|part| part.operands().all(Value::closed)),
             Kind::Literal(_) | Kind::Void => true,
             Kind::List(items) => items.iter().all(Value::closed),
-            Kind::Construct(fields) => fields.iter().all(|(_, value)| value.closed()),
+            Kind::Captured(_, fields) | Kind::Construct(fields) => {
+                fields.iter().all(|(_, value)| value.closed())
+            }
             Kind::TemporalLiteral(_)
             | Kind::Prepared(_)
             | Kind::WiringFailure(_)

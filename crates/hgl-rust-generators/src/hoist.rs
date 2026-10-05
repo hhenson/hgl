@@ -55,6 +55,7 @@ fn rewrite(value: &mut Value) {
         | Kind::Output
         | Kind::Capability
         | Kind::TemporalLiteral(_)
+        | Kind::Captured(..)
         | Kind::Prepared(_)
         | Kind::Void => {}
     }

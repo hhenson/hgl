@@ -242,6 +242,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "hgl-harness-check"
+version = "0.0.0"
+dependencies = [
+ "hgl-eval-data",
+ "hgl-flow-check",
+ "hgl-harness-ir",
+ "hgl-rust-ir",
+ "hgl-source",
+ "hgl-static-values",
+]
+
+[[package]]
 name = "hgl-harness-ir"
 version = "0.0.0"
 dependencies = [
@@ -400,6 +412,7 @@ dependencies = [
  "hgl-enums",
  "hgl-eval-data",
  "hgl-flow-check",
+ "hgl-harness-check",
  "hgl-harness-ir",
  "hgl-library",
  "hgl-library-files",
@@ -487,6 +500,7 @@ dependencies = [
  "hgl-harness-ir",
  "hgl-rust-enums",
  "hgl-rust-ir",
+ "hgl-rust-type-data",
  "hgl-source",
 ]
 
@@ -658,6 +672,14 @@ name = "hgl-rust-structs"
 version = "0.0.0"
 dependencies = [
  "hgl-rust-prepared-values",
+ "hgl-source",
+]
+
+[[package]]
+name = "hgl-rust-type-data"
+version = "0.0.0"
+dependencies = [
+ "hgl-rust-enums",
  "hgl-source",
 ]
 
@@ -904,6 +926,7 @@ dependencies = [
  "hgl-rust-ir",
  "hgl-source",
  "hgl-time-values",
+ "hgl-value-operations",
 ]
 
 [[package]]
@@ -911,6 +934,14 @@ name = "hgl-value-lists"
 version = "0.0.0"
 dependencies = [
  "hgl-types",
+]
+
+[[package]]
+name = "hgl-value-operations"
+version = "0.0.0"
+dependencies = [
+ "hgl-rust-ir",
+ "hgl-source",
 ]
 
 [[package]]
