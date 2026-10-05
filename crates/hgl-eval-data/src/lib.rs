@@ -1,11 +1,12 @@
 //! Closed ordinary replay data and pre-start publication admission.
 use hgl_rust_ir::{DeltaEntry, Kind, Value};
+use hgl_scalar_keys::Key;
 use hgl_source::{Expr, Literal, Ty};
 use std::collections::{BTreeMap, BTreeSet};
 #[derive(Default)]
 struct State {
-    members: BTreeSet<i64>,
-    children: BTreeMap<i64, Self>,
+    members: BTreeSet<Key>,
+    children: BTreeMap<Key, Self>,
 }
 /// Validate sparse publications from a fresh endpoint, preserving prior membership.
 pub fn validate(shape: &Ty, slots: &[Option<Value>]) -> Result<(), (usize, String)> {
@@ -25,39 +26,47 @@ impl State {
         if parts.is_empty() {
             return Err("empty structural publication".into());
         }
+        hgl_delta_check::materialized(parts)?;
         for part in parts {
             match (shape, part) {
                 (Ty::Set(_), DeltaEntry::Add(member)) => {
-                    if !self.members.insert(key(member)) {
+                    if !self.members.insert(key(member)?) {
                         return Err("set addition is already present".into());
                     }
                 }
                 (Ty::Set(_), DeltaEntry::Remove(member)) => {
-                    if !self.members.remove(&key(member)) {
+                    if !self.members.remove(&key(member)?) {
                         return Err("set removal is absent".into());
                     }
                 }
                 (Ty::Map(..), DeltaEntry::Remove(member)) => {
-                    if self.children.remove(&key(member)).is_none() {
+                    if self.children.remove(&key(member)?).is_none() {
                         return Err("map removal is absent".into());
                     }
                 }
-                (Ty::Map(_, child) | Ty::List(child, _), DeltaEntry::Child(index, value)) => self
+                (Ty::Map(_, child), DeltaEntry::Keyed(member, value)) => self
                     .children
-                    .entry(*index)
+                    .entry(key(member)?)
+                    .or_default()
+                    .apply(child, value)?,
+                (Ty::List(child, _), DeltaEntry::Child(index, value)) => self
+                    .children
+                    .entry(hgl_scalar_keys::key(&Literal::Int(*index))?)
                     .or_default()
                     .apply(child, value)?,
                 (Ty::Tuple(children), DeltaEntry::Child(index, value)) => {
                     let index = usize::try_from(*index).map_err(|e| e.to_string())?;
                     self.children
-                        .entry(i64::try_from(index).map_err(|e| e.to_string())?)
+                        .entry(hgl_scalar_keys::key(&Literal::Int(
+                            i64::try_from(index).map_err(|e| e.to_string())?,
+                        ))?)
                         .or_default()
                         .apply(&children[index], value)?;
                 }
                 (Ty::Struct(_, fields), DeltaEntry::Child(index, value)) => {
                     let position = usize::try_from(*index).map_err(|e| e.to_string())?;
                     self.children
-                        .entry(*index)
+                        .entry(hgl_scalar_keys::key(&Literal::Int(*index))?)
                         .or_default()
                         .apply(&fields[position].1, value)?;
                 }
@@ -67,22 +76,11 @@ impl State {
         Ok(())
     }
 }
-fn key(value: &Literal) -> i64 {
-    match value {
-        Literal::Int(value) => *value,
-        Literal::Bool(value) => i64::from(*value),
-        Literal::Float(_)
-        | Literal::Str(_)
-        | Literal::Date(_)
-        | Literal::Time(_)
-        | Literal::DateTime(_)
-        | Literal::CivilDateTime(_)
-        | Literal::TimeZone(_)
-        | Literal::Enum(..)
-        | Literal::ZonedTime(_)
-        | Literal::ZonedDateTime(_)
-        | Literal::Duration(_) => unreachable!("checked set member or map key"),
-    }
+fn key(value: &Value) -> Result<Key, String> {
+    let Kind::Literal(value) = &value.kind else {
+        return Err("delta key requires cold scalar materialization".into());
+    };
+    hgl_scalar_keys::key(value)
 }
 /// Turn present dense slots into owned ordinary timed entries; absence adds no data.
 pub fn timed(entry_type: Ty, slots: &[Option<Value>]) -> Result<Value, String> {

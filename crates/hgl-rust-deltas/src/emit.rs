@@ -82,6 +82,16 @@ pub(super) fn marker(ty: &Ty) -> String {
     code
 }
 fn allocate(ty: &Ty) -> String {
+    if let Ty::Set(key) = ty {
+        return hgl_rust_keyed::allocation(
+            key,
+            &shape_marker(ty),
+            "store.add_output::<bool>(owner).id()",
+        );
+    }
+    if let Ty::Map(key, child) = ty {
+        return hgl_rust_keyed::allocation(key, &shape_marker(ty), &allocation(child));
+    }
     let mut code = "let mut children=Vec::new();".to_string();
     if let Ty::List(child, Some(n)) = ty {
         append(
@@ -179,21 +189,8 @@ fn push(target: &str, value: &str) -> String {
 }
 fn observation(ty: &Ty) -> String {
     match ty {
-        Ty::Set(key) => {
-            let conversion = if **key == Ty::Bool { "key!=0" } else { "key" };
-            format!(
-                "for key in _ctx.store().bindings().added_keys(input.id()) {{{}}} for key in _ctx.store().bindings().removed_keys(input.id()) {{{}}}",
-                push("delta.0", conversion),
-                push("delta.1", conversion)
-            )
-        }
-        Ty::Map(_, child) => format!(
-            "for &key in _ctx.store().bindings().changed_keys(input.id()) {{ if let Some(child)=input.member(_ctx.store().bindings(),key) {{if !_ctx.store().input_valid(child.id()) {{return Err(hgl_types::NodeError::new(\"invalid structural child delta\"));}} let value={}; {} {} }} }} for key in _ctx.store().bindings().removed_keys(input.id()) {{{}}}",
-            read(child, "child"),
-            push("delta.0", "key"),
-            push("delta.1", "value"),
-            push("delta.2", "key")
-        ),
+        Ty::Set(key) => hgl_rust_keyed::observation(key, None),
+        Ty::Map(key, child) => hgl_rust_keyed::observation(key, Some(&read(child, "child"))),
         Ty::List(child, Some(n)) => format!(
             "for n in 0..{n} {{let child=input.index(_ctx.store().bindings(),n); {} }}",
             observe_child(
@@ -249,11 +246,8 @@ fn observe_child(child: &Ty, index: &str, target: &str, keys: bool) -> String {
 }
 fn application(ty: &Ty) -> String {
     match ty {
-        Ty::Set(key)=>{
-            let conversion=if **key==Ty::Bool{"i64::from(key)"}else{"key"};
-            format!("for &key in &delta.0 {{ if output.member(_ctx.store().bindings(),{conversion}).is_some() {{return Err(hgl_types::NodeError::new(\"noncanonical set addition\"));}} }} for &key in &delta.1 {{if output.member(_ctx.store().bindings(),{conversion}).is_none() {{return Err(hgl_types::NodeError::new(\"noncanonical set removal\"));}}}} for key in delta.1 {{_ctx.remove_shaped(output.id(),{conversion});}} for key in delta.0 {{let key={conversion}; _ctx.get_or_create_with(output.id(),key,|store,owner|store.add_output::<bool>(owner).id()); let child=output.member(_ctx.store().bindings(),key).ok_or_else(||hgl_types::NodeError::new(\"missing created set member\"))?; {} }}",apply(&Ty::Bool,"child","true"))
-        }
-        Ty::Map(_,child)=>format!("for &key in &delta.2 {{if output.member(_ctx.store().bindings(),key).is_none() {{return Err(hgl_types::NodeError::new(\"noncanonical map removal\"));}}}} for key in delta.2 {{_ctx.remove_shaped(output.id(),key);}} for (key,value) in delta.0.into_iter().zip(delta.1) {{_ctx.get_or_create_with(output.id(),key,|store,owner|{}); let child=output.member(_ctx.store().bindings(),key).ok_or_else(||hgl_types::NodeError::new(\"missing created map member\"))?; {} }}",allocation(child),apply(child,"child","value")),
+        Ty::Set(key)=>hgl_rust_keyed::application(key,None),
+        Ty::Map(key,child)=>hgl_rust_keyed::application(key,Some((&allocation(child),&apply(child,"child","value")))),
         Ty::List(child,Some(n))=>format!("for (key,value) in delta.0.into_iter().zip(delta.1) {{let n=usize::try_from(key).ok().filter(|&n|n<{n}).ok_or_else(||hgl_types::NodeError::new(\"sparse list index out of bounds\"))?; let child=output.index(_ctx.store().bindings(),n); {} }}",apply(child,"child","value")),
         Ty::Struct(..)|Ty::Tuple(_)=>children(ty).iter().enumerate().map(|(i,child)|format!("for value in delta.{i} {{let child=output.field::<{i}>(_ctx.store().bindings()); {}}}",apply(child,"child","value"))).collect::<Vec<_>>().concat(),
         Ty::Atomic(_) | Ty::Delta(_) | Ty::I64 | Ty::F64 | Ty::Bool | Ty::Str | Ty::CivilDateTime | Ty::TimeZone | Ty::Enum(_) | Ty::ZonedTime | Ty::ZonedDateTime | Ty::Duration | Ty::Date | Ty::Time | Ty::DateTime | Ty::Ref(_) | Ty::Nullable(_) | Ty::Void | Ty::List(_,None)=>unreachable!("structural origin"),

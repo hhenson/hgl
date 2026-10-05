@@ -152,7 +152,10 @@ fn equal(a: &Value, b: &Value) -> bool {
                 && a.iter().all(|a| {
                     b.iter().any(|b| match (a, b) {
                         (DeltaEntry::Add(a), DeltaEntry::Add(b))
-                        | (DeltaEntry::Remove(a), DeltaEntry::Remove(b)) => a == b,
+                        | (DeltaEntry::Remove(a), DeltaEntry::Remove(b)) => equal(a, b),
+                        (DeltaEntry::Keyed(i, a), DeltaEntry::Keyed(j, b)) => {
+                            equal(i, j) && equal(a, b)
+                        }
                         (DeltaEntry::Child(i, a), DeltaEntry::Child(j, b)) => i == j && equal(a, b),
                         _ => false,
                     })

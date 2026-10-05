@@ -39,7 +39,7 @@ Add CivilDateTime, TimeZone, ZonedDateTime and ZonedTime scalar variants and sou
 spellings; scalar atomic normalization and delta reduction apply identically.
 The same twelve leaves are admitted recursively under the pinned publication
 profile. ZonedTime uses source spelling zoned_time; its exact identity is wall-clock
-time plus exact zone name, with no date or offset. Existing shape/key restrictions remain.
+time plus exact zone name, with no date or offset. Existing non-key shape restrictions remain.
 
 May use hgl-type-syntax for pure spelling decomposition, preserving existing
 application/delta_argument exports and Ty::list_parts. See its card.
@@ -47,4 +47,9 @@ application/delta_argument exports and Ty::list_parts. See its card.
 EnumType { origin: String, members: Vec<(String, i64)> } owns a validated
 nominal enum declaration. Ty::Enum(EnumType) is a scalar publication leaf; its
 source name is the canonical origin. Atomic normalization and delta reduction
-apply identically; enum keys and set members remain excluded.
+apply identically.
+
+Scalar-collection-keys (spec06e576a) admits every built-in scalar and declared enum
+as the exact K of set<K> and map<K,S>. Composite/reference/native keys remain
+outside the profile. f64 value restrictions belong to key checking, not type
+formation. No key normalization changes the declared source type.

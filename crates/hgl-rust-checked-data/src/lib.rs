@@ -106,13 +106,15 @@ fn recipe(r: &TemporalLiteral) -> String {
 }
 fn part(p: &DeltaEntry) -> String {
     let p = match p {
-        DeltaEntry::Add(l) => format!("Add({})", literal(l)),
-        DeltaEntry::Remove(l) => format!("Remove({})", literal(l)),
+        DeltaEntry::Add(l) => format!("Add({})", value(l)),
+        DeltaEntry::Remove(l) => format!("Remove({})", value(l)),
+        DeltaEntry::Keyed(k, v) => format!("Keyed({},{})", value(k), value(v)),
         DeltaEntry::Child(i, v) => format!("Child({i},{})", value(v)),
     };
     format!("hgl_rust_ir::DeltaEntry::{p}")
 }
-fn value(v: &Value) -> String {
+/// Emit one exact checked expression for cold preparation.
+pub fn value(v: &Value) -> String {
     let kind = match &v.kind {
         Kind::Literal(l) => format!("Literal({})", literal(l)),
         Kind::TemporalLiteral(r) => format!("TemporalLiteral({})", recipe(r)),

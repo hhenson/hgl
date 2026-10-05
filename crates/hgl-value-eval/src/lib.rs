@@ -269,19 +269,12 @@ impl Execution<'_, '_> {
         Ok(())
     }
     fn delta(&mut self, parts: &[DeltaEntry]) -> Result<Kind, EvalError> {
-        Ok(Kind::Delta(
-            parts
-                .iter()
-                .map(|part| {
-                    Ok(match part {
-                        DeltaEntry::Child(key, value) => {
-                            DeltaEntry::Child(*key, self.value(value)?)
-                        }
-                        DeltaEntry::Add(_) | DeltaEntry::Remove(_) => part.clone(),
-                    })
-                })
-                .collect::<Result<_, EvalError>>()?,
-        ))
+        let parts = parts
+            .iter()
+            .map(|part| part.try_map(|value| self.value(value)))
+            .collect::<Result<Vec<_>, _>>()?;
+        hgl_delta_check::materialized(&parts).map_err(EvalError::Operation)?;
+        Ok(Kind::Delta(parts))
     }
     fn path(&mut self, value: &Value, path: &mut Vec<Projection>) -> Result<usize, EvalError> {
         if let Kind::WiringFailure(message) = &value.kind {

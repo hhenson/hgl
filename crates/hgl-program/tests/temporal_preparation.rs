@@ -38,6 +38,18 @@ fn clock_default(value:zoned_time,const ignored:zoned_time = @09:30[Missing/Defa
     start {{ start_marker(1) }}
     when {{ return delta_value(value) }}
 }}
+fn key_target(value:map<timezone,i64>)->map<timezone,i64> {{
+    start {{ start_marker(1) }}
+    when {{ return delta_value(value) }}
+}}
+fn set_target(value:set<zoned_time>)->set<zoned_time> {{
+    start {{ start_marker(1) }}
+    when {{ return delta_value(value) }}
+}}
+fn nested_key_target(value:map<timezone,set<zoned_time>>)->map<timezone,set<zoned_time>> {{
+    start {{ start_marker(1) }}
+    when {{ return delta_value(value) }}
+}}
 test ordered {{ {body} }}
 "
             ),
@@ -52,7 +64,56 @@ test ordered {{ {body} }}
         ),
     ]
 }
-const CASES: [(&str, &str, bool, &str, usize); 15] = [
+const CASES: [(&str, &str, bool, &str, usize); 22] = [
+    (
+        "nested_key_domains",
+        r"assert eval(nested_key_target,value:[delta<map<timezone,set<zoned_time>>>(upsert:[@[UTC]:delta<set<zoned_time>>(added:[@09:30[US/Eastern]])]),delta<map<timezone,set<zoned_time>>>(remove:[@[UTC]]),delta<map<timezone,set<zoned_time>>>(upsert:[@[UTC]:delta<set<zoned_time>>(added:[@09:30[America/New_York]])])]) == [delta<map<timezone,set<zoned_time>>>(upsert:[@[UTC]:delta<set<zoned_time>>(added:[@09:30[US/Eastern]])]),delta<map<timezone,set<zoned_time>>>(remove:[@[UTC]]),delta<map<timezone,set<zoned_time>>>(upsert:[@[UTC]:delta<set<zoned_time>>(added:[@09:30[America/New_York]])])]",
+        true,
+        "",
+        1,
+    ),
+    (
+        "key_missing",
+        r"eval(key_target,value:[delta<map<timezone,i64>>(upsert:[@[Missing/Key]:1])])",
+        false,
+        "Missing/Key",
+        0,
+    ),
+    (
+        "key_case",
+        r"eval(key_target,value:[delta<map<timezone,i64>>(upsert:[@[america/new_york]:1])])",
+        false,
+        "america/new_york",
+        0,
+    ),
+    (
+        "key_duplicate",
+        r"eval(key_target,value:[delta<map<timezone,i64>>(upsert:[@[UTC]:1,@[UTC]:2])])",
+        false,
+        "duplicate",
+        0,
+    ),
+    (
+        "key_overlap",
+        r"eval(key_target,value:[delta<map<timezone,i64>>(upsert:[@[UTC]:1],remove:[@[UTC]])])",
+        false,
+        "overlap",
+        0,
+    ),
+    (
+        "set_duplicate",
+        r"eval(set_target,value:[delta<set<zoned_time>>(added:[@09:30[UTC],@09:30[UTC]])])",
+        false,
+        "duplicate",
+        0,
+    ),
+    (
+        "key_aliases",
+        r"eval(key_target,value:[delta<map<timezone,i64>>(upsert:[@[US/Eastern]:1,@[America/New_York]:2])])",
+        true,
+        "",
+        1,
+    ),
     (
         "clock_dense",
         r"eval(clock_target,value:[@09:30[america/new_york]])",

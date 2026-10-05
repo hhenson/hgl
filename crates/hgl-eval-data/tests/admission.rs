@@ -13,18 +13,35 @@ fn recursive_memberships_survive_sparse_gaps_and_reset_on_reinsertion() {
     let fixed = Ty::List(Box::new(map.clone()), Some(2));
     let update = |entries| patch(&fixed, vec![DeltaEntry::Child(1, patch(&map, entries))]);
     let add = || {
-        update(vec![DeltaEntry::Child(
-            7,
-            patch(&set, vec![DeltaEntry::Add(Literal::Bool(false))]),
+        update(vec![DeltaEntry::Keyed(
+            Value::new(Ty::I64, Kind::Literal(Literal::Int(7))),
+            patch(
+                &set,
+                vec![DeltaEntry::Add(Value::new(
+                    Ty::Bool,
+                    Kind::Literal(Literal::Bool(false)),
+                ))],
+            ),
         )])
     };
     let remove_member = || {
-        update(vec![DeltaEntry::Child(
-            7,
-            patch(&set, vec![DeltaEntry::Remove(Literal::Bool(false))]),
+        update(vec![DeltaEntry::Keyed(
+            Value::new(Ty::I64, Kind::Literal(Literal::Int(7))),
+            patch(
+                &set,
+                vec![DeltaEntry::Remove(Value::new(
+                    Ty::Bool,
+                    Kind::Literal(Literal::Bool(false)),
+                ))],
+            ),
         )])
     };
-    let remove_key = || update(vec![DeltaEntry::Remove(Literal::Int(7))]);
+    let remove_key = || {
+        update(vec![DeltaEntry::Remove(Value::new(
+            Ty::I64,
+            Kind::Literal(Literal::Int(7)),
+        ))])
+    };
     assert!(
         validate(
             &fixed,

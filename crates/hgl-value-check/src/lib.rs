@@ -91,10 +91,8 @@ fn expression(value: &Value, live: &BTreeMap<usize, bool>) -> Result<(), String>
             conflict(*entry, true, live)?;
         }
         Kind::Delta(parts) => {
-            for part in parts {
-                if let hgl_rust_ir::DeltaEntry::Child(_, value) = part {
-                    expression(value, live)?;
-                }
+            for value in parts.iter().flat_map(hgl_rust_ir::DeltaEntry::operands) {
+                expression(value, live)?;
             }
         }
         Kind::List(values) => {

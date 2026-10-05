@@ -116,16 +116,19 @@ fn node_build(
     if n.handlers.iter().any(|(guard, _)| guard.is_some()) {
         out.push("valid_inputs: Some(vec![]),\n".into());
     }
-    let prepared = node_prepared(n);
     out.push(format!(
         "uses_scheduler: {}, ..hgl_types::NodeType::default() }}\n}}\n",
         n.alarm
     ));
-    if prepared {
-        out.push(format!("fn build(_: &mut hgl_describe::Ports<'_>)->Result<Self,hgl_describe::BuildError> {{Err(hgl_describe::BuildError::InvalidNodeType {{node:{:?},what:\"prepared configuration required\".into()}})}} }}\nimpl Node{index} {{\nfn build_prepared(ports: &mut hgl_describe::Ports<'_>,{}) -> Result<Self,hgl_describe::BuildError> {{\nOk(Self {{\n",n.name,n.configuration.iter().enumerate().map(|(id,v)|format!("configuration{id}:{}",owned_type(&v.ty))).collect::<Vec<_>>().join(",")));
+    if node_prepared(n) {
+        out.push(format!("fn build(_: &mut hgl_describe::Ports<'_>)->Result<Self,hgl_describe::BuildError> {{Err(hgl_describe::BuildError::InvalidNodeType {{node:{:?},what:\"prepared configuration required\".into()}})}} }}\nimpl Node{index} {{\nfn build_prepared(ports: &mut hgl_describe::Ports<'_>,{}) -> Result<Self,hgl_describe::BuildError> {{\n",n.name,n.configuration.iter().enumerate().map(|(id,v)|format!("configuration{id}:{}",owned_type(&v.ty))).collect::<Vec<_>>().join(",")));
     } else {
-        out.push("fn build(ports: &mut hgl_describe::Ports<'_>) -> Result<Self,hgl_describe::BuildError> {\nOk(Self {\n".into());
+        out.push("fn build(ports: &mut hgl_describe::Ports<'_>) -> Result<Self,hgl_describe::BuildError> {\n".into());
     }
+    out.push(hgl_rust_keyed::node_preparation(n, |v| {
+        condition_code(plan, v)
+    }));
+    out.push("Ok(Self {\n".into());
     if let Some(generator) = generator {
         out.push(generator.initialize());
     }
@@ -136,7 +139,7 @@ fn node_build(
         ));
     }
     for (id, value) in n.configuration.iter().enumerate() {
-        if prepared {
+        if node_prepared(n) {
             out.push(format!("configuration{id},\n"));
             continue;
         }
@@ -248,7 +251,7 @@ pub fn emit(plan: &Plan) -> String {
 
 /// Emit execution and observation of one checked eval plan.
 pub fn emit_test_body(plan: &Plan, expected: Option<&[Option<Value>]>) -> String {
-    let mut out = Vec::<String>::new();
+    let mut out = vec![hgl_rust_keyed::preparation(plan)];
     if !plan.natives.is_empty() {
         out.push("impl Native for crate::Provider {\n".into());
     }
@@ -279,14 +282,14 @@ pub fn emit_test_body(plan: &Plan, expected: Option<&[Option<Value>]>) -> String
         out.push("Ok(())\n}\n".into());
         return out.concat();
     }
-    out.push("let mut store=hgl_store::Store::new();\nstore.global_state().provision();\nlet mut built=hgl_describe::instantiate_complete(&graph,&registry,&mut store).map_err(|e|format!(\"{e:?}\"))?;\n".into());
+    out.push("let mut store=hgl_store::Store::new();\nstore.global_state().provision();prepare_static(&mut store.keys)?;\nlet mut built=hgl_describe::instantiate_complete(&graph,&registry,&mut store).map_err(|e|format!(\"{e:?}\"))?;\n".into());
     if let Some((key, ty)) = &plan.recording {
         out.push(format!(
             "let recording=store.global_state().bind::<{}>({key:?}).map_err(|e|format!(\"{{e:?}}\"))?;\n",
             global_type(ty)
         ));
     }
-    out.push("hgl_kernel::run_simulation(&mut built.graph,&mut store,&hgl_kernel::RunConfig { start_time:hgl_types::EngineTime::MIN_START,end_time:hgl_types::EngineTime::MAX_END }).map_err(|e|format!(\"{e:?}\"))?;\n".into());
+    out.push("store.prepare_collection_inputs();hgl_kernel::run_simulation(&mut built.graph,&mut store,&hgl_kernel::RunConfig { start_time:hgl_types::EngineTime::MIN_START,end_time:hgl_types::EngineTime::MAX_END }).map_err(|e|format!(\"{e:?}\"))?;\n".into());
     if plan.output.is_some() {
         out.push(format!("let ticks=store.global_state().get(recording).map_err(|e|e.message)?.into_iter().collect();\ndrop(built);\nlet _observed=hgl_testkit::evaluation::observe(ticks,{})?;\n", plan.input_length));
         if let Some(expected) = expected {
@@ -393,7 +396,7 @@ fn prepared_values(value: &Value, out: &mut std::collections::BTreeMap<usize, Ty
         }
         Kind::Delta(parts) => {
             for p in parts {
-                if let crate::ir::DeltaEntry::Child(_, v) = p {
+                for v in p.operands() {
                     prepared_values(v, out);
                 }
             }
@@ -483,11 +486,11 @@ pub fn emit_prepared_test_body(plan: &Plan) -> String {
     } else {
         out.push("register(&mut registry).map_err(|e|format!(\"{e:?}\"))?;\n".into());
     }
-    out.push("let graph=main(&registry).map_err(|e|format!(\"{e:?}\"))?;\nlet mut store=hgl_store::Store::new();store.global_state().provision();\nlet mut built=hgl_describe::instantiate_complete(&graph,&registry,&mut store).map_err(|e|format!(\"{e:?}\"))?;\n".into());
+    out.push("let graph=main(&registry).map_err(|e|format!(\"{e:?}\"))?;\nlet mut store=hgl_store::Store::new();store.global_state().provision();prepare_static(&mut store.keys)?;prepare_values(&mut store.keys,&prepared.arguments)?;\nlet mut built=hgl_describe::instantiate_complete(&graph,&registry,&mut store).map_err(|e|format!(\"{e:?}\"))?;\n".into());
     if let Some((key, ty)) = &plan.recording {
         out.push(format!("let recording=store.global_state().bind::<{}>({key:?}).map_err(|e|format!(\"{{e:?}}\"))?;\n",global_type(ty)));
     }
-    out.push("hgl_kernel::run_simulation(&mut built.graph,&mut store,&hgl_kernel::RunConfig {start_time:hgl_types::EngineTime::MIN_START,end_time:hgl_types::EngineTime::MAX_END}).map_err(|e|format!(\"{e:?}\"))?;\n".into());
+    out.push("store.prepare_collection_inputs();hgl_kernel::run_simulation(&mut built.graph,&mut store,&hgl_kernel::RunConfig {start_time:hgl_types::EngineTime::MIN_START,end_time:hgl_types::EngineTime::MAX_END}).map_err(|e|format!(\"{e:?}\"))?;\n".into());
     if let Some((_, ty)) = &plan.output {
         let payload = ty
             .clone()

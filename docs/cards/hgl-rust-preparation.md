@@ -22,3 +22,7 @@ Declared enum source types retain nominal identity through generated i64-backed
 GlobalValue markers. Enum publication uses one prepared whole-value slot without
 structural children. Checked harness capture retains the original declaration
 and assigned member number; it never substitutes an ordinary integer.
+
+Map Keyed(Value,Value) entries and Add/Remove(Value) decode materialized ordinary
+keys by exact K; capture re-encodes complete typed keys independently of runtime
+membership IDs. Field and fixed-list Child indices remain i64.

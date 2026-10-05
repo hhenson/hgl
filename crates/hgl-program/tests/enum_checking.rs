@@ -12,6 +12,8 @@ fn checked(body: &str) -> Result<(), String> {
 #[test]
 fn members_defaults_and_generic_delta_atomic_types_are_exact() {
     for body in [
+        "let value:delta<map<E,i64>> = delta<map<E,i64>>(upsert:[E::first:1])",
+        "let value:delta<set<E>> = delta<set<E>>(added:[E::first])",
         "let value:E = E::first\nassert value == E::first",
         "let value:atomic<E> = E::first\nlet delta:delta<atomic<E>> = value\nassert delta != E::second",
         "let value:E = id(E::first)",
@@ -41,8 +43,6 @@ fn wrong_identity_and_unsupported_integer_operations_are_rejected() {
         "let value = E::First",
         "let value = E(-7)",
         "let value = E(\"first\")",
-        "let value:delta<map<E,i64>> = delta<map<E,i64>>(upsert:[E::first:1])",
-        "let value:delta<set<E>> = delta<set<E>>(added:[E::first])",
         "let value = values(E)",
         "let value = keys(E)",
         "let value = elements(E)",

@@ -33,6 +33,13 @@ impl hgl_store::GlobalValue for {name} {{
     fn install(columns:&mut hgl_store::ValueColumns,value:i64,layouts:&mut hgl_store::Layouts)->usize {{<i64 as hgl_store::GlobalValue>::install(columns,value,layouts)}}
     fn release(columns:&mut hgl_store::ValueColumns,slots:usize) {{<i64 as hgl_store::GlobalValue>::release(columns,slots)}}
 }}
+impl hgl_store::Key for {name} {{
+fn prepare(keys:&mut hgl_store::Keys,value:&i64)->hgl_types::NodeResult {{<i64 as hgl_store::Key>::prepare(keys,value)}}
+fn id(keys:&hgl_store::Keys,value:&i64)->hgl_types::NodeResult<i64> {{<i64 as hgl_store::Key>::id(keys,value)}}
+fn value(keys:&hgl_store::Keys,id:i64)->hgl_types::NodeResult<i64> {{<i64 as hgl_store::Key>::value(keys,id)}}
+fn ids(keys:&hgl_store::Keys)->&[i64] {{<i64 as hgl_store::Key>::ids(keys)}}
+}}
+
 "
     )
 }

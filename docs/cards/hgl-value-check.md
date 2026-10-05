@@ -68,3 +68,6 @@ providers, native/capability/global/endpoint effects and unsupported or unbounde
 control flow without executing anything. The frontend may then use the ordinary
 evaluator for checking-time diagnostics; short-circuit and branch execution
 remain the evaluator's responsibility. Contextual assertions remain deferred.
+
+Delta traversal includes typed Add/Remove keys and both Keyed map operands;
+retained keys obey the same constant/provenance checks as child expressions.

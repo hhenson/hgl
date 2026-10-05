@@ -123,6 +123,8 @@ dependencies = [
 name = "hgl-delta-check"
 version = "0.0.0"
 dependencies = [
+ "hgl-rust-ir",
+ "hgl-scalar-keys",
  "hgl-source",
 ]
 
@@ -171,8 +173,10 @@ dependencies = [
 name = "hgl-eval-data"
 version = "0.0.0"
 dependencies = [
+ "hgl-delta-check",
  "hgl-library",
  "hgl-rust-ir",
+ "hgl-scalar-keys",
  "hgl-source",
  "hgl-value-eval",
 ]
@@ -378,6 +382,7 @@ dependencies = [
  "hgl-rust-deltas",
  "hgl-rust-generators",
  "hgl-rust-ir",
+ "hgl-rust-keyed",
  "hgl-rust-preparation",
  "hgl-rust-values",
  "hgl-source",
@@ -397,6 +402,7 @@ name = "hgl-rust-deltas"
 version = "0.0.0"
 dependencies = [
  "hgl-rust-ir",
+ "hgl-rust-keyed",
  "hgl-rust-layouts",
  "hgl-source",
 ]
@@ -422,6 +428,16 @@ dependencies = [
 name = "hgl-rust-ir"
 version = "0.0.0"
 dependencies = [
+ "hgl-source",
+]
+
+[[package]]
+name = "hgl-rust-keyed"
+version = "0.0.0"
+dependencies = [
+ "hgl-rust-checked-data",
+ "hgl-rust-ir",
+ "hgl-rust-layouts",
  "hgl-source",
 ]
 
@@ -463,6 +479,14 @@ dependencies = [
  "hgl-rust-ir",
  "hgl-rust-layouts",
  "hgl-source",
+]
+
+[[package]]
+name = "hgl-scalar-keys"
+version = "0.0.0"
+dependencies = [
+ "hgl-source",
+ "hgl-time-values",
 ]
 
 [[package]]
@@ -662,8 +686,10 @@ dependencies = [
 name = "hgl-value-eval"
 version = "0.0.0"
 dependencies = [
+ "hgl-delta-check",
  "hgl-rust-ir",
  "hgl-source",
+ "hgl-time-values",
 ]
 
 [[package]]

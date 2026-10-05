@@ -1,5 +1,5 @@
 //! Pure lexical classification for checking-time ordinary evaluation.
-use hgl_rust_ir::{DeltaEntry, Kind, Statement, Value};
+use hgl_rust_ir::{Kind, Statement, Value};
 use std::collections::BTreeSet;
 
 /// Whether a complete expression can execute without external values or effects.
@@ -12,10 +12,9 @@ fn expression(value: &Value, locals: &BTreeSet<usize>) -> bool {
         Kind::Local(id) | Kind::MutableLocal(id) => locals.contains(id),
         Kind::List(values) => values.iter().all(|v| expression(v, locals)),
         Kind::Construct(fields) => fields.iter().all(|(_, v)| expression(v, locals)),
-        Kind::Delta(parts) => parts.iter().all(|part| match part {
-            DeltaEntry::Child(_, value) => expression(value, locals),
-            DeltaEntry::Add(_) | DeltaEntry::Remove(_) => true,
-        }),
+        Kind::Delta(parts) => parts
+            .iter()
+            .all(|part| part.operands().all(|value| expression(value, locals))),
         Kind::Field(value, _) | Kind::Length(value) | Kind::Unary(_, value) => {
             expression(value, locals)
         }

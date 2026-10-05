@@ -113,8 +113,8 @@ fn unsupported_set_shapes_fail_before_emission() {
         "set<ref<i64>>",
         "set<set<i64>>",
         "set<void>",
-        "set<str>",
-        "set<f64>",
+        "set<list<str,2>>",
+        "set<tuple<f64>>",
         "ref<set<ref<i64>>>",
     ] {
         let text = format!(
@@ -125,7 +125,7 @@ fn unsupported_set_shapes_fail_before_emission() {
             error.contains(if ty.contains("ref<i64>") {
                 "type position requires value_type"
             } else {
-                "set elements currently require bool or i64"
+                "unsupported temporal publication shape"
             }),
             "{ty}: {error}"
         );

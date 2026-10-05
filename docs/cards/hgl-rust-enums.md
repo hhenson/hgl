@@ -11,3 +11,7 @@ the typed i64 implementation. Member numbers are already checked by the frontend
 
 Typed storage tests verify exact nominal binding and allocation-free first and
 repeated publications; generated shared HGL tests verify recursive enum capture.
+
+Markers also implement the hgl-store Key contract by delegating physical i64
+prepare/id/value/domain operations. The collection schema preserves the nominal
+enum identity independently of the membership token.

@@ -1,0 +1,23 @@
+# Card: hgl-rust-keyed
+
+Typed set/map code generation and finite cold key-domain preparation. Uses
+hgl-source, hgl-rust-ir, hgl-rust-layouts and hgl-rust-checked-data; budget 450
+source lines. Emits static Key calls, never type-erased per-tick key operations.
+
+`preparation(&Plan) -> String` emits cold prepared-argument traversal and static
+key seeding before graph construction. `observation(&Ty, Option<&str>) -> String`
+and `application(&Ty, Option<(&str,&str)>) -> String` emit exact owning sparse
+key observations and membership updates; child operations are supplied by the
+structural delta owner. Typed domains must already contain every key. Unknown
+keys fail; the generated path does not expand a domain during execution.
+
+Harness captures retain ordinary K, including enum identity and zone spelling.
+Collection comparison continues using ordinary key equality and recursive
+child equality, independent of member/entry order.
+
+allocation(key:&Ty, shape:&str, child:&str) -> String prebuilds an inactive
+collection for its prepared finite key domain using the supplied typed child
+factory. Input projections are prepared after graph wiring and before startup.
+
+`node_preparation(node, emit)` seeds literal key domains during ordinary generated
+node construction, preserving callers that instantiate outside the eval harness.

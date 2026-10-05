@@ -25,8 +25,8 @@ fn exact_derived_shapes_and_scalar_reduction() {
 fn unsupported_origins_fail_formation() {
     for source in [
         "list<i64>",
-        "set<str>",
-        "map<bool,i64>",
+        "set<list<str,2>>",
+        "map<tuple<bool>,i64>",
         "ref<i64>",
         "list<i64,-1>",
         "delta<set<i64>>",

@@ -60,7 +60,7 @@ pub enum Ty {
     Enum(EnumType),
     /// Complete ordinary payload behind one temporal boundary.
     Atomic(Box<Self>),
-    /// Integer-keyed temporal map and recursively checked child shape.
+    /// Scalar-keyed temporal map and recursively checked child shape.
     Map(Box<Self>, Box<Self>),
     /// Positional temporal children.
     Tuple(Vec<Self>),
@@ -242,11 +242,11 @@ impl Ty {
             | Self::ZonedDateTime
             | Self::Duration => true,
             Self::Atomic(payload) => payload.atomic_payload(),
-            Self::Set(member) => matches!(**member, Self::Bool | Self::I64),
+            Self::Set(member) => member.scalar(),
             Self::List(child, Some(_)) => child.publication(),
             Self::Tuple(children) => children.iter().all(Self::publication),
             Self::Struct(_, fields) => fields.iter().all(|(_, child)| child.publication()),
-            Self::Map(key, child) => **key == Self::I64 && child.publication(),
+            Self::Map(key, child) => key.scalar() && child.publication(),
             Self::List(_, None)
             | Self::Delta(_)
             | Self::Ref(_)

@@ -17,7 +17,7 @@ fn rewrite(value: &mut Value) {
         }
         Kind::Delta(entries) => {
             for entry in entries {
-                if let hgl_rust_ir::DeltaEntry::Child(_, v) = entry {
+                for v in entry.operands_mut() {
                     rewrite(v);
                 }
             }

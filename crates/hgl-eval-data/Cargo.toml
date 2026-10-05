@@ -13,3 +13,5 @@ hgl-value-eval = { path = "../hgl-value-eval" }
 hgl-source = { path = "../hgl-source" }
 hgl-rust-ir = { path = "../hgl-rust-ir" }
 hgl-library = { path = "../hgl-library" }
+hgl-scalar-keys = { path = "../hgl-scalar-keys" }
+hgl-delta-check = { path = "../hgl-delta-check" }

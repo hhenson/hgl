@@ -51,11 +51,11 @@ outer lexical local uses with owned node storage, leaving value-call body
 locals lexical. No borrowed global view is admitted into generator storage.
 
 `Kind::Delta(Vec<DeltaEntry>)` retains ordered structural delta constructor
-parts. `DeltaEntry::{Add(Literal),Remove(Literal),Child(i64,Value)}` uses checked
-constant members/keys/indices; Value.ty is exact Ty::Delta(origin), so each
+parts. `DeltaEntry::{Add(Value),Remove(Value),Keyed(Value,Value),Child(i64,Value)}`
+retains typed scalar keys separately from fixed collection indices; Value.ty is exact Ty::Delta(origin), so each
 child's representation is determined before runtime. No shape registry or
-runtime type test is required. Every child expression is evaluated once and
-retained before the next part. `Kind::ObservedLocal(id)` preserves a readonly
+runtime type test is required. Every key and child expression is evaluated once and
+retained before the next part, with a map key preceding its payload. `Kind::ObservedLocal(id)` preserves a readonly
 evaluation-local structural delta observation; it is not an owning copy.
 Direct structural Query(delta_value) and observation aliases retain endpoint
 observation identity until an admitted owning retention/publication boundary.
@@ -73,3 +73,11 @@ buffer is needed. Source replay configuration consists of ordinary value data.
 Kind::TemporalLiteral(TemporalLiteral) retains contextual scalar construction;
 Kind::Prepared(usize) references a statically typed cold configuration binding.
 Neither is a closed compile-time value; Prepared is never a node-hook operand.
+
+DeltaEntry::operands visits retained key/payload expressions in source order;
+try_map maps those same expressions fallibly, preserving indexed versus keyed
+identity. closed() traverses keys as well as payloads: contextual recipes are
+not closed merely because they occur in membership/removal data.
+
+DeltaEntry::operands_mut exposes the same source-order traversal for cold IR
+rewrites, retaining typed keys alongside their payloads.

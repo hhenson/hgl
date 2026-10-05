@@ -33,8 +33,12 @@ pub fn shape_marker(ty: &Ty) -> String {
         Ty::List(child, Some(n)) => {
             format!("hgl_store::shapes::Fixed<{}, {n}>", shape_marker(child))
         }
-        Ty::Map(_, child) => format!("hgl_store::shapes::Map<{}>", shape_marker(child)),
-        Ty::Set(key) => format!("hgl_store::shapes::Set<{}>", rust_type(key)),
+        Ty::Map(key, child) => format!(
+            "hgl_store::shapes::Map<{},{}>",
+            shape_marker(child),
+            global_type(key)
+        ),
+        Ty::Set(key) => format!("hgl_store::shapes::Set<{}>", global_type(key)),
         Ty::Tuple(_) | Ty::Struct(..) => format!("Shape{}", identity(ty)),
         Ty::Delta(_)
         | Ty::List(..)
@@ -177,11 +181,7 @@ fn reserve(target: &str) -> String {
     format!("{target}.try_reserve(1).map_err(|e|hgl_types::NodeError::new(e.to_string()))?;")
 }
 /// Preserve written constructor entry order before assembling sparse storage.
-pub fn construct(
-    value: &Value,
-    emit: impl Fn(&Value) -> String,
-    literal: impl Fn(&hgl_source::Literal) -> String,
-) -> String {
+pub fn construct(value: &Value, emit: impl Fn(&Value) -> String) -> String {
     let Ty::Delta(origin) = &value.ty else {
         unreachable!()
     };
@@ -204,10 +204,16 @@ pub fn construct(
                     1
                 };
                 code += &reserve(&format!("delta.{slot}"));
+                append(&mut code, format_args!("delta.{slot}.push({});", emit(key)));
+            }
+            DeltaEntry::Keyed(key, value) => {
                 append(
                     &mut code,
-                    format_args!("delta.{slot}.push({});", literal(key)),
+                    format_args!("let key={};let child={};", emit(key), emit(value)),
                 );
+                code += &reserve("delta.0");
+                code += &reserve("delta.1");
+                code += "delta.0.push(key);delta.1.push(child);";
             }
             DeltaEntry::Child(key, value) => {
                 append(&mut code, format_args!("let child = {};", emit(value)));
@@ -354,7 +360,7 @@ fn values(value: &Value, types: &mut BTreeSet<Ty>) {
     match &value.kind {
         Kind::Delta(entries) => {
             for entry in entries {
-                if let DeltaEntry::Child(_, v) = entry {
+                for v in entry.operands() {
                     values(v, types);
                 }
             }

@@ -1,7 +1,7 @@
 # Card: hgl-value-eval
 
 Direct execution of checked ordinary value IR during constant evaluation and
-graph construction. Depends only on `hgl-source` and `hgl-rust-ir`; budget 500
+graph construction. Depends on `hgl-source`, `hgl-rust-ir` and `hgl-delta-check`; budget 500
 source lines. No runtime or third-party dependencies.
 
 Public surface: `Evaluator` with `Default`, `value`, `statement` and `bind_failed`;
@@ -61,3 +61,8 @@ callback again. The existing source-line budget remains unchanged.
 `Evaluator` is cloneable for isolated cold branch checking. Cloning retains
 independent ordinary local values and authority; it does not duplicate runtime
 handles or execute effects. Only the selected branch's evaluator is retained.
+
+Cold Delta evaluation materializes typed Add/Remove/Keyed expressions once in
+written order, with each map key preceding its payload. It validates resolved
+duplicates, signed-zero identity, overlaps and NaN through hgl-delta-check before
+returning closed data. Already retained scalar keys do not invoke a provider.

@@ -1661,6 +1661,9 @@ impl Checker {
         }
         let parts = hgl_delta_check::constructor(&origin, args, |expr| {
             let value = self.expression(module, expr, env, false)?;
+            if let Kind::TemporalLiteral(recipe) = value.kind {
+                return Ok(hgl_source::ParsedLiteral::Contextual(recipe));
+            }
             let value = self
                 .wiring
                 .value(&value)
@@ -1668,23 +1671,16 @@ impl Checker {
             let Kind::Literal(value) = value.kind else {
                 return Err("delta position requires a constant scalar".into());
             };
+            Ok(hgl_source::ParsedLiteral::Value(value))
+        })?;
+        let entries = hgl_delta_check::values(parts, |ty, expr| {
+            let value = self.expected_expression(module, expr, env, runtime, Some(ty))?;
+            require_payload(&value)?;
+            if value.ty != *ty {
+                return Err("delta child type mismatch".into());
+            }
             Ok(value)
         })?;
-        let mut entries = Vec::new();
-        for part in parts {
-            entries.push(match part {
-                hgl_delta_check::Part::Added(value) => hgl_rust::DeltaEntry::Add(value),
-                hgl_delta_check::Part::Removed(value) => hgl_rust::DeltaEntry::Remove(value),
-                hgl_delta_check::Part::Child(key, ty, expr) => {
-                    let value = self.expected_expression(module, expr, env, runtime, Some(&ty))?;
-                    require_payload(&value)?;
-                    if value.ty != ty {
-                        return Err("delta child type mismatch".into());
-                    }
-                    hgl_rust::DeltaEntry::Child(key, value)
-                }
-            });
-        }
         Ok(Value::new(ty, Kind::Delta(entries)))
     }
     fn value_call(

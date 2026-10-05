@@ -220,7 +220,7 @@ fn value_types(value: &hgl_rust_ir::Value, types: &mut BTreeMap<String, Ty>) {
         }
         Kind::Delta(entries) => {
             for entry in entries {
-                if let hgl_rust_ir::DeltaEntry::Child(_, v) = entry {
+                for v in entry.operands() {
                     value_types(v, types);
                 }
             }

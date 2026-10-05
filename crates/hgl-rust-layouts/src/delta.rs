@@ -7,16 +7,15 @@ pub fn delta_storage(origin: &Ty) -> Ty {
             ("added".into(), list((**key).clone())),
             ("removed".into(), list((**key).clone())),
         ],
-        Ty::List(child, Some(_)) | Ty::Map(_, child) => {
-            let mut fields = vec![
-                ("keys".into(), list(Ty::I64)),
-                ("values".into(), list(delta_type(child))),
-            ];
-            if matches!(origin, Ty::Map(..)) {
-                fields.push(("removed".into(), list(Ty::I64)));
-            }
-            fields
-        }
+        Ty::List(child, Some(_)) => vec![
+            ("keys".into(), list(Ty::I64)),
+            ("values".into(), list(delta_type(child))),
+        ],
+        Ty::Map(key, child) => vec![
+            ("keys".into(), list((**key).clone())),
+            ("values".into(), list(delta_type(child))),
+            ("removed".into(), list((**key).clone())),
+        ],
         Ty::Tuple(children) => children
             .iter()
             .enumerate()

@@ -81,11 +81,6 @@ pub fn bind(
 
 /// Check supported type at the typed call boundary.
 pub fn supported_type(ty: &Ty) -> Result<(), String> {
-    if let Ty::Set(child) = ty
-        && !matches!(**child, Ty::Bool | Ty::I64)
-    {
-        return Err("Rust set elements currently require bool or i64".into());
-    }
     if matches!(
         ty,
         Ty::Atomic(_)
@@ -153,13 +148,21 @@ fn bind_type(
             return Err("inconsistent generic inference".into());
         }
     } else if p.ty != "signal"
-        && resolve_type(formal, types).map(|ty| {
-            if p.constant || signature.value_function {
-                hgl_value_access::project(&ty)
-            } else {
-                ty
-            }
-        }) != Some(actual.clone())
+        && resolve_type(formal, types)
+            .or_else(|| {
+                let (Ty::Ref(child) | Ty::Set(child)) = resolve_type(&p.ty, types)? else {
+                    return None;
+                };
+                Some(*child)
+            })
+            .map(|ty| {
+                if p.constant || signature.value_function {
+                    hgl_value_access::project(&ty)
+                } else {
+                    ty
+                }
+            })
+            != Some(actual.clone())
     {
         return Err(format!("type mismatch for {}", p.name));
     }
@@ -251,10 +254,7 @@ pub fn order_arguments(
 /// Whether a checked value is closed ordinary configuration data.
 pub fn constant(value: &Value) -> bool {
     if let Kind::Delta(parts) = &value.kind {
-        return parts.iter().all(|part| match part {
-            hgl_rust_ir::DeltaEntry::Child(_, value) => constant(value),
-            hgl_rust_ir::DeltaEntry::Add(_) | hgl_rust_ir::DeltaEntry::Remove(_) => true,
-        });
+        return parts.iter().all(|part| part.operands().all(constant));
     }
     if let Kind::Construct(fields) = &value.kind {
         return fields.iter().all(|(_, v)| constant(v));

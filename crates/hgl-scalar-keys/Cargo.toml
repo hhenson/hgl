@@ -1,19 +1,14 @@
 [package]
-name = "hgl-value-eval"
+name = "hgl-scalar-keys"
 version = "0.0.0"
 edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
-
 [package.metadata.hgl]
-line-budget = 500
-
+line-budget = 100
 [lints]
 workspace = true
-
 [dependencies]
 hgl-source = { path = "../hgl-source" }
-hgl-rust-ir = { path = "../hgl-rust-ir" }
-hgl-delta-check = { path = "../hgl-delta-check" }
 [dev-dependencies]
 hgl-time-values = { path = "../hgl-time-values" }

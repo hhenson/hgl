@@ -56,3 +56,6 @@ preparation, after supplied arguments; supplied arguments suppress that default.
 Signal parameters retain the actual endpoint shape for prepared metadata access,
 but never unify that shape as an ordinary type named signal. Existing lexical
 signal restrictions still prohibit payload observation through the formal.
+
+Delta traversal includes typed Add/Remove keys and both Keyed map operands;
+retained keys obey the same constant/provenance checks as child expressions.

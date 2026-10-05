@@ -46,7 +46,7 @@ fn value(plan: &Plan, v: &Value) -> String {
         Kind::WiringFailure(message) => {
             format!("return Err(hgl_types::NodeError::new({message:?}))")
         }
-        Kind::Delta(_) => hgl_rust_deltas::construct(v, |v| value(plan, v), literal),
+        Kind::Delta(_) => hgl_rust_deltas::construct(v, |v| value(plan, v)),
         Kind::ObservedLocal(id) => hgl_rust_deltas::observe(&v.ty, &format!("local{id}")),
         Kind::List(values) => list_value(plan, &v.ty, values),
         Kind::Length(parent) => length(plan, parent),

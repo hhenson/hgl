@@ -87,11 +87,41 @@ pub enum Kind {
 #[derive(Debug, Clone)]
 pub enum DeltaEntry {
     /// Constant set member addition.
-    Add(Literal),
+    Add(Value),
     /// Constant set member or map key removal.
-    Remove(Literal),
-    /// Constant field/position/key and its exact child publication payload.
+    Remove(Value),
+    /// Exact constant map key and its child publication payload.
+    Keyed(Value, Value),
+    /// Constant field/position and its exact child publication payload.
     Child(i64, Value),
+}
+impl DeltaEntry {
+    /// Retained expressions in written key-before-payload order.
+    pub fn operands(&self) -> impl Iterator<Item = &Value> {
+        let (first, second) = match self {
+            Self::Add(value) | Self::Remove(value) | Self::Child(_, value) => (value, None),
+            Self::Keyed(key, value) => (key, Some(value)),
+        };
+        [Some(first), second].into_iter().flatten()
+    }
+
+    /// Writable retained expressions in key-before-payload order.
+    pub fn operands_mut(&mut self) -> impl Iterator<Item = &mut Value> {
+        let (first, second) = match self {
+            Self::Add(value) | Self::Remove(value) | Self::Child(_, value) => (value, None),
+            Self::Keyed(key, value) => (key, Some(value)),
+        };
+        [Some(first), second].into_iter().flatten()
+    }
+    /// Visit retained expressions in key-before-payload source order.
+    pub fn try_map<E>(&self, mut check: impl FnMut(&Value) -> Result<Value, E>) -> Result<Self, E> {
+        Ok(match self {
+            Self::Add(value) => Self::Add(check(value)?),
+            Self::Remove(value) => Self::Remove(check(value)?),
+            Self::Child(index, value) => Self::Child(*index, check(value)?),
+            Self::Keyed(key, value) => Self::Keyed(check(key)?, check(value)?),
+        })
+    }
 }
 /// Checked statements in a node lifecycle hook or handler.
 #[derive(Debug, Clone)]
@@ -186,10 +216,7 @@ impl Value {
     /// Whether an expression is already a closed ordinary constant.
     pub fn closed(&self) -> bool {
         match &self.kind {
-            Kind::Delta(parts) => parts.iter().all(|part| match part {
-                DeltaEntry::Child(_, value) => value.closed(),
-                DeltaEntry::Add(_) | DeltaEntry::Remove(_) => true,
-            }),
+            Kind::Delta(parts) => parts.iter().all(|part| part.operands().all(Value::closed)),
             Kind::Literal(_) | Kind::Void => true,
             Kind::List(items) => items.iter().all(Value::closed),
             Kind::Construct(fields) => fields.iter().all(|(_, value)| value.closed()),
