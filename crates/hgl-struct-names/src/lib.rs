@@ -27,11 +27,26 @@ pub fn declaration<'a>(
     module: &str,
     name: &str,
 ) -> Result<Option<&'a Decl>, String> {
+    find(library, module, name, &Role::Struct)
+}
+/// Find a visible nominal enum declaration.
+pub fn enum_declaration<'a>(
+    library: &'a Library,
+    module: &str,
+    name: &str,
+) -> Result<Option<&'a Decl>, String> {
+    find(library, module, name, &Role::Enum)
+}
+fn find<'a>(
+    library: &'a Library,
+    module: &str,
+    name: &str,
+    role: &Role,
+) -> Result<Option<&'a Decl>, String> {
     let local = !name.contains("::")
-        && library
-            .declarations
-            .iter()
-            .any(|d| d.module == module && d.name == name && d.role == Role::Struct);
+        && library.declarations.iter().any(|d| {
+            d.module == module && d.name == name && matches!(d.role, Role::Struct | Role::Enum)
+        });
     let (owner, item) = if local {
         (module.into(), name.into())
     } else {
@@ -40,15 +55,20 @@ pub fn declaration<'a>(
     let mut found = library
         .declarations
         .iter()
-        .filter(|d| d.module == owner && d.name == item && d.role == Role::Struct);
+        .filter(|d| d.module == owner && d.name == item && &d.role == role);
     let declaration = found.next();
     if found.next().is_some() {
-        return Err(format!("duplicate struct {owner}::{item}"));
+        let kind = if *role == Role::Struct {
+            "struct"
+        } else {
+            "enum"
+        };
+        return Err(format!("duplicate {kind} declaration {owner}::{item}"));
     }
     if let Some(decl) = declaration {
         if decl.module != module && !exported(decl) {
             return Err(format!(
-                "{}::{}: struct is not exported",
+                "{}::{}: type is not exported",
                 decl.module, decl.name
             ));
         }
@@ -56,7 +76,7 @@ pub fn declaration<'a>(
             && !library.imports.contains_key(&(module.into(), alias.into()))
         {
             return Err(format!(
-                "struct qualification requires an imported module alias {alias}"
+                "type qualification requires an imported module alias {alias}"
             ));
         }
     }
@@ -104,7 +124,8 @@ fn exported_name(
     {
         return Ok(());
     }
-    if let Some(decl) = declaration(library, module, base)?
+    if let Some(decl) =
+        declaration(library, module, base)?.or(enum_declaration(library, module, base)?)
         && !exported(decl)
     {
         return Err(format!(

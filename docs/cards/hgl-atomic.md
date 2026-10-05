@@ -32,3 +32,9 @@ snapshots; empty/equal publications; failed preparation leaves old state;
 repeated replacement reuses storage; graph-scope reuse preserves generation.
 Mutants: alias a retained list; skip reclaim; publish before prepare succeeds;
 treat an empty list as invalid; accept a mismatched root shape.
+
+An OrdinaryType::Enum root reserves its one i64 physical slot during construction
+and starts with no publication. Generated enum markers set PREPARED_SCALAR, so
+write skips generic payload preparation/reservation and commits to that typed
+slot directly. The compile-time marker selects this path; there is no per-value
+schema test, name lookup, allocation or invented published default member.

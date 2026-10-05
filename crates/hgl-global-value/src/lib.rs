@@ -6,6 +6,8 @@ use std::{fmt::Debug, marker::PhantomData};
 
 /// A compiler-selected value representation; implementations preserve their schema.
 pub trait GlobalValue {
+    /// Nominal scalar storage already exists before the first publication.
+    const PREPARED_SCALAR: bool = false;
     /// Independently owned representation, without borrow capabilities.
     type Value;
     /// Prepared typed field positions, copied without copying payloads.
@@ -156,6 +158,7 @@ pub fn allocate(
             columns.reserve(&capacity)?;
             slots.push(columns.insert_list(Vec::new()));
         }
+        OrdinaryType::Enum(_) => slots.push(leaf::<i64>(columns)?),
         OrdinaryType::Scalar(scalar) => slots.push(match scalar {
             ScalarType::Bool => leaf::<bool>(columns)?,
             ScalarType::I64 => leaf::<i64>(columns)?,

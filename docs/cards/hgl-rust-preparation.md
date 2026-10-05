@@ -17,3 +17,8 @@ compiler TZDB, expression re-evaluation or runtime choice of temporal shape.
 
 May use hgl-rust-checked-data for checked-IR source serialization; this crate
 retains native conversions and runner construction, with its budget unchanged.
+
+Declared enum source types retain nominal identity through generated i64-backed
+GlobalValue markers. Enum publication uses one prepared whole-value slot without
+structural children. Checked harness capture retains the original declaration
+and assigned member number; it never substitutes an ordinary integer.

@@ -5,7 +5,7 @@ hgl-source, hgl-library, hgl-value-check, hgl-value-access and hgl-struct-names;
 budget 350 source lines. Identity and declaration lookup are re-exported from
 hgl-struct-names; export closure validation delegates to the same owner.
 
-Public surface: identity, declaration, resolve, specialize, substitute, unify. Nominal required-field structs
+Public surface: identity, declaration, resolve, resolve_ordinary, specialize, substitute, unify. Nominal required-field structs
 preserve qualified identity; ordinary lists preserve recursive element type and
 exact fixedness. Visibility and recursive-schema checks remain source checks.
 Type-generic required-field schemas retain the complete invariant specialization
@@ -40,3 +40,11 @@ Generic occurrence validation delegates to hgl-shape-obligations (an allowed
 dependency), preserving the same checked argument identities. Scalar atomic
 spelling normalizes before ordinary-value requirements; composite atomic
 arguments remain shapes and only pass occurrences that admit them.
+
+Resolve declared enum types before ordinary structs through hgl-enums; no generic
+arguments or implicit integer conversion apply. Resolve each retained scalar
+default in its declaration module before checking its exact field type.
+May use hgl-enums.
+
+resolve_ordinary resolves a complete source type with a fresh recursion scope,
+then projects its ordinary payload for argument hints.

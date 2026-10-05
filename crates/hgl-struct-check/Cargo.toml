@@ -15,3 +15,4 @@ hgl-value-types = { path = "../hgl-value-types" }
 hgl-rust-ir = { path = "../hgl-rust-ir" }
 hgl-type-sizes = { path = "../hgl-type-sizes" }
 hgl-value-access = { path = "../hgl-value-access" }
+hgl-enums = { path = "../hgl-enums" }

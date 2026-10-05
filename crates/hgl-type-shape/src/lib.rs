@@ -3,6 +3,14 @@ pub use hgl_type_syntax::{application, delta_argument};
 use std::fmt;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+/// An exact nominal enum declaration with its assigned members.
+pub struct EnumType {
+    /// Canonical module-qualified declaration identity.
+    pub origin: String,
+    /// Declaration-ordered names and signed assigned numbers.
+    pub members: Vec<(String, i64)>,
+}
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 /// A declaring origin and its complete invariant source arguments.
 pub struct Nominal {
     /// Module-qualified declaration identity.
@@ -48,6 +56,8 @@ impl fmt::Display for Nominal {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 /// Types admitted by the executable source compiler.
 pub enum Ty {
+    /// A declared nominal enum scalar.
+    Enum(EnumType),
     /// Complete ordinary payload behind one temporal boundary.
     Atomic(Box<Self>),
     /// Integer-keyed temporal map and recursively checked child shape.
@@ -97,6 +107,7 @@ impl Ty {
     /// Canonical scalar spelling; constructed types retain their child separately.
     pub fn name(&self) -> &'static str {
         match self {
+            Self::Enum(_) => "enum",
             Self::I64 => "i64",
             Self::F64 => "f64",
             Self::Bool => "bool",
@@ -178,6 +189,7 @@ impl Ty {
     /// Canonical checked HGL source form, including complete nominal arguments.
     pub fn source_name(&self) -> String {
         match self {
+            Self::Enum(ty) => ty.origin.clone(),
             Self::Struct(identity, _) => identity.source_name(),
             Self::Delta(origin) => format!("delta<{}>", origin.source_name()),
             Self::Tuple(children) => format!(
@@ -216,7 +228,8 @@ impl Ty {
     /// Whether this exact type belongs to the finite publication profile.
     pub fn publication(&self) -> bool {
         match self {
-            Self::Bool
+            Self::Enum(_)
+            | Self::Bool
             | Self::I64
             | Self::F64
             | Self::Str
@@ -283,7 +296,8 @@ impl Ty {
     fn scalar(&self) -> bool {
         matches!(
             self,
-            Self::Bool
+            Self::Enum(_)
+                | Self::Bool
                 | Self::I64
                 | Self::F64
                 | Self::Str

@@ -180,3 +180,7 @@ Temporal scalar data now lives in hgl-time-values and is re-exported here.
 ScalarType and ScalarValue add CivilDateTime, TimeZone, ZonedDateTime and ZonedTime with
 the corresponding concrete data types. May use hgl-time-values; the existing
 250-line budget is unchanged. See hgl-time-values.md for ownership and identity.
+
+OrdinaryType::Enum(&'static str) describes a declared enum by its canonical
+module-qualified identity. Its physical value is a checked assigned i64; enum
+identity is never interchangeable with an ordinary integer or another enum.

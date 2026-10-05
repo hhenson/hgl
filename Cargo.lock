@@ -149,6 +149,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "hgl-enums"
+version = "0.0.0"
+dependencies = [
+ "hgl-library",
+ "hgl-source",
+ "hgl-struct-names",
+]
+
+[[package]]
 name = "hgl-eval-data"
 version = "0.0.0"
 dependencies = [
@@ -308,6 +317,7 @@ dependencies = [
  "hgl-delta-check",
  "hgl-documentation",
  "hgl-endpoint-check",
+ "hgl-enums",
  "hgl-eval-data",
  "hgl-flow-check",
  "hgl-harness-ir",
@@ -369,6 +379,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "hgl-rust-enums"
+version = "0.0.0"
+dependencies = [
+ "hgl-source",
+]
+
+[[package]]
 name = "hgl-rust-generators"
 version = "0.0.0"
 dependencies = [
@@ -389,6 +406,7 @@ dependencies = [
 name = "hgl-rust-layouts"
 version = "0.0.0"
 dependencies = [
+ "hgl-rust-enums",
  "hgl-rust-ir",
  "hgl-rust-scalars",
  "hgl-source",
@@ -493,6 +511,7 @@ dependencies = [
 name = "hgl-struct-check"
 version = "0.0.0"
 dependencies = [
+ "hgl-enums",
  "hgl-library",
  "hgl-rust-ir",
  "hgl-source",
@@ -613,6 +632,7 @@ dependencies = [
 name = "hgl-value-types"
 version = "0.0.0"
 dependencies = [
+ "hgl-enums",
  "hgl-library",
  "hgl-shape-obligations",
  "hgl-source",

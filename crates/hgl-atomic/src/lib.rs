@@ -25,13 +25,18 @@ impl Arena {
         ty: OrdinaryType,
     ) -> OutputId {
         let width = width(&ty);
+        let prepared = matches!(ty, OrdinaryType::Enum(_));
         let next = u32::try_from(self.roots.len())
             .unwrap_or_else(|_| unreachable!("atomic endpoint capacity exceeded"));
         let (id, fresh) = bindings.add_output(owner, TsType::Atomic(ty), next);
         if fresh {
             self.roots.push(Root {
-                layout: vec![0; width],
-                installed: false,
+                layout: if prepared {
+                    vec![self.values.append_scalar(0_i64)]
+                } else {
+                    vec![0; width]
+                },
+                installed: prepared,
             });
         }
         id
@@ -79,8 +84,10 @@ impl Arena {
         let slot = endpoint.slot;
         let mut capacity = Capacity::default();
         self.layouts.reset();
-        T::prepare(&value, &mut capacity, &mut self.layouts)?;
-        self.values.reserve(&capacity)?;
+        if !T::PREPARED_SCALAR {
+            T::prepare(&value, &mut capacity, &mut self.layouts)?;
+            self.values.reserve(&capacity)?;
+        }
         let root = &mut self.roots[slot as usize];
         if root.installed {
             ValueSlot::<T>::bind(&mut root.layout.as_slice()).commit(
@@ -99,7 +106,7 @@ impl Arena {
 }
 fn width(ty: &OrdinaryType) -> usize {
     match ty {
-        OrdinaryType::Scalar(_) | OrdinaryType::List(..) => 1,
+        OrdinaryType::Enum(_) | OrdinaryType::Scalar(_) | OrdinaryType::List(..) => 1,
         OrdinaryType::Tuple(fields) => fields.iter().map(width).sum(),
         OrdinaryType::Struct(_, fields) => fields.iter().map(|(_, ty)| width(ty)).sum(),
     }

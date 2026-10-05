@@ -35,3 +35,6 @@ Omitted schema defaults may contain ParsedLiteral::Contextual. Emit the typed
 TemporalLiteral recipe after supplied fields, in declaration order, for ordered
 construction. Existing fixed literal defaults and sparse-delta omission rules
 remain unchanged. Contexts without provider construction reject recipe use.
+
+Resolve retained enum member defaults with their declaration module through
+hgl-enums before constructing an omitted ordinary field. May use hgl-enums.

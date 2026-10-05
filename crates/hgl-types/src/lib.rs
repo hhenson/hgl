@@ -179,6 +179,8 @@ impl TsType {
 /// An exact ordinary entry type, including nominal identity and required fields.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum OrdinaryType {
+    /// Exact module-qualified enum identity, backed by a declared i64 member.
+    Enum(&'static str),
     /// One of the eight owning primitive values.
     Scalar(ScalarType),
     /// Positional ordinary fields in declaration order.

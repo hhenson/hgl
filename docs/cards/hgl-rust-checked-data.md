@@ -12,3 +12,8 @@ lookup, native value conversion or graph wiring.
 hgl-rust-preparation delegates checked data emission here and retains native
 conversion and runner emission. Test nested source types, escaped names/literals
 and ordered checked forms through compiled generated executables.
+
+Declared enum source types retain nominal identity through generated i64-backed
+GlobalValue markers. Enum publication uses one prepared whole-value slot without
+structural children. Checked harness capture retains the original declaration
+and assigned member number; it never substitutes an ordinary integer.

@@ -13,6 +13,10 @@ pub fn resolve(
 ) -> Result<Ty, String> {
     substitute(library, module, name, &BTreeMap::new(), active)
 }
+/// Resolve a source type into its ordinary payload representation.
+pub fn resolve_ordinary(library: &Library, module: &str, name: &str) -> Result<Ty, String> {
+    resolve(library, module, name, &mut BTreeSet::new()).map(|ty| hgl_value_access::project(&ty))
+}
 /// Substitute declared type parameters through finite ordinary source shapes.
 pub fn substitute(
     library: &Library,
@@ -66,6 +70,12 @@ pub fn substitute(
             "unsupported ordinary struct argument or field {name}"
         ));
     }
+    if let Some(ty) = hgl_enums::resolve(library, module, base)? {
+        if !arguments.is_empty() {
+            return Err("enum type arguments are unsupported".into());
+        }
+        return Ok(Ty::Enum(ty));
+    }
     let decl = declaration(library, module, base)?
         .ok_or_else(|| format!("unresolved ordinary type {name}"))?;
     let arguments = arguments.into_iter().map(|arg| {
@@ -115,12 +125,10 @@ pub fn specialize(
         if !ordinary(&ty) && !ty.publication() {
             return Err("ordinary struct fields require ordinary value types".into());
         }
-        if schema
-            .defaults
-            .iter()
-            .any(|(field, value)| *field == index && value.ty() != ty)
-        {
-            return Err(format!("struct field {name}: default type mismatch"));
+        for (_, value) in schema.defaults.iter().filter(|(field, _)| *field == index) {
+            if hgl_enums::default(library, &decl.module, value)?.ty() != ty {
+                return Err(format!("struct field {name}: default type mismatch"));
+            }
         }
         fields.push((name, ty));
     }
@@ -188,6 +196,9 @@ pub fn unify(
                 unify(library, module, pattern, actual, generics, bindings)?;
             }
             return Ok(());
+        }
+        if hgl_enums::resolve(library, module, base)?.is_some() {
+            return Err("enum type arguments are unsupported".into());
         }
         let decl = declaration(library, module, base)?
             .ok_or_else(|| format!("unresolved ordinary type {base}"))?;

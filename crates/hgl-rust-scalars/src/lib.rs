@@ -3,7 +3,7 @@ use hgl_source::Ty;
 /// Emit the checked rust type form.
 pub fn rust_type(ty: &Ty) -> &'static str {
     match ty {
-        Ty::I64 => "i64",
+        Ty::Enum(_) | Ty::I64 => "i64",
         Ty::Duration => "hgl_types::EngineDelta",
         Ty::Date => "hgl_types::Date",
         Ty::Time => "hgl_types::Time",
@@ -32,6 +32,7 @@ pub fn rust_type(ty: &Ty) -> &'static str {
 /// Emit the checked scalar type form.
 pub fn scalar_type(ty: &Ty) -> &'static str {
     match ty {
+        Ty::Enum(_) => unreachable!("enum metadata retains nominal identity"),
         Ty::Bool => "Bool",
         Ty::F64 => "F64",
         Ty::I64 => "I64",

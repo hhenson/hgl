@@ -2,7 +2,7 @@ use crate::ir::{Kind, Node, Plan, Value};
 use hgl_rust_generators::Generator;
 use hgl_rust_values::{
     condition_code, global_markers, global_schema, global_type, literal, owned_type, query,
-    rust_type, scalar_type, statements,
+    rust_type, scalar_type, statements, whole_payload,
 };
 use hgl_source::Ty;
 
@@ -23,7 +23,7 @@ fn node(plan: &Plan, n: &Node, index: usize, out: &mut Vec<String>) {
     }
     for (i, (_, _, ty)) in n.inputs.iter().enumerate() {
         out.push(
-            if hgl_rust_deltas::structural(ty) || matches!(ty, Ty::Atomic(_)) {
+            if hgl_rust_deltas::structural(ty) || whole_payload(ty).is_some() {
                 format!(
                     "input{i}: hgl_store::shapes::Input<{}>,\n",
                     hgl_rust_deltas::shape_marker(ty)
@@ -40,7 +40,7 @@ fn node(plan: &Plan, n: &Node, index: usize, out: &mut Vec<String>) {
     }
     if n.result != Ty::Void {
         out.push(
-            if hgl_rust_deltas::structural(&n.result) || matches!(n.result, Ty::Atomic(_)) {
+            if hgl_rust_deltas::structural(&n.result) || whole_payload(&n.result).is_some() {
                 format!(
                     "_output: hgl_store::shapes::Output<{}>,\n",
                     hgl_rust_deltas::shape_marker(&n.result)
@@ -143,7 +143,7 @@ fn node_build(
         out.push(format!("configuration{id}: (|| -> Result<{}, Box<hgl_types::NodeError>> {{ Ok({}) }})().map_err(|e| hgl_describe::BuildError::InvalidNodeType {{ node: {:?}, what: e.message }})?,\n", owned_type(&value.ty), condition_code(plan, value), n.name));
     }
     for (i, (name, _, ty)) in n.inputs.iter().enumerate() {
-        if hgl_rust_deltas::structural(ty) || matches!(ty, Ty::Atomic(_)) {
+        if hgl_rust_deltas::structural(ty) || whole_payload(ty).is_some() {
             out.push(format!("input{i}: {{let id=ports.shaped_input({name:?})?; hgl_store::shapes::Input::<{}>::bind(ports.store().bindings(),id).map_err(hgl_describe::BuildError::Bind)?}},\n",hgl_rust_deltas::shape_marker(ty)));
             continue;
         }
@@ -159,7 +159,7 @@ fn node_build(
     for (i, cache) in n.caches.iter().enumerate() {
         out.push(format!("cache{i}: {},\n", literal(cache)));
     }
-    if hgl_rust_deltas::structural(&n.result) || matches!(n.result, Ty::Atomic(_)) {
+    if hgl_rust_deltas::structural(&n.result) || whole_payload(&n.result).is_some() {
         out.push(format!("_output: {{let id=ports.shaped_output()?; hgl_store::shapes::Output::<{}>::bind(ports.store().bindings(),id).map_err(hgl_describe::BuildError::Bind)?}},\n",hgl_rust_deltas::shape_marker(&n.result)));
     } else if n.result != Ty::Void {
         out.push(format!(
@@ -335,7 +335,7 @@ fn native_result(native: &crate::ir::Native) -> String {
 }
 
 fn shape(ty: &Ty) -> String {
-    if hgl_rust_deltas::structural(ty) || matches!(ty, Ty::Atomic(_)) {
+    if hgl_rust_deltas::structural(ty) || whole_payload(ty).is_some() {
         return format!(
             "<{} as hgl_store::shapes::Shape>::shape()",
             hgl_rust_deltas::shape_marker(ty)

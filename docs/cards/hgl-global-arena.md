@@ -33,3 +33,7 @@ there is no allocation, schema inspection or payload copy during commit.
 cursor, and preserves the outer scratch-vector capacity for the next preparation.
 `Capacity::lists(usize)` batches known descriptor demand; arithmetic saturates so
 oversized requests reliably fail reservation before any logical value is changed.
+
+Columns::append_scalar<T: Scalar>(value: T) -> usize constructs a new physical
+scalar slot before graph execution, using the ordinary infallible allocation
+boundary of native endpoint construction. It does not reuse a live slot.

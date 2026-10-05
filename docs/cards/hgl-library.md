@@ -52,3 +52,8 @@ ordinary literals and contextual scalar recipes share the existing default
 profile. Type-check each against the substituted canonical field type. Omitted
 fields construct/retain defaults in declaration order after supplied fields; an
 explicit field suppresses its default. No provider call occurs during indexing.
+
+Role::Enum indexes enum declarations as nominal types, including export visibility.
+RequiredStruct.defaults now stores Expr, retaining a qualified enum member name
+until declaration-owned resolution. Other defaults retain the existing closed
+scalar and contextual temporal profile.

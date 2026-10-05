@@ -19,6 +19,7 @@ fn fields(t: &Ty) -> Vec<Ty> {
         | Ty::DateTime
         | Ty::CivilDateTime
         | Ty::TimeZone
+        | Ty::Enum(_)
         | Ty::ZonedTime
         | Ty::ZonedDateTime
         | Ty::Ref(_)
@@ -30,6 +31,7 @@ fn fields(t: &Ty) -> Vec<Ty> {
 /// Decode a constructed checked value into its exact native owning representation.
 pub fn decode(t: &Ty, expression: &str) -> String {
     let body = match t {
+        Ty::Enum(_) => "let hgl_rust_ir::Kind::Literal(hgl_source::Literal::Enum(_,number))=&v.kind else {return Err(\"prepared enum required\".into())}; *number".into(),
         Ty::Delta(origin) => return delta_decode(origin, expression),
         Ty::List(child, _) => format!(
             "let hgl_rust_ir::Kind::List(items)=&v.kind else {{return Err(\"prepared list required\".into())}}; items.iter().map(|item|Ok({})).collect::<Result<Vec<_>,String>>()?",
@@ -69,7 +71,8 @@ pub fn decode(t: &Ty, expression: &str) -> String {
                 Ty::TimeZone => ("TimeZone", "item.clone()"),
                 Ty::ZonedTime => ("ZonedTime", "item.clone()"),
                 Ty::ZonedDateTime => ("ZonedDateTime", "item.clone()"),
-                Ty::Atomic(_)
+                Ty::Enum(_)
+                | Ty::Atomic(_)
                 | Ty::Map(..)
                 | Ty::Tuple(_)
                 | Ty::Delta(_)
@@ -93,6 +96,10 @@ pub fn decode(t: &Ty, expression: &str) -> String {
 /// Encode an independently owned native capture as its exact checked value.
 pub fn encode(t: &Ty, expression: &str) -> String {
     let kind = match t {
+        Ty::Enum(_) => format!(
+            "hgl_rust_ir::Kind::Literal(hgl_source::Literal::Enum({{let hgl_source::Ty::Enum(identity)={} else {{unreachable!()}};identity}},*v))",
+            ty(t)
+        ),
         Ty::Delta(origin) => return delta_encode(origin, expression),
         Ty::List(child, _) => format!(
             "hgl_rust_ir::Kind::List(v.iter().map(|item|{}).collect())",
@@ -132,7 +139,8 @@ pub fn encode(t: &Ty, expression: &str) -> String {
                 Ty::TimeZone => ("TimeZone", "v.clone()"),
                 Ty::ZonedTime => ("ZonedTime", "v.clone()"),
                 Ty::ZonedDateTime => ("ZonedDateTime", "v.clone()"),
-                Ty::Atomic(_)
+                Ty::Enum(_)
+                | Ty::Atomic(_)
                 | Ty::Map(..)
                 | Ty::Tuple(_)
                 | Ty::Delta(_)
@@ -170,7 +178,7 @@ fn delta_decode(origin: &Ty, expression: &str) -> String {
             result.concat()
         }
         Ty::Tuple(_) | Ty::Struct(..)=>fields(origin).iter().enumerate().map(|(i,t)|format!("parts.iter().filter_map(|p|if let hgl_rust_ir::DeltaEntry::Child(id,v)=p {{if *id=={i} {{Some(v)}} else {{None}}}} else {{None}}).map(|v|Ok({})).collect::<Result<Vec<_>,String>>()?,",decode(&t.clone().delta().unwrap_or_else(|_|unreachable!("checked child")),"v"))).collect::<Vec<_>>().concat(),
-        Ty::Atomic(_) | Ty::Delta(_) | Ty::I64 | Ty::F64 | Ty::Bool | Ty::Str | Ty::Duration | Ty::Date | Ty::Time | Ty::DateTime | Ty::CivilDateTime | Ty::TimeZone | Ty::ZonedTime | Ty::ZonedDateTime | Ty::Ref(_) | Ty::Nullable(_) | Ty::Void => unreachable!("checked structural delta"),
+        Ty::Atomic(_) | Ty::Delta(_) | Ty::I64 | Ty::F64 | Ty::Bool | Ty::Str | Ty::Duration | Ty::Date | Ty::Time | Ty::DateTime | Ty::CivilDateTime | Ty::TimeZone | Ty::Enum(_) | Ty::ZonedTime | Ty::ZonedDateTime | Ty::Ref(_) | Ty::Nullable(_) | Ty::Void => unreachable!("checked structural delta"),
     };
     format!(
         "{{let hgl_rust_ir::Kind::Delta(parts)=&({expression}).kind else {{return Err(\"prepared delta required\".into())}}; ({storage})}}"
@@ -215,6 +223,7 @@ fn delta_encode(origin: &Ty, expression: &str) -> String {
         | Ty::DateTime
         | Ty::CivilDateTime
         | Ty::TimeZone
+        | Ty::Enum(_)
         | Ty::ZonedTime
         | Ty::ZonedDateTime
         | Ty::Ref(_)

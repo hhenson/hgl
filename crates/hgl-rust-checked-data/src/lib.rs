@@ -8,9 +8,25 @@ fn list<T>(items: &[T], f: impl Fn(&T) -> String) -> String {
         items.iter().map(f).collect::<Vec<_>>().join(",")
     )
 }
+fn enum_data(e: &hgl_source::EnumType) -> String {
+    format!(
+        "hgl_source::EnumType {{origin:{:?}.into(),members:{}}}",
+        e.origin,
+        list(&e.members, |(name, number)| format!(
+            "({name:?}.into(),{number})"
+        ))
+    )
+}
 /// Emit exact checked source type metadata.
 pub fn ty(t: &Ty) -> String {
     let inner = match t {
+        Ty::Enum(e) => format!(
+            "Enum(hgl_source::EnumType {{origin:{:?}.into(),members:{}}})",
+            e.origin,
+            list(&e.members, |(name, number)| format!(
+                "({name:?}.into(),{number})"
+            ))
+        ),
         Ty::Atomic(t) => format!("Atomic(Box::new({}))", ty(t)),
         Ty::Ref(t) => format!("Ref(Box::new({}))", ty(t)),
         Ty::Nullable(t) => format!("Nullable(Box::new({}))", ty(t)),
@@ -43,6 +59,7 @@ pub fn ty(t: &Ty) -> String {
 }
 fn literal(l: &Literal) -> String {
     let inner = match l {
+        Literal::Enum(e, number) => format!("Enum({}, {number})", enum_data(e)),
         Literal::Str(s) => format!("Str({s:?}.into())"),
         Literal::Float(v) => format!("Float(f64::from_bits({}))", v.to_bits()),
         Literal::TimeZone(zone) => format!(

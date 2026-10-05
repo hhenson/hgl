@@ -22,3 +22,7 @@ validate the clock without accepting an offset. Reject offset-free named zoned
 datetimes with the spec's resolution hint. Parsing follows the pinned spec, not backend parsing.
 
 ParsedLiteral::ty() -> Ty returns the type of its fixed value or recipe.
+
+Literal::Enum(EnumType, i64) retains the declaration identity and assigned member
+number. It is a constructed ordinary scalar; frontend validation admits declared
+members only. The type is Ty::Enum with the same declaration.

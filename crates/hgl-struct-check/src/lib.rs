@@ -226,6 +226,7 @@ impl Constructor {
             .collect::<Result<Vec<_>, String>>()?;
         for (index, default) in self.schema.defaults {
             if !fields.iter().any(|(field, _)| *field == index) {
+                let default = hgl_enums::default(library, &self.declaration.module, &default)?;
                 let ty = default.ty();
                 let kind = match default {
                     hgl_source::ParsedLiteral::Value(v) => Kind::Literal(v),

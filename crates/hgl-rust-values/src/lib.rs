@@ -1,7 +1,7 @@
 //! Checked hook expression and statement emission.
 use hgl_rust_ir::{Kind, Plan, Statement, Value};
 pub use hgl_rust_layouts::{
-    global_markers, global_schema, global_type, owned_type, rust_type, scalar_type,
+    global_markers, global_schema, global_type, owned_type, rust_type, scalar_type, whole_payload,
 };
 use hgl_source::{Literal, Ty};
 
@@ -18,6 +18,7 @@ pub fn literal(value: &Literal) -> String {
             "hgl_types::ZoneId::from_validated_name({:?}.to_owned())",
             zone.as_str()
         ),
+        Literal::Enum(_, number) => format!("{number}_i64"),
         Literal::ZonedTime(value) => format!(
             "hgl_types::ZonedTime::from_validated_parts(hgl_types::Time({}), hgl_types::ZoneId::from_validated_name({:?}.to_owned()))",
             value.time().0,
@@ -67,7 +68,12 @@ fn value(plan: &Plan, v: &Value) -> String {
         ),
         Kind::Literal(l) => literal(l),
         Kind::Input(i, _) => {
-            if matches!(v.ty, Ty::Ref(_)) {
+            if matches!(v.ty, Ty::Enum(_)) {
+                format!(
+                    "_ctx.store().atomic_get::<{}>(self.input{i})?",
+                    global_type(&v.ty)
+                )
+            } else if matches!(v.ty, Ty::Ref(_)) {
                 format!("_ctx.store().bindings().input_reference(self.input{i})")
             } else {
                 format!("_ctx.get(self.input{i})")
@@ -183,7 +189,7 @@ fn retained(source: &str, ty: &Ty) -> String {
     }
     if matches!(
         ty,
-        Ty::Str | Ty::TimeZone | Ty::ZonedTime | Ty::ZonedDateTime
+        Ty::Str | Ty::TimeZone | Ty::Enum(_) | Ty::ZonedTime | Ty::ZonedDateTime
     ) {
         format!("hgl_store::Scalar::try_clone(&({source}))?")
     } else {
@@ -357,7 +363,7 @@ pub fn query(op: &str, args: &[Value]) -> String {
             let Kind::Input(i, _) = v.kind else {
                 unreachable!("checked endpoint query")
             };
-            if let Ty::Atomic(payload) = &v.ty
+            if let Some(payload) = whole_payload(&v.ty)
                 && op == "delta_value"
             {
                 return format!(
@@ -365,7 +371,7 @@ pub fn query(op: &str, args: &[Value]) -> String {
                     global_type(payload)
                 );
             }
-            if hgl_rust_deltas::structural(&v.ty) || matches!(v.ty, Ty::Atomic(_)) {
+            if hgl_rust_deltas::structural(&v.ty) || whole_payload(&v.ty).is_some() {
                 let input = format!("self.input{i}");
                 return match op {
                     "delta_value" => hgl_rust_deltas::observe(

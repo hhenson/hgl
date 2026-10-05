@@ -34,3 +34,11 @@ These helpers perform compiler-time shape selection, never runtime dispatch.
 Scalar spelling helpers may delegate to hgl-rust-scalars with existing public
 paths retained. Extend exact typed layouts for the three temporal scalar leaves;
 no provider object or recipe is stored in a published value. Budget unchanged.
+
+Declared enum source types retain nominal identity through generated i64-backed
+GlobalValue markers. Enum publication uses one prepared whole-value slot without
+structural children. Checked harness capture retains the original declaration
+and assigned member number; it never substitutes an ordinary integer.
+
+May use hgl-rust-enums. Expose whole_payload(&Ty) -> Option<&Ty> for an atomic
+payload or a declared enum scalar using a prepared complete-value endpoint.

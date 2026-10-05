@@ -367,8 +367,7 @@ impl Checker {
         } else {
             signature.parameters.get(index)?
         };
-        self.ordinary_type(&owner, &parameter.ty, &mut BTreeSet::new())
-            .ok()
+        hgl_value_types::resolve_ordinary(&self.library, &owner, &parameter.ty).ok()
     }
     fn select(
         &mut self,
@@ -1036,15 +1035,6 @@ impl Checker {
     fn struct_declaration(&self, module: &str, name: &str) -> Result<Option<&Decl>, String> {
         hgl_value_types::declaration(&self.library, module, name)
     }
-    fn ordinary_type(
-        &self,
-        module: &str,
-        name: &str,
-        active: &mut BTreeSet<String>,
-    ) -> Result<Ty, String> {
-        hgl_value_types::resolve(&self.library, module, name, active)
-            .map(|ty| hgl_value_access::project(&ty))
-    }
     fn global_operation(&mut self, operation: &str, args: &Arguments) -> Result<Value, String> {
         if operation == "get" {
             return Err("global_state: get requires a concrete scalar expected type or a typed ordinary struct binding".into());
@@ -1443,6 +1433,7 @@ impl Checker {
             Expr::TemporalLiteral(l) if self.value_context == ValueContext::Preparation && !self.preparing_graph => Ok(Value::new(l.ty(), Kind::TemporalLiteral(l.clone()))),
             Expr::TemporalLiteral(_) => Err("contextual temporal construction requires run preparation; node-hook construction is unsupported".into()),
             Expr::Name(name) => {
+                if !env.contains_key(name) && let Some(value) = hgl_enums::member(&self.library, module, name)? { return Ok(Value::new(value.ty(), Kind::Literal(value))); }
                 let value = env
                     .get(name)
                     .cloned()
@@ -1493,6 +1484,7 @@ impl Checker {
         env: &Env,
         runtime: bool,
     ) -> Result<Value, String> {
+        hgl_enums::check_call(&self.library, module, name, args)?;
         if let Some((label, Expr::Name(receiver))) = args.first()
             && env
                 .get(receiver)
@@ -1817,7 +1809,7 @@ fn select_eval(
             || decl.name != item
             || matches!(
                 decl.role,
-                Role::Implementation | Role::Test | Role::Native | Role::Struct
+                Role::Implementation | Role::Test | Role::Native | Role::Struct | Role::Enum
             )
             || (decl.test_only && owner != module)
             || (helpers && owner == module && !decl.test_only)

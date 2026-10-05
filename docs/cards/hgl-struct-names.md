@@ -15,3 +15,9 @@ Resolution and generic occurrence validation use the same declaration lookup.
 
 Acceptance: existing imported-struct, visibility and generic specialization
 tests, including local and imported declarations with the same name.
+
+Expose enum_declaration with the same signature and visibility rules as
+declaration, selecting Role::Enum. Exported field closure includes enum names.
+
+A local nominal declaration takes precedence over an imported name across both
+struct and enum kinds; changing the requested kind cannot bypass that shadow.

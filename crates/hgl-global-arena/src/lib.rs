@@ -31,6 +31,13 @@ pub struct Columns {
     free_lists: Vec<usize>,
 }
 impl Columns {
+    /// Construct a fresh scalar position before graph execution.
+    pub fn append_scalar<T: Scalar>(&mut self, value: T) -> usize {
+        let values = T::column_mut(&mut self.values);
+        let slot = values.len();
+        values.push(value);
+        slot
+    }
     /// Obtain every capacity needed by installation and subsequent reclamation.
     pub fn reserve(&mut self, capacity: &Capacity) -> NodeResult {
         self.reserve_scalar::<bool>(capacity)?;

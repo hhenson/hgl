@@ -63,3 +63,10 @@ and reclaim recursively under the same ownership contract as nominal structs.
 CivilDateTime, ZoneId, ZonedDateTime and ZonedTime are concrete typed scalar implementations.
 Zone-bearing values retain exact owned names fallibly at retention boundaries;
 prepared borrowed projections neither allocate nor consult a provider.
+
+GlobalValue::PREPARED_SCALAR defaults to false. Generated enum markers set it
+true and use Value=i64, Slots=usize, WIDTH=1 and OrdinaryType::Enum(identity).
+They delegate typed slot operations to i64 while preserving the nominal schema.
+Only such enum roots are initialized physically during endpoint construction;
+no default enum member is published. Ordinary allocation recognizes Enum as one
+i64 physical leaf. Retention and complete nested payload rules remain unchanged.

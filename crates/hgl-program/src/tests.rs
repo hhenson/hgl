@@ -10,6 +10,7 @@ pub struct Suite {
 /// Check named tests without executing ordinary setup or supplied eval values.
 pub fn compile_tests(sources: &[(String, String)]) -> Result<Suite, String> {
     let library = index::load(sources)?;
+    hgl_enums::validate(&library)?;
     let mut suite = Suite {
         tests: Vec::new(),
         plans: Vec::new(),

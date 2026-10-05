@@ -39,13 +39,7 @@ fn as_float(value: i64) -> f64 {
 }
 pub(super) fn binary(op: &str, a: &Value, b: &Value) -> Result<Value, EvalError> {
     let (a, b) = (scalar(a)?, scalar(b)?);
-    if a.ty() == b.ty()
-        && matches!(
-            a,
-            Literal::TimeZone(_) | Literal::ZonedTime(_) | Literal::ZonedDateTime(_)
-        )
-        && matches!(op, "==" | "!=")
-    {
+    if a.ty() == b.ty() && matches!(op, "==" | "!=") && !matches!(a, Literal::Float(_)) {
         return Ok(value(Literal::Bool((a == b) == (op == "=="))));
     }
     let result = match (a, b) {

@@ -31,3 +31,8 @@ omissions from held state. No general HGL equality operator is admitted.
 The generated delta marker provides allocate, validate, observe, apply and
 post-run equivalent methods. Sparse payload storage is opaque to HGL; generated
 Rust projection code is the only consumer of its internal list fields.
+
+Declared enum source types retain nominal identity through generated i64-backed
+GlobalValue markers. Enum publication uses one prepared whole-value slot without
+structural children. Checked harness capture retains the original declaration
+and assigned member number; it never substitutes an ordinary integer.

@@ -1,10 +1,12 @@
 //! Module parts, imports, declarations and test-scope indexing for HGL.
-use hgl_source::{Cursor, Expr, ParsedLiteral, Token, lex};
+use hgl_source::{Cursor, Expr, Token, lex};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 /// The declaration role before overload selection.
 pub enum Role {
+    /// Nominal enum declaration.
+    Enum,
     /// Ordinary nominal struct declaration.
     Struct,
     /// Ordinary or const function.
@@ -78,7 +80,7 @@ pub struct RequiredStruct {
     /// Declaration-ordered source field types.
     pub fields: Vec<(String, String)>,
     /// Declaration-indexed non-null fixed scalar defaults.
-    pub defaults: Vec<(usize, ParsedLiteral)>,
+    pub defaults: Vec<(usize, Expr)>,
     /// Supported finite type-domain constraint.
     pub type_domain: Option<(String, Vec<String>)>,
 }
@@ -108,6 +110,7 @@ fn boundary(s: &str) -> bool {
             | "native"
             | "fn"
             | "struct"
+            | "enum"
             | "abstract"
             | "instantiate"
             | "test"
@@ -239,6 +242,8 @@ fn load_source(
             } else if d.take("const") {
                 d.need("fn")?;
                 Role::Function
+            } else if d.take("enum") {
+                Role::Enum
             } else if d.take("struct") {
                 Role::Struct
             } else if d.take("fn") {
@@ -545,11 +550,11 @@ fn parse_native_requirement(c: &mut Cursor<'_>) -> Result<(String, Vec<String>, 
     Ok((name, args, c.name()?))
 }
 
-fn scalar_default(expr: Expr) -> Result<ParsedLiteral, String> {
-    if let Expr::TemporalLiteral(value) = expr {
-        return Ok(ParsedLiteral::Contextual(value));
+fn scalar_default(expr: Expr) -> Result<Expr, String> {
+    if matches!(&expr, Expr::TemporalLiteral(_) | Expr::Name(_)) {
+        return Ok(expr);
     }
     expr.fixed()
-        .map(ParsedLiteral::Value)
+        .map(Expr::Literal)
         .ok_or_else(|| "struct defaults require supported non-null fixed scalar expressions".into())
 }

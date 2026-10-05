@@ -43,3 +43,8 @@ time plus exact zone name, with no date or offset. Existing shape/key restrictio
 
 May use hgl-type-syntax for pure spelling decomposition, preserving existing
 application/delta_argument exports and Ty::list_parts. See its card.
+
+EnumType { origin: String, members: Vec<(String, i64)> } owns a validated
+nominal enum declaration. Ty::Enum(EnumType) is a scalar publication leaf; its
+source name is the canonical origin. Atomic normalization and delta reduction
+apply identically; enum keys and set members remain excluded.

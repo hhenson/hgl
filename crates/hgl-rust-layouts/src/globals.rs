@@ -5,6 +5,9 @@ use std::collections::BTreeMap;
 
 /// Rust marker identifying an exact prepared entry type.
 pub fn global_type(ty: &Ty) -> String {
+    if let Ty::Enum(identity) = ty {
+        return hgl_rust_enums::marker_type(identity);
+    }
     if let Ty::Tuple(children) = ty {
         return global_type(&crate::tuple_storage(children));
     }
@@ -34,7 +37,7 @@ pub fn global_type(ty: &Ty) -> String {
 pub fn global_schema(ty: &Ty) -> String {
     if matches!(
         ty,
-        Ty::Tuple(_) | Ty::Delta(_) | Ty::Struct(..) | Ty::List(..)
+        Ty::Enum(_) | Ty::Tuple(_) | Ty::Delta(_) | Ty::Struct(..) | Ty::List(..)
     ) {
         format!("<{} as hgl_store::GlobalValue>::schema()", global_type(ty))
     } else {
@@ -71,6 +74,9 @@ pub fn global_markers(plan: &Plan) -> String {
     types.values().map(marker).collect()
 }
 fn collect(ty: &Ty, types: &mut BTreeMap<String, Ty>) {
+    if let Ty::Enum(identity) = ty {
+        types.insert(identity.origin.clone(), ty.clone());
+    }
     if let Ty::Tuple(children) = ty {
         collect(&crate::tuple_storage(children), types);
     }
@@ -94,6 +100,9 @@ pub(super) fn tuple(fields: impl Iterator<Item = String>) -> String {
     }
 }
 fn marker(ty: &Ty) -> String {
+    if let Ty::Enum(identity) = ty {
+        return hgl_rust_enums::marker(identity);
+    }
     let Ty::Struct(identity, fields) = ty else {
         unreachable!("collected structs")
     };

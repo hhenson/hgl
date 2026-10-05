@@ -1,6 +1,8 @@
 //! Statically specialized sparse delta construction, observation and publication.
 use hgl_rust_ir::{DeltaEntry, Kind, Plan, Statement, Value};
-use hgl_rust_layouts::{delta_storage, delta_type, global_type, owned_type, rust_type};
+use hgl_rust_layouts::{
+    delta_storage, delta_type, global_type, owned_type, rust_type, whole_payload,
+};
 use hgl_source::Ty;
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
@@ -26,6 +28,7 @@ fn identity(ty: &Ty) -> String {
 /// Compile-time marker for one exact prepared temporal shape.
 pub fn shape_marker(ty: &Ty) -> String {
     match ty {
+        Ty::Enum(_) => format!("hgl_store::shapes::Atomic<{}>", global_type(ty)),
         Ty::Atomic(payload) => format!("hgl_store::shapes::Atomic<{}>", global_type(payload)),
         Ty::List(child, Some(n)) => {
             format!("hgl_store::shapes::Fixed<{}, {n}>", shape_marker(child))
@@ -57,6 +60,12 @@ fn operations(ty: &Ty) -> String {
 }
 /// Emit publication of an already retained owning payload.
 pub fn publish(ty: &Ty, payload: &str) -> String {
+    if matches!(ty, Ty::Enum(_)) {
+        return format!(
+            "_ctx.set_atomic::<{}>(self._output,{payload})?;",
+            global_type(ty)
+        );
+    }
     if let Ty::Delta(origin) = ty {
         format!(
             "{}::apply(self._output,{payload},_ctx)?;",
@@ -73,6 +82,9 @@ pub fn publish(ty: &Ty, payload: &str) -> String {
 }
 /// Retain exactly the sparse current observation of a prepared input token.
 pub fn observe(ty: &Ty, input: &str) -> String {
+    if matches!(ty, Ty::Enum(_)) {
+        return read(ty, input);
+    }
     let Ty::Delta(origin) = ty else {
         unreachable!("structural observation")
     };
@@ -87,7 +99,7 @@ pub fn equivalent(ty: &Ty, left: &str, right: &str) -> String {
     }
 }
 fn read(ty: &Ty, input: &str) -> String {
-    if let Ty::Atomic(payload) = ty {
+    if let Some(payload) = whole_payload(ty) {
         return format!(
             "_ctx.store().atomic_get::<{}>({input})?",
             global_type(payload)
@@ -102,7 +114,7 @@ fn read(ty: &Ty, input: &str) -> String {
     }
 }
 fn apply(ty: &Ty, output: &str, payload: &str) -> String {
-    if let Ty::Atomic(ty) = ty {
+    if let Some(ty) = whole_payload(ty) {
         return format!(
             "_ctx.set_atomic::<{}>({output},{payload})?;",
             global_type(ty)
@@ -115,7 +127,7 @@ fn apply(ty: &Ty, output: &str, payload: &str) -> String {
     }
 }
 fn allocation(ty: &Ty) -> String {
-    if let Ty::Atomic(payload) = ty {
+    if let Some(payload) = whole_payload(ty) {
         return format!("store.add_atomic_output::<{}>(owner)", global_type(payload));
     }
     if structural(ty) {
@@ -138,6 +150,7 @@ fn children(ty: &Ty) -> Vec<&Ty> {
         | Ty::Str
         | Ty::CivilDateTime
         | Ty::TimeZone
+        | Ty::Enum(_)
         | Ty::ZonedTime
         | Ty::ZonedDateTime
         | Ty::Duration
@@ -267,6 +280,7 @@ fn origin(ty: &Ty, types: &mut BTreeSet<Ty>) {
         | Ty::Str
         | Ty::CivilDateTime
         | Ty::TimeZone
+        | Ty::Enum(_)
         | Ty::ZonedTime
         | Ty::ZonedDateTime
         | Ty::Duration
@@ -296,6 +310,7 @@ fn collect(ty: &Ty, types: &mut BTreeSet<Ty>) {
         | Ty::Str
         | Ty::CivilDateTime
         | Ty::TimeZone
+        | Ty::Enum(_)
         | Ty::ZonedTime
         | Ty::ZonedDateTime
         | Ty::Duration

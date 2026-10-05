@@ -319,3 +319,9 @@ Both branches check fixed categories and lexical authority. This narrow branch
 profile admits local declarations, name assignments and scalar/binary expressions;
 arbitrary calls remain explicitly unsupported. Existing ordinary-only blocks
 retain their broader established execution path.
+
+Validate indexed enum declarations before source checking. Qualified declared
+members resolve to exact owning enum literals through hgl-enums. No implicit
+integer conversion or additional enum operation is introduced. Enum type calls
+report unsupported construction and suggest qualified declared members. May use
+hgl-enums.

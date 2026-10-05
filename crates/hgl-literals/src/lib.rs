@@ -1,9 +1,11 @@
 //! Scalar source values and unresolved execution-context literal recipes.
 use hgl_time_values::{ZoneId, ZonedDateTime, ZonedTime};
-use hgl_type_shape::Ty;
+use hgl_type_shape::{EnumType, Ty};
 #[derive(Debug, Clone, PartialEq)]
 /// A fixed scalar value in HGL source.
 pub enum Literal {
+    /// Declared enum identity and assigned member number.
+    Enum(EnumType, i64),
     /// Signed integer value.
     Int(i64),
     /// Floating value.
@@ -33,6 +35,7 @@ impl Literal {
     /// The literal scalar type.
     pub fn ty(&self) -> Ty {
         match self {
+            Self::Enum(ty, _) => Ty::Enum(ty.clone()),
             Self::Int(_) => Ty::I64,
             Self::Float(_) => Ty::F64,
             Self::Bool(_) => Ty::Bool,
