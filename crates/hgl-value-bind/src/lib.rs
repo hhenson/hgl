@@ -279,6 +279,9 @@ pub fn signature_types(
     let mut types = BTreeMap::new();
     for (index, value) in supplied {
         let parameter = &signature.parameters[index];
+        if parameter.ty == "signal" {
+            continue;
+        }
         let formal = parameter
             .ty
             .strip_prefix("ref<")

@@ -52,3 +52,7 @@ read the once-constructed lexical parameter, including const parameters.
 Parameter literal defaults admit both fixed scalar literals and contextual
 TemporalLiteral recipes. Materialize an omitted contextual default at invocation
 preparation, after supplied arguments; supplied arguments suppress that default.
+
+Signal parameters retain the actual endpoint shape for prepared metadata access,
+but never unify that shape as an ordinary type named signal. Existing lexical
+signal restrictions still prohibit payload observation through the formal.
