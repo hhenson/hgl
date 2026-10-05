@@ -30,6 +30,14 @@ const fn choose(flag:bool)->timezone {{
     if flag {{return @[UTC]}}
     return @[Missing/SkippedHelper]
 }}
+fn clock_target(value:zoned_time,const ignored:zoned_time = @09:30[UTC])->zoned_time {{
+    start {{ start_marker(1) }}
+    when {{ return delta_value(value) }}
+}}
+fn clock_default(value:zoned_time,const ignored:zoned_time = @09:30[Missing/Default])->zoned_time {{
+    start {{ start_marker(1) }}
+    when {{ return delta_value(value) }}
+}}
 test ordered {{ {body} }}
 "
             ),
@@ -44,7 +52,43 @@ test ordered {{ {body} }}
         ),
     ]
 }
-const CASES: [(&str, &str, bool, &str, usize); 10] = [
+const CASES: [(&str, &str, bool, &str, usize); 15] = [
+    (
+        "clock_dense",
+        r"eval(clock_target,value:[@09:30[america/new_york]])",
+        false,
+        "america/new_york",
+        0,
+    ),
+    (
+        "clock_const",
+        r"eval(clock_target,value:[@09:30[UTC]],ignored:@09:30[Missing/Const])",
+        false,
+        "Missing/Const",
+        0,
+    ),
+    (
+        "clock_default",
+        r"eval(clock_default,value:[@09:30[UTC]])",
+        false,
+        "Missing/Default",
+        0,
+    ),
+    (
+        "clock_expected",
+        r"assert eval(clock_target,value:[@09:30[UTC]]) == [@09:30[Missing/Expected]]",
+        false,
+        "Missing/Expected",
+        1,
+    ),
+    (
+        "clock_valid",
+        r"let clock=@09:30:00.123456[US/Eastern]
+        assert eval(clock_target,value:[clock,clock,_,@09:30:00.123457[America/New_York]]) == [clock,clock,_,@09:30:00.123457[America/New_York]]",
+        true,
+        "0 failures",
+        1,
+    ),
     (
         "unused_default",
         r"eval(invalid_default,value:[@[UTC]])",

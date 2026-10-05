@@ -91,3 +91,18 @@ fn typed_civil_zone_and_zoned_values_survive_replacement_and_teardown() -> NodeR
         ),
     )
 }
+
+#[test]
+fn zoned_times_retain_independent_scalar_list_and_atomic_values() -> NodeResult {
+    use hgl_types::{Time, ZonedTime};
+    exercise(
+        ZonedTime::from_validated_parts(
+            Time(34_200_123_456),
+            ZoneId::from_validated_name("US/Eastern".into()),
+        ),
+        ZonedTime::from_validated_parts(
+            Time(34_200_123_457),
+            ZoneId::from_validated_name("America/New_York".into()),
+        ),
+    )
+}

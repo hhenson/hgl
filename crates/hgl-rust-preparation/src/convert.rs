@@ -19,6 +19,7 @@ fn fields(t: &Ty) -> Vec<Ty> {
         | Ty::DateTime
         | Ty::CivilDateTime
         | Ty::TimeZone
+        | Ty::ZonedTime
         | Ty::ZonedDateTime
         | Ty::Ref(_)
         | Ty::Set(_)
@@ -50,6 +51,7 @@ pub fn decode(t: &Ty, expression: &str) -> String {
         | Ty::Duration
         | Ty::CivilDateTime
         | Ty::TimeZone
+        | Ty::ZonedTime
         | Ty::ZonedDateTime => {
             let (variant, result) = match t {
                 Ty::Bool => ("Bool", "*item"),
@@ -65,6 +67,7 @@ pub fn decode(t: &Ty, expression: &str) -> String {
                     "hgl_types::CivilDateTime::from_micros(*item)",
                 ),
                 Ty::TimeZone => ("TimeZone", "item.clone()"),
+                Ty::ZonedTime => ("ZonedTime", "item.clone()"),
                 Ty::ZonedDateTime => ("ZonedDateTime", "item.clone()"),
                 Ty::Atomic(_)
                 | Ty::Map(..)
@@ -114,6 +117,7 @@ pub fn encode(t: &Ty, expression: &str) -> String {
         | Ty::Duration
         | Ty::CivilDateTime
         | Ty::TimeZone
+        | Ty::ZonedTime
         | Ty::ZonedDateTime => {
             let (variant, expression) = match t {
                 Ty::Bool => ("Bool", "*v"),
@@ -126,6 +130,7 @@ pub fn encode(t: &Ty, expression: &str) -> String {
                 Ty::Duration => ("Duration", "v.micros()"),
                 Ty::CivilDateTime => ("CivilDateTime", "v.micros()"),
                 Ty::TimeZone => ("TimeZone", "v.clone()"),
+                Ty::ZonedTime => ("ZonedTime", "v.clone()"),
                 Ty::ZonedDateTime => ("ZonedDateTime", "v.clone()"),
                 Ty::Atomic(_)
                 | Ty::Map(..)
@@ -165,7 +170,7 @@ fn delta_decode(origin: &Ty, expression: &str) -> String {
             result.concat()
         }
         Ty::Tuple(_) | Ty::Struct(..)=>fields(origin).iter().enumerate().map(|(i,t)|format!("parts.iter().filter_map(|p|if let hgl_rust_ir::DeltaEntry::Child(id,v)=p {{if *id=={i} {{Some(v)}} else {{None}}}} else {{None}}).map(|v|Ok({})).collect::<Result<Vec<_>,String>>()?,",decode(&t.clone().delta().unwrap_or_else(|_|unreachable!("checked child")),"v"))).collect::<Vec<_>>().concat(),
-        Ty::Atomic(_) | Ty::Delta(_) | Ty::I64 | Ty::F64 | Ty::Bool | Ty::Str | Ty::Duration | Ty::Date | Ty::Time | Ty::DateTime | Ty::CivilDateTime | Ty::TimeZone | Ty::ZonedDateTime | Ty::Ref(_) | Ty::Nullable(_) | Ty::Void => unreachable!("checked structural delta"),
+        Ty::Atomic(_) | Ty::Delta(_) | Ty::I64 | Ty::F64 | Ty::Bool | Ty::Str | Ty::Duration | Ty::Date | Ty::Time | Ty::DateTime | Ty::CivilDateTime | Ty::TimeZone | Ty::ZonedTime | Ty::ZonedDateTime | Ty::Ref(_) | Ty::Nullable(_) | Ty::Void => unreachable!("checked structural delta"),
     };
     format!(
         "{{let hgl_rust_ir::Kind::Delta(parts)=&({expression}).kind else {{return Err(\"prepared delta required\".into())}}; ({storage})}}"
@@ -210,6 +215,7 @@ fn delta_encode(origin: &Ty, expression: &str) -> String {
         | Ty::DateTime
         | Ty::CivilDateTime
         | Ty::TimeZone
+        | Ty::ZonedTime
         | Ty::ZonedDateTime
         | Ty::Ref(_)
         | Ty::Nullable(_)

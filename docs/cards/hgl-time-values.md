@@ -25,3 +25,11 @@ copies, civil ordering and unchanged engine time boundaries.
 `from_validated_name` consumes String; `from_validated_parts` consumes
 EngineTime, ZoneId and i32. Both fallible `try_clone` methods return
 `Result<Self, std::collections::TryReserveError>`.
+
+ZonedTime owns private Time and ZoneId fields. Expose
+from_validated_parts(Time, ZoneId) -> Self, time(&self) -> Time,
+zone(&self) -> &ZoneId and try_clone(&self) -> Result<Self, TryReserveError>.
+Derive Debug, Default, Clone, equality and Hash, without ordering. Its exact
+identity contains wall-clock microseconds and the original name only; no date,
+instant or resolved offset is invented. The validated native boundary and
+independent fallible ownership rules above apply identically.

@@ -80,6 +80,8 @@ pub enum Ty {
     CivilDateTime,
     /// Exact named timezone identity.
     TimeZone,
+    /// Wall-clock time and exact zone, without a date or offset.
+    ZonedTime,
     /// Instant, zone and resolved offset.
     ZonedDateTime,
     /// Reference designation.
@@ -105,6 +107,7 @@ impl Ty {
             Self::DateTime => "datetime",
             Self::CivilDateTime => "civil_datetime",
             Self::TimeZone => "timezone",
+            Self::ZonedTime => "zoned_time",
             Self::ZonedDateTime => "zoned_datetime",
             Self::Ref(_) => "ref",
             Self::Set(_) => "set",
@@ -162,6 +165,7 @@ impl Ty {
             "datetime" => Some(Self::DateTime),
             "civil_datetime" => Some(Self::CivilDateTime),
             "timezone" => Some(Self::TimeZone),
+            "zoned_time" => Some(Self::ZonedTime),
             "zoned_datetime" => Some(Self::ZonedDateTime),
             "void" => Some(Self::Void),
             _ => None,
@@ -202,6 +206,7 @@ impl Ty {
             | Self::DateTime
             | Self::CivilDateTime
             | Self::TimeZone
+            | Self::ZonedTime
             | Self::ZonedDateTime
             | Self::Void => self.name().into(),
         }
@@ -220,6 +225,7 @@ impl Ty {
             | Self::DateTime
             | Self::CivilDateTime
             | Self::TimeZone
+            | Self::ZonedTime
             | Self::ZonedDateTime
             | Self::Duration => true,
             Self::Atomic(payload) => payload.atomic_payload(),
@@ -286,6 +292,7 @@ impl Ty {
                 | Self::DateTime
                 | Self::CivilDateTime
                 | Self::TimeZone
+                | Self::ZonedTime
                 | Self::ZonedDateTime
                 | Self::Duration
         )

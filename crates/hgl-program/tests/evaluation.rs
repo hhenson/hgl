@@ -1,5 +1,5 @@
 //! Run the unmodified shared suite and probe the harness independently of it.
-use hgl_program::{compile_tests, compile_tests_files, emit_tests};
+use hgl_program::{compile_tests, emit_tests};
 use std::{
     fmt::Write,
     fs,
@@ -268,7 +268,9 @@ fn actual_stdlib_and_harness_regressions_run_on_rust() -> Result<(), Box<dyn std
         )));
     }
     parts.push(root.join("crates/hgl-program/tests/fixtures/contextual_locals.hgl"));
-    let suite = compile_tests_files(&parts, &[library])?;
+    let sources = hgl_library_files::sources(&parts, &[library])?;
+    let summary = expected_summary(&sources)?;
+    let suite = compile_tests(&sources)?;
     let dir = std::env::temp_dir().join(format!(
         "hgl-eval-{}-{}",
         std::process::id(),
@@ -312,13 +314,35 @@ _ => panic!("unknown test image") } }
 "#,
     )?;
     let binary = build_binary(&dir)?;
-    check_images(&binary)?;
+    check_images(&binary, &summary)?;
     fs::remove_dir_all(dir)?;
     Ok(())
 }
-fn check_images(binary: &Path) -> Result<(), Box<dyn std::error::Error>> {
+fn expected_summary(sources: &[(String, String)]) -> Result<String, String> {
+    let library = hgl_library::load(sources)?;
+    let mut tests = 0;
+    let mut evaluations = 0;
+    for declaration in library.declarations {
+        if declaration.role == hgl_library::Role::Test {
+            tests += 1;
+            evaluations += hgl_eval_data::steps(&declaration.tokens)?
+                .iter()
+                .filter(|step| {
+                    matches!(
+                        step,
+                        hgl_eval_data::TestStep::Eval(_) | hgl_eval_data::TestStep::Assert(_)
+                    )
+                })
+                .count();
+        }
+    }
+    Ok(format!(
+        "{tests} tests, {evaluations} evaluations, 0 failures"
+    ))
+}
+fn check_images(binary: &Path, summary: &str) -> Result<(), Box<dyn std::error::Error>> {
     for (name, success, message) in [
-        ("standard", true, "170 tests, 346 evaluations, 0 failures"),
+        ("standard", true, summary),
         ("source_operators", true, "0 failures"),
         (
             "replay_order_failure",
@@ -361,7 +385,10 @@ fn check_images(binary: &Path) -> Result<(), Box<dyn std::error::Error>> {
             String::from_utf8_lossy(&output.stderr)
         );
         assert_eq!(output.status.success(), success, "{name}: {text}");
-        assert!(text.contains(message), "{name}: {text}");
+        assert!(
+            text.contains(message),
+            "{name}: expected {message:?}: {text}"
+        );
     }
     Ok(())
 }

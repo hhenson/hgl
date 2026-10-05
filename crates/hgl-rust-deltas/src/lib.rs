@@ -41,6 +41,7 @@ pub fn shape_marker(ty: &Ty) -> String {
         | Ty::Str
         | Ty::CivilDateTime
         | Ty::TimeZone
+        | Ty::ZonedTime
         | Ty::ZonedDateTime
         | Ty::Duration
         | Ty::Date
@@ -137,6 +138,7 @@ fn children(ty: &Ty) -> Vec<&Ty> {
         | Ty::Str
         | Ty::CivilDateTime
         | Ty::TimeZone
+        | Ty::ZonedTime
         | Ty::ZonedDateTime
         | Ty::Duration
         | Ty::Date
@@ -265,6 +267,7 @@ fn origin(ty: &Ty, types: &mut BTreeSet<Ty>) {
         | Ty::Str
         | Ty::CivilDateTime
         | Ty::TimeZone
+        | Ty::ZonedTime
         | Ty::ZonedDateTime
         | Ty::Duration
         | Ty::Date
@@ -293,6 +296,7 @@ fn collect(ty: &Ty, types: &mut BTreeSet<Ty>) {
         | Ty::Str
         | Ty::CivilDateTime
         | Ty::TimeZone
+        | Ty::ZonedTime
         | Ty::ZonedDateTime
         | Ty::Duration
         | Ty::Date

@@ -23,6 +23,7 @@ pub fn ordinary(ty: &Ty) -> bool {
             | Ty::DateTime
             | Ty::CivilDateTime
             | Ty::TimeZone
+            | Ty::ZonedTime
             | Ty::ZonedDateTime
             | Ty::Duration
             | Ty::Struct(..)

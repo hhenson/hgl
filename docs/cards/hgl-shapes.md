@@ -28,6 +28,6 @@ its Shape is `TsType::Atomic(T::schema())`. This card also permits the
 hgl-global-value dependency. Atomic inputs/outputs use the same prepared
 Input/Output tokens and generation checks, without structural field projection.
 
-CivilDateTime, ZoneId and ZonedDateTime are concrete typed scalar implementations.
+CivilDateTime, ZoneId, ZonedDateTime and ZonedTime are concrete typed scalar implementations.
 Zone-bearing values retain exact owned names fallibly at retention boundaries;
 prepared borrowed projections neither allocate nor consult a provider.

@@ -167,6 +167,7 @@ pub fn allocate(
             ScalarType::Duration => leaf::<EngineDelta>(columns)?,
             ScalarType::CivilDateTime => leaf::<hgl_types::CivilDateTime>(columns)?,
             ScalarType::TimeZone => leaf::<hgl_types::ZoneId>(columns)?,
+            ScalarType::ZonedTime => leaf::<hgl_types::ZonedTime>(columns)?,
             ScalarType::ZonedDateTime => leaf::<hgl_types::ZonedDateTime>(columns)?,
         }),
     }

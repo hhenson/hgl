@@ -80,6 +80,7 @@ pub fn constructor<'a>(
             | Ty::Str
             | Ty::CivilDateTime
             | Ty::TimeZone
+            | Ty::ZonedTime
             | Ty::ZonedDateTime
             | Ty::Duration
             | Ty::Date
@@ -105,6 +106,7 @@ fn member_key(value: &Literal) -> Result<i64, String> {
         | Literal::Str(_)
         | Literal::CivilDateTime(_)
         | Literal::TimeZone(_)
+        | Literal::ZonedTime(_)
         | Literal::ZonedDateTime(_)
         | Literal::Duration(_)
         | Literal::Date(_)
@@ -163,6 +165,7 @@ fn sparse<'a>(
             | Ty::Str
             | Ty::CivilDateTime
             | Ty::TimeZone
+            | Ty::ZonedTime
             | Ty::ZonedDateTime
             | Ty::Duration
             | Ty::Date

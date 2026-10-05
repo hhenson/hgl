@@ -24,6 +24,7 @@ pub struct Columns {
     civil_datetimes: Vec<hgl_types::CivilDateTime>,
     zones: Vec<hgl_types::ZoneId>,
     zoned_datetimes: Vec<hgl_types::ZonedDateTime>,
+    zoned_times: Vec<hgl_types::ZonedTime>,
 }
 
 impl Columns {
@@ -41,6 +42,7 @@ impl Columns {
             ScalarType::Text => ScalarValue::Text(self.texts[slot].clone()),
             ScalarType::CivilDateTime => ScalarValue::CivilDateTime(self.civil_datetimes[slot]),
             ScalarType::TimeZone => ScalarValue::TimeZone(self.zones[slot].clone()),
+            ScalarType::ZonedTime => ScalarValue::ZonedTime(self.zoned_times[slot].clone()),
             ScalarType::ZonedDateTime => {
                 ScalarValue::ZonedDateTime(self.zoned_datetimes[slot].clone())
             }
@@ -358,6 +360,32 @@ impl Scalar for hgl_types::ZonedDateTime {
     }
     fn from_value(value: ScalarValue) -> Option<Self> {
         if let ScalarValue::ZonedDateTime(value) = value {
+            Some(value)
+        } else {
+            None
+        }
+    }
+}
+
+impl Column for hgl_types::ZonedTime {
+    fn column(columns: &Columns) -> &[Self] {
+        &columns.zoned_times
+    }
+    fn column_mut(columns: &mut Columns) -> &mut Vec<Self> {
+        &mut columns.zoned_times
+    }
+}
+impl Scalar for hgl_types::ZonedTime {
+    fn try_clone(&self) -> Result<Self, Box<hgl_types::NodeError>> {
+        self.try_clone()
+            .map_err(|error| hgl_types::NodeError::new(error.to_string()))
+    }
+    const TYPE: ScalarType = ScalarType::ZonedTime;
+    fn into_value(self) -> ScalarValue {
+        ScalarValue::ZonedTime(self)
+    }
+    fn from_value(value: ScalarValue) -> Option<Self> {
+        if let ScalarValue::ZonedTime(value) = value {
             Some(value)
         } else {
             None

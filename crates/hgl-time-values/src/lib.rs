@@ -142,3 +142,31 @@ impl ZonedDateTime {
         ))
     }
 }
+
+/// A wall-clock time and exact zone identity, without a date or offset.
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
+pub struct ZonedTime {
+    time: Time,
+    zone: ZoneId,
+}
+impl ZonedTime {
+    /// Move independently owned parts after time and provider validation.
+    pub fn from_validated_parts(time: Time, zone: ZoneId) -> Self {
+        Self { time, zone }
+    }
+    /// The exact wall-clock time, including microseconds.
+    pub const fn time(&self) -> Time {
+        self.time
+    }
+    /// The exact supplied zone identity.
+    pub fn zone(&self) -> &ZoneId {
+        &self.zone
+    }
+    /// Retain both identity fields independently with fallible allocation.
+    pub fn try_clone(&self) -> Result<Self, std::collections::TryReserveError> {
+        Ok(Self::from_validated_parts(
+            self.time,
+            self.zone.try_clone()?,
+        ))
+    }
+}

@@ -10,6 +10,7 @@ pub fn rust_type(ty: &Ty) -> &'static str {
         Ty::DateTime => "hgl_types::EngineTime",
         Ty::CivilDateTime => "hgl_types::CivilDateTime",
         Ty::TimeZone => "hgl_types::ZoneId",
+        Ty::ZonedTime => "hgl_types::ZonedTime",
         Ty::ZonedDateTime => "hgl_types::ZonedDateTime",
         Ty::Bool => "bool",
         Ty::F64 => "f64",
@@ -41,6 +42,7 @@ pub fn scalar_type(ty: &Ty) -> &'static str {
         Ty::DateTime => "DateTime",
         Ty::CivilDateTime => "CivilDateTime",
         Ty::TimeZone => "TimeZone",
+        Ty::ZonedTime => "ZonedTime",
         Ty::ZonedDateTime => "ZonedDateTime",
         Ty::Atomic(_)
         | Ty::Map(..)

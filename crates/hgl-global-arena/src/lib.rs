@@ -6,7 +6,7 @@ use hgl_types::{Date, EngineDelta, EngineTime, NodeError, NodeResult, ScalarType
 pub type ListData = Vec<Vec<usize>>;
 /// Upper bounds on slots required before an infallible installation.
 #[derive(Debug, Default)]
-pub struct Capacity([usize; 12]);
+pub struct Capacity([usize; 13]);
 impl Capacity {
     /// Count one statically typed primitive slot.
     pub fn scalar<T: Scalar>(&mut self) {
@@ -19,14 +19,14 @@ impl Capacity {
     }
     /// Count a known number of list descriptors, saturating into reservation failure.
     pub fn lists(&mut self, count: usize) {
-        self.0[11] = self.0[11].saturating_add(count);
+        self.0[12] = self.0[12].saturating_add(count);
     }
 }
 /// Private payloads remain in type-specific columns; all handles are stable indices.
 #[derive(Debug, Default)]
 pub struct Columns {
     values: hgl_columns::Columns,
-    free: [Vec<usize>; 11],
+    free: [Vec<usize>; 12],
     lists: Vec<ListData>,
     free_lists: Vec<usize>,
 }
@@ -44,7 +44,8 @@ impl Columns {
         self.reserve_scalar::<hgl_types::CivilDateTime>(capacity)?;
         self.reserve_scalar::<hgl_types::ZoneId>(capacity)?;
         self.reserve_scalar::<hgl_types::ZonedDateTime>(capacity)?;
-        let extra = capacity.0[11].saturating_sub(self.free_lists.len());
+        self.reserve_scalar::<hgl_types::ZonedTime>(capacity)?;
+        let extra = capacity.0[12].saturating_sub(self.free_lists.len());
         self.lists
             .try_reserve(extra)
             .map_err(|error| NodeError::new(error.to_string()))?;
@@ -138,7 +139,8 @@ impl Columns {
                 + count::<EngineDelta>(&self.values)
                 + count::<hgl_types::CivilDateTime>(&self.values)
                 + count::<hgl_types::ZoneId>(&self.values)
-                + count::<hgl_types::ZonedDateTime>(&self.values),
+                + count::<hgl_types::ZonedDateTime>(&self.values)
+                + count::<hgl_types::ZonedTime>(&self.values),
             self.lists.len(),
         )
     }
@@ -156,6 +158,7 @@ fn kind<T: Scalar>() -> usize {
         ScalarType::Duration => 7,
         ScalarType::CivilDateTime => 8,
         ScalarType::TimeZone => 9,
+        ScalarType::ZonedTime => 11,
         ScalarType::ZonedDateTime => 10,
     }
 }

@@ -70,5 +70,5 @@ capture; repeated begin; timestamp validation and retained captures; independent
 owned strings and runs; invalid binding manifests and duplicate writers.
 
 BufferScalar delegates to Scalar::try_clone for every concrete runtime scalar,
-including CivilDateTime, ZoneId and ZonedDateTime. Owned zone identities are
+including CivilDateTime, ZoneId, ZonedDateTime and ZonedTime. Owned zone identities are
 retained independently without provider access.

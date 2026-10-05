@@ -5,7 +5,7 @@
 //! a node-error message can allocate. No graph execution lives here.
 
 pub use hgl_time_values::{
-    CivilDateTime, Date, EngineDelta, EngineTime, Time, ZoneId, ZonedDateTime,
+    CivilDateTime, Date, EngineDelta, EngineTime, Time, ZoneId, ZonedDateTime, ZonedTime,
 };
 
 /// A node's position in its graph's rank order.
@@ -35,6 +35,8 @@ pub enum ScalarType {
     CivilDateTime,
     /// An exact named timezone.
     TimeZone,
+    /// A wall-clock time with its exact timezone.
+    ZonedTime,
     /// An instant with its exact timezone and offset.
     ZonedDateTime,
 }
@@ -63,6 +65,8 @@ pub enum ScalarValue {
     CivilDateTime(CivilDateTime),
     /// An exact named timezone.
     TimeZone(ZoneId),
+    /// A wall-clock time with its exact timezone.
+    ZonedTime(ZonedTime),
     /// An instant with its exact timezone and offset.
     ZonedDateTime(ZonedDateTime),
 }
@@ -81,6 +85,7 @@ impl ScalarValue {
             Self::Duration(_) => ScalarType::Duration,
             Self::CivilDateTime(_) => ScalarType::CivilDateTime,
             Self::TimeZone(_) => ScalarType::TimeZone,
+            Self::ZonedTime(_) => ScalarType::ZonedTime,
             Self::ZonedDateTime(_) => ScalarType::ZonedDateTime,
         }
     }

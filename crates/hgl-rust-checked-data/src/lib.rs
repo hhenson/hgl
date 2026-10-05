@@ -35,6 +35,7 @@ pub fn ty(t: &Ty) -> String {
         | Ty::Duration
         | Ty::CivilDateTime
         | Ty::TimeZone
+        | Ty::ZonedTime
         | Ty::ZonedDateTime
         | Ty::Void => format!("{t:?}"),
     };
@@ -47,6 +48,11 @@ fn literal(l: &Literal) -> String {
         Literal::TimeZone(zone) => format!(
             "TimeZone(hgl_types::ZoneId::from_validated_name({:?}.into()))",
             zone.as_str()
+        ),
+        Literal::ZonedTime(zoned) => format!(
+            "ZonedTime(hgl_types::ZonedTime::from_validated_parts(hgl_types::Time({}), hgl_types::ZoneId::from_validated_name({:?}.into())))",
+            zoned.time().0,
+            zoned.zone().as_str()
         ),
         Literal::ZonedDateTime(zoned) => format!(
             "ZonedDateTime(hgl_types::ZonedDateTime::from_validated_parts(hgl_types::EngineTime::from_micros({}),hgl_types::ZoneId::from_validated_name({:?}.into()),{}))",
@@ -69,6 +75,9 @@ fn recipe(r: &TemporalLiteral) -> String {
         TemporalLiteral::TimeZone(s) => {
             format!("hgl_source::TemporalLiteral::TimeZone({s:?}.into())")
         }
+        TemporalLiteral::ZonedTime { time_micros, zone } => format!(
+            "hgl_source::TemporalLiteral::ZonedTime {{time_micros:{time_micros},zone:{zone:?}.into()}}"
+        ),
         TemporalLiteral::ZonedDateTime {
             instant_micros,
             zone,

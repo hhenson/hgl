@@ -17,8 +17,9 @@ The explicit database constructor permits controlled native host tests.
 
 Snapshot the provider's exact catalog during construction. Require case-sensitive
 membership before backend lookup; never inherit case folding or synthetic unknown
-zones. For zoned values, verify the supplied offset against the provider at the
-supplied instant. Preserve the original name and reject lookup, range or offset
+zones. For zoned datetimes, verify the supplied offset against the provider at the
+supplied instant. Zoned times validate the wall-clock range and exact catalog
+name without resolving a date-dependent offset. Preserve the original name and reject lookup, range or offset
 failures without fallback/truncation. The compiler never invokes this provider.
 
 The context owns provider state outside graph ticks. Already constructed scalar

@@ -8,7 +8,7 @@ fn ordinary_contextual_literals_are_checked_without_provider_lookup() {
 }
 #[test]
 fn zones_and_zoned_instants_have_equality_but_no_order() {
-    for value in ["@[UTC]", "@2026-01-15T12:30Z[Etc/UTC]"] {
+    for value in ["@[UTC]", "@2026-01-15T12:30Z[Etc/UTC]", "@12:30[UTC]"] {
         let equal = format!("module example\ntest values {{assert {value} == {value}}}");
         assert!(compile_tests(&[("test.hgl".into(), equal)]).is_ok());
         for operator in ["<", ">", "<=", ">="] {
@@ -19,7 +19,7 @@ fn zones_and_zoned_instants_have_equality_but_no_order() {
     }
 }
 #[test]
-fn hook_construction_and_zoned_time_report_the_supported_boundary() {
+fn hook_construction_and_offset_bearing_zoned_time_report_the_supported_boundary() {
     let contextual = "module example\nfn main()->timezone {when {return @[UTC]}}";
     let error = compile(&[("test.hgl".into(), contextual.into())], "main").unwrap_err();
     assert!(
@@ -113,4 +113,36 @@ fn assertions_using_harness_locals_defer_and_dead_constant_branches_are_skipped(
     }
     let source = "module example\nconst fn safe()->bool {if false {let values:list<i64> = []\nreturn values[0] == 0}\nreturn true}\ntest t {assert safe()}";
     assert!(compile_tests(&[("test.hgl".into(), source.into())]).is_ok());
+}
+
+#[test]
+fn zoned_time_keeps_exact_type_and_existing_publication_restrictions() {
+    for body in [
+        "let value:time = @09:30[UTC]",
+        "let value:zoned_time = @09:30",
+        "assert @09:30[UTC] == @[UTC]",
+        "let value=@09:30[UTC] + 1h",
+        "let value:delta<set<zoned_time>> = {}",
+        "let value:delta<map<zoned_time,i64>> = {}",
+    ] {
+        let source = format!("module example\ntest invalid {{{body}}}");
+        assert!(
+            compile_tests(&[("test.hgl".into(), source)]).is_err(),
+            "{body}"
+        );
+    }
+    let source = "module example\nfn main(value:zoned_time,trigger:i64)->zoned_time {when modified(trigger) {return delta_value(value)}}\ntest bad {eval(main,value:[@09:30[UTC]],trigger:[1])}";
+    let error = compile_tests(&[
+        ("test.hgl".into(), source.into()),
+        (
+            "replay_record.hgl".into(),
+            include_str!("../../../external/hgraph_std/hgl/hgraph/replay_record.hgl").into(),
+        ),
+        (
+            "replay_record_impl.hgl".into(),
+            include_str!("../../../external/hgraph_std/hgl/hgraph/impl/replay_record.hgl").into(),
+        ),
+    ])
+    .unwrap_err();
+    assert!(error.contains("valid and modified"), "{error}");
 }

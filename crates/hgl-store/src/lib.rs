@@ -22,8 +22,7 @@ pub use hgl_global::{
     Capacity, Global, GlobalState, GlobalValue, Layouts, List, ValueColumns, ValueSlot, list_index,
     list_index_mut, list_len, list_push,
 };
-use hgl_types::NodeResult;
-use hgl_types::{EngineTime, NodeId, ScalarType, ScalarValue};
+use hgl_types::{EngineTime, NodeId, NodeResult, ScalarType, ScalarValue};
 
 use hgl_bindings::Bindings;
 pub use hgl_bindings::Kind;

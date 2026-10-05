@@ -21,6 +21,6 @@ address stability and the compile-fail sealing test.
 fallible ordinary owned copying. Fixed scalar implementations use their copy;
 String reserves fallibly before copying. Existing endpoint reads are unchanged.
 
-CivilDateTime, ZoneId and ZonedDateTime are concrete typed scalar implementations.
+CivilDateTime, ZoneId, ZonedDateTime and ZonedTime are concrete typed scalar implementations.
 Zone-bearing values retain exact owned names fallibly at retention boundaries;
 prepared borrowed projections neither allocate nor consult a provider.

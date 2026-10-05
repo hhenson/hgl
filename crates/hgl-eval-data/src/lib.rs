@@ -78,6 +78,7 @@ fn key(value: &Literal) -> i64 {
         | Literal::DateTime(_)
         | Literal::CivilDateTime(_)
         | Literal::TimeZone(_)
+        | Literal::ZonedTime(_)
         | Literal::ZonedDateTime(_)
         | Literal::Duration(_) => unreachable!("checked set member or map key"),
     }

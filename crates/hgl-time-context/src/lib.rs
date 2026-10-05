@@ -1,6 +1,6 @@
 //! Construction-only timezone validation against an exact provider catalog.
 use hgl_literals::{Literal, TemporalLiteral};
-use hgl_time_values::{EngineTime, ZoneId, ZonedDateTime};
+use hgl_time_values::{EngineTime, Time, ZoneId, ZonedDateTime, ZonedTime};
 use jiff::{Timestamp, tz::TimeZoneDatabase};
 use std::collections::BTreeSet;
 
@@ -33,9 +33,9 @@ impl RunContext {
     /// Validate one recipe before start and construct an independently owned scalar.
     pub fn materialize(&mut self, literal: &TemporalLiteral) -> Result<Literal, String> {
         let name = match literal {
-            TemporalLiteral::TimeZone(name) | TemporalLiteral::ZonedDateTime { zone: name, .. } => {
-                name
-            }
+            TemporalLiteral::TimeZone(name)
+            | TemporalLiteral::ZonedTime { zone: name, .. }
+            | TemporalLiteral::ZonedDateTime { zone: name, .. } => name,
         };
         if !self.names.contains(name) {
             return Err(format!(
@@ -54,6 +54,15 @@ impl RunContext {
         let identity = ZoneId::from_validated_name(owned);
         match literal {
             TemporalLiteral::TimeZone(_) => Ok(Literal::TimeZone(identity)),
+            TemporalLiteral::ZonedTime { time_micros, .. } => {
+                if !(0..86_400_000_000).contains(time_micros) {
+                    return Err("zoned time range: time must be within one day".into());
+                }
+                Ok(Literal::ZonedTime(ZonedTime::from_validated_parts(
+                    Time(*time_micros),
+                    identity,
+                )))
+            }
             TemporalLiteral::ZonedDateTime {
                 instant_micros,
                 offset_seconds,

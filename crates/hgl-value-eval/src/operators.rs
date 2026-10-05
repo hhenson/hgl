@@ -42,7 +42,7 @@ pub(super) fn binary(op: &str, a: &Value, b: &Value) -> Result<Value, EvalError>
     if a.ty() == b.ty()
         && matches!(
             a,
-            Literal::CivilDateTime(_) | Literal::TimeZone(_) | Literal::ZonedDateTime(_)
+            Literal::TimeZone(_) | Literal::ZonedTime(_) | Literal::ZonedDateTime(_)
         )
         && matches!(op, "==" | "!=")
     {

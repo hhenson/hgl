@@ -260,3 +260,9 @@ impl Shape for hgl_types::ZonedDateTime {
         TsType::Ts(ScalarType::ZonedDateTime)
     }
 }
+
+impl Shape for hgl_types::ZonedTime {
+    fn shape() -> TsType {
+        TsType::Ts(ScalarType::ZonedTime)
+    }
+}

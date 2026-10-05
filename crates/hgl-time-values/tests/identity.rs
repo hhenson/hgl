@@ -42,3 +42,32 @@ fn moved_engine_values_preserve_boundaries_and_result_based_addition() {
         Some(EngineTime::NEVER)
     );
 }
+
+#[test]
+fn zoned_time_identity_owns_only_wall_time_and_exact_name()
+-> Result<(), std::collections::TryReserveError> {
+    use hgl_time_values::{Time, ZonedTime};
+    let original = ZonedTime::from_validated_parts(
+        Time(34_200_123_456),
+        ZoneId::from_validated_name("US/Eastern".into()),
+    );
+    let retained = original.try_clone()?;
+    assert_eq!(retained, original);
+    assert_ne!(
+        retained.zone().as_str().as_ptr(),
+        original.zone().as_str().as_ptr()
+    );
+    for (time, zone) in [
+        (Time(34_200_123_457), "US/Eastern"),
+        (original.time(), "America/New_York"),
+    ] {
+        assert_ne!(
+            original,
+            ZonedTime::from_validated_parts(time, ZoneId::from_validated_name(zone.into()))
+        );
+    }
+    drop(original);
+    assert_eq!(retained.time(), Time(34_200_123_456));
+    assert_eq!(retained.zone().as_str(), "US/Eastern");
+    Ok(())
+}

@@ -139,6 +139,7 @@ pub(crate) fn snapshot(
                 | ScalarType::Duration
                 | ScalarType::CivilDateTime
                 | ScalarType::TimeZone
+                | ScalarType::ZonedTime
                 | ScalarType::ZonedDateTime,
             ) => unreachable!("observed separately"),
         }
@@ -224,6 +225,7 @@ pub(crate) fn output(store: &Store, id: OutputId, t: i64, path: &str, rows: &mut
             ScalarValue::Duration(v) => v.micros().to_string(),
             ScalarValue::CivilDateTime(v) => v.micros().to_string(),
             ScalarValue::TimeZone(v) => v.as_str().into(),
+            ScalarValue::ZonedTime(v) => format!("{}@{}", v.time().0, v.zone().as_str()),
             ScalarValue::ZonedDateTime(v) => format!(
                 "{}@{}:{}",
                 v.instant().micros(),

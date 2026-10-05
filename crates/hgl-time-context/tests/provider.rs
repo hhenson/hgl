@@ -93,11 +93,60 @@ fn configured_catalog_has_no_synthetic_names_and_is_snapshotted()
         );
     }
     let saved = context.materialize(&TemporalLiteral::TimeZone("ExactAlias".into()))?;
+    let saved_clock = context.materialize(&TemporalLiteral::ZonedTime {
+        time_micros: 34_200_123_456,
+        zone: "ExactAlias".into(),
+    })?;
     drop(context);
     std::fs::remove_dir_all(root)?;
+    let Literal::ZonedTime(clock) = saved_clock else {
+        panic!("zoned time")
+    };
+    assert_eq!(clock.time().0, 34_200_123_456);
+    assert_eq!(clock.zone().as_str(), "ExactAlias");
     let Literal::TimeZone(zone) = saved else {
         panic!("expected timezone")
     };
     assert_eq!(zone.as_str(), "ExactAlias");
+    Ok(())
+}
+
+#[test]
+fn zoned_time_validates_catalog_and_wall_range_without_date_resolution()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut context = RunContext::from_bundled()?;
+    let recipe = |time_micros, zone: &str| TemporalLiteral::ZonedTime {
+        time_micros,
+        zone: zone.into(),
+    };
+    let original = context.materialize(&recipe(34_200_123_456, "US/Eastern"))?;
+    assert_ne!(
+        original,
+        context.materialize(&recipe(34_200_123_456, "America/New_York"))?
+    );
+    for name in ["utc", "america/new_york", "Etc/Unknown", "Missing/Zone"] {
+        assert!(
+            context
+                .materialize(&recipe(0, name))
+                .unwrap_err()
+                .contains("absent from exact provider catalog")
+        );
+    }
+    for time in [-1, 86_400_000_000, i64::MAX] {
+        assert!(
+            context
+                .materialize(&recipe(time, "UTC"))
+                .unwrap_err()
+                .contains("zoned time range")
+        );
+    }
+    context.materialize(&recipe(0, "UTC"))?;
+    context.materialize(&recipe(86_399_999_999, "UTC"))?;
+    drop(context);
+    let Literal::ZonedTime(value) = original else {
+        panic!("zoned time")
+    };
+    assert_eq!(value.time().0, 34_200_123_456);
+    assert_eq!(value.zone().as_str(), "US/Eastern");
     Ok(())
 }

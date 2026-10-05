@@ -35,10 +35,11 @@ contracts. Unsupported source scalar families remain explicit diagnostics.
 
 ## Temporal scalar preparation
 
-Add CivilDateTime, TimeZone and ZonedDateTime scalar variants and source
+Add CivilDateTime, TimeZone, ZonedDateTime and ZonedTime scalar variants and source
 spellings; scalar atomic normalization and delta reduction apply identically.
-The same eleven leaves are admitted recursively under the pinned publication
-profile; zoned_time remains excluded. Existing shape/key restrictions remain.
+The same twelve leaves are admitted recursively under the pinned publication
+profile. ZonedTime uses source spelling zoned_time; its exact identity is wall-clock
+time plus exact zone name, with no date or offset. Existing shape/key restrictions remain.
 
 May use hgl-type-syntax for pure spelling decomposition, preserving existing
 application/delta_argument exports and Ty::list_parts. See its card.

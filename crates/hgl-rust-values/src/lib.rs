@@ -18,6 +18,11 @@ pub fn literal(value: &Literal) -> String {
             "hgl_types::ZoneId::from_validated_name({:?}.to_owned())",
             zone.as_str()
         ),
+        Literal::ZonedTime(value) => format!(
+            "hgl_types::ZonedTime::from_validated_parts(hgl_types::Time({}), hgl_types::ZoneId::from_validated_name({:?}.to_owned()))",
+            value.time().0,
+            value.zone().as_str()
+        ),
         Literal::ZonedDateTime(value) => format!(
             "hgl_types::ZonedDateTime::from_validated_parts(hgl_types::EngineTime::from_micros({}), hgl_types::ZoneId::from_validated_name({:?}.to_owned()), {})",
             value.instant().micros(),
@@ -176,7 +181,10 @@ fn retained(source: &str, ty: &Ty) -> String {
             format!("{{ let source = &({source}); ({fields},) }}")
         };
     }
-    if matches!(ty, Ty::Str | Ty::TimeZone | Ty::ZonedDateTime) {
+    if matches!(
+        ty,
+        Ty::Str | Ty::TimeZone | Ty::ZonedTime | Ty::ZonedDateTime
+    ) {
         format!("hgl_store::Scalar::try_clone(&({source}))?")
     } else {
         format!("({source})")

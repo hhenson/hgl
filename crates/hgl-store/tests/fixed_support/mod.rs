@@ -201,6 +201,7 @@ pub(crate) fn snapshot(
                 | ScalarType::Duration
                 | ScalarType::CivilDateTime
                 | ScalarType::TimeZone
+                | ScalarType::ZonedTime
                 | ScalarType::ZonedDateTime,
             ) => {
                 unreachable!("membership and REF observed separately")
