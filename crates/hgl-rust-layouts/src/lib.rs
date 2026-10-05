@@ -52,32 +52,11 @@ fn tuple_storage(children: &[Ty]) -> Ty {
 
 /// Complete ordinary payload stored behind a prepared whole-value endpoint.
 pub fn whole_payload(ty: &Ty) -> Option<&Ty> {
-    match ty {
-        Ty::Atomic(payload) => Some(payload),
-        Ty::Enum(_) => Some(ty),
-        Ty::Rolling(..)
-        | Ty::Map(..)
-        | Ty::Tuple(_)
-        | Ty::Delta(_)
-        | Ty::List(..)
-        | Ty::Struct(..)
-        | Ty::I64
-        | Ty::F64
-        | Ty::Bool
-        | Ty::Str
-        | Ty::Duration
-        | Ty::Date
-        | Ty::Time
-        | Ty::DateTime
-        | Ty::CivilDateTime
-        | Ty::TimeZone
-        | Ty::ZonedTime
-        | Ty::ZonedDateTime
-        | Ty::Ref(_)
-        | Ty::Set(_)
-        | Ty::Nullable(_)
-        | Ty::Recursive(_)
-        | Ty::Family(_)
-        | Ty::Void => None,
+    if let Ty::Atomic(payload) = ty {
+        Some(payload)
+    } else if matches!(ty, Ty::Enum(_)) {
+        Some(ty)
+    } else {
+        None
     }
 }

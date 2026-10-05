@@ -99,15 +99,16 @@ fn malformed_constructors_and_incompatible_origins() {
         ("delta<map<i64,i64>>(upsert:[1:1],remove:[1])", "overlap"),
         ("delta<set<bool>>(added:[true,true])", "duplicate"),
         ("delta<tuple<i64,str>>(items:[1:2])", "child type mismatch"),
-        (
-            "delta<map<tuple<bool>,i64>>()",
-            "unsupported publication shape",
-        ),
         ("delta<list<ref<i64>>>()", "unsupported publication shape"),
     ] {
         let actual=check(&format!("fn source()->i64 {{ start {{ let d={value} }}\nwhen {{return 1}} }}\nfn main()->i64=>source()")).unwrap_err();
         assert!(actual.contains(error), "{value}: {actual}");
     }
+}
+
+#[test]
+fn complete_tuple_keys_are_admitted_as_sparse_map_origins() {
+    check("fn source()->i64 {start {let d=delta<map<tuple<bool>,i64>>()}\nwhen {return 1}}\nfn main()->i64=>source()").unwrap();
 }
 
 #[test]

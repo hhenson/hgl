@@ -205,10 +205,8 @@ dependencies = [
 name = "hgl-eval-data"
 version = "0.0.0"
 dependencies = [
- "hgl-composite-keys",
- "hgl-delta-check",
- "hgl-growing-range",
  "hgl-library",
+ "hgl-publication-trace",
  "hgl-rust-ir",
  "hgl-source",
  "hgl-value-eval",
@@ -510,6 +508,17 @@ dependencies = [
  "hgl-kernel",
  "hgl-store",
  "hgl-types",
+]
+
+[[package]]
+name = "hgl-publication-trace"
+version = "0.0.0"
+dependencies = [
+ "hgl-composite-keys",
+ "hgl-delta-check",
+ "hgl-growing-range",
+ "hgl-rust-ir",
+ "hgl-source",
 ]
 
 [[package]]
