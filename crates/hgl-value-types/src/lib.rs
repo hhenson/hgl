@@ -275,10 +275,7 @@ fn size(library: &Library, module: &str, expr: &str) -> Result<hgl_source::Liter
     library
         .type_sizes
         .get(&(module.into(), expr.into()))
-        .map_or_else(
-            || hgl_type_sizes::literal(expr),
-            |size| Ok(hgl_source::Literal::Int(*size)),
-        )
+        .map_or_else(|| hgl_type_sizes::literal(expr), |size| Ok(size.clone()))
 }
 
 fn unify_delta(

@@ -27,3 +27,8 @@ declaration graph. Active backedges use accumulated occurrence requirements;
 unchanged generic permutations therefore propagate obligations across the complete
 cycle. Only after convergence do unused root parameters acquire value_type.
 This preserves ordinary/delta restrictions without rejecting finite recursion.
+
+A rolling structural field is an admitted temporal child; its payload parameter
+still requires an ordinary value type. Max/Min are bound expressions, excluded
+from generic type occurrences. This does not make a rolling endpoint or a struct
+containing one an ordinary atomic payload.

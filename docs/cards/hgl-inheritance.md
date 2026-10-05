@@ -19,3 +19,6 @@ Fixed-list field patterns retain the size expression as scoped bound syntax,
 not as a nominal type argument. Pattern substitution resolves only the element;
 family field resolution and inference delegate the reconstructed list type to
 ordinary checked constant-size normalization in the ancestor's module.
+
+Rolling field patterns likewise retain Max/Min expression spelling beside the
+single payload type pattern; field resolution never resolves a bound as a type.

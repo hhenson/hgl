@@ -25,3 +25,6 @@ Inherited fixed-list patterns reconstruct list<Element,size-expression> before
 calling the checked resolver/unifier. Size expressions retain declaration scope
 and never participate as ordinary generic type arguments. Inference checks the
 same normalized length as explicit specialization.
+
+The bounded-application reconstruction also handles rolling payload patterns,
+preserving declared bound expressions and exact count/duration kinds.

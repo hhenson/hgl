@@ -235,12 +235,7 @@ impl Checker {
     }
     fn type_sizes(&mut self, module: &str, name: &str, env: &Env) -> Result<String, String> {
         for (owner, expr) in hgl_struct_check::schema_sizes(&self.library, module, name)? {
-            let Literal::Int(size) = self.constant_size(&owner, &expr, &Env::new())? else {
-                return Err("list size requires a constant i64".into());
-            };
-            if size < 0 {
-                return Err("list size must be nonnegative or unbounded".into());
-            }
+            let size = self.constant_size(&owner, &expr, &Env::new())?;
             self.library.type_sizes.insert((owner, expr), size);
         }
         hgl_type_sizes::normalize(name, &mut |source| self.constant_size(module, source, env))

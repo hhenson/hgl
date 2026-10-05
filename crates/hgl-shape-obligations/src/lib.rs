@@ -84,11 +84,22 @@ fn occurrences(
     let Some((base, arguments)) = application(pattern) else {
         return Ok(());
     };
-    if matches!(base, "list" | "tuple" | "map" | "set" | "atomic") {
-        let requirement = if base == "atomic" { 1 } else { requirement };
+    if matches!(
+        base,
+        "list" | "tuple" | "map" | "set" | "atomic" | "rolling"
+    ) {
+        let requirement = if matches!(base, "atomic" | "rolling") {
+            1
+        } else {
+            requirement
+        };
         for argument in arguments
             .iter()
-            .take(if base == "list" { 1 } else { arguments.len() })
+            .take(if matches!(base, "list" | "rolling") {
+                1
+            } else {
+                arguments.len()
+            })
         {
             occurrences(
                 library,
@@ -101,7 +112,7 @@ fn occurrences(
         }
         return Ok(());
     }
-    if matches!(base, "ref" | "rolling") {
+    if base == "ref" {
         return Err("ordinary struct fields require ordinary value types".into());
     }
     let decl = hgl_struct_names::declaration(library, module, base)?

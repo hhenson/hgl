@@ -259,3 +259,36 @@ pub fn end_i64(_:i64)->hgl_types::NodeResult {assert_eq!(CONFIGS.load(std::sync:
 }",
     )
 }
+
+#[test]
+fn structural_fields_preserve_tick_and_duration_window_bounds()
+-> Result<(), Box<dyn std::error::Error>> {
+    run_shared(
+        r#"
+module hgraph.std part rolling_fields
+const fn width()->duration => 5us
+struct WindowBox {value:rolling<i64,2>}
+struct DurationBox {value:rolling<str,width(),0us>}
+fn ticks(value:WindowBox)->WindowBox => pass_through(value)
+fn durations(value:DurationBox)->DurationBox => pass_through(value)
+test {test fields {
+ assert eval(ticks,[delta<WindowBox>(value:1),_,delta<WindowBox>(value:1)]) == [delta<WindowBox>(value:1),_,delta<WindowBox>(value:1)]
+ assert eval(durations,[delta<DurationBox>(value:"first"),_,delta<DurationBox>(value:"second")]) == [delta<DurationBox>(value:"first"),_,delta<DurationBox>(value:"second")]
+}}
+"#,
+        true,
+    )
+}
+
+#[test]
+fn window_fields_do_not_make_ordinary_atomic_payloads() {
+    for body in [
+        "fn bad(value:atomic<WindowBox>)->atomic<WindowBox> => pass_through(value)\ntest {test bad {assert eval(bad,[])==[]}}",
+        "test {test bad {let value=WindowBox(value:1)}}",
+    ] {
+        let source = format!(
+            "module hgraph.std part rolling_payload_boundary\nstruct WindowBox {{value:rolling<i64,2>}}\n{body}"
+        );
+        assert!(compile_tests(&sources(&source)).is_err(), "admitted {body}");
+    }
+}

@@ -76,8 +76,8 @@ pub use hgl_struct_declarations::RequiredStruct;
 #[derive(Debug, Default, Clone)]
 /// Indexed source declarations, imports and explicit instances.
 pub struct Library {
-    /// Declaration-owned list sizes checked before concrete type formation.
-    pub type_sizes: BTreeMap<(String, String), i64>,
+    /// Declaration-owned bound literals, retaining exact count or duration kind.
+    pub type_sizes: BTreeMap<(String, String), hgl_source::Literal>,
     /// All indexed declarations.
     pub declarations: Vec<Decl>,
     /// First source's module.

@@ -55,8 +55,10 @@ fn application_bindings(name: &str, args: &[Ty]) -> (String, BTreeMap<String, Ty
     (spelling, bindings)
 }
 fn spelling(name: &str, args: &[String]) -> String {
-    if let Some(size) = name.strip_prefix("list<").and_then(|s| s.strip_suffix('>')) {
-        return format!("list<{},{}>", args[0], size);
+    if let Some((base, bounds)) = hgl_source::application(name)
+        && matches!(base, "list" | "rolling")
+    {
+        return format!("{base}<{},{}>", args[0], bounds.join(","));
     }
     if args.is_empty() {
         name.into()

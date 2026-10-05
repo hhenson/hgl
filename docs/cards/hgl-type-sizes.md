@@ -16,3 +16,8 @@ Rolling maximum/minimum expressions use the same checked lexical constant
 callback, then hgl-window-types validates kind and range. Omitted minimum equals
 maximum. Canonical microseconds preserve equivalent duration spelling identity;
 tick counts never implicitly convert to duration bounds.
+
+expressions(name) collects declaration-owned bound syntax recursively without
+calling providers, validating sizes or manufacturing placeholder values. List
+bounds and rolling Max/Min are scalar expression positions; only their payload
+arguments are traversed as types. Normalization later validates actual literals.

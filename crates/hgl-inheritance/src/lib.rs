@@ -64,13 +64,14 @@ fn pattern(module: &str, name: &str, bindings: &BTreeMap<String, Pattern>) -> Pa
     if let Some(value) = bindings.get(name) {
         return value.clone();
     }
-    if let Some(("list", args)) = application(name)
-        && let [element, size] = args.as_slice()
+    if let Some((base, args)) = application(name)
+        && matches!(base, "list" | "rolling")
+        && args.len() >= 2
     {
         return Pattern::Named(
             module.into(),
-            format!("list<{size}>"),
-            vec![pattern(module, element, bindings)],
+            format!("{base}<{}>", args[1..].join(",")),
+            vec![pattern(module, args[0], bindings)],
         );
     }
     let (base, args) = application(name).unwrap_or((name, Vec::new()));

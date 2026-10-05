@@ -320,10 +320,11 @@ fn schema_names(
         return schema_names(library, module, origin, seen, sizes);
     }
     let (base, args) = application(name).unwrap_or((name, Vec::new()));
-    for argument in args
-        .iter()
-        .take(if base == "list" { 1 } else { args.len() })
-    {
+    for argument in args.iter().take(if matches!(base, "list" | "rolling") {
+        1
+    } else {
+        args.len()
+    }) {
         schema_names(library, module, argument, seen, sizes)?;
     }
     if Ty::parse(name).is_some()
@@ -343,15 +344,14 @@ fn schema_names(
             schema_names(library, &decl.module, &parent, seen, sizes)?;
         }
         for (_, field) in schema.fields {
-            let _normalized = hgl_type_sizes::normalize(&field, &mut |expr| {
+            for expr in hgl_type_sizes::expressions(&field) {
                 if !library
                     .type_sizes
                     .contains_key(&(decl.module.clone(), expr.into()))
                 {
                     sizes.push((decl.module.clone(), expr.into()));
                 }
-                Ok(hgl_source::Literal::Int(0))
-            })?;
+            }
             schema_names(library, &decl.module, &field, seen, sizes)?;
         }
     }

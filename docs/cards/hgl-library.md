@@ -66,3 +66,7 @@ RequiredStruct parsing is owned by hgl-struct-declarations. abstract_type and
 parent retain abstract declaration status and one source ancestor application;
 Role::Struct indexes both concrete and abstract declarations. Multiple parents
 remain explicitly unsupported. Semantic inheritance/closure checking is separate.
+
+Library.type_sizes maps declaration module/expression to the evaluated Literal,
+retaining count versus duration kind. Bound validation remains with normalized
+list/rolling formation; the cold cache never coerces duration into integer size.

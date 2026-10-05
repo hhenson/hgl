@@ -63,6 +63,25 @@ pub fn normalize(
         .collect::<Result<Vec<_>, _>>()?;
     Ok(format!("{base}<{}>", args.join(",")))
 }
+/// Collect explicit bound expressions without evaluating or fabricating size values.
+pub fn expressions(name: &str) -> Vec<&str> {
+    if let Some(origin) = delta_argument(name) {
+        return expressions(origin);
+    }
+    let Some((base, args)) = application(name) else {
+        return Vec::new();
+    };
+    let bounded = matches!(base, "list" | "rolling");
+    let mut bounds = args
+        .iter()
+        .take(if bounded { 1 } else { args.len() })
+        .flat_map(|arg| expressions(arg))
+        .collect::<Vec<_>>();
+    if bounded {
+        bounds.extend(args.into_iter().skip(1).filter(|arg| *arg != "unbounded"));
+    }
+    bounds
+}
 /// Evaluate a closed scalar size expression with ordinary checked semantics.
 pub fn literal(source: &str) -> Result<Literal, String> {
     let tokens = lex(source)?;

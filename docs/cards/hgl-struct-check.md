@@ -56,3 +56,8 @@ explicit nominal specializations retain identical nested atomic boundaries.
 schema_sizes traverses declared ancestors as well as own fields, retaining each
 ancestor module for checked constant-size expressions. Imported inherited list
 bounds therefore use the introducing declaration's helper scope.
+
+Schema bound discovery uses hgl-type-sizes::expressions without fake zero values.
+Rolling bounds stay scalar expressions; payloads alone are traversed as type
+arguments. The compiler evaluates collected expressions in declaration scope and
+retains their exact Literal kind before canonical type validation.
