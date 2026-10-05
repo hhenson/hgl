@@ -348,7 +348,7 @@ and never replaces that capacity with source-owned aliases.
 Out::generation()->u32 exposes the original writing-token generation for the
 prepared publication facade; it never substitutes the current endpoint generation.
 
-Re-exports `hgl_optional::Optional` for generated concrete struct field markers.
-Optional snapshot semantics are implemented; complete finite evaluation
-allocation freedom remains guarded by the new generated allocation test and
-must not be inferred from isolated prepared scalar tests.
+Re-exports `Optional` through hgl-global for generated concrete struct field
+markers. The six shared optional cases pass debug/release capture semantics and
+zero allocations measured across every actual graph.evaluate call, including
+first publication, pass-through and recording.

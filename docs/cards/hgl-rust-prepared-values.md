@@ -2,8 +2,9 @@
 
 Typed prepared-copy emission for nominal ordinary layouts. Depends on hgl-source;
 250 source lines. Public `structure(name, fields, marker)` and `enumeration(name)`
-return PreparedValue implementations for existing GlobalValue markers. The caller
-supplies exact child markers; no source type or schema is inspected during copies.
+and `structure_fields(name, markers)` return PreparedValue implementations for existing GlobalValue markers. The caller
+supplies exact child markers; `structure_fields` accepts field-presence markers
+selected by the concrete struct emitter without changing the source field type; no source type or schema is inspected during copies.
 
 Bounds merge only during cold preparation. Whole-value checks visit every child
 before an infallible copy writes any destination. Independent destination slots

@@ -16,7 +16,7 @@ fn marker(ty: &Ty) -> String {
     global_type(&delta_type(ty))
 }
 fn fields(ty: &Ty) -> Vec<&Ty> {
-    if let Ty::Struct(_, fields) = ty {
+    if let Ty::Struct(_, fields, _) = ty {
         return fields.iter().map(|(_, ty)| ty).collect();
     }
     if let Ty::Tuple(fields) = ty {

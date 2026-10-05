@@ -8,6 +8,13 @@ fn append(code: &mut String, text: std::fmt::Arguments<'_>) {
 
 /// Emit independent bounds and copies for the existing tuple-backed nominal marker.
 pub fn structure(name: &str, fields: &[(String, Ty)], marker: impl Fn(&Ty) -> String) -> String {
+    structure_fields(
+        name,
+        &fields.iter().map(|(_, ty)| marker(ty)).collect::<Vec<_>>(),
+    )
+}
+/// Emit prepared operations from already selected per-field storage markers.
+pub fn structure_fields(name: &str, markers: &[String]) -> String {
     let mut bounds = String::new();
     let mut include = String::new();
     let mut allocated = Vec::new();
@@ -16,8 +23,8 @@ pub fn structure(name: &str, fields: &[(String, Ty)], marker: impl Fn(&Ty) -> St
     let mut copy_native = String::new();
     let mut copy_between = String::new();
     let mut copy_within = String::new();
-    for (i, (_, ty)) in fields.iter().enumerate() {
-        let child = format!("<{} as hgl_store::PreparedValue>", marker(ty));
+    for (i, marker) in markers.iter().enumerate() {
+        let child = format!("<{marker} as hgl_store::PreparedValue>");
         append(&mut bounds, format_args!("field{i}:{child}::Bounds,\n"));
         append(
             &mut include,

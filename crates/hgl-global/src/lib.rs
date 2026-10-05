@@ -3,6 +3,7 @@ pub use hgl_global_value::{Capacity, GlobalValue, Layouts, ValueColumns, ValueSl
 pub use hgl_list::{
     List, ListBounds, append_slot, commit_append, list_index, list_index_mut, list_len, list_push,
 };
+pub use hgl_optional::Optional;
 pub use hgl_prepared_value::PreparedValue;
 use hgl_types::{NodeError, NodeResult, OrdinaryType};
 use std::{collections::HashMap, fmt::Debug};

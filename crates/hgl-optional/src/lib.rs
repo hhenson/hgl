@@ -2,6 +2,7 @@
 use hgl_global_value::{Capacity, GlobalValue, Layouts, ValueColumns};
 use hgl_types::{NodeResult, OrdinaryType};
 use std::marker::PhantomData;
+mod prepared;
 /// Independently retained optional ordinary field payload.
 #[derive(Debug)]
 pub struct Optional<T: GlobalValue>(PhantomData<T>);

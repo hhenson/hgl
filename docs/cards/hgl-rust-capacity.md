@@ -34,3 +34,7 @@ without claiming allocation-free execution for that existing generic path.
 May use hgl-rust-keyed::constructors to include statically known constructor
 key paths and storage widths even when child payload expressions execute in
 hooks. Cold preparation never evaluates those runtime child payloads.
+
+Optional field limits inspect only present native payloads and reserve independent
+child capacity for every prepared destination. Logical presence remains unset
+until the complete value is copied and published.

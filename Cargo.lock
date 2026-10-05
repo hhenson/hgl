@@ -205,6 +205,7 @@ version = "0.0.0"
 dependencies = [
  "hgl-global-value",
  "hgl-list",
+ "hgl-optional",
  "hgl-prepared-value",
  "hgl-types",
 ]
@@ -346,7 +347,10 @@ dependencies = [
 name = "hgl-optional"
 version = "0.0.0"
 dependencies = [
+ "hgl-alloc-count",
  "hgl-global-value",
+ "hgl-list-storage",
+ "hgl-prepared-value",
  "hgl-types",
 ]
 
@@ -615,6 +619,7 @@ dependencies = [
 name = "hgl-rust-structs"
 version = "0.0.0"
 dependencies = [
+ "hgl-rust-prepared-values",
  "hgl-source",
 ]
 
@@ -721,7 +726,6 @@ dependencies = [
  "hgl-global",
  "hgl-keys",
  "hgl-literals",
- "hgl-optional",
  "hgl-prepared-store",
  "hgl-shapes",
  "hgl-store-build",

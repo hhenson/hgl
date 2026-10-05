@@ -50,3 +50,6 @@ invalidate existing typed projections. destination(handle)->ValueSlot<T> retriev
 prepared positions even while absent. values()/values_mut() expose typed arenas;
 mark_present(handle) establishes ordinary presence only after a successful write.
 PreparedValue, ListBounds, append_slot and commit_append are reexported.
+
+Optional<T> is reexported from hgl-optional for internal field-presence storage
+through the ordinary global-value facade.

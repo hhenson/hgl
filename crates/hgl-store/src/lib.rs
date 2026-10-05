@@ -19,11 +19,10 @@
 use std::marker::PhantomData;
 
 pub use hgl_global::{
-    Capacity, Global, GlobalState, GlobalValue, Layouts, List, ListBounds, PreparedValue,
+    Capacity, Global, GlobalState, GlobalValue, Layouts, List, ListBounds, Optional, PreparedValue,
     ValueColumns, ValueSlot, append_slot, commit_append, list_index, list_index_mut, list_len,
     list_push,
 };
-pub use hgl_optional::Optional;
 use hgl_types::{EngineTime, NodeId, NodeResult, ScalarType, ScalarValue};
 
 use hgl_bindings::Bindings;

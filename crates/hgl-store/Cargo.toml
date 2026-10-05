@@ -11,7 +11,6 @@ line-budget = 500
 
 [dependencies]
 hgl-prepared-store = { path = "../hgl-prepared-store" }
-hgl-optional = { path = "../hgl-optional" }
 hgl-atomic = { path = "../hgl-atomic" }
 hgl-shapes = { path = "../hgl-shapes" }
 hgl-columns = { path = "../hgl-columns" }

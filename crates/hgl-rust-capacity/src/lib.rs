@@ -5,7 +5,7 @@ use hgl_source::Ty;
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 fn fields(ty: &Ty) -> Vec<Ty> {
-    if let Ty::Struct(_, fields) = ty {
+    if let Ty::Struct(_, fields, _) = ty {
         return fields.iter().map(|(_, ty)| ty.clone()).collect();
     }
     if let Ty::Tuple(fields) = ty {
@@ -107,12 +107,20 @@ impl Capacity {
                     write!(extra,"capacity.width{index}_{i}=capacity.width{index}_{i}.max(({value}).{i}.len());").unwrap_or_else(|_|unreachable!("String formatting"));
                 }
             }
-            return extra
-                + &children
-                    .iter()
-                    .enumerate()
-                    .map(|(i, child)| self.include(child, &format!("&({value}).{i}")))
-                    .collect::<String>();
+            return extra + &children
+                .iter()
+                .enumerate()
+                .map(|(i, child)| {
+                    if optional(ty, i) {
+                        format!(
+                            "if let Some(value)=(&({value}).{i}).as_ref() {{{}}}",
+                            self.include(child, "value")
+                        )
+                    } else {
+                        self.include(child, &format!("&({value}).{i}"))
+                    }
+                })
+                .collect::<String>();
         }
         format!(
             "<{} as hgl_store::PreparedValue>::include(&mut capacity.limit{index},{value});",
@@ -235,7 +243,14 @@ impl Capacity {
             let args = fields(ty)
                 .iter()
                 .enumerate()
-                .map(|(i, child)| format!("field{i}:{}", self.bounds(child)))
+                .map(|(i, child)| {
+                    let bounds = self.bounds(child);
+                    if optional(ty, i) {
+                        format!("field{i}:Some({bounds})")
+                    } else {
+                        format!("field{i}:{bounds}")
+                    }
+                })
                 .collect::<Vec<_>>()
                 .join(",");
             return format!("PreparedBounds{} {{{args}}}", global_type(ty));
@@ -303,7 +318,7 @@ impl Capacity {
                 "{{let output={id};let domain={domain};for index in 0..store.bindings().output(output).fixed.len() {{let child=store.bindings().output(output).fixed[index];let domain=domain.children.get(&(index as i64)).unwrap_or(&empty);{}}}}}",
                 self.output_with(child, "child","domain")
             ),
-            Ty::Struct(_, children) => children
+            Ty::Struct(_, children, _) => children
                 .iter()
                 .enumerate()
                 .map(|(i, (_, child))| {
@@ -350,4 +365,8 @@ impl Capacity {
             ),
         }
     }
+}
+
+fn optional(ty: &Ty, index: usize) -> bool {
+    matches!(ty,Ty::Struct(_,_,optional) if optional.contains(&index))
 }
