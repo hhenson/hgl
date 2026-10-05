@@ -107,20 +107,21 @@ impl Capacity {
                     write!(extra,"capacity.width{index}_{i}=capacity.width{index}_{i}.max(({value}).{i}.len());").unwrap_or_else(|_|unreachable!("String formatting"));
                 }
             }
-            return extra + &children
-                .iter()
-                .enumerate()
-                .map(|(i, child)| {
-                    if optional(ty, i) {
-                        format!(
-                            "if let Some(value)=(&({value}).{i}).as_ref() {{{}}}",
-                            self.include(child, "value")
-                        )
-                    } else {
-                        self.include(child, &format!("&({value}).{i}"))
-                    }
-                })
-                .collect::<String>();
+            return extra
+                + &children
+                    .iter()
+                    .enumerate()
+                    .map(|(i, child)| {
+                        if optional(ty, i) {
+                            format!(
+                                "if let Some(value)=(&({value}).{i}).as_ref() {{{}}}",
+                                self.include(child, "value")
+                            )
+                        } else {
+                            self.include(child, &format!("&({value}).{i}"))
+                        }
+                    })
+                    .collect::<String>();
         }
         format!(
             "<{} as hgl_store::PreparedValue>::include(&mut capacity.limit{index},{value});",

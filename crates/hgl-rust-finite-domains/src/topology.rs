@@ -24,7 +24,7 @@ pub fn include(ty: &Ty, value: &str, domain: &str) -> String {
             include(child, "value", "domain")
         );
     }
-    if let Ty::Struct(_, fields) = ty {
+    if let Ty::Struct(_, fields, _) = ty {
         return fields.iter().enumerate().map(|(i,(_,child))|format!("for value in &({value}).{i} {{let domain=({domain}).children.entry({i}).or_default();{}}}",include(child,"value","domain"))).collect::<Vec<_>>().concat();
     }
     if let Ty::Tuple(fields) = ty {
