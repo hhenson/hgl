@@ -42,8 +42,6 @@ fn complete_composites_do_not_infer_a_temporal_boundary() {
 #[test]
 fn atomic_shape_profile_rejects_excluded_payloads() {
     for (declaration, shape) in [
-        ("", "atomic<set<i64>>"),
-        ("", "atomic<map<i64,i64>>"),
         ("", "atomic<ref<i64>>"),
         ("", "atomic<delta<list<i64,2>>>"),
         ("struct Optional {value:ref<i64>=null}", "atomic<Optional>"),
@@ -172,4 +170,15 @@ fn composite_boundaries_do_not_become_ordinary_result_values() {
         ))
         .is_err()
     );
+}
+
+#[test]
+fn atomic_collection_shapes_are_admitted() {
+    for shape in ["atomic<set<i64>>", "atomic<map<i64,i64>>"] {
+        let body = format!(
+            "fn pass(value:{shape})->{shape} {{when {{return delta_value(value)}}}}\ntest empty {{eval(pass,[])}}"
+        );
+        let result = compile_tests(&sources(&body));
+        assert!(result.is_ok(), "{shape}: {result:?}");
+    }
 }
