@@ -318,31 +318,79 @@ _ => panic!("unknown test image") } }
     fs::remove_dir_all(dir)?;
     Ok(())
 }
-fn expected_summary(sources: &[(String, String)]) -> Result<String, String> {
+struct ExpectedSummary {
+    names: Vec<String>,
+    minimum: usize,
+    maximum: usize,
+}
+fn step_bounds(steps: &[hgl_eval_data::TestStep]) -> (usize, usize) {
+    use hgl_eval_data::TestStep;
+    steps.iter().fold((0, 0), |(minimum, maximum), step| {
+        let (low, high) = match step {
+            TestStep::Ordinary(_) => (0, 0),
+            TestStep::Eval(_) | TestStep::BindEval(..) | TestStep::Assert(_) => (1, 1),
+            TestStep::If(_, yes, no) => {
+                let (a, b) = step_bounds(yes);
+                let (c, d) = step_bounds(no);
+                (a.min(c), b.max(d))
+            }
+        };
+        (minimum + low, maximum + high)
+    })
+}
+fn expected_summary(sources: &[(String, String)]) -> Result<ExpectedSummary, String> {
     let library = hgl_library::load(sources)?;
-    let mut tests = 0;
-    let mut evaluations = 0;
+    let mut summary = ExpectedSummary {
+        names: Vec::new(),
+        minimum: 0,
+        maximum: 0,
+    };
     for declaration in library.declarations {
         if declaration.role == hgl_library::Role::Test {
-            tests += 1;
-            evaluations += hgl_eval_data::steps(&declaration.tokens)?
-                .iter()
-                .filter(|step| {
-                    matches!(
-                        step,
-                        hgl_eval_data::TestStep::Eval(_) | hgl_eval_data::TestStep::Assert(_)
-                    )
-                })
-                .count();
+            summary
+                .names
+                .push(format!("{}::{}", declaration.module, declaration.name));
+            let (low, high) = step_bounds(&hgl_eval_data::steps(&declaration.tokens)?);
+            summary.minimum += low;
+            summary.maximum += high;
         }
     }
-    Ok(format!(
-        "{tests} tests, {evaluations} evaluations, 0 failures"
-    ))
+    summary.names.sort();
+    Ok(summary)
 }
-fn check_images(binary: &Path, summary: &str) -> Result<(), Box<dyn std::error::Error>> {
+fn check_summary(text: &str, summary: &ExpectedSummary) {
+    let mut reported = text
+        .lines()
+        .filter_map(|line| line.strip_suffix(" ... ok"))
+        .collect::<Vec<_>>();
+    reported.sort_unstable();
+    assert_eq!(
+        reported, summary.names,
+        "every named test must execute exactly once"
+    );
+    let prefix = format!("{} tests, ", summary.names.len());
+    let evaluations = text
+        .lines()
+        .find_map(|line| {
+            line.strip_prefix(&prefix)?
+                .strip_suffix(" evaluations, 0 failures")?
+                .parse::<usize>()
+                .ok()
+        })
+        .expect("complete test summary");
+    assert!(
+        (summary.minimum..=summary.maximum).contains(&evaluations),
+        "executed steps {evaluations} outside {}..={}",
+        summary.minimum,
+        summary.maximum
+    );
+}
+fn check_images(
+    binary: &Path,
+    summary: &ExpectedSummary,
+) -> Result<(), Box<dyn std::error::Error>> {
     for (name, success, message) in [
-        ("standard", true, summary),
+        ("standard", true, "0 failures"),
         ("source_operators", true, "0 failures"),
         (
             "replay_order_failure",
@@ -385,6 +433,9 @@ fn check_images(binary: &Path, summary: &str) -> Result<(), Box<dyn std::error::
             String::from_utf8_lossy(&output.stderr)
         );
         assert_eq!(output.status.success(), success, "{name}: {text}");
+        if name == "standard" {
+            check_summary(&text, summary);
+        }
         assert!(
             text.contains(message),
             "{name}: expected {message:?}: {text}"
