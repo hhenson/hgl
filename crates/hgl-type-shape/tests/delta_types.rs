@@ -3,7 +3,18 @@ use hgl_type_shape::Ty;
 #[test]
 fn exact_derived_shapes_and_scalar_reduction() {
     for scalar in [
-        "bool", "i64", "f64", "str", "date", "time", "datetime", "duration",
+        "bool",
+        "i64",
+        "f64",
+        "str",
+        "date",
+        "time",
+        "datetime",
+        "duration",
+        "civil_datetime",
+        "timezone",
+        "zoned_time",
+        "zoned_datetime",
     ] {
         assert_eq!(Ty::parse(&format!("delta<{scalar}>")), Ty::parse(scalar));
     }
@@ -12,6 +23,7 @@ fn exact_derived_shapes_and_scalar_reduction() {
         "list<map<i64,str>,3>",
         "list<i64>",
         "list<list<str>>",
+        "map<tuple<bool>,i64>",
     ] {
         let ty = Ty::parse(source);
         let ty = ty.unwrap();
@@ -31,7 +43,7 @@ fn unsupported_origins_fail_formation() {
     for source in [
         "list<ref<i64>>",
         "set<list<str,2>>",
-        "map<tuple<bool>,i64>",
+        "map<tuple<list<bool>>,i64>",
         "ref<i64>",
         "list<i64,-1>",
         "delta<set<i64>>",

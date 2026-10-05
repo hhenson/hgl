@@ -4,7 +4,18 @@ use hgl_type_shape::Ty;
 #[test]
 fn all_admitted_scalar_wrappers_normalize_recursively() {
     for scalar in [
-        "bool", "i64", "f64", "str", "date", "time", "datetime", "duration",
+        "bool",
+        "i64",
+        "f64",
+        "str",
+        "date",
+        "time",
+        "datetime",
+        "duration",
+        "civil_datetime",
+        "timezone",
+        "zoned_time",
+        "zoned_datetime",
     ] {
         assert_eq!(Ty::parse(&format!("atomic<{scalar}>")), Ty::parse(scalar));
         assert_eq!(
@@ -23,13 +34,21 @@ fn complete_payload_and_structural_delta_are_different_types() {
         Ty::List(Box::new(Ty::I64), None),
         Ty::List(Box::new(Ty::I64), Some(0)),
         Ty::Tuple(vec![Ty::I64]),
+        Ty::Set(Box::new(Ty::I64)),
+        Ty::Map(Box::new(Ty::Str), Box::new(Ty::I64)),
         Ty::Struct("Empty".into(), vec![], vec![]),
         Ty::Struct("Single".into(), vec![("value".into(), Ty::I64)], vec![]),
     ] {
         let atomic = payload.clone().atomic();
         assert_ne!(atomic, payload);
+        assert_ne!(atomic.clone().delta(), payload.clone().delta());
         assert_eq!(atomic.delta(), Ok(payload));
     }
-    assert!(Ty::Set(Box::new(Ty::I64)).atomic().delta().is_err());
+    assert!(
+        Ty::Set(Box::new(Ty::Set(Box::new(Ty::I64))))
+            .atomic()
+            .delta()
+            .is_err()
+    );
     assert_eq!(Ty::parse("atomic<civil_datetime>"), Some(Ty::CivilDateTime));
 }
