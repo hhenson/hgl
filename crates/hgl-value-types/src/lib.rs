@@ -118,20 +118,12 @@ pub fn specialize(
             &arguments,
             active,
             |decl, args, active| specialize(library, decl, args, active),
-            |module, name, bindings| {
-                substitute(library, module, name, bindings, &mut BTreeSet::new())
-            },
+            |module, name, bindings| concrete(library, module, name, bindings),
         );
     }
     if let Some(ty) =
         hgl_recursive_types::resolve(library, decl, &arguments, |owner, pattern, bindings| {
-            substitute(
-                library,
-                &owner.module,
-                pattern,
-                bindings,
-                &mut BTreeSet::new(),
-            )
+            concrete(library, &owner.module, pattern, bindings)
         })?
     {
         return Ok(ty);
@@ -297,9 +289,7 @@ fn unify_delta(
     generics: &[String],
     bindings: &mut BTreeMap<String, Ty>,
 ) -> Result<(), String> {
-    if let Ok(expected) =
-        substitute(library, module, origin, bindings, &mut BTreeSet::new()).and_then(Ty::delta)
-    {
+    if let Ok(expected) = concrete(library, module, origin, bindings).and_then(Ty::delta) {
         return if expected == *actual {
             Ok(())
         } else {
