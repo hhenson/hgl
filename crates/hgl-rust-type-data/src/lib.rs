@@ -52,6 +52,13 @@ pub fn ty(t: &Ty) -> String {
         ),
         Ty::Recursive(batch) => format!("Recursive({})", recursive(batch)),
         Ty::Enum(e) => format!("Enum({})", enum_data(e)),
+        Ty::Rolling(t, window) => format!(
+            "Rolling(Box::new({}),hgl_source::Window::new(hgl_source::WindowKind::{:?},{},{}).expect(\"checked window\"))",
+            ty(t),
+            window.kind(),
+            window.maximum(),
+            window.minimum()
+        ),
         Ty::Atomic(t) => format!("Atomic(Box::new({}))", ty(t)),
         Ty::Ref(t) => format!("Ref(Box::new({}))", ty(t)),
         Ty::Nullable(t) => format!("Nullable(Box::new({}))", ty(t)),

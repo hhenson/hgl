@@ -63,3 +63,6 @@ formation uses hgl-family-types and rejects recursive family expansion. Explicit
 ancestor identities preserve subfamily-to-ancestor nominal membership.
 
 concrete(&Library,&str,&str,&BTreeMap<String,Ty>)->Result<Ty,String> resolves a specialization with a fresh recursive resolution scope.
+Rolling bounds normalize before substitution and generic unification. A pattern
+rolling<V,Max,Min> matches only a rolling actual with the exact normalized bounds,
+then unifies V. Neither an ordinary arrival nor its delta invents window identity.

@@ -14,3 +14,4 @@ workspace = true
 
 [dependencies]
 hgl-time-values = { path = "../hgl-time-values" }
+hgl-window-types = { path = "../hgl-window-types" }

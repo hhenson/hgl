@@ -1716,7 +1716,7 @@ impl Checker {
         }
         if matches!(
             name,
-            "valid" | "modified" | "last_modified" | "passivate" | "activate"
+            "valid" | "modified" | "all_valid" | "last_modified" | "passivate" | "activate"
         ) {
             return endpoint_call(name, args, runtime);
         }

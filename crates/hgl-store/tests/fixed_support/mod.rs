@@ -191,6 +191,7 @@ pub(crate) fn snapshot(
             ),
             Kind::Bundle(_) | Kind::Dictionary(_) | Kind::KeyedDictionary(..) => object(&fields),
             Kind::Atomic(_)
+            | Kind::Rolling(..)
             | Kind::Reference(_)
             | Kind::Set(_)
             | Kind::KeyedSet(_)

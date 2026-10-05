@@ -11,6 +11,7 @@ workspace = true
 [dependencies]
 hgl-rust-collections = { path = "../hgl-rust-collections" }
 hgl-rust-pure-bounds = { path = "../hgl-rust-pure-bounds" }
+hgl-rust-windows = { path = "../hgl-rust-windows" }
 hgl-source = { path = "../hgl-source" }
 hgl-rust-ir = { path = "../hgl-rust-ir" }
 hgl-rust-layouts = { path = "../hgl-rust-layouts" }

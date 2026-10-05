@@ -25,7 +25,8 @@ pub fn delta_storage(origin: &Ty) -> Ty {
             .iter()
             .map(|(name, child)| (name.clone(), list(delta_type(child))))
             .collect(),
-        Ty::Atomic(_)
+        Ty::Rolling(..)
+        | Ty::Atomic(_)
         | Ty::Delta(_)
         | Ty::List(..)
         | Ty::I64

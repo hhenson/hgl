@@ -1,5 +1,6 @@
 //! Canonical checked source shapes and invariant nominal applications.
 pub use hgl_type_syntax::{application, delta_argument};
+pub use hgl_window_types::{Window, WindowKind};
 use std::fmt;
 /// Fixed declared membership for an abstract atomic family.
 pub type FamilyType = hgl_nominal_batch::Family<Nominal, Ty>;
@@ -54,6 +55,8 @@ impl fmt::Display for Nominal {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 /// Types admitted by the executable source compiler.
 pub enum Ty {
+    /// Inherently temporal arrival window with exact resolved bounds.
+    Rolling(Box<Self>, Window),
     /// Closed declared concrete membership of an abstract atomic family.
     Family(FamilyType),
     /// Complete finite recursive batch, or nominal edge within such a batch.
@@ -122,6 +125,7 @@ impl Ty {
     /// Canonical scalar spelling; constructed types retain their child separately.
     pub fn name(&self) -> &'static str {
         match self {
+            Self::Rolling(..) => "rolling",
             Self::Enum(_) => "enum",
             Self::I64 => "i64",
             Self::F64 => "f64",
@@ -153,6 +157,12 @@ impl Ty {
             return Self::parse(origin)?.delta().ok();
         }
         if let Some((base, arguments)) = application(name) {
+            if base == "rolling" && (2..=3).contains(&arguments.len()) {
+                return Some(Self::Rolling(
+                    Box::new(Self::parse(arguments[0])?),
+                    Window::parse(arguments[1], arguments.get(2).copied())?,
+                ));
+            }
             if base == "atomic" && arguments.len() == 1 {
                 return Some(Self::parse(arguments[0])?.atomic());
             }
@@ -204,6 +214,9 @@ impl Ty {
     /// Canonical checked HGL source form, including complete nominal arguments.
     pub fn source_name(&self) -> String {
         match self {
+            Self::Rolling(child, window) => {
+                format!("rolling<{},{}>", child.source_name(), window.source_name())
+            }
             Self::Enum(ty) => ty.origin.clone(),
             Self::Struct(identity, _, _) => identity.source_name(),
             Self::Recursive(batch) => batch.identity().source_name(),
@@ -237,36 +250,24 @@ impl Ty {
 impl Ty {
     /// Whether this exact type belongs to the finite publication profile.
     pub fn publication(&self) -> bool {
-        match self {
-            Self::Enum(_)
-            | Self::Bool
-            | Self::I64
-            | Self::F64
-            | Self::Str
-            | Self::Date
-            | Self::Time
-            | Self::DateTime
-            | Self::CivilDateTime
-            | Self::TimeZone
-            | Self::ZonedTime
-            | Self::ZonedDateTime
-            | Self::Duration => true,
-            Self::Atomic(payload) => payload.atomic_payload(),
-            Self::Set(member) => member.collection_key(),
-            Self::List(child, Some(_)) => child.publication(),
-            Self::Tuple(children) => children.iter().all(Self::publication),
-            Self::Struct(_, fields, optional) => {
-                optional.is_empty() && fields.iter().all(|(_, child)| child.publication())
-            }
-            Self::Map(key, child) => key.collection_key() && child.publication(),
-            Self::Family(_)
-            | Self::Recursive(_)
-            | Self::List(_, None)
-            | Self::Delta(_)
-            | Self::Ref(_)
-            | Self::Nullable(_)
-            | Self::Void => false,
+        if let Self::Atomic(payload) | Self::Rolling(payload, _) = self {
+            return payload.atomic_payload();
         }
+        if let Self::Set(member) = self {
+            return member.collection_key();
+        }
+        if let Self::List(child, Some(_)) = self {
+            return child.publication();
+        }
+        if let Self::Map(key, child) = self {
+            return key.collection_key() && child.publication();
+        }
+        if let Self::Struct(_, _, optional) = self
+            && !optional.is_empty()
+        {
+            return false;
+        }
+        self.components(Self::publication)
     }
     /// Form the exact ordinary publication type, reducing scalar origins.
     pub fn delta(self) -> Result<Self, String> {
@@ -274,7 +275,7 @@ impl Ty {
             let name = self.source_name();
             return Err(format!("delta: unsupported publication shape {name}"));
         }
-        if let Self::Atomic(payload) = self {
+        if let Self::Atomic(payload) | Self::Rolling(payload, _) = self {
             return Ok(*payload);
         }
         Ok(if self.scalar() {

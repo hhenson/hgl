@@ -16,6 +16,7 @@
 //! entry. Only [`Store::bind`] reports an unknown id, because the builder
 //! calls it with ids read from a description.
 
+pub use hgl_rolling::{Rolling, WindowShape};
 use std::marker::PhantomData;
 
 pub use hgl_global::{
@@ -83,6 +84,8 @@ pub struct Store {
     bindings: Bindings,
     globals: GlobalState,
     atomic: hgl_atomic::Arena,
+    /// Independently prepared ordinary arrival windows.
+    pub rolling: hgl_rolling::Arena,
 }
 
 /// A dictionary with i64 keys and scalar children.
@@ -118,6 +121,7 @@ impl Store {
             bindings: &mut self.bindings,
             globals: &mut self.globals,
             atomic: &mut self.atomic,
+            rolling: &mut self.rolling,
             keys: &self.keys,
         }
     }
@@ -132,18 +136,14 @@ impl Store {
     /// Allocate a scalar output in the current graph scope.
     pub fn add_output<T: Scalar>(&mut self, owner: NodeId) -> Out<T> {
         let id = hgl_store_build::scalar::<T>(&mut self.bindings, &mut self.columns, owner);
-        Out {
-            id,
-            generation: self.bindings.output(id).generation,
-            value_type: PhantomData,
-        }
+        self.scalar_output(id)
+            .unwrap_or_else(|_| unreachable!("new scalar output"))
     }
     /// Allocate an unbound scalar input.
     pub fn add_input<T: Scalar>(&mut self, owner: NodeId, active: bool) -> In<T> {
-        In {
-            id: self.bindings.add_input(owner, Kind::Ts(T::TYPE), active),
-            value_type: PhantomData,
-        }
+        let id = self.bindings.add_input(owner, Kind::Ts(T::TYPE), active);
+        self.scalar_input(id)
+            .unwrap_or_else(|_| unreachable!("new scalar input"))
     }
     /// Plain, silent wiring-time binding.
     pub fn bind(&mut self, input: InputId, output: OutputId) -> Result<(), BindError> {

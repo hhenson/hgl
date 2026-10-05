@@ -11,3 +11,8 @@ no alternate arithmetic policy. Function calls and configuration names need
 the compiler's normal resolution context, not string substitution.
 Acceptance: nested type equivalence, arithmetic precedence, configuration
 sizes, rejection of runtime/wrong-type/negative/overflow sizes.
+
+Rolling maximum/minimum expressions use the same checked lexical constant
+callback, then hgl-window-types validates kind and range. Omitted minimum equals
+maximum. Canonical microseconds preserve equivalent duration spelling identity;
+tick counts never implicitly convert to duration bounds.

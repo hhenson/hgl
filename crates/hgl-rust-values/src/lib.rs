@@ -263,13 +263,13 @@ fn integer_binary(op: &str, a: &str, b: &str) -> String {
 }
 
 /// Emit the checked statements form.
-pub fn statements(plan: &Plan, body: &[Statement], out: &mut Vec<String>) {
+pub fn statements(plan: &Plan, body: &[Statement], out: &mut Vec<String>, result: Option<&Ty>) {
     for statement in body {
         out.push(match statement {
             Statement::TimedYield(..) => unreachable!("generator yields use resume lowering"),
             Statement::While(condition, body) => {
                 let mut code = vec![format!("while {} {{\n", condition_code(plan, condition))];
-                statements(plan, body, &mut code);
+                statements(plan, body, &mut code, result);
                 code.push("}\n".into());
                 code.concat()
             }
@@ -287,9 +287,9 @@ pub fn statements(plan: &Plan, body: &[Statement], out: &mut Vec<String>) {
             },
             Statement::Var(i, v) => format!("let mut local{i} = {};\n", condition_code(plan, v)),
             Statement::Return(v) => {
-                if hgl_rust_finite_domains::prepared(plan) && plan.recording.is_some() && let Some(code)=prepared::forward(plan,v) {out.push(code);continue;}
+                if hgl_rust_finite_domains::prepared(plan) && plan.recording.is_some() && let Some(code)=prepared::forward(plan,v,result) {out.push(code);continue;}
                 let publish = if matches!(v.ty, Ty::Ref(_)) { "_ctx.set_reference(self._output, publication)?;" } else { "" };
-                let publish = if publish.is_empty() { hgl_rust_deltas::publish(&v.ty,"publication") } else { publish.into() };
+                let publish = if publish.is_empty() { result.filter(|ty| matches!(ty,Ty::Rolling(..))).map_or_else(|| hgl_rust_deltas::publish(&v.ty,"publication"),|ty| hgl_rust_windows::apply(ty,"self._output","publication")) } else { publish.into() };
                 format!("let publication = {};\n{publish}\nreturn Ok(());\n", condition_code(plan, v))
             },
             Statement::Call(v) => format!("{};\n", condition_code(plan, v)),
@@ -297,14 +297,14 @@ pub fn statements(plan: &Plan, body: &[Statement], out: &mut Vec<String>) {
                 let Kind::Input(input, _)=collection.kind else {unreachable!("checked collection")};
                 let Ty::Set(element)=&collection.ty else {unreachable!("checked collection")};
                 let mut code=vec![format!("let mut index{id}=0;\nwhile let Some(key{id})=_ctx.store().bindings().changed_keys(self.input{input}.id()).get(index{id}).copied() {{\nindex{id}+=1;\nif _ctx.store().bindings().input(self.input{input}.id()).members.initial.get(key{id})==Some(&false) && _ctx.store().bindings().child_input(self.input{input}.id(),key{id}).is_some() {{\nlet local{id}={};\n",if **element==Ty::Bool {format!("key{id}!=0")} else {format!("key{id}")})];
-                statements(plan,body,&mut code);code.push("}\n}\n".into());code.concat()
+                statements(plan,body,&mut code,result);code.push("}\n}\n".into());code.concat()
             }
             Statement::Assign(target,v) => assignment(plan, target, v),
             Statement::If(condition, yes, no) => {
                 let mut code = vec![format!("if {} {{\n", condition_code(plan, condition))];
-                statements(plan, yes, &mut code);
+                statements(plan, yes, &mut code, result);
                 code.push("} else {\n".to_owned());
-                statements(plan, no, &mut code);
+                statements(plan, no, &mut code, result);
                 code.push("}\n".to_owned());
                 code.concat()
             }
@@ -370,6 +370,9 @@ pub fn query(op: &str, args: &[Value]) -> String {
             let Kind::Input(i, _) = v.kind else {
                 unreachable!("checked endpoint query")
             };
+            if let Some(code) = hgl_rust_windows::query(&v.ty, op, &format!("self.input{i}")) {
+                return code;
+            }
             if let Some(payload) = whole_payload(&v.ty)
                 && op == "delta_value"
             {
@@ -378,7 +381,7 @@ pub fn query(op: &str, args: &[Value]) -> String {
                     global_type(payload)
                 );
             }
-            if hgl_rust_deltas::structural(&v.ty) || whole_payload(&v.ty).is_some() {
+            if hgl_rust_deltas::shaped(&v.ty) {
                 let input = format!("self.input{i}");
                 return match op {
                     "delta_value" => hgl_rust_deltas::observe(
@@ -389,6 +392,7 @@ pub fn query(op: &str, args: &[Value]) -> String {
                         &input,
                     ),
                     "valid" => format!("_ctx.store().input_valid({input}.id())"),
+                    "all_valid" => format!("_ctx.store().bindings().all_valid({input}.id())"),
                     "modified" => format!(
                         "_ctx.store().bindings().modified({input}.id(),_ctx.evaluation_time())"
                     ),
@@ -423,10 +427,8 @@ pub fn query(op: &str, args: &[Value]) -> String {
     if values.len() == 1 {
         values[0].clone()
     } else {
-        format!(
-            "({})",
-            values.join(if op == "modified" { " || " } else { " && " })
-        )
+        let separator = if op == "modified" { " || " } else { " && " };
+        format!("({})", values.join(separator))
     }
 }
 
@@ -613,7 +615,7 @@ fn direct_call(plan: &Plan, result: &Ty, args: &[Value], body: &[Statement]) -> 
     for i in 0..args.len() {
         code.push(format!("let local{i} = argument{i};"));
     }
-    statements(plan, body, &mut code);
+    statements(plan, body, &mut code, None);
     if *result == Ty::Void {
         code.push("Ok(())".into());
     }

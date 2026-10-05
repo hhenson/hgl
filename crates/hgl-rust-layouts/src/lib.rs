@@ -55,7 +55,8 @@ pub fn whole_payload(ty: &Ty) -> Option<&Ty> {
     match ty {
         Ty::Atomic(payload) => Some(payload),
         Ty::Enum(_) => Some(ty),
-        Ty::Map(..)
+        Ty::Rolling(..)
+        | Ty::Map(..)
         | Ty::Tuple(_)
         | Ty::Delta(_)
         | Ty::List(..)

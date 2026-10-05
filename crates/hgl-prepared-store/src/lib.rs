@@ -13,6 +13,8 @@ pub struct Observation<'a> {
     pub bindings: &'a Bindings,
     /// Whole-value atomic source columns.
     pub atomic: &'a hgl_atomic::Arena,
+    /// Retained ordinary arrival windows.
+    pub rolling: &'a hgl_rolling::Arena,
     /// Exact retained scalar key identities.
     pub keys: &'a hgl_keys::Keys,
 }
@@ -36,6 +38,8 @@ pub struct PreparedStorage<'a> {
     pub globals: &'a mut GlobalState,
     /// Ordinary whole-value temporal storage.
     pub atomic: &'a mut hgl_atomic::Arena,
+    /// Independent rolling arrival rings.
+    pub rolling: &'a mut hgl_rolling::Arena,
     /// Cold exact owning keys.
     pub keys: &'a hgl_keys::Keys,
 }
@@ -47,6 +51,7 @@ impl<'a> PreparedStorage<'a> {
                 columns: self.columns,
                 bindings: self.bindings,
                 atomic: self.atomic,
+                rolling: self.rolling,
                 keys: self.keys,
             },
             self.globals,
@@ -81,13 +86,7 @@ pub struct PreparedTick<'a, W: Wake> {
     wake: &'a mut W,
 }
 impl<W: Wake> PreparedTick<'_, W> {
-    /// Copy a checked native scalar into reserved owning capacity, then publish.
-    pub fn scalar<T: Scalar>(
-        &mut self,
-        output: OutputId,
-        generation: u32,
-        value: &T,
-    ) -> NodeResult {
+    fn authorize(&self, output: OutputId, generation: u32) {
         validate_write(
             self.storage.bindings,
             output,
@@ -95,6 +94,63 @@ impl<W: Wake> PreparedTick<'_, W> {
             self.now,
             self.writer,
         );
+    }
+    /// Publish one independently retained arrival from a prepared source slot.
+    pub fn rolling_from<S: hgl_rolling::WindowShape>(
+        &mut self,
+        source: &ValueColumns,
+        from: ValueSlot<S::Payload>,
+        output: Output<S>,
+    ) -> NodeResult
+    where
+        S::Payload: PreparedValue,
+    {
+        self.authorize(output.id(), output.generation());
+        self.storage.rolling.from(
+            self.storage.bindings,
+            output,
+            source,
+            from,
+            (self.now, self.wake),
+        )
+    }
+    /// Publish one native arrival while reusing its output's reserved ring storage.
+    pub fn rolling<S: hgl_rolling::WindowShape>(
+        &mut self,
+        output: Output<S>,
+        value: &<S::Payload as hgl_global::GlobalValue>::Value,
+    ) -> NodeResult
+    where
+        S::Payload: PreparedValue,
+    {
+        self.authorize(output.id(), output.generation());
+        self.storage
+            .rolling
+            .write(self.storage.bindings, output, value, self.now, self.wake)
+    }
+    /// Forward the current arrival into an independently timed output window.
+    pub fn pass_rolling<S: hgl_rolling::WindowShape>(
+        &mut self,
+        input: Input<S>,
+        output: Output<S>,
+    ) -> NodeResult
+    where
+        S::Payload: PreparedValue,
+    {
+        self.authorize(output.id(), output.generation());
+        self.storage
+            .rolling
+            .pass(self.storage.bindings, input, output, self.now, self.wake)
+    }
+
+    /// Copy a checked native scalar into reserved owning capacity, then publish.
+    pub fn scalar<T: Scalar>(
+        &mut self,
+        output: OutputId,
+        generation: u32,
+        value: &T,
+    ) -> NodeResult {
+        self.authorize(output, generation);
         let slot = self.storage.bindings.output(output).slot as usize;
         let destination = &mut T::column_mut(self.storage.columns)[slot];
         if destination.capacity() < value.size() {
@@ -111,13 +167,7 @@ impl<W: Wake> PreparedTick<'_, W> {
         output: OutputId,
         generation: u32,
     ) -> NodeResult {
-        validate_write(
-            self.storage.bindings,
-            output,
-            generation,
-            self.now,
-            self.writer,
-        );
+        self.authorize(output, generation);
         if !self.storage.bindings.valid(input) {
             return Err(NodeError::new("prepared input is invalid"));
         }
@@ -157,6 +207,7 @@ impl<W: Wake> PreparedTick<'_, W> {
             columns: self.storage.columns,
             bindings: self.storage.bindings,
             atomic: self.storage.atomic,
+            rolling: self.storage.rolling,
             keys: self.storage.keys,
         };
         let bytes = measure(observation)?;
@@ -171,6 +222,7 @@ impl<W: Wake> PreparedTick<'_, W> {
             columns: self.storage.columns,
             bindings: self.storage.bindings,
             atomic: self.storage.atomic,
+            rolling: self.storage.rolling,
             keys: self.storage.keys,
         };
         compose(&mut destination, observation);
@@ -184,13 +236,7 @@ impl<W: Wake> PreparedTick<'_, W> {
         output: Output<Atomic<T>>,
         value: &T::Value,
     ) -> NodeResult {
-        validate_write(
-            self.storage.bindings,
-            output.id(),
-            output.generation(),
-            self.now,
-            self.writer,
-        );
+        self.authorize(output.id(), output.generation());
         let slot = self
             .storage
             .atomic
@@ -208,13 +254,7 @@ impl<W: Wake> PreparedTick<'_, W> {
         input: Input<Atomic<T>>,
         output: Output<Atomic<T>>,
     ) -> NodeResult {
-        validate_write(
-            self.storage.bindings,
-            output.id(),
-            output.generation(),
-            self.now,
-            self.writer,
-        );
+        self.authorize(output.id(), output.generation());
         let from = self.storage.atomic.borrow(self.storage.bindings, input)?;
         let to = self
             .storage
@@ -239,13 +279,7 @@ impl<W: Wake> PreparedTick<'_, W> {
         from: ValueSlot<T>,
         output: Output<Atomic<T>>,
     ) -> NodeResult {
-        validate_write(
-            self.storage.bindings,
-            output.id(),
-            output.generation(),
-            self.now,
-            self.writer,
-        );
+        self.authorize(output.id(), output.generation());
         let to = self
             .storage
             .atomic

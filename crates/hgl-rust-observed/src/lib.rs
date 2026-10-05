@@ -33,6 +33,9 @@ fn element(ty: &Ty, list: &str, index: &str, columns: &str) -> String {
 }
 /// Publish a typed payload slot without constructing an owning intermediary.
 pub fn apply(ty: &Ty, output: &str, source: &str, slot: &str) -> String {
+    if matches!(ty, Ty::Rolling(..)) {
+        return hgl_rust_windows::from(ty, output, source, slot);
+    }
     if let Some(payload) = whole_payload(ty) {
         return format!(
             "_ctx.prepared().atomic_from::<{}>({source},{slot},{output})?;",
@@ -53,6 +56,9 @@ pub fn apply(ty: &Ty, output: &str, source: &str, slot: &str) -> String {
 }
 /// Copy a sparse temporal observation into an independently owned prepared ordinary slot.
 pub fn capture(ty: &Ty, input: &str, slot: &str) -> String {
+    if matches!(ty, Ty::Rolling(..)) {
+        return hgl_rust_windows::capture(ty, input, slot);
+    }
     if let Some(payload) = whole_payload(ty) {
         let marker = global_type(payload);
         return format!(
@@ -72,6 +78,9 @@ pub fn capture(ty: &Ty, input: &str, slot: &str) -> String {
 }
 /// Forward exact changed publications directly between prepared temporal endpoints.
 pub fn pass(ty: &Ty, input: &str, output: &str) -> String {
+    if matches!(ty, Ty::Rolling(..)) {
+        return hgl_rust_windows::pass(ty, input, output);
+    }
     if let Some(payload) = whole_payload(ty) {
         return format!(
             "_ctx.prepared().pass_atomic::<{}>({input},{output})?;",

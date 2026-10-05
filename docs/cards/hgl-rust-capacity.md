@@ -52,3 +52,8 @@ behavioral limitation distinct from the validated finite publication matrix.
 May use hgl-rust-keyed::constructors to include statically known constructor
 key paths and storage widths even when child payload expressions execute in
 hooks. Cold preparation never evaluates those runtime child payloads.
+
+Rolling outputs reserve ordinary arrival bounds independently for every retained
+ring slot before start. FiniteCapacity.arrivals carries the finite input/replay
+horizon; duration windows use it directly and tick windows cap it by Max. Nested
+structural child preparation recursively installs the same static window storage.

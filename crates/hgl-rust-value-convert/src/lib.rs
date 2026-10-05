@@ -5,12 +5,10 @@ fn fields(t: &Ty) -> Vec<Ty> {
     if let Ty::Tuple(fields) = t {
         return fields.clone();
     }
-    t.structure()
-        .unwrap_or_else(|_| unreachable!("checked aggregate root"))
-        .1
-        .iter()
-        .map(|(_, ty)| ty.clone())
-        .collect()
+    let (_, fields, _) = t
+        .structure()
+        .unwrap_or_else(|_| unreachable!("checked aggregate root"));
+    fields.iter().map(|(_, ty)| ty.clone()).collect()
 }
 /// Decode a constructed checked value into its exact native owning representation.
 pub fn decode(t: &Ty, expression: &str) -> String {
@@ -66,7 +64,7 @@ pub fn decode(t: &Ty, expression: &str) -> String {
         | Ty::ZonedDateTime => {
             scalar_decode(t)
         }
-        Ty::Atomic(_) | Ty::Map(..) | Ty::Set(_) | Ty::Ref(_) | Ty::Nullable(_) | Ty::Recursive(_) | Ty::Family(_) | Ty::Void => {
+        Ty::Atomic(_) | Ty::Rolling(..) | Ty::Map(..) | Ty::Set(_) | Ty::Ref(_) | Ty::Nullable(_) | Ty::Recursive(_) | Ty::Family(_) | Ty::Void => {
             unreachable!("checked prepared ordinary type")
         }
     };
@@ -123,6 +121,7 @@ pub fn encode(t: &Ty, expression: &str) -> String {
         | Ty::ZonedTime
         | Ty::ZonedDateTime => scalar_encode(t),
         Ty::Atomic(_)
+        | Ty::Rolling(..)
         | Ty::Map(..)
         | Ty::Set(_)
         | Ty::Ref(_)
@@ -150,7 +149,7 @@ fn delta_decode(origin: &Ty, expression: &str) -> String {
             format!("parts.iter().filter_map(|p|if let hgl_rust_ir::DeltaEntry::Keyed(k,_)=p {{Some(k)}} else {{None}}).map(|k|Ok({})).collect::<Result<Vec<_>,String>>()?,parts.iter().filter_map(|p|if let hgl_rust_ir::DeltaEntry::Keyed(_,v)=p {{Some(v)}} else {{None}}).map(|v|Ok({})).collect::<Result<Vec<_>,String>>()?,parts.iter().filter_map(|p|if let hgl_rust_ir::DeltaEntry::Remove(k)=p {{Some(k)}} else {{None}}).map(|k|Ok({})).collect::<Result<Vec<_>,String>>()?,",decode(key,"k"),decode(&child,"v"),decode(key,"k"))
         }
         Ty::Tuple(_) | Ty::Struct(..)=>fields(origin).iter().enumerate().map(|(i,t)|format!("parts.iter().filter_map(|p|if let hgl_rust_ir::DeltaEntry::Child(id,v)=p {{if *id=={i} {{Some(v)}} else {{None}}}} else {{None}}).map(|v|Ok({})).collect::<Result<Vec<_>,String>>()?,",decode(&t.clone().delta().unwrap_or_else(|_|unreachable!("checked child")),"v"))).collect::<Vec<_>>().concat(),
-        Ty::Atomic(_) | Ty::Delta(_) | Ty::I64 | Ty::F64 | Ty::Bool | Ty::Str | Ty::Duration | Ty::Date | Ty::Time | Ty::DateTime | Ty::CivilDateTime | Ty::TimeZone | Ty::Enum(_) | Ty::ZonedTime | Ty::ZonedDateTime | Ty::Ref(_) | Ty::Nullable(_) | Ty::Recursive(_) | Ty::Family(_) | Ty::Void => unreachable!("checked structural delta"),
+        Ty::Atomic(_) | Ty::Rolling(..) | Ty::Delta(_) | Ty::I64 | Ty::F64 | Ty::Bool | Ty::Str | Ty::Duration | Ty::Date | Ty::Time | Ty::DateTime | Ty::CivilDateTime | Ty::TimeZone | Ty::Enum(_) | Ty::ZonedTime | Ty::ZonedDateTime | Ty::Ref(_) | Ty::Nullable(_) | Ty::Recursive(_) | Ty::Family(_) | Ty::Void => unreachable!("checked structural delta"),
     };
     format!(
         "{{let hgl_rust_ir::Kind::Delta(parts)=&({expression}).kind else {{return Err(\"prepared delta required\".into())}}; ({storage})}}"
@@ -191,6 +190,7 @@ fn delta_encode(origin: &Ty, expression: &str) -> String {
             }
         }
         Ty::Atomic(_)
+        | Ty::Rolling(..)
         | Ty::Delta(_)
         | Ty::I64
         | Ty::F64
@@ -271,6 +271,7 @@ fn scalar_decode(t: &Ty) -> String {
         | Ty::Nullable(_)
         | Ty::Recursive(_)
         | Ty::Family(_)
+        | Ty::Rolling(..)
         | Ty::Void => unreachable!("checked scalar"),
     };
     format!(
@@ -304,6 +305,7 @@ fn scalar_encode(t: &Ty) -> String {
         | Ty::Nullable(_)
         | Ty::Recursive(_)
         | Ty::Family(_)
+        | Ty::Rolling(..)
         | Ty::Void => unreachable!("checked scalar"),
     };
     format!("hgl_rust_ir::Kind::Literal(hgl_source::Literal::{variant}({expression}))")

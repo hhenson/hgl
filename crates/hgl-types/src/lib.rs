@@ -7,6 +7,7 @@
 pub use hgl_time_values::{
     CivilDateTime, Date, EngineDelta, EngineTime, Time, ZoneId, ZonedDateTime, ZonedTime,
 };
+pub use hgl_window_types::{Window, WindowKind};
 
 /// A node's position in its graph's rank order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -94,6 +95,8 @@ impl ScalarValue {
 /// Recursive shape, independent of endpoint bindings.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TsType {
+    /// One arrival window with exact ordinary payload and resolved bounds.
+    Rolling(OrdinaryType, Window),
     /// A scalar column.
     Ts(ScalarType),
     /// One complete ordinary payload.
@@ -130,6 +133,7 @@ impl TsType {
             Self::Set(_) | Self::KeyedSet(_) => Some(&Self::Ts(ScalarType::Bool)),
             Self::Ts(_)
             | Self::Atomic(_)
+            | Self::Rolling(..)
             | Self::Reference(_)
             | Self::List(..)
             | Self::Bundle(_) => None,
@@ -142,6 +146,7 @@ impl TsType {
             Self::Bundle(fields) => fields.len(),
             Self::Ts(_)
             | Self::Atomic(_)
+            | Self::Rolling(..)
             | Self::KeyedDictionary(..)
             | Self::KeyedSet(_)
             | Self::Dictionary(_)
@@ -160,6 +165,7 @@ impl TsType {
             Self::Bundle(fields) => &fields[position].1,
             Self::Ts(_)
             | Self::Atomic(_)
+            | Self::Rolling(..)
             | Self::KeyedDictionary(..)
             | Self::KeyedSet(_)
             | Self::Dictionary(_)

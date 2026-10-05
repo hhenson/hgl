@@ -28,6 +28,7 @@ fn identity(ty: &Ty) -> String {
 /// Compile-time marker for one exact prepared temporal shape.
 pub fn shape_marker(ty: &Ty) -> String {
     match ty {
+        Ty::Rolling(..) => hgl_rust_windows::marker(ty),
         Ty::Enum(_) => format!("hgl_store::shapes::Atomic<{}>", global_type(ty)),
         Ty::Atomic(payload) => format!("hgl_store::shapes::Atomic<{}>", global_type(payload)),
         Ty::List(child, Some(n)) => {
@@ -110,6 +111,9 @@ pub fn equivalent(ty: &Ty, left: &str, right: &str) -> String {
     }
 }
 fn read(ty: &Ty, input: &str) -> String {
+    if matches!(ty, Ty::Rolling(..)) {
+        return hgl_rust_windows::read(ty, input);
+    }
     if let Some(payload) = whole_payload(ty) {
         return format!(
             "_ctx.store().atomic_get::<{}>({input})?",
@@ -125,6 +129,9 @@ fn read(ty: &Ty, input: &str) -> String {
     }
 }
 fn apply(ty: &Ty, output: &str, payload: &str) -> String {
+    if matches!(ty, Ty::Rolling(..)) {
+        return hgl_rust_windows::apply(ty, output, payload);
+    }
     if let Some(ty) = whole_payload(ty) {
         return format!(
             "_ctx.set_atomic::<{}>({output},{payload})?;",
@@ -138,6 +145,12 @@ fn apply(ty: &Ty, output: &str, payload: &str) -> String {
     }
 }
 fn allocation(ty: &Ty) -> String {
+    if matches!(ty, Ty::Rolling(..)) {
+        return format!(
+            "store.add_shaped_output(owner,<{} as hgl_store::shapes::Shape>::shape())",
+            shape_marker(ty)
+        );
+    }
     if let Some(payload) = whole_payload(ty) {
         return format!("store.add_atomic_output::<{}>(owner)", global_type(payload));
     }
@@ -148,33 +161,13 @@ fn allocation(ty: &Ty) -> String {
     }
 }
 fn children(ty: &Ty) -> Vec<&Ty> {
-    match ty {
-        Ty::Struct(_, fields, _) => fields.iter().map(|(_, t)| t).collect(),
-        Ty::Tuple(children) => children.iter().collect(),
-        Ty::Atomic(_)
-        | Ty::Map(..)
-        | Ty::Delta(_)
-        | Ty::List(..)
-        | Ty::I64
-        | Ty::F64
-        | Ty::Bool
-        | Ty::Str
-        | Ty::CivilDateTime
-        | Ty::TimeZone
-        | Ty::Enum(_)
-        | Ty::ZonedTime
-        | Ty::ZonedDateTime
-        | Ty::Duration
-        | Ty::Date
-        | Ty::Time
-        | Ty::DateTime
-        | Ty::Ref(_)
-        | Ty::Set(_)
-        | Ty::Nullable(_)
-        | Ty::Recursive(_)
-        | Ty::Family(_)
-        | Ty::Void => vec![],
+    if let Ty::Struct(_, fields, _) = ty {
+        return fields.iter().map(|(_, t)| t).collect();
     }
+    if let Ty::Tuple(children) = ty {
+        return children.iter().collect();
+    }
+    Vec::new()
 }
 fn empty(ty: &Ty) -> String {
     let Ty::Struct(_, fields, _) = delta_storage(ty) else {
@@ -299,7 +292,8 @@ fn collect(ty: &Ty, types: &mut BTreeSet<Ty>) {
                 collect(child, types);
             }
         }
-        Ty::Atomic(_)
+        Ty::Rolling(..)
+        | Ty::Atomic(_)
         | Ty::Map(..)
         | Ty::Tuple(_)
         | Ty::I64
@@ -407,3 +401,8 @@ fn values(value: &Value, types: &mut BTreeSet<Ty>) {
 }
 mod emit;
 use emit::marker;
+
+/// Whether endpoint handles carry an exact prepared shape rather than a scalar column.
+pub fn shaped(ty: &Ty) -> bool {
+    structural(ty) || whole_payload(ty).is_some() || matches!(ty, Ty::Rolling(..))
+}

@@ -12,6 +12,35 @@ pub fn normalize(
     let Some((base, args)) = application(name) else {
         return Ok(name.into());
     };
+    if base == "rolling" {
+        if !(2..=3).contains(&args.len()) {
+            return Err("rolling requires payload, maximum and optional minimum".into());
+        }
+        let max = evaluate(args[1])?;
+        let min = if args.len() == 3 {
+            evaluate(args[2])?
+        } else {
+            max.clone()
+        };
+        let window = match (max, min) {
+            (Literal::Int(max), Literal::Int(min)) => {
+                hgl_source::Window::new(hgl_source::WindowKind::Ticks, max, min)?
+            }
+            (Literal::Duration(max), Literal::Duration(min)) => {
+                hgl_source::Window::new(hgl_source::WindowKind::Duration, max, min)?
+            }
+            _ => {
+                return Err(
+                    "rolling sizes require constants of the same i64 or duration kind".into(),
+                );
+            }
+        };
+        return Ok(format!(
+            "rolling<{},{}>",
+            normalize(args[0], evaluate)?,
+            window.source_name()
+        ));
+    }
     if base == "list" {
         if !(1..=2).contains(&args.len()) {
             return Err("list requires an element and optional constant size".into());

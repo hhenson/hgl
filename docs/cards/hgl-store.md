@@ -356,3 +356,8 @@ first publication, pass-through and recording.
 Reexports Recursive and RecursiveTarget through hgl-global. Complete recursive
 publication uses the existing prepared atomic facade; boxes are materialized and
 captured only at cold owning boundaries, while per-tick copies reuse descendants.
+
+Store owns and exposes an independent hgl-rolling Arena. Rolling and WindowShape
+are reexported for statically typed output/input handles. Shaped allocation creates
+invalid rolling roots; PreparedStorage owns the disjoint cold/hot access. The
+payload is ordinary V and root membership/readiness is private rolling state.

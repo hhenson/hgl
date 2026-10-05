@@ -13,6 +13,7 @@ workspace = true
 
 [dependencies]
 hgl-rust-finite-domains = { path = "../hgl-rust-finite-domains" }
+hgl-rust-windows = { path = "../hgl-rust-windows" }
 hgl-rust-source-slots = { path = "../hgl-rust-source-slots" }
 hgl-rust-deltas = { path = "../hgl-rust-deltas" }
 hgl-source = { path = "../hgl-source" }

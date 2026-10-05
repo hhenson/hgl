@@ -66,17 +66,18 @@ pub fn substitute(
             _ => Err(format!("invalid structural type arguments {name}")),
         };
     }
-    if base == "atomic" && arguments.len() == 1 {
-        return Ok(hgl_value_access::project(&substitute(
-            library,
-            module,
-            arguments[0],
-            bindings,
-            active,
-        )?)
-        .atomic());
+    if (base == "atomic" && arguments.len() == 1) || base == "rolling" {
+        let payload = substitute(library, module, arguments[0], bindings, active)?;
+        let payload = hgl_value_access::project(&payload);
+        return if base == "atomic" {
+            Ok(payload.atomic())
+        } else {
+            let window = hgl_source::Window::parse(arguments[1], arguments.get(2).copied())
+                .ok_or("invalid rolling bounds")?;
+            Ok(Ty::Rolling(Box::new(payload), window))
+        };
     }
-    if matches!(base, "rolling" | "ref") {
+    if base == "ref" {
         return Err(format!(
             "unsupported ordinary struct argument or field {name}"
         ));
@@ -216,13 +217,13 @@ pub fn unify(
     }
     if let Some((base, arguments)) = application(pattern) {
         if base == "atomic" && arguments.len() == 1 {
-            let payload = if let Ty::Atomic(payload) = actual {
-                payload.as_ref()
-            } else if actual.clone().atomic() == *actual {
-                actual
-            } else {
-                return Err("atomic boundary mismatch".into());
-            };
+            let payload = atomic_payload(actual)?;
+            return unify(library, module, arguments[0], payload, generics, bindings);
+        }
+        if let ("rolling", Ty::Rolling(payload, window)) = (base, actual) {
+            if hgl_source::Window::parse(arguments[1], arguments.get(2).copied()) != Some(*window) {
+                return Err("rolling bounds mismatch".into());
+            }
             return unify(library, module, arguments[0], payload, generics, bindings);
         }
         let children = match (base, actual) {
@@ -267,6 +268,15 @@ pub fn unify(
         return Err("struct field type mismatch".into());
     }
     Ok(())
+}
+
+fn atomic_payload(actual: &Ty) -> Result<&Ty, String> {
+    if let Ty::Atomic(payload) = actual {
+        return Ok(payload);
+    }
+    (actual.clone().atomic() == *actual)
+        .then_some(actual)
+        .ok_or_else(|| "atomic boundary mismatch".into())
 }
 
 fn size(library: &Library, module: &str, expr: &str) -> Result<hgl_source::Literal, String> {

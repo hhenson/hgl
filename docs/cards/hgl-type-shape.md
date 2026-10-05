@@ -83,3 +83,9 @@ collection_key() admits scalar leaves, finite positional tuples and concrete
 structs recursively, including optional fields. Recursive/family/collection/ref
 components remain excluded. Temporal Set/Map publication uses this same complete
 ordinary K classification; atomic payload classification remains independent.
+
+Rolling admission adds Ty::Rolling(Box<Ty>,Window), preserving exact ordinary V,
+resolved size kind and both bounds. It is inherently temporal, excluded from
+ordinary payloads and keys. Its delta is V. Equivalent duration spellings and
+omitted Min normalize before identity. Structural children may be rolling;
+ordinary V alone cannot infer a rolling context. Uses hgl-window-types.

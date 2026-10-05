@@ -24,9 +24,13 @@ pub fn output(
     bindings: &mut Bindings,
     columns: &mut Columns,
     atomic: &mut hgl_atomic::Arena,
+    rolling: &mut hgl_rolling::Arena,
     owner: NodeId,
     kind: Kind,
 ) -> OutputId {
+    if let Kind::Rolling(ty, window) = kind {
+        return rolling.add_output(bindings, owner, ty, window);
+    }
     if let Kind::Atomic(ty) = kind {
         return atomic.add_output(bindings, owner, ty);
     }
@@ -51,7 +55,16 @@ pub fn output(
         };
     }
     let children = (0..kind.len())
-        .map(|n| output(bindings, columns, atomic, owner, kind.child(n).clone()))
+        .map(|n| {
+            output(
+                bindings,
+                columns,
+                atomic,
+                rolling,
+                owner,
+                kind.child(n).clone(),
+            )
+        })
         .collect::<Vec<_>>();
     let id = bindings.add_output(owner, kind, 0).0;
     for child in children {

@@ -17,6 +17,7 @@ pub fn rust_type(ty: &Ty) -> &'static str {
         Ty::Str => "String",
         Ty::Void => "()",
         Ty::Atomic(_)
+        | Ty::Rolling(..)
         | Ty::Map(..)
         | Ty::Tuple(_)
         | Ty::Delta(_)
@@ -48,6 +49,7 @@ pub fn scalar_type(ty: &Ty) -> &'static str {
         Ty::ZonedTime => "ZonedTime",
         Ty::ZonedDateTime => "ZonedDateTime",
         Ty::Atomic(_)
+        | Ty::Rolling(..)
         | Ty::Map(..)
         | Ty::Tuple(_)
         | Ty::Delta(_)

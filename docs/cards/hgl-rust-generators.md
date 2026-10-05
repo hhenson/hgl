@@ -59,3 +59,7 @@ Prepared eval transport is selected as one complete path by
 `hgl-rust-execution-proof::prepared(plan)`. Unproved plans retain existing ordinary
 publication and recording behavior; no per-insertion fallback or hook replay is
 introduced. Prepared allocation evidence applies only to the selected finite path.
+Rolling generators retain delta<result>=V in their ordinary/configuration pending
+forms. Publication preserves the declared rolling result context and copies the
+arrival into its independent prepared ring. Statement emission carries an optional
+result type through nested blocks; ordinary helper bodies have no temporal result.

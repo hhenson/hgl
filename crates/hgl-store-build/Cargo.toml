@@ -13,3 +13,5 @@ hgl-bindings = { path = "../hgl-bindings" }
 hgl-types = { path = "../hgl-types" }
 hgl-columns = { path = "../hgl-columns" }
 hgl-atomic = { path = "../hgl-atomic" }
+
+hgl-rolling = { path = "../hgl-rolling" }

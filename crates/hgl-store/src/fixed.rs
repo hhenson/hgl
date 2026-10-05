@@ -38,6 +38,7 @@ impl Store {
             &mut self.bindings,
             &mut self.columns,
             &mut self.atomic,
+            &mut self.rolling,
             owner,
             kind,
         )

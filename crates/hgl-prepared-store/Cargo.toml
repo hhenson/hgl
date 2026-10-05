@@ -14,5 +14,6 @@ hgl-columns = { path = "../hgl-columns" }
 hgl-keys = { path = "../hgl-keys" }
 hgl-shapes = { path = "../hgl-shapes" }
 hgl-types = { path = "../hgl-types" }
+hgl-rolling = { path = "../hgl-rolling" }
 [lints]
 workspace = true

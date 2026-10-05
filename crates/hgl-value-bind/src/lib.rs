@@ -304,7 +304,7 @@ pub fn signature_types(
                     | Ty::Tuple(_)
             )
             || hgl_source::application(&parameter.ty)
-                .is_some_and(|(base, _)| matches!(base, "delta" | "atomic"))
+                .is_some_and(|(base, _)| matches!(base, "delta" | "atomic" | "rolling"))
         {
             hgl_value_types::unify(
                 library,

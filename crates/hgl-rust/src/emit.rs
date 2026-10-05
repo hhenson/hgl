@@ -7,7 +7,7 @@ fn append(out: &mut String, args: std::fmt::Arguments<'_>) {
 use hgl_rust_generators::Generator;
 use hgl_rust_values::{
     condition_code, global_markers, global_schema, global_type, literal, owned_type, query,
-    rust_type, scalar_type, statements, whole_payload,
+    rust_type, scalar_type, statements,
 };
 use hgl_source::Ty;
 
@@ -32,35 +32,31 @@ fn node(plan: &Plan, n: &Node, index: usize, out: &mut Vec<String>) {
         ));
     }
     for (i, (_, _, ty)) in n.inputs.iter().enumerate() {
-        out.push(
-            if hgl_rust_deltas::structural(ty) || whole_payload(ty).is_some() {
-                format!(
-                    "input{i}: hgl_store::shapes::Input<{}>,\n",
-                    hgl_rust_deltas::shape_marker(ty)
-                )
-            } else if matches!(ty, Ty::Ref(_)) {
-                format!("input{i}: hgl_store::InputId,\n")
-            } else {
-                format!("input{i}: hgl_store::In<{}>,\n", rust_type(ty))
-            },
-        );
+        out.push(if hgl_rust_deltas::shaped(ty) {
+            format!(
+                "input{i}: hgl_store::shapes::Input<{}>,\n",
+                hgl_rust_deltas::shape_marker(ty)
+            )
+        } else if matches!(ty, Ty::Ref(_)) {
+            format!("input{i}: hgl_store::InputId,\n")
+        } else {
+            format!("input{i}: hgl_store::In<{}>,\n", rust_type(ty))
+        });
     }
     for (i, cache) in n.caches.iter().enumerate() {
         out.push(format!("cache{i}: {},\n", rust_type(&cache.ty())));
     }
     if n.result != Ty::Void {
-        out.push(
-            if hgl_rust_deltas::structural(&n.result) || whole_payload(&n.result).is_some() {
-                format!(
-                    "_output: hgl_store::shapes::Output<{}>,\n",
-                    hgl_rust_deltas::shape_marker(&n.result)
-                )
-            } else if matches!(n.result, Ty::Ref(_)) {
-                "_output: hgl_store::OutputId,\n".into()
-            } else {
-                format!("_output: hgl_store::Out<{}>,\n", rust_type(&n.result))
-            },
-        );
+        out.push(if hgl_rust_deltas::shaped(&n.result) {
+            format!(
+                "_output: hgl_store::shapes::Output<{}>,\n",
+                hgl_rust_deltas::shape_marker(&n.result)
+            )
+        } else if matches!(n.result, Ty::Ref(_)) {
+            "_output: hgl_store::OutputId,\n".into()
+        } else {
+            format!("_output: hgl_store::Out<{}>,\n", rust_type(&n.result))
+        });
     }
     out.push(format!("}}\nimpl std::fmt::Debug for Node{index} {{ fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {{ f.debug_struct(\"Node{index}\").finish_non_exhaustive() }} }}\nimpl hgl_kernel::Node for Node{index} {{\nfn start(&mut self, _ctx: &mut hgl_kernel::Ctx<'_>) -> hgl_kernel::NodeResult {{\n"));
     for (i, cache) in n.caches.iter().enumerate() {
@@ -69,7 +65,7 @@ fn node(plan: &Plan, n: &Node, index: usize, out: &mut Vec<String>) {
     if let Some(generator) = &generator {
         out.push(generator.start());
     }
-    statements(plan, &n.start, out);
+    statements(plan, &n.start, out, Some(&n.result));
     out.push("Ok(())\n}\nfn eval(&mut self, _ctx: &mut hgl_kernel::Ctx<'_>) -> hgl_kernel::NodeResult {\n" .to_owned());
     node_eval(plan, n, generator.as_ref(), out);
     node_build(plan, n, index, generator.as_ref(), out);
@@ -91,11 +87,11 @@ fn node_eval(plan: &Plan, n: &Node, generator: Option<&Generator>, out: &mut Vec
             .as_ref()
             .map_or_else(|| input_guard(n), |v| condition_code(plan, v));
         out.push(format!("if {guard} {{\n"));
-        statements(plan, body, out);
+        statements(plan, body, out, Some(&n.result));
         out.push("}\n".into());
     }
     out.push("}\nOk(())\n}\nfn stop(&mut self, _ctx: &mut hgl_kernel::Ctx<'_>) -> hgl_kernel::NodeResult {\n".into());
-    statements(plan, &n.stop, out);
+    statements(plan, &n.stop, out, Some(&n.result));
     out.push("Ok(())\n}\n}\n".into());
 }
 fn node_build(
@@ -130,7 +126,7 @@ fn node_build(
         out.push(format!("configuration{id},configuration_slot{id},\n"));
     }
     for (i, (name, _, ty)) in n.inputs.iter().enumerate() {
-        if hgl_rust_deltas::structural(ty) || whole_payload(ty).is_some() {
+        if hgl_rust_deltas::shaped(ty) {
             out.push(format!("input{i}: {{let id=ports.shaped_input({name:?})?; hgl_store::shapes::Input::<{}>::bind(ports.store().bindings(),id).map_err(hgl_describe::BuildError::Bind)?}},\n",hgl_rust_deltas::shape_marker(ty)));
             continue;
         }
@@ -146,7 +142,7 @@ fn node_build(
     for (i, cache) in n.caches.iter().enumerate() {
         out.push(format!("cache{i}: {},\n", literal(cache)));
     }
-    if hgl_rust_deltas::structural(&n.result) || whole_payload(&n.result).is_some() {
+    if hgl_rust_deltas::shaped(&n.result) {
         out.push(format!("_output: {{let id=ports.shaped_output()?; hgl_store::shapes::Output::<{}>::bind(ports.store().bindings(),id).map_err(hgl_describe::BuildError::Bind)?}},\n",hgl_rust_deltas::shape_marker(&n.result)));
     } else if n.result != Ty::Void {
         out.push(format!(
@@ -404,7 +400,7 @@ fn native_result(native: &crate::ir::Native) -> String {
 }
 
 fn shape(ty: &Ty) -> String {
-    if hgl_rust_deltas::structural(ty) || whole_payload(ty).is_some() {
+    if hgl_rust_deltas::shaped(ty) {
         return format!(
             "<{} as hgl_store::shapes::Shape>::shape()",
             hgl_rust_deltas::shape_marker(ty)
@@ -642,7 +638,7 @@ fn capacities(plan: &Plan) -> String {
             );
         }
     }
-    code += "Ok(capacity)}\nfn prepare_outputs(capacity:&FiniteCapacity,store:&mut hgl_store::Store,graph:&hgl_describe::GraphDescription,built:&hgl_describe::BuiltGraph)->hgl_types::NodeResult {let empty=FiniteTopology::default();";
+    code += "capacity.arrivals=cycles;Ok(capacity)}\nfn prepare_outputs(capacity:&FiniteCapacity,store:&mut hgl_store::Store,graph:&hgl_describe::GraphDescription,built:&hgl_describe::BuiltGraph)->hgl_types::NodeResult {let empty=FiniteTopology::default();";
     for (i, node) in plan.nodes.iter().enumerate() {
         if node.result.publication() {
             code += &capacity.output(

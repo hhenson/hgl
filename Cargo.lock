@@ -450,6 +450,7 @@ dependencies = [
  "hgl-columns",
  "hgl-global",
  "hgl-keys",
+ "hgl-rolling",
  "hgl-shapes",
  "hgl-types",
 ]
@@ -528,6 +529,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "hgl-rolling"
+version = "0.0.0"
+dependencies = [
+ "hgl-bindings",
+ "hgl-global-value",
+ "hgl-prepared-value",
+ "hgl-shapes",
+ "hgl-types",
+]
+
+[[package]]
 name = "hgl-rust"
 version = "0.0.0"
 dependencies = [
@@ -556,6 +568,7 @@ dependencies = [
  "hgl-rust-keyed",
  "hgl-rust-layouts",
  "hgl-rust-pure-bounds",
+ "hgl-rust-windows",
  "hgl-source",
 ]
 
@@ -588,6 +601,7 @@ dependencies = [
  "hgl-rust-keyed",
  "hgl-rust-layouts",
  "hgl-rust-observed",
+ "hgl-rust-windows",
  "hgl-source",
 ]
 
@@ -648,6 +662,7 @@ dependencies = [
  "hgl-rust-ir",
  "hgl-rust-source-slots",
  "hgl-rust-values",
+ "hgl-rust-windows",
  "hgl-source",
 ]
 
@@ -697,6 +712,7 @@ version = "0.0.0"
 dependencies = [
  "hgl-rust-ir",
  "hgl-rust-layouts",
+ "hgl-rust-windows",
  "hgl-source",
 ]
 
@@ -796,6 +812,15 @@ dependencies = [
  "hgl-rust-ir",
  "hgl-rust-layouts",
  "hgl-rust-observed",
+ "hgl-rust-windows",
+ "hgl-source",
+]
+
+[[package]]
+name = "hgl-rust-windows"
+version = "0.0.0"
+dependencies = [
+ "hgl-rust-layouts",
  "hgl-source",
 ]
 
@@ -891,6 +916,7 @@ dependencies = [
  "hgl-keys",
  "hgl-literals",
  "hgl-prepared-store",
+ "hgl-rolling",
  "hgl-shapes",
  "hgl-store-build",
  "hgl-time-context",
@@ -904,6 +930,7 @@ dependencies = [
  "hgl-atomic",
  "hgl-bindings",
  "hgl-columns",
+ "hgl-rolling",
  "hgl-types",
 ]
 
@@ -969,6 +996,7 @@ version = "0.0.0"
 dependencies = [
  "hgl-nominal-batch",
  "hgl-type-syntax",
+ "hgl-window-types",
 ]
 
 [[package]]
@@ -990,6 +1018,7 @@ name = "hgl-types"
 version = "0.0.0"
 dependencies = [
  "hgl-time-values",
+ "hgl-window-types",
 ]
 
 [[package]]
@@ -1077,6 +1106,10 @@ dependencies = [
  "hgl-value-access",
  "hgl-value-check",
 ]
+
+[[package]]
+name = "hgl-window-types"
+version = "0.0.0"
 
 [[package]]
 name = "hgl-wiring-locals"

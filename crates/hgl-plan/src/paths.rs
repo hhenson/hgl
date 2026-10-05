@@ -23,22 +23,21 @@ pub fn project<'a>(kind: &'a TsType, path: &[Step], keyed: bool) -> Result<&'a T
 
 /// Reject ambiguous field names anywhere in a recursive shape.
 pub fn check_shape(kind: &TsType) -> Result<(), BuildError> {
-    match kind {
-        TsType::Ts(_) | TsType::Atomic(_) | TsType::Set(_) | TsType::KeyedSet(_) => Ok(()),
-        TsType::Dictionary(child)
-        | TsType::KeyedDictionary(_, child)
-        | TsType::Reference(child)
-        | TsType::List(child, _) => check_shape(child),
-        TsType::Bundle(fields) => {
-            for (n, (name, child)) in fields.iter().enumerate() {
-                if fields[..n].iter().any(|(previous, _)| previous == name) {
-                    return Err(BuildError::InvalidPath(format!("duplicate field {name}")));
-                }
-                check_shape(child)?;
+    if let Some(child) = kind.member() {
+        return check_shape(child);
+    }
+    if let TsType::Reference(child) | TsType::List(child, _) = kind {
+        return check_shape(child);
+    }
+    if let TsType::Bundle(fields) = kind {
+        for (n, (name, child)) in fields.iter().enumerate() {
+            if fields[..n].iter().any(|(previous, _)| previous == name) {
+                return Err(BuildError::InvalidPath(format!("duplicate field {name}")));
             }
-            Ok(())
+            check_shape(child)?;
         }
     }
+    Ok(())
 }
 
 /// GRF-6/7: a compatible edge whose target overlaps no previous target.

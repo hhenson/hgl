@@ -1,13 +1,13 @@
 use super::{Kind, Plan, Value, global_type, value};
 use hgl_source::Ty;
-pub(super) fn forward(plan: &Plan, value: &Value) -> Option<String> {
+pub(super) fn forward(plan: &Plan, value: &Value, result: Option<&Ty>) -> Option<String> {
     if let Kind::Configuration(id) = value.kind
         && value.ty.atomic_payload()
     {
         return Some(format!(
             "{}return Ok(());\n",
             hgl_rust_observed::apply(
-                &value.ty.clone().atomic(),
+                result.unwrap_or(&value.ty.clone().atomic()),
                 "self._output",
                 "&self.configuration_columns",
                 &format!("self.configuration_slot{id}")

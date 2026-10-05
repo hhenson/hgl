@@ -306,7 +306,7 @@ impl Capacity {
             })
             .collect::<String>();
         format!(
-            "{}#[derive(Default)] struct FiniteCapacity {{{fields}{domains}}}\n",
+            "{}#[derive(Default)] struct FiniteCapacity {{arrivals:usize,{fields}{domains}}}\n",
             hgl_rust_finite_domains::DECLARATION
         )
     }
@@ -320,6 +320,13 @@ impl Capacity {
         self.output_with(ty, id, &domain)
     }
     fn output_with(&self, ty: &Ty, id: &str, domain: &str) -> String {
+        if let Ty::Rolling(payload, _) = ty {
+            return format!(
+                "{{let bounds={};let storage=store.prepared();storage.rolling.prepare_output::<{}>(storage.bindings,{id},&bounds,capacity.arrivals)?;}}",
+                self.bounds(payload),
+                hgl_rust_windows::marker(ty)
+            );
+        }
         if let Some(payload) = whole_payload(ty) {
             return format!(
                 "{{let bounds={};let storage=store.prepared();storage.atomic.prepare_output::<{}>(storage.bindings,{id},&bounds)?;}}",
@@ -365,7 +372,7 @@ impl Capacity {
                 .collect::<Vec<_>>()
                 .concat(),
             Ty::Enum(_)
-            | Ty::Atomic(_)
+            | Ty::Atomic(_) | Ty::Rolling(..)
             | Ty::Delta(_)
             | Ty::List(_, None)
             | Ty::I64

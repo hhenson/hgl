@@ -397,3 +397,17 @@ fn multiline_explicit_nested_types_remain_distinct_from_comparisons() {
     );
     assert!(result.is_ok(), "{result:?}");
 }
+
+#[test]
+fn rolling_delta_fields_preserve_exact_window_specialization() {
+    let types = "struct Arrival<T>{value:delta<T>}";
+    let check = |body| compile(&[("rolling.hgl".into(), source(types, body))], "main");
+    let result = check(
+        "let item:Arrival<rolling<i64,2>> = get(global_state,\"window\")\nlet arrival:i64 = item.value",
+    );
+    assert!(result.is_ok(), "{result:?}");
+    let result = check(
+        "let a:Arrival<rolling<i64,2>> = get(global_state,\"window\")\nlet b:Arrival<rolling<i64,3>> = get(global_state,\"window\")",
+    );
+    assert!(result.is_err(), "distinct rolling identities merged");
+}

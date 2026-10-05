@@ -56,24 +56,15 @@ pub fn constructor<'a>(
                     parts.push(Part::Removed(value.0));
                 }
             }
-            Ty::Map(_, _) if name == "upsert" => {
+            Ty::Map(..) | Ty::List(..) | Ty::Tuple(_)
+                if matches!(
+                    (origin, name),
+                    (Ty::Map(..), "upsert") | (Ty::List(..) | Ty::Tuple(_), "items")
+                ) =>
+            {
                 sparse(origin, expr, &mut fixed, &mut added, &mut parts)?;
             }
-            Ty::List(..) | Ty::Tuple(_) if name == "items" => {
-                sparse(origin, expr, &mut fixed, &mut added, &mut parts)?;
-            }
-            Ty::Struct(_, fields, _) => {
-                let (index, (_, child)) = fields
-                    .iter()
-                    .enumerate()
-                    .find(|(_, (field, _))| field == name)
-                    .ok_or_else(|| format!("unknown delta field {name}"))?;
-                parts.push(Part::Child(
-                    i64::try_from(index).map_err(|e| e.to_string())?,
-                    child.clone().delta()?,
-                    expr,
-                ));
-            }
+            Ty::Struct(_, fields, _) => parts.push(field(fields, name, expr)?),
             Ty::Map(..)
             | Ty::Tuple(_)
             | Ty::Delta(_)
@@ -91,6 +82,7 @@ pub fn constructor<'a>(
             | Ty::Date
             | Ty::Time
             | Ty::DateTime
+            | Ty::Rolling(..)
             | Ty::Ref(_)
             | Ty::Set(_)
             | Ty::Nullable(_)
@@ -103,6 +95,19 @@ pub fn constructor<'a>(
     disjoint(&added, &removed)?;
     Ok(parts)
 }
+fn field<'a>(fields: &[(String, Ty)], name: &str, expr: &'a Expr) -> Result<Part<'a>, String> {
+    let (index, (_, child)) = fields
+        .iter()
+        .enumerate()
+        .find(|(_, (field, _))| field == name)
+        .ok_or_else(|| format!("unknown delta field {name}"))?;
+    Ok(Part::Child(
+        i64::try_from(index).map_err(|e| e.to_string())?,
+        child.clone().delta()?,
+        expr,
+    ))
+}
+
 fn remember(
     value: &(Value, Option<Value>),
     expected: &Ty,
@@ -216,6 +221,7 @@ fn sparse<'a>(
             | Ty::Date
             | Ty::Time
             | Ty::DateTime
+            | Ty::Rolling(..)
             | Ty::Ref(_)
             | Ty::Set(_)
             | Ty::Nullable(_)

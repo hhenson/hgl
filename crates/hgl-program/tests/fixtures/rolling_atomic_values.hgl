@@ -1,0 +1,117 @@
+module hgraph.std part rolling_values_tests
+
+struct RollingSnapshot { amount: i64
+    label: str }
+
+test {
+    fn rolling_ticks(value: rolling<i64, 2, 2>) -> rolling<i64, 2, 2> => pass_through(value)
+    fn rolling_ticks_default(value: rolling<i64, 2>) -> rolling<i64, 2, 2> => pass_through(value)
+    fn rolling_duration(value: rolling<i64, 5us, 1us>) -> rolling<i64, 5us, 1us> => pass_through(value)
+    fn rolling_zero_min(value: rolling<i64, 5us, 0us>) -> rolling<i64, 5us, 0us> => pass_through(value)
+    fn rolling_snapshots(value: rolling<RollingSnapshot, 2>) -> rolling<RollingSnapshot, 2> => pass_through(value)
+    fn rolling_lists(value: rolling<list<i64>, 2>) -> rolling<list<i64>, 2> => pass_through(value)
+
+    fn concrete_ticks(value: rolling<i64, 2>) -> rolling<i64, 2> {
+        when { return delta_value(value) }
+    }
+    fn concrete_duration(value: rolling<i64, 5us, 1us>) -> rolling<i64, 5us, 1us> {
+        when { return delta_value(value) }
+    }
+    fn concrete_snapshots(value: rolling<RollingSnapshot, 2>) -> rolling<RollingSnapshot, 2> {
+        when { return delta_value(value) }
+    }
+    fn concrete_lists(value: rolling<list<i64>, 2>) -> rolling<list<i64>, 2> {
+        when { return delta_value(value) }
+    }
+
+    # An explicit rolling result accepts the same arrival as a generic T result.
+    test concrete_rolling_pass_through_preserves_arrival_payloads {
+        assert eval(concrete_ticks, [10, _, 10, 20]) == [10, _, 10, 20]
+        assert eval(concrete_duration, [10, _, 20]) == [10, _, 20]
+        let item: RollingSnapshot = RollingSnapshot(amount: 1, label: "same")
+        assert eval(concrete_snapshots, [item, _, item]) == [item, _, item]
+        let empty: list<i64> = []
+        assert eval(concrete_lists, [[1], _, empty, [2, 3]]) == [[1], _, empty, [2, 3]]
+    }
+
+    # delta_value is one arrival. It never substitutes the held window or gates on all_valid.
+    test rolling_publications_include_first_and_equal_arrivals {
+        assert eval(rolling_ticks, [10, _, 10, 20, 30, _]) == [10, _, 10, 20, 30, _]
+        assert eval(rolling_ticks_default, [10, _, 10, 20]) == [10, _, 10, 20]
+        assert eval(rolling_duration, [10, _, 20, _, _, _, _, _, 30]) == [10, _, 20, _, _, _, _, _, 30]
+        assert eval(rolling_zero_min, [10, _, 10]) == [10, _, 10]
+        assert eval(rolling_ticks, []) == []
+        assert eval(rolling_ticks, [_, _, _]) == [_, _, _]
+        assert eval(rolling_duration, []) == []
+        assert eval(rolling_duration, [_, _, _]) == [_, _, _]
+    }
+
+    fn ticks_ready(value: rolling<i64, 2, 2>) -> bool {
+        when valid(value) && modified(value) { return all_valid(value) }
+    }
+    fn duration_ready(value: rolling<i64, 5us, 1us>) -> bool {
+        when valid(value) && modified(value) { return all_valid(value) }
+    }
+    fn boundary_ready(value: rolling<i64, 5us, 5us>) -> bool {
+        when valid(value) && modified(value) { return all_valid(value) }
+    }
+    fn zero_min_ready(value: rolling<i64, 5us, 0us>) -> bool {
+        when valid(value) && modified(value) { return all_valid(value) }
+    }
+    fn observed_ticks(value: rolling<i64, 2, 2>) -> bool => ticks_ready(pass_through(value))
+    fn observed_duration(value: rolling<i64, 5us, 1us>) -> bool => duration_ready(pass_through(value))
+    fn observed_boundary(value: rolling<i64, 5us, 5us>) -> bool => boundary_ready(pass_through(value))
+    fn observed_zero_min(value: rolling<i64, 5us, 0us>) -> bool => zero_min_ready(pass_through(value))
+
+    test rolling_readiness_uses_current_count_or_retained_span {
+        assert eval(observed_ticks, [10, _, 10, 20, 30, _]) == [false, _, true, true, true, _]
+        assert eval(observed_duration, [10, _, 20, _, _, _, _, _, 30]) == [false, _, true, _, _, _, _, _, false]
+        assert eval(observed_zero_min, [10, _, 10]) == [true, _, true]
+        # An arrival exactly Max old is retained; the next arrival evicts it.
+        assert eval(observed_boundary, [10, _, _, _, _, 20, 30]) == [false, _, _, _, _, true, false]
+    }
+
+    fn observe_idle_window(value: rolling<i64, 5us, 1us>, trigger: i64) -> bool {
+        when valid(value, trigger) && modified(trigger) { return all_valid(value) }
+    }
+    test rolling_silence_does_not_evict_or_schedule_a_publication {
+        assert eval(observe_idle_window, value: [10, _, 20], trigger: [_, _, _, _, _, _, _, _, _, 1]) == [_, _, _, _, _, _, _, _, _, true]
+    }
+
+    test rolling_composite_arrivals_retain_complete_ordinary_values {
+        var source: RollingSnapshot = RollingSnapshot(amount: 1, label: "first")
+        let retained: RollingSnapshot = source
+        source.amount = 2
+        source.label = "second"
+        assert eval(rolling_snapshots, [retained, source, _, retained]) == [
+            RollingSnapshot(amount: 1, label: "first"), RollingSnapshot(amount: 2, label: "second"), _, retained
+        ]
+        var values: list<i64> = []
+        push(values, 1)
+        let first: list<i64> = values
+        push(values, 2)
+        let empty: list<i64> = []
+        assert eval(rolling_lists, [first, empty, _, values, empty]) == [first, empty, _, values, empty]
+    }
+
+    fn rolling_replay_context(tick: i64) { when { } }
+    fn rolling_replayed(tick: i64, const samples: list<TimedValue<rolling<i64, 2, 2>>>) -> rolling<i64, 2, 2> {
+        rolling_replay_context(tick)
+        replay(samples)
+    }
+    test rolling_timed_replay_retains_arrivals_instead_of_window_snapshots {
+        var sample: TimedValue<rolling<i64, 2, 2>> = TimedValue<rolling<i64, 2, 2>>(time: @1970-01-01T00:00:00.000001Z, value: 10)
+        var samples: list<TimedValue<rolling<i64, 2, 2>>> = []
+        push(samples, sample)
+        sample.time = @1970-01-01T00:00:00.000003Z
+        push(samples, sample)
+        sample.time = @1970-01-01T00:00:00.000004Z
+        sample.value = 20
+        push(samples, sample)
+        sample.value = 99
+        assert eval(rolling_replayed, tick: [1, 1, 1, 1, 1], samples: samples) == [10, _, 10, 20, _]
+        assert eval(rolling_replayed, tick: [1, 1, 1, 1, 1], samples: samples) == [10, _, 10, 20, _]
+        let empty: list<TimedValue<rolling<i64, 2, 2>>> = []
+        assert eval(rolling_replayed, tick: [1, 1], samples: empty) == [_, _]
+    }
+}

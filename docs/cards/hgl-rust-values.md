@@ -89,3 +89,8 @@ introduced. Prepared allocation evidence applies only to the selected finite pat
 Supported returned sparse constructors use hgl-rust-direct-deltas to evaluate
 scalar operands once, retain constant key aliases cold, and publish directly
 into prepared child endpoints. No intermediate delta vectors are constructed.
+statements additionally receives Option<&Ty> for the declared temporal result,
+propagated through nested blocks. Rolling returns publish ordinary arrival V into
+the typed window; ordinary helper bodies pass None. Window-specific delta_value
+and all_valid queries delegate to hgl-rust-windows; metadata queries retain the
+existing statically selected endpoint path.

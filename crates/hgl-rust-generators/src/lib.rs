@@ -149,13 +149,17 @@ impl Generator {
     }
     /// Emit a typed evaluation loop which resumes without reevaluating a yield.
     pub fn evaluation(&self, plan: &Plan, result: &Ty) -> String {
-        let publication = hgl_rust_deltas::publish(
-            &result
-                .clone()
-                .delta()
-                .unwrap_or_else(|_| unreachable!("checked generator result")),
-            "publication",
-        );
+        let publication = if matches!(result, Ty::Rolling(..)) {
+            hgl_rust_windows::apply(result, "self._output", "publication")
+        } else {
+            hgl_rust_deltas::publish(
+                &result
+                    .clone()
+                    .delta()
+                    .unwrap_or_else(|_| unreachable!("checked generator result")),
+                "publication",
+            )
+        };
         let mut code = vec![format!(
             "if let Some(publication) = self.generator_pending.take() {{ {publication} }}\n",
         )];
@@ -166,19 +170,19 @@ impl Generator {
                 .unwrap_or_else(|_| unreachable!("checked generator result"));
             code.push(format!(
                 "if let Some(publication)=self.generator_pending_slot.take() {{ {} }}\n",
-                slot_publication(&payload, "publication")
+                slot_publication(&payload, "publication", result)
             ));
         }
         code.push("loop { match self.generator_pc {\n".into());
         for (id, block) in self.blocks.iter().enumerate() {
             code.push(format!("{id} => {{\n"));
-            self.emit_block(plan, block, &mut code);
+            self.emit_block(plan, block, &mut code, result);
             code.push("}\n".into());
         }
         code.push("_ => return Err(hgl_types::NodeError::new(\"invalid generator resume position\")),\n} }\n".into());
         code.concat()
     }
-    fn emit_block(&self, plan: &Plan, block: &Block, code: &mut Vec<String>) {
+    fn emit_block(&self, plan: &Plan, block: &Block, code: &mut Vec<String>, result: &Ty) {
         match block {
             Block::Done => {
                 code.push(self.clear_locals());
@@ -189,7 +193,7 @@ impl Generator {
                 condition_code(plan, value)
             )),
             Block::Execute(statement, next) => {
-                statements(plan, std::slice::from_ref(statement), code);
+                statements(plan, std::slice::from_ref(statement), code,Some(result));
                 code.push(format!("self.generator_pc = {next};\n"));
             }
             Block::Branch(condition, yes, no) => code.push(format!(
@@ -197,12 +201,12 @@ impl Generator {
                 condition_code(plan, condition)
             )),
             Block::Yield(time, value, next) => {
-                code.push(timed_yield(plan, time, value, *next));
+                code.push(timed_yield(plan, time, value, *next, result));
             }
         }
     }
 }
-fn timed_yield(plan: &Plan, time: &Value, payload: &Value, next: usize) -> String {
+fn timed_yield(plan: &Plan, time: &Value, payload: &Value, next: usize, result: &Ty) -> String {
     let resolution = if time.ty == Ty::Duration {
         "{ if time.micros() < 0 { return Err(hgl_types::NodeError::new(\"generator negative yield duration\")); } hgl_types::EngineTime::from_micros(now.micros().checked_add(time.micros()).ok_or_else(|| hgl_types::NodeError::new(\"generator target time overflow\"))?) }"
     } else {
@@ -218,14 +222,18 @@ fn timed_yield(plan: &Plan, time: &Value, payload: &Value, next: usize) -> Strin
         || {
             (
                 condition_code(plan, payload),
-                hgl_rust_deltas::publish(&payload.ty, "payload"),
+                if matches!(result, Ty::Rolling(..)) {
+                    hgl_rust_windows::apply(result, "self._output", "payload")
+                } else {
+                    hgl_rust_deltas::publish(&payload.ty, "payload")
+                },
                 "generator_pending",
             )
         },
         |slot| {
             (
                 slot,
-                slot_publication(&payload.ty, "payload"),
+                slot_publication(&payload.ty, "payload", result),
                 "generator_pending_slot",
             )
         },
@@ -236,7 +244,10 @@ fn timed_yield(plan: &Plan, time: &Value, payload: &Value, next: usize) -> Strin
         value
     )
 }
-fn slot_publication(ty: &Ty, slot: &str) -> String {
+fn slot_publication(ty: &Ty, slot: &str, result: &Ty) -> String {
+    if matches!(result, Ty::Rolling(..)) {
+        return hgl_rust_windows::from(result, "self._output", "&self.configuration_columns", slot);
+    }
     let marker = global_type(ty);
     if matches!(ty, Ty::Delta(_)) {
         format!("{marker}::apply_slot(self._output,&self.configuration_columns,{slot},_ctx)?;")
