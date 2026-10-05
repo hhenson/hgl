@@ -47,7 +47,9 @@ pub fn writable(value: &Value) -> bool {
 }
 /// Resolve a declared ordinary field without changing its parent's authority.
 pub fn field(parent: Value, name: &str) -> Result<Value, String> {
-    let (_, fields, optional) = parent.ty.structure()?;
+    let (_, fields, optional) = parent.ty.structure().map_err(|error| {
+        format!("field access requires an ordinary struct or direct injected clock: {error}")
+    })?;
     if matches!(parent.kind, Kind::Input(..) | Kind::Wire(_) | Kind::Output) {
         return Err(
             "temporal child projection is outside the admitted publication-delta profile".into(),
