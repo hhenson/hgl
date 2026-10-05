@@ -44,10 +44,8 @@ Capacity emission requires `hgl-rust-execution-proof::prepared(plan)`. Unknown
 membership or owning-width bounds preserve the existing complete adapter instead
 of reserving a guessed pool. This preserves input/native-controlled loop behavior
 without claiming allocation-free execution for that existing generic path.
-Runtime while bodies do not have a general iteration proof in this finite planner;
-their single-traversal estimate does not establish an allocation guarantee for
-arbitrary mutation loops. Such loops can exhaust the prepared pool, a remaining
-behavioral limitation distinct from the validated finite publication matrix.
+Recognized constant induction loops contribute checked bounds. Arbitrary
+runtime-controlled mutation loops do not establish a prepared execution proof.
 
 May use hgl-rust-keyed::constructors to include statically known constructor
 key paths and storage widths even when child payload expressions execute in
@@ -55,6 +53,6 @@ hooks. Cold preparation never evaluates those runtime child payloads.
 
 Rolling outputs reserve ordinary arrival bounds independently for every retained
 ring slot before start. FiniteCapacity.arrivals carries the finite input/replay
-horizon; duration windows use it directly and tick windows cap it by Max. Nested
-structural child preparation recursively installs the same static window storage.
+horizon plus proved direct generator arrivals; duration windows use it directly
+and tick windows cap it by Max. Nested structural child preparation recursively installs the same static window storage.
 Growing outputs reserve only reachable per-parent index paths and independent descendant capacities. Sparse recording reserves all three delta fields from finite recipe widths.

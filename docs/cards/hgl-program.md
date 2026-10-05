@@ -13,12 +13,17 @@ include explicit parts and recursively load libraries, excluding test/example
 directories. Embedded tests are indexed; production emission excludes them.
 
 The supported slice includes scalar streams (bool, i64, f64, str, date, time,
-datetime, duration), imports, generic operator selection with native scalar
+datetime, duration, civil_datetime, timezone, zoned_time, zoned_datetime), nominal
+enums, imports, generic operator selection with native scalar
 requirements and finite type-domain constraints, defaults, contextual result inference, graph composition, const
 lifts, ordered guarded handlers, state/cache, scalar input activity, source
 alarms, reference capture/following, and bool/i64 set membership. Set bodies
 mutate `out`; `elements(input, added)` supplies typed elements. State resets
-for each fresh graph; checkpoint recovery is outside this slice.
+for each fresh graph; checkpoint recovery is outside this slice. The current
+[publication matrix](../compiler/eval.md) includes growing lists, rolling windows
+and complete atomic values. References are excluded from that test matrix;
+signal coverage observes metadata only. Type admission does not itself establish
+the separate finite prepared-execution proof.
 
 `eval` resolves ordinary `hgraph.std::replay` and `hgraph.std::record` operator
 contracts and checks their selected HGL bodies through the normal resolver.
@@ -34,7 +39,8 @@ never the expected sequence. A mismatch or node error fails the executable.
 
 Test helpers have a module-wide scope; production calls cannot see them.
 The current test body accepts direct `assert eval(...) == [...]`, outputless
-`eval(...)`, deterministic ordinary bool assertions and ordinary test bindings.
+`eval(...)`, deterministic ordinary bool assertions, ordinary test bindings,
+bound eval captures and guarded test branches.
 Timed input and untyped empty generic sequences remain unsupported. Structural delta literals use
 the exact originating-shape publication profile described below.
 Unused library bodies are not advertised as implemented: reachable unsupported
@@ -58,8 +64,9 @@ Start hooks use ordinary checked statements, native calls, conditions and cache
 access; temporal input reads and return publication remain rejected there.
 
 `delta_value(input)` checks the concrete instance of the endpoint-derived delta
-relationship. The admitted eight scalars have delta type equal to scalar type; structural
-instances have an exact ordinary Delta type retaining the complete origin.
+relationship. Admitted scalar leaves and enums have delta type equal to their own
+type; structural instances have an exact ordinary Delta type retaining the
+complete origin.
 Formal `signal` parameters retain their signal identity even when the producer
 has a scalar payload; they are excluded from delta access and recording.
 Only runtime evaluation can read delta metadata. Endpoint identity and proof of
@@ -100,9 +107,9 @@ Ordinary `global_state` is an ordinary run-wide keyed facility, admitted in
 start/evaluation/stop without temporal shape or source/sink role constraints.
 Get uses an ordinary concrete expected type, never a key spelling or
 an enclosing temporal shape; unconstrained reads are diagnosed. Annotated
-locals resolve selected generic bindings. Set takes ordinary scalar or required-field
-struct payloads; capabilities, endpoint references, signals and nullable values
-do not enter this profile. Stop bodies use checked ordinary statements;
+locals resolve selected generic bindings. Set takes admitted ordinary payloads;
+capabilities, endpoint references, signals and nullable values do not enter this
+profile. Stop bodies use checked ordinary statements;
 input/output publication and evaluation-only operations remain unavailable.
 No new replay or recording representation follows from this facility.
 
@@ -116,7 +123,7 @@ construction preflight; binding does not initialize an entry. Direct annotated
 initializers, returns, assignments and conditions supply get expected types;
 nested expression and overload-argument inference are outside this subset.
 
-Initialized runtime `var` bindings of the eleven admitted scalar types are
+Initialized runtime `var` bindings of the admitted scalar types are
 writable owned locals, including in lifecycle hooks and lifted ordinary value
 function bodies. `let`, parameters and `for` bindings remain read-only. Branch
 scopes preserve each binding identity across shadowing. Scalar assignments
@@ -125,14 +132,15 @@ str), while cache increments retain their i64 profile. Primitive global get
 initializes an owned local, so local mutation never implicitly writes the entry.
 Uninitialized locals remain outside this backend subset. No value-type qualifier is introduced.
 
-Runtime hook locals admit finite type-generic ordinary structs with required
-primitive, ordinary list or nested struct fields. Constructors require every field once by name and
-check exact nominal types. Owning local initialization, constructor retention,
+Runtime hook locals admit concrete type-generic ordinary structs with admitted
+payload fields. Constructors check supplied fields, required/defaulted/optional
+presence and exact nominal types. Owning local initialization, constructor retention,
 and assignment copy independently (value-mutability, VAL-17). `var` admits
 whole-value and nested field replacement; `let` is recursively read-only.
 Primitive field `+=` uses existing addition typing. Field projections retain
-the root's write authority. Unsupported optional/const-generic/recursive
-schemas are diagnosed. Aggregate temporal ports remain outside this slice.
+the root's write authority. Optional-field reads and clearing, const-generic struct
+schemas and recursive forms outside the finite atomic contract remain unsupported.
+Complete atomic ports and sparse structural ports use distinct publication paths.
 
 Acceptance: source fixtures executed as emitted Rust through lifecycle hooks;
 nested text/value copy independence, mutable field/whole replacement, branch
@@ -143,7 +151,7 @@ Imported structs preserve qualified identity and declared layouts. Local names
 precede imports; cross-module access requires export, and selected exported
 layouts reject unexported reachable struct fields (ADR 0013). Declaration
 checks remain lazy in this executable subset: unused schemas are not certified.
-All eleven admitted scalar field types are covered by source eval assertions.
+Admitted scalar field types are covered by source eval assertions.
 
 The checked constructor preserves supplied source order and declared-field
 indices after validating the entire call (`struct-constructor-order.md`).
@@ -166,7 +174,7 @@ aggregate entries and failed replacement preserving the previous value.
 Ordinary lists admit exact unbounded/fixed identity, contextual empty literals,
 homogeneous constant nonempty literals, len, checked i64 indexed reads and
 retained end growth. Indexed replacement and runtime-expression list literals
-are rejected. Lists can contain primitive, required-field struct or list values.
+are rejected. Lists can contain admitted ordinary payload values.
 Writable indexed projections admit content operations without creating an alias.
 Borrowed indexed aggregates inherit entry provenance and lexical authority;
 primitive reads are owned. Push evaluates its receiver projection and retains
@@ -194,7 +202,7 @@ pinned specification describes constant homogeneous list literals but does not
 uniquely define their inferred fixedness. Contextual nonempty literals retain
 their expected exact list type. Harness sequence typing is unchanged.
 
-Ordinary generic required-field constructors use hgl-struct-check. Explicit
+Ordinary generic concrete constructors use hgl-struct-check. Explicit
 applications and expected-value contexts feed invariant type inference before
 field execution. Concrete specializations use the existing ordinary value,
 configuration and global borrow paths. No new generic callable syntax is admitted.
@@ -272,8 +280,11 @@ discarded, preserving construction failures and ordinary effects.
 Finite nonrecursive nominal fields admit non-null scalar literal defaults; contextual calendar defaults remain recipes until run preparation. Complete
 ordinary constructors retain supplied fields in written order, then omitted
 defaults in declaration order. Sparse deltas never apply those defaults. Generic
-specialization checks default types; unsupported non-fixed expressions and null
-optionality remain explicit diagnostics.
+specialization checks default types; unsupported non-fixed default expressions
+remain explicit diagnostics. Optional atomic fields with null defaults preserve
+absence; explicit null is allowed only for optional fields. Finite recursive atomic
+structs and nonrecursive abstract families use their separate checked nominal
+contracts; neither admits recursive structural publication roots.
 
 Test bodies may establish ordinary harness bindings before eval/assert calls.
 Check and evaluate each binding once in source order in the test's lexical
@@ -326,10 +337,11 @@ integer conversion or additional enum operation is introduced. Enum type calls
 report unsupported construction and suggest qualified declared members. May use
 hgl-enums.
 
-Scalar-key delta construction uses ParsedLiteral constant callbacks. Exact map
-keys and set members may retain provider recipes in cold preparation; fixed
-list/tuple indices remain constant i64. hgl-delta-check owns the conversion from
-checked parts to typed key/payload IR, preserving source argument order.
+Scalar and finite composite delta keys retain checked Value operands and known
+constant identity through hgl-static-values. Exact map keys and set members may
+retain provider recipes in cold preparation; fixed list/tuple indices remain
+constant i64. hgl-delta-check converts checked parts to typed key/payload IR,
+preserving source argument order.
 
 Prepared test operations share hgl-static-values::PreparedLexicalScope, retaining
 immutable key origins across setup, arguments and expectations. Source checking

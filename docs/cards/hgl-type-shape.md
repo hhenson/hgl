@@ -15,8 +15,10 @@ Acceptance: compiler generic constructor/import/inference tests and distinct
 prepared global schemas for equal-layout specializations.
 
 Structural publication shapes add `Ty::{Map,Tuple}` and ordinary
-`Ty::Delta(origin)`. `Ty::publication` admits exactly the finite recursive
-scalar8/bool-i64-set/fixed-list/tuple/nominal/i64-key-map profile.
+`Ty::Delta(origin)`. `Ty::publication` checks scalar/enum leaves, sets,
+fixed/growing lists, tuples, concrete required-field structs and maps recursively,
+with collection_key checking exact set/map keys. Atomic and rolling boundaries
+use the ordinary payload checks below.
 `Ty::delta` validates that profile and reduces scalar origins to themselves;
 structural origins retain their complete exact shape. Delta is never itself a
 temporal publication shape. `delta_argument` recognizes only the contextual
@@ -25,8 +27,9 @@ ordinary-delta-types and contextual-collection-deltas.
 
 `Ty::Atomic(Box<Ty>)` preserves a composite whole-value temporal boundary.
 `Ty::atomic(self) -> Self` normalizes every admitted scalar leaf to itself;
-`Ty::atomic_payload(&self) -> bool` admits finite ordinary scalar8, lists,
-tuples and concrete required/defaulted structs recursively. Publication
+`Ty::atomic_payload(&self) -> bool` admits the finite ordinary payload profile
+including lists, tuples, concrete structs, sets/maps, optional fields, recursive
+structs and nonrecursive families under the restrictions below. Publication
 admission includes such atomic shapes, and `delta` reduces their payload to V.
 Canonical generic arguments normalize before occurrence checks and matching;
 an ordinary composite V alone never determines an atomic origin for `delta<T>`.
@@ -50,11 +53,9 @@ source name is the canonical origin. Atomic normalization and delta reduction
 apply identically.
 
 Scalar-collection-keys (spec06e576a) admits every built-in scalar and declared enum
-as the exact K of set<K> and map<K,S>. Composite/reference/native keys remain
-outside the profile. f64 value restrictions belong to key checking, not type
-formation. No key normalization changes the declared source type.
-
-apply identically; enum keys and set members remain excluded.
+as the exact K of set<K> and map<K,S>. The composite extension below adds finite
+tuples and concrete structs; reference/native opaque keys remain excluded. f64
+value restrictions belong to key checking, not type formation. No key normalization changes the declared source type.
 
 Optional atomic structs retain `Ty::Struct(Nominal, Vec<(String,Ty)>, Vec<usize>)`;
 the final vector contains optional declaration positions. It is schema metadata,
