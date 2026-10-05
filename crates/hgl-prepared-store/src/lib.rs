@@ -2,31 +2,9 @@
 use hgl_bindings::{Bindings, InputId, OutputId, Wake};
 use hgl_columns::{Columns, Scalar};
 use hgl_global::{GlobalState, PreparedValue, ValueColumns, ValueSlot};
+pub use hgl_observation::Observation;
 use hgl_shapes::{Atomic, Input, Output};
 use hgl_types::{EngineTime, NodeError, NodeId, NodeResult};
-/// Read-only temporal sources can coexist with independently writable global records.
-#[derive(Debug, Clone, Copy)]
-pub struct Observation<'a> {
-    /// Scalar source columns selected by generated types.
-    pub columns: &'a Columns,
-    /// Temporal validity, deltas and prepared projections.
-    pub bindings: &'a Bindings,
-    /// Whole-value atomic source columns.
-    pub atomic: &'a hgl_atomic::Arena,
-    /// Retained ordinary arrival windows.
-    pub rolling: &'a hgl_rolling::Arena,
-    /// Exact retained scalar key identities.
-    pub keys: &'a hgl_keys::Keys,
-}
-impl Observation<'_> {
-    /// Borrow a valid scalar input without constructing an owning value.
-    pub fn scalar<T: Scalar>(&self, input: InputId) -> NodeResult<&T> {
-        if !self.bindings.valid(input) {
-            return Err(NodeError::new("prepared input is invalid"));
-        }
-        Ok(&T::column(self.columns)[self.bindings.input(input).slot as usize])
-    }
-}
 /// Disjoint storage borrowed from one Store, without a secondary owner or alias registry.
 #[derive(Debug)]
 pub struct PreparedStorage<'a> {
@@ -114,6 +92,35 @@ impl<W: Wake> PreparedTick<'_, W> {
             (self.now, self.wake),
         )
     }
+    /// Compose a complete text arrival into its prepared ring destination.
+    pub fn rolling_text<S: hgl_rolling::WindowShape<Payload = String>>(
+        &mut self,
+        output: Output<S>,
+        measure: impl FnOnce(Observation<'_>) -> NodeResult<usize>,
+        compose: impl FnOnce(&mut String, Observation<'_>),
+    ) -> NodeResult {
+        self.authorize(output.id(), output.generation());
+        let bytes = measure(self.storage.observations().0)?;
+        let storage = &mut self.storage;
+        storage.rolling.text(
+            storage.bindings,
+            output,
+            bytes,
+            (self.now, self.wake),
+            |destination, bindings, rolling| {
+                compose(
+                    destination,
+                    Observation {
+                        columns: storage.columns,
+                        bindings,
+                        atomic: storage.atomic,
+                        rolling,
+                        keys: storage.keys,
+                    },
+                );
+            },
+        )
+    }
     /// Publish one native arrival while reusing its output's reserved ring storage.
     pub fn rolling<S: hgl_rolling::WindowShape>(
         &mut self,
@@ -197,14 +204,7 @@ impl<W: Wake> PreparedTick<'_, W> {
         compose: impl FnOnce(&mut String, Observation<'_>),
     ) -> NodeResult {
         self.authorize(output, generation);
-        let observation = Observation {
-            columns: self.storage.columns,
-            bindings: self.storage.bindings,
-            atomic: self.storage.atomic,
-            rolling: self.storage.rolling,
-            keys: self.storage.keys,
-        };
-        let bytes = measure(observation)?;
+        let bytes = measure(self.storage.observations().0)?;
         let slot = self.storage.bindings.output(output).slot as usize;
         if scalar_values::<String>(self.storage.columns)[slot].capacity() < bytes {
             return Err(NodeError::new("prepared text capacity exceeded"));
@@ -212,14 +212,7 @@ impl<W: Wake> PreparedTick<'_, W> {
         let mut destination =
             std::mem::take(&mut scalar_values::<String>(self.storage.columns)[slot]);
         destination.clear();
-        let observation = Observation {
-            columns: self.storage.columns,
-            bindings: self.storage.bindings,
-            atomic: self.storage.atomic,
-            rolling: self.storage.rolling,
-            keys: self.storage.keys,
-        };
-        compose(&mut destination, observation);
+        compose(&mut destination, self.storage.observations().0);
         scalar_values::<String>(self.storage.columns)[slot] = destination;
         self.storage.bindings.publish(output, self.now, self.wake);
         Ok(())

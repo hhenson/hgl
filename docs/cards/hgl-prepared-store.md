@@ -46,3 +46,9 @@ PreparedTick adds rolling<S>(Output<S>,&Payload), rolling_from<S>(columns,slot,
 Output<S>) and pass_rolling<S>(Input<S>,Output<S>) for WindowShape markers with
 PreparedValue payloads. They share the existing write authority check and only
 publish after the independent complete arrival copy succeeds.
+
+Observation is reexported from hgl-observation, preserving its existing public
+surface. rolling_text<S> authorizes a String window output, measures pure scalar
+source fragments through Observation, then composes into its independent reserved
+ring slot and commits one arrival. The callback contract matches scalar text:
+read inputs and append exactly the measured bytes, with no fallible side effects.

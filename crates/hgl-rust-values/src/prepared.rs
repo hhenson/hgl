@@ -17,7 +17,7 @@ pub(super) fn forward(plan: &Plan, value: &Value, result: Option<&Ty>) -> Option
     if let Some(code) = hgl_rust_direct_deltas::publish(value, |v| super::value(plan, v)) {
         return Some(code);
     }
-    if let Some(code) = hgl_rust_observed::text(value) {
+    if let Some(code) = hgl_rust_observed::text(value, result) {
         return Some(code);
     }
     let (ty, input) = if let Kind::Query(op, args) = &value.kind {

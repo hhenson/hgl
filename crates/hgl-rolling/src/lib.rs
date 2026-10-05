@@ -211,6 +211,27 @@ impl Arena {
         root.count = count + 1;
         bindings.publish(output.id(), now, wake);
     }
+    /// Compose premeasured text, then commit the independently retained arrival.
+    /// The callback reads source state and appends exactly the measured bytes.
+    pub fn text<S: WindowShape<Payload = String>, W: Wake>(
+        &mut self,
+        bindings: &mut Bindings,
+        output: Output<S>,
+        bytes: usize,
+        (now, wake): (EngineTime, &mut W),
+        compose: impl FnOnce(&mut String, &Bindings, &Self),
+    ) -> NodeResult {
+        let (to, head, count) = self.destination(bindings, output, now)?;
+        if self.values.scalar::<String>(to.fields()).capacity() < bytes {
+            return Err(NodeError::new("prepared rolling text capacity exceeded"));
+        }
+        let mut destination = std::mem::take(self.values.scalar_mut::<String>(to.fields()));
+        destination.clear();
+        compose(&mut destination, bindings, self);
+        *self.values.scalar_mut::<String>(to.fields()) = destination;
+        self.commit(bindings, output, now, wake, (head, count));
+        Ok(())
+    }
     /// Copy an independently owned source slot, then publish and apply arrival eviction.
     pub fn from<S: WindowShape, W: Wake>(
         &mut self,

@@ -166,3 +166,44 @@ fn equal_tick_arrivals_reuse_ring_slots_and_removal_resets_readiness()
     );
     Ok(())
 }
+
+#[test]
+fn text_preflight_failure_preserves_last_arrival_and_readiness()
+-> Result<(), Box<hgl_types::NodeError>> {
+    type S = Rolling<String, false, 2, 2>;
+    let mut store = Store::new();
+    let (output, input) = prepare::<S>(&mut store, 0)?;
+    let mut wakes = Wakes;
+    for tick in 1..=3 {
+        let (result, allocations) = count_in(|| {
+            store
+                .prepared()
+                .tick(time(tick), NodeId(0), &mut wakes)
+                .rolling_text(output, |_| Ok(4), |text, _| text.push_str("text"))
+        });
+        result?;
+        assert_eq!(allocations, 0);
+    }
+    assert!(store.rolling.ready(store.bindings(), input));
+    assert!(
+        store
+            .prepared()
+            .tick(time(4), NodeId(0), &mut wakes)
+            .rolling_text(
+                output,
+                |_| Ok(9),
+                |_, _| unreachable!("capacity preflight must run first")
+            )
+            .is_err()
+    );
+    assert_eq!(store.bindings().last_modified(input.id()), time(3));
+    assert!(store.rolling.ready(store.bindings(), input));
+    assert_eq!(
+        store
+            .rolling
+            .borrow(store.bindings(), input)?
+            .read(store.rolling.values())?,
+        "text"
+    );
+    Ok(())
+}

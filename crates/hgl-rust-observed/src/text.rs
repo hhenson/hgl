@@ -49,7 +49,7 @@ fn text_parts(value: &Value, parts: &mut Vec<String>) -> Option<()> {
     Some(())
 }
 /// Compose a pure observed text expression directly into prepared output capacity.
-pub fn text(value: &Value) -> Option<String> {
+pub fn text(value: &Value, result: Option<&Ty>) -> Option<String> {
     if !matches!(&value.kind,Kind::Binary(op,_,_) if op=="+" && value.ty==Ty::Str) {
         return None;
     }
@@ -69,7 +69,14 @@ pub fn text(value: &Value) -> Option<String> {
         })
         .collect::<Vec<_>>()
         .concat();
+    let target = if result.is_some_and(|ty| matches!(ty, Ty::Rolling(..))) {
+        "rolling_text(self._output"
+    } else if result.is_none_or(|ty| *ty == Ty::Str) {
+        "text(self._output.id(),self._output.generation()"
+    } else {
+        return None;
+    };
     Some(format!(
-        "_ctx.prepared().text(self._output.id(),self._output.generation(),|observation|{{let mut bytes=0usize;{measure}Ok(bytes)}},|destination,observation|{{{compose}}})?;return Ok(());"
+        "_ctx.prepared().{target},|observation|{{let mut bytes=0usize;{measure}Ok(bytes)}},|destination,observation|{{{compose}}})?;return Ok(());"
     ))
 }

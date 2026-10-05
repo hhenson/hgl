@@ -163,3 +163,23 @@ test {
         true,
     )
 }
+
+#[test]
+fn scalar_text_composition_publishes_arrivals_into_rolling_storage()
+-> Result<(), Box<dyn std::error::Error>> {
+    run_shared(
+        r#"
+module hgraph.std part rolling_text
+fn concat(a:str,b:str)->rolling<str,2> {when {return a+"!"+b}}
+fn scalar(a:str,b:str)->str {when {return a+"!"+b}}
+fn ready(value:rolling<str,2>)->bool {when {return all_valid(value)}}
+fn observed(a:str,b:str)->bool => ready(concat(a,b))
+test {test concat {
+ assert eval(scalar,a:["a","",_,"b"],b:["x","y",_,"z"])==["a!x","!y",_,"b!z"]
+ assert eval(concat,a:["a","",_,"b"],b:["x","y",_,"z"])==["a!x","!y",_,"b!z"]
+ assert eval(observed,a:["a","",_,"b"],b:["x","y",_,"z"])==[false,true,_,true]
+}}
+"#,
+        true,
+    )
+}

@@ -426,6 +426,18 @@ name = "hgl-nominal-batch"
 version = "0.0.0"
 
 [[package]]
+name = "hgl-observation"
+version = "0.0.0"
+dependencies = [
+ "hgl-atomic",
+ "hgl-bindings",
+ "hgl-columns",
+ "hgl-keys",
+ "hgl-rolling",
+ "hgl-types",
+]
+
+[[package]]
 name = "hgl-optional"
 version = "0.0.0"
 dependencies = [
@@ -453,6 +465,7 @@ dependencies = [
  "hgl-columns",
  "hgl-global",
  "hgl-keys",
+ "hgl-observation",
  "hgl-rolling",
  "hgl-shapes",
  "hgl-types",

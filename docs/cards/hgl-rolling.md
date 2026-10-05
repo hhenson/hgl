@@ -31,3 +31,9 @@ owning strings, invalidation and reactivation. Generated shared six-case tests
 count every Graph::evaluate call in debug/release, including first publication,
 replay, pass-through and prepared recording. No claim extends to arbitrary
 unbounded dynamic native sources outside the finite prepared profile.
+
+text<S> prepares a String arrival destination, checks complete measured byte
+capacity, then invokes an infallible generated composition callback before
+committing the ring arrival. The reserved buffer is moved temporarily, retaining
+capacity, and the callback observes independent source storage. Failed capacity
+checks leave the prior window and publication metadata unchanged.
