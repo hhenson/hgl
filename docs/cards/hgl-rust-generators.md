@@ -54,8 +54,8 @@ Acceptance includes emitted first/parked/repeated String publication and mixed
 projected/native scalar execution in debug/release, counting allocations around
 each complete Graph::evaluate call with no warm-up excluded.
 
+Complete ordinary Set/Map pending payloads and prepared slots publish through atomic whole-value transport.
 Prepared eval transport is selected as one complete path by
 `hgl-rust-execution-proof::prepared(plan)`. Unproved plans retain existing ordinary
 publication and recording behavior; no per-insertion fallback or hook replay is
 introduced. Prepared allocation evidence applies only to the selected finite path.
-Complete ordinary Set/Map pending payloads and prepared slots publish through atomic whole-value transport.

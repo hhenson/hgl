@@ -12,9 +12,9 @@ line-budget = 800
 workspace = true
 
 [dependencies]
+hgl-rust-collections = { path = "../hgl-rust-collections" }
 hgl-rust-direct-deltas = { path = "../hgl-rust-direct-deltas" }
 hgl-rust-finite-domains = { path = "../hgl-rust-finite-domains" }
-hgl-rust-collections = { path = "../hgl-rust-collections" }
 hgl-rust-observed = { path = "../hgl-rust-observed" }
 hgl-rust-deltas = { path = "../hgl-rust-deltas" }
 hgl-source = { path = "../hgl-source" }

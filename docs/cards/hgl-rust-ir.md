@@ -85,8 +85,6 @@ rewrites, retaining typed keys alongside their payloads.
 `Node: Clone` supports cold suite-level layout collection; node state remains
 independent in every generated graph instance.
 
-Plan and Native are cloneable for deterministic backend normalization; a cloned
-plan contains checked expressions and signatures, never runtime provider state.
 Kind::Captured(length, Vec<(usize,Value)>) owns a harness result's dense logical
 horizon and increasing present slots. It is closed cold data; no silent cells
 are allocated. It never enters node runtime storage or ordinary list mutation.
