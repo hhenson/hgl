@@ -472,6 +472,7 @@ version = "0.0.0"
 dependencies = [
  "hgl-rust-ir",
  "hgl-rust-layouts",
+ "hgl-rust-mutation-bounds",
  "hgl-source",
 ]
 
@@ -511,6 +512,14 @@ dependencies = [
  "hgl-rust-ir",
  "hgl-rust-prepared-values",
  "hgl-rust-scalars",
+ "hgl-source",
+]
+
+[[package]]
+name = "hgl-rust-mutation-bounds"
+version = "0.0.0"
+dependencies = [
+ "hgl-rust-ir",
  "hgl-source",
 ]
 

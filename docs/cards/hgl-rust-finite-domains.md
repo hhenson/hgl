@@ -15,4 +15,6 @@ finite replay horizon to reserve primitive runtime-key slots.
 `widths(plan, base)` emits one per-output width in dependency order. Direct
 mutation sites add, branches take maximum, and each added-element loop multiplies
 its own input publication width. Independent nodes never multiply one another.
-While bodies have only a single-traversal estimate and remain outside this proof.
+Constant integer induction loops use exact iteration counts from
+`hgl-rust-mutation-bounds`; other while bodies still have a single-traversal
+estimate and remain outside this proof.

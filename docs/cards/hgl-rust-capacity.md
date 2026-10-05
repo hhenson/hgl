@@ -26,7 +26,8 @@ Downstream projections and cycle work queues are allocated cold. Per-cycle recor
 width remains separate from total distinct-key capacity, avoiding quadratic
 record pools. `text_limits(plan)` widens retained text for pure local concatenations.
 
-Runtime while bodies do not have a general iteration proof in this finite planner;
-their single-traversal estimate does not establish an allocation guarantee for
-arbitrary mutation loops. Such loops can exhaust the prepared pool, a remaining
-behavioral limitation distinct from the validated finite publication matrix.
+Constant integer induction loops have exact finite mutation bounds. Other runtime
+while bodies retain a single-traversal estimate: neither an input-dependent nor
+a native-dependent loop receives a general iteration proof from the replay
+horizon. Such loops can exhaust the prepared pool, a remaining behavioral
+limitation distinct from the validated finite publication matrix.

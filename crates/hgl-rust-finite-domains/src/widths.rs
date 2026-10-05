@@ -1,4 +1,4 @@
-use hgl_rust_ir::{Kind, Node, Plan, Statement, Value};
+use hgl_rust_ir::{Kind, Node, Plan, Statement};
 use hgl_source::Ty;
 use std::fmt::Write as _;
 fn sum(parts: Vec<String>) -> String {
@@ -7,37 +7,14 @@ fn sum(parts: Vec<String>) -> String {
     })
 }
 fn body(statements: &[Statement], node: &Node) -> String {
-    sum(statements
-        .iter()
-        .map(|statement| match statement {
-            Statement::Call(Value {
-                kind: Kind::Query(op, _),
-                ..
-            }) if op == "set_upsert" || op == "set_discard" => "1usize".into(),
-            Statement::If(_, yes, no) => format!("({}).max({})", body(yes, node), body(no, node)),
-            Statement::For(_, collection, statements) => {
-                let Kind::Input(input, _) = collection.kind else {
-                    unreachable!("checked added-element loop")
-                };
-                let source = node.inputs[input].1;
-                format!(
-                    "width{source}.checked_mul({}).ok_or(\"prepared loop width overflow\")?",
-                    body(statements, node)
-                )
-            }
-            Statement::While(_, statements) => body(statements, node),
-            Statement::Exit
-            | Statement::Let(..)
-            | Statement::Var(..)
-            | Statement::Borrow(..)
-            | Statement::Return(_)
-            | Statement::TimedYield(..)
-            | Statement::Yield(_)
-            | Statement::Call(_)
-            | Statement::Assign(..) => "0usize".into(),
-        })
-        .collect())
+    hgl_rust_mutation_bounds::mutation_width(statements, |collection| {
+        let Kind::Input(input, _) = collection.kind else {
+            unreachable!("checked added-element loop")
+        };
+        format!("width{}", node.inputs[input].1)
+    })
 }
+
 fn node(
     plan: &Plan,
     index: usize,
@@ -76,7 +53,7 @@ fn node(
         .unwrap_or_else(|_| unreachable!("String formatting"));
 }
 /// Emit per-output finite publication widths along dependencies, including nested added loops.
-/// Runtime while loops retain their single-traversal estimate and are outside this finite proof.
+/// Constant integer induction loops have exact finite bounds; other while loops remain outside this proof.
 pub fn widths(plan: &Plan, base: impl Fn(&Ty) -> String) -> String {
     let mut out = String::new();
     let mut seen = vec![false; plan.nodes.len()];

@@ -37,6 +37,18 @@ test opaque_members {assert eval(opaque_members,value:[1,2,-3,1],other:[1,1,1,1]
 fn paired_members(left:set<i64>,right:set<i64>)->set<i64> {inject out
 when {for a in elements(left,added) {for b in elements(right,added) {upsert(out,a*100+b)}}}}
 test paired_members {assert eval(paired_members,left:[delta<set<i64>>(added:[1,2])],right:[delta<set<i64>>(added:[3,4,5])]) == [delta<set<i64>>(added:[103,104,105,203,204,205])]}
+fn bounded_members(value:i64)->set<i64> {inject out
+when {var i=0
+while i<5 {upsert(out,i)
+i+=1}}}
+test bounded_members {assert eval(bounded_members,value:[1]) == [delta<set<i64>>(added:[0,1,2,3,4])]}
+fn nested_bounded_members(value:i64)->set<i64> {inject out
+when {var i=2
+while i>=0 {var j=0
+while j<2 {upsert(out,i*10+j)
+j+=1}
+i=i-1}}}
+test nested_bounded_members {assert eval(nested_bounded_members,value:[1]) == [delta<set<i64>>(added:[20,21,10,11,0,1])]}
 fn computed_text(value:str)->str {when {return value+":"+value}}
 test computed_text {assert eval(computed_text,value:["a","longer",""]) == ["a:a","longer:longer",":"]}
 fn computed_members(value:i64)->set<i64> {inject out
@@ -208,6 +220,9 @@ static KEY_STARTS:std::sync::atomic::AtomicUsize=std::sync::atomic::AtomicUsize:
 static CONFIGURATION_CALLS:std::sync::atomic::AtomicUsize=std::sync::atomic::AtomicUsize::new(0);
 #[global_allocator] static ALLOCATOR:hgl_alloc_count::CountingAllocator=hgl_alloc_count::CountingAllocator;
 fn verify_pool(store:&mut hgl_store::Store,built:&hgl_describe::BuiltGraph,graph:&hgl_describe::GraphDescription) {
+ for (name,expected) in [("::bounded_members#",15),("::nested_bounded_members#",18)] {
+ if let Some(index)=graph.nodes.iter().position(|node|node.implementation.contains(name)) {let output=built.outputs[index].expect("bounded mutation output");assert_eq!(store.bindings().output(output).members.prepared.len(),expected,"constant induction bound");}
+ }
  if let Some(node)=graph.nodes.iter().find(|node|node.implementation.contains("::branch_member_")) {
  let n:usize=node.implementation.split("::branch_member_").nth(1).unwrap().split('#').next().unwrap().parse().unwrap();
  let roots=built.outputs.iter().flatten().filter(|id|store.bindings().output(**id).members.live.pooled()).collect::<Vec<_>>();
