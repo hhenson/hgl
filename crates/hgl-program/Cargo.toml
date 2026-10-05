@@ -34,3 +34,4 @@ hgl-rust-preparation = { path = "../hgl-rust-preparation" }
 hgl-local-check = { path = "../hgl-local-check" }
 hgl-wiring-locals = { path = "../hgl-wiring-locals" }
 hgl-enums = { path = "../hgl-enums" }
+hgl-static-values = { path = "../hgl-static-values" }

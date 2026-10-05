@@ -1,6 +1,10 @@
 //! The complete generated replay, target and recording path must not allocate in ticks.
 use std::{fmt::Write as _, fs, process::Command, time::SystemTime};
 const SOURCE: &str = r#"module prepared_execution
+fn retained_key(value:i64)->map<str,i64> {when {let key="retained"
+let alias=key
+return delta<map<str,i64>>(upsert:[alias:value])}}
+test retained_key {assert eval(retained_key,value:[1,2]) == [delta<map<str,i64>>(upsert:["retained":1]),delta<map<str,i64>>(upsert:["retained":2])]}
 native const fn configuration_marker(value:i64)->i64 throws
 native const fn configuration_marker(value:i64)->i64 throws {}
 struct ConfigRow {time:datetime

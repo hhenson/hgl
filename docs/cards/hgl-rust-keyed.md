@@ -21,3 +21,7 @@ factory. Input projections are prepared after graph wiring and before startup.
 
 `node_preparation(node, emit)` seeds literal key domains during ordinary generated
 node construction, preserving callers that instantiate outside the eval harness.
+
+May use hgl-static-values to follow immutable constant lexical origins during
+cold key-domain discovery. Prepare known keys, never emit an initializer replay
+or a provider call. Runtime constructor operands retain their original locals.

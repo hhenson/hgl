@@ -1,6 +1,13 @@
 //! Sparse ordinary formation validates the whole schema and preserves payload order.
 use hgl_delta_check::{Part, constructor};
-use hgl_source::{Cursor, Expr, Literal, ParsedLiteral, Ty, lex};
+use hgl_rust_ir::{Kind, Value};
+fn fixed(value: Literal) -> (Value, Option<Literal>) {
+    (
+        Value::new(value.ty(), Kind::Literal(value.clone())),
+        Some(value),
+    )
+}
+use hgl_source::{Cursor, Expr, Literal, Ty, lex};
 type Parsed = (Ty, Vec<(Option<String>, Expr)>);
 fn parsed(source: &str) -> Result<Parsed, String> {
     let tokens = lex(source)?;
@@ -25,21 +32,22 @@ fn all_collection_forms_and_written_payload_order() {
     ] {
         let (ty, args) = parsed(source).unwrap();
         let parts = constructor(&ty, &args, |expr| {
-            expr.fixed()
-                .map(ParsedLiteral::Value)
-                .ok_or("constant required".into())
+            expr.fixed().map(fixed).ok_or("constant required".into())
         })
         .unwrap();
         if source.contains("one()") {
             assert!(matches!(
                 &parts[0],
-                Part::Removed(ParsedLiteral::Value(Literal::Int(9)))
+                Part::Removed(Value {
+                    kind: Kind::Literal(Literal::Int(9)),
+                    ..
+                })
             ));
             assert!(
-                matches!(&parts[1],Part::Keyed(ParsedLiteral::Value(Literal::Int(7)),Ty::I64,Expr::Call(name,_)) if name=="one")
+                matches!(&parts[1],Part::Keyed(Value {kind: Kind::Literal(Literal::Int(7)), ..},Ty::I64,Expr::Call(name,_)) if name=="one")
             );
             assert!(
-                matches!(&parts[2],Part::Keyed(ParsedLiteral::Value(Literal::Int(8)),Ty::I64,Expr::Call(name,_)) if name=="two")
+                matches!(&parts[2],Part::Keyed(Value {kind: Kind::Literal(Literal::Int(8)), ..},Ty::I64,Expr::Call(name,_)) if name=="two")
             );
         }
     }
@@ -73,9 +81,7 @@ fn rejects_malformed_data_before_any_payload_is_evaluated() {
     ] {
         let (ty, args) = parsed(source).unwrap();
         let actual = constructor(&ty, &args, |expr| {
-            expr.fixed()
-                .map(ParsedLiteral::Value)
-                .ok_or("constant required".into())
+            expr.fixed().map(fixed).ok_or("constant required".into())
         })
         .unwrap_err();
         assert!(actual.contains(error), "{source}: {actual}");
@@ -94,7 +100,7 @@ fn scalar_keys_are_exact_and_signed_zero_collisions_fail_during_checking() {
         assert!(
             constructor(&ty, &args, |expr| expr
                 .fixed()
-                .map(ParsedLiteral::Value)
+                .map(fixed)
                 .ok_or("constant required".into()))
             .is_ok(),
             "{source}"
@@ -114,9 +120,7 @@ fn scalar_keys_are_exact_and_signed_zero_collisions_fail_during_checking() {
     ] {
         let (ty, args) = parsed(source).unwrap();
         let error = constructor(&ty, &args, |expr| {
-            expr.fixed()
-                .map(ParsedLiteral::Value)
-                .ok_or("constant required".into())
+            expr.fixed().map(fixed).ok_or("constant required".into())
         })
         .unwrap_err();
         assert!(error.contains(diagnostic), "{source}: {error}");
@@ -131,12 +135,18 @@ fn provider_dependent_identities_are_retained_without_guessing_duplicate_names()
         let Expr::TemporalLiteral(recipe) = expr else {
             return Err("expected contextual recipe".into());
         };
-        Ok(ParsedLiteral::Contextual(recipe.clone()))
+        Ok((
+            Value::new(recipe.ty(), Kind::TemporalLiteral(recipe.clone())),
+            None,
+        ))
     })
     .unwrap();
     assert_eq!(parts.len(), 3);
     assert!(matches!(
         &parts[0],
-        Part::Added(ParsedLiteral::Contextual(_))
+        Part::Added(Value {
+            kind: Kind::TemporalLiteral(_),
+            ..
+        })
     ));
 }

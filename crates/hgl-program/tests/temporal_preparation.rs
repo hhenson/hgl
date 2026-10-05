@@ -64,7 +64,51 @@ test ordered {{ {body} }}
         ),
     ]
 }
-const CASES: [(&str, &str, bool, &str, usize); 22] = [
+const CASES: [(&str, &str, bool, &str, usize); 27] = [
+    (
+        "fresh_key_recipes",
+        r"eval(key_target,value:[delta<map<timezone,i64>>(upsert:[@[UTC]:1])])
+       eval(key_target,value:[delta<map<timezone,i64>>(upsert:[@[UTC]:2])])",
+        true,
+        "0 failures",
+        2,
+    ),
+    (
+        "retained_alias",
+        r"let key=@[UTC]
+       let alias=key
+       assert eval(key_target,value:[delta<map<timezone,i64>>(upsert:[alias:1])]) == [delta<map<timezone,i64>>(upsert:[key:1])]
+       assert eval(key_target,value:[delta<map<timezone,i64>>(upsert:[key:2])]) == [delta<map<timezone,i64>>(upsert:[alias:2])]",
+        true,
+        "0 failures",
+        2,
+    ),
+    (
+        "alias_duplicate",
+        r"let key=@[UTC]
+       let alias=key
+       eval(key_target,value:[delta<map<timezone,i64>>(upsert:[key:1,alias:2])])",
+        false,
+        "duplicate",
+        0,
+    ),
+    (
+        "alias_overlap",
+        r"let key=@[UTC]
+       eval(key_target,value:[delta<map<timezone,i64>>(upsert:[key:1],remove:[key])])",
+        false,
+        "overlap",
+        0,
+    ),
+    (
+        "unused_alias",
+        r"let key=@[Missing/Unused]
+       let alias=key
+       eval(key_target,value:[delta<map<timezone,i64>>(upsert:[alias:1])])",
+        false,
+        "Missing/Unused",
+        0,
+    ),
     (
         "nested_key_domains",
         r"assert eval(nested_key_target,value:[delta<map<timezone,set<zoned_time>>>(upsert:[@[UTC]:delta<set<zoned_time>>(added:[@09:30[US/Eastern]])]),delta<map<timezone,set<zoned_time>>>(remove:[@[UTC]]),delta<map<timezone,set<zoned_time>>>(upsert:[@[UTC]:delta<set<zoned_time>>(added:[@09:30[America/New_York]])])]) == [delta<map<timezone,set<zoned_time>>>(upsert:[@[UTC]:delta<set<zoned_time>>(added:[@09:30[US/Eastern]])]),delta<map<timezone,set<zoned_time>>>(remove:[@[UTC]]),delta<map<timezone,set<zoned_time>>>(upsert:[@[UTC]:delta<set<zoned_time>>(added:[@09:30[America/New_York]])])]",
@@ -247,7 +291,12 @@ fn generated_tests_validate_before_start_and_expectations_after_run()
         let suite = compile_tests(&source(body))?;
         fs::write(
             dir.join(format!("src/{name}.rs")),
-            emit_tests(&suite).replace("fn main()", "pub fn main()"),
+            emit_tests(&suite)
+                .replace("fn main()", "pub fn main()")
+                .replace(
+                    "context.materialize(recipe)",
+                    "{println!(\"MATERIALIZED\");context.materialize(recipe)}",
+                ),
         )?;
         writeln!(modules, "mod {name};")?;
         writeln!(calls, "Some({name:?})=>{name}::main(),")?;
@@ -289,6 +338,7 @@ fn generated_tests_validate_before_start_and_expectations_after_run()
             );
             assert_eq!(output.status.success(), success, "{name}: {text}");
             assert!(text.contains(diagnostic), "{name}: {text}");
+            materializations(name, &text);
             assert_eq!(
                 text.matches("TARGET_STARTED").count(),
                 starts,
@@ -349,5 +399,23 @@ fn contextual_composition_construction_requires_run_preparation() {
         .unwrap();
         let error = compile_tests(&sources).unwrap_err();
         assert!(error.contains(diagnostic), "{error}");
+    }
+}
+
+fn materializations(name: &str, text: &str) {
+    if [
+        "retained_alias",
+        "alias_duplicate",
+        "alias_overlap",
+        "unused_alias",
+        "fresh_key_recipes",
+    ]
+    .contains(&name)
+    {
+        assert_eq!(
+            text.matches("MATERIALIZED").count(),
+            if name == "fresh_key_recipes" { 2 } else { 1 },
+            "{name}: {text}"
+        );
     }
 }

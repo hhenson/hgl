@@ -2,14 +2,16 @@
 
 Validate bounded structural delta constructor syntax against an already checked
 origin shape. Dependencies: hgl-source, hgl-rust-ir and hgl-scalar-keys; budget 350 source lines. Semantic
-authority: spec06e576a scalar-collection-keys, ordinary-delta-types and contextual-collection-deltas.
+authority: spec443b92c scalar-collection-keys, ordinary-delta-types and contextual-collection-deltas.
 
 Public surface: `Part::{Added,Removed,Keyed,Child}` and `constructor(origin,args,fixed)`.
-Added/Removed hold ParsedLiteral scalar members/keys; Keyed holds an exact
-ParsedLiteral map key, child delta type and borrowed payload. Child retains only
+Added/Removed hold retained checked scalar Values; Keyed holds an exact
+checked map key, child delta type and borrowed payload. Child retains only
 fixed i64 field/position indices, child delta type and borrowed payload AST.
 The returned parts preserve supplied argument and sparse-entry order. The
-callback returns ParsedLiteral for each constant expression without admitting runtime positions.
+callback returns (Value, Option<Literal>) for each constant expression: retained
+IR plus any known identity, without admitting runtime positions. Immutable cold
+aliases retain their Local IR; metadata must not replay an initializer.
 Before returning, validate the whole constructor: exact argument names,
 duplicates, constant types, disjoint memberships/keys, fixed bounds and shape.
 Empty ordinary data is valid; application profile checks belong to the runtime.

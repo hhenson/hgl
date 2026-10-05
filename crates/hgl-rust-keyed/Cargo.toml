@@ -13,3 +13,4 @@ hgl-source = { path = "../hgl-source" }
 hgl-rust-ir = { path = "../hgl-rust-ir" }
 hgl-rust-layouts = { path = "../hgl-rust-layouts" }
 hgl-rust-checked-data = { path = "../hgl-rust-checked-data" }
+hgl-static-values = { path = "../hgl-static-values" }

@@ -26,7 +26,7 @@ fn plan(body: &str) -> Plan {
             None,
             Expr::Sequence(vec![Some(Expr::Literal(Literal::Int(1)))]),
         )],
-        &Env::new(),
+        &PreparedLexicalScope::default(),
     )
     .unwrap()
     .0

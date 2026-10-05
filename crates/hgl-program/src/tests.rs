@@ -24,15 +24,14 @@ pub fn compile_tests(sources: &[(String, String)]) -> Result<Suite, String> {
         if !names.insert(name.clone()) {
             return Err(format!("duplicate test {name}"));
         }
-        let mut env = std::collections::BTreeMap::new();
-        let mut next = 0;
+        let mut scope = hgl_static_values::PreparedLexicalScope::default();
         let mut steps = Vec::new();
         for step in hgl_eval_data::steps(&decl.tokens)? {
             match step {
                 hgl_eval_data::TestStep::Ordinary(statement) => {
                     if let hgl_source::Stmt::Let(name, _, _) | hgl_source::Stmt::Var(name, _, _) =
                         &statement
-                        && env.contains_key(name)
+                        && scope.bindings.contains_key(name)
                     {
                         return Err(format!("duplicate test local {name}"));
                     }
@@ -40,12 +39,11 @@ pub fn compile_tests(sources: &[(String, String)]) -> Result<Suite, String> {
                         library.clone(),
                         &decl.module,
                         &statement,
-                        &mut env,
-                        &mut next,
+                        &mut scope,
                     )?));
                 }
                 hgl_eval_data::TestStep::Assert(expr) => steps.push(Step::Assert(
-                    resolve::prepared_assertion(library.clone(), &decl.module, &expr, &env)?,
+                    resolve::prepared_assertion(library.clone(), &decl.module, &expr, &scope)?,
                 )),
                 hgl_eval_data::TestStep::Eval(call) => {
                     let (plan, arguments) = resolve::prepare_evaluation(
@@ -53,7 +51,7 @@ pub fn compile_tests(sources: &[(String, String)]) -> Result<Suite, String> {
                         &decl.module,
                         &call.function,
                         &call.arguments,
-                        &env,
+                        &scope,
                     )
                     .map_err(|e| format!("{name}: {e}"))?;
                     let expected = call
@@ -68,7 +66,7 @@ pub fn compile_tests(sources: &[(String, String)]) -> Result<Suite, String> {
                                 &decl.module,
                                 ty,
                                 &slots,
-                                &env,
+                                &scope,
                             )
                             .map_err(|e| format!("{name}: expected output: {e}"))
                         })

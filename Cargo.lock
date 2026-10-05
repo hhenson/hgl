@@ -390,6 +390,7 @@ dependencies = [
  "hgl-rust",
  "hgl-rust-preparation",
  "hgl-source",
+ "hgl-static-values",
  "hgl-struct-check",
  "hgl-type-sizes",
  "hgl-value-access",
@@ -514,6 +515,7 @@ dependencies = [
  "hgl-rust-ir",
  "hgl-rust-layouts",
  "hgl-source",
+ "hgl-static-values",
 ]
 
 [[package]]
@@ -642,6 +644,17 @@ dependencies = [
  "hgl-lex",
  "hgl-literals",
  "hgl-type-shape",
+]
+
+[[package]]
+name = "hgl-static-values"
+version = "0.0.0"
+dependencies = [
+ "hgl-library",
+ "hgl-rust-ir",
+ "hgl-source",
+ "hgl-value-constant",
+ "hgl-value-eval",
 ]
 
 [[package]]
@@ -777,6 +790,7 @@ dependencies = [
  "hgl-library",
  "hgl-rust-ir",
  "hgl-source",
+ "hgl-static-values",
 ]
 
 [[package]]

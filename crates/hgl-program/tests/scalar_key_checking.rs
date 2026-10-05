@@ -62,3 +62,39 @@ fn provider_names_do_not_establish_checking_time_key_identity() {
         assert!(result.is_ok(), "{body}: {result:?}");
     }
 }
+
+#[test]
+fn immutable_key_aliases_preserve_exact_identity() {
+    for body in [
+        "let key=@[UTC]\nlet alias=key\nlet p=delta<map<timezone,i64>>(upsert:[alias:1])",
+        "let key=1\nlet alias=key\nlet p=delta<set<i64>>(added:[alias])",
+        "let key=E::first\nlet alias=key\nlet p=delta<set<E>>(added:[alias])",
+    ] {
+        assert!(checked(body).is_ok(), "{body}");
+    }
+    for (body, message) in [
+        (
+            "var key=1\nlet alias=key\nlet p=delta<set<i64>>(added:[alias])",
+            "constant",
+        ),
+        (
+            "let key=0.0\nlet alias=key\nlet p=delta<set<f64>>(added:[alias,-0.0])",
+            "duplicate",
+        ),
+        (
+            "let key=1\nlet p=delta<map<f64,i64>>(upsert:[key:1])",
+            "type mismatch",
+        ),
+        (
+            "let key=1\nlet p=delta<map<i64,i64>>(upsert:[key:1],remove:[key])",
+            "overlap",
+        ),
+        (
+            "let key=1\nif true {var key=2\nlet p=delta<set<i64>>(added:[key])}",
+            "constant",
+        ),
+    ] {
+        let error = checked(body).unwrap_err();
+        assert!(error.contains(message), "{body}: {error}");
+    }
+}

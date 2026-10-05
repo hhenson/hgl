@@ -7,6 +7,7 @@ use hgl_endpoint_check::{
 };
 use hgl_flow_check::{facts, handler_facts, merge_facts, terminates};
 use hgl_rust::{Kind, Native, Node, Plan, Statement, Value};
+use hgl_static_values::PreparedLexicalScope;
 use hgl_value_bind::{bind, bind_prepared, method_arguments, order_arguments, resolve_type};
 use hgl_value_check::{field, ordinary, writable};
 use std::collections::{BTreeMap, BTreeSet};
@@ -54,11 +55,13 @@ type Selection = (usize, Signature, Vec<Value>, BTreeMap<String, Ty>, Ty);
 type Env = BTreeMap<String, Value>;
 type Arguments = Vec<(Option<String>, Value)>;
 
-fn test_checker(library: Library, module: &str, values: Env) -> Checker {
+fn test_checker(library: Library, module: &str, scope: &PreparedLexicalScope) -> Checker {
     Checker {
         library,
         test_scope: Some(module.into()),
-        harness_values: values,
+        harness_values: scope.bindings.clone(),
+        static_values: scope.origins.clone(),
+        facts: scope.facts.clone(),
         value_context: ValueContext::Preparation,
         ..Checker::default()
     }
@@ -67,20 +70,27 @@ pub(crate) fn prepared_statement(
     library: Library,
     module: &str,
     statement: &Stmt,
-    env: &mut Env,
-    next: &mut usize,
+    scope: &mut PreparedLexicalScope,
 ) -> Result<Statement, String> {
-    let mut checker = test_checker(library, module, Env::new());
-    checker.statement(module, statement, env, &Ty::Void, next)
+    let mut checker = test_checker(library, module, scope);
+    let result = checker.statement(
+        module,
+        statement,
+        &mut scope.bindings,
+        &Ty::Void,
+        &mut scope.next,
+    );
+    scope.origins = checker.static_values;
+    result
 }
 pub(crate) fn prepared_assertion(
     library: Library,
     module: &str,
     expr: &Expr,
-    env: &Env,
+    scope: &PreparedLexicalScope,
 ) -> Result<Value, String> {
-    let mut checker = test_checker(library, module, Env::new());
-    let value = checker.expression(module, expr, env, false)?;
+    let mut checker = test_checker(library, module, scope);
+    let value = checker.expression(module, expr, &scope.bindings, false)?;
     if value.ty != Ty::Bool {
         return Err("ordinary assertion requires bool".into());
     }
@@ -1202,6 +1212,7 @@ impl Checker {
                 let mutable = matches!(statement, Stmt::Var(..));
                 let id = *next_local;
                 *next_local += 1;
+                self.static_values.bind(id, &value, mutable);
                 let (binding, statement) =
                     hgl_local_check::statement(id, value, mutable, annotation.is_some())?;
                 env.insert(name.clone(), binding);
@@ -1661,17 +1672,7 @@ impl Checker {
         }
         let parts = hgl_delta_check::constructor(&origin, args, |expr| {
             let value = self.expression(module, expr, env, false)?;
-            if let Kind::TemporalLiteral(recipe) = value.kind {
-                return Ok(hgl_source::ParsedLiteral::Contextual(recipe));
-            }
-            let value = self
-                .wiring
-                .value(&value)
-                .map_err(|e| format!("delta position requires a constant: {e}"))?;
-            let Kind::Literal(value) = value.kind else {
-                return Err("delta position requires a constant scalar".into());
-            };
-            Ok(hgl_source::ParsedLiteral::Value(value))
+            self.static_values.key(value)
         })?;
         let entries = hgl_delta_check::values(parts, |ty, expr| {
             let value = self.expected_expression(module, expr, env, runtime, Some(ty))?;
@@ -1816,7 +1817,12 @@ fn select_eval(
         let mut candidate = test_checker(
             checker.library.clone(),
             module,
-            checker.harness_values.clone(),
+            &PreparedLexicalScope {
+                bindings: checker.harness_values.clone(),
+                origins: checker.static_values.clone(),
+                facts: checker.facts.clone(),
+                ..PreparedLexicalScope::default()
+            },
         );
         match eval_arguments(&mut candidate, module, &decl.module, &signature, args) {
             Ok((plan, values)) => candidates.push((candidate, plan, values)),
@@ -1838,9 +1844,9 @@ pub(crate) fn prepare_evaluation(
     module: &str,
     name: &str,
     args: &[(Option<String>, Expr)],
-    values: &Env,
+    scope: &PreparedLexicalScope,
 ) -> Result<(Plan, Vec<hgl_harness_ir::Argument>), String> {
-    let checker = test_checker(library, module, values.clone());
+    let checker = test_checker(library, module, scope);
     let (mut checker, plan, mut values) = select_eval(&checker, module, name, args)?;
     let mut prepared = Vec::new();
     checker.static_values.prepared = values.iter().map(|(_, value)| value.clone()).collect();
@@ -1937,9 +1943,9 @@ pub(crate) fn prepared_expected(
     module: &str,
     ty: &Ty,
     slots: &[Option<Expr>],
-    values: &Env,
+    scope: &PreparedLexicalScope,
 ) -> Result<Vec<Option<Value>>, String> {
-    let mut checker = test_checker(library, module, values.clone());
+    let mut checker = test_checker(library, module, scope);
     hgl_eval_data::sequence(slots, Some(ty.clone()), |expr, expected| {
         checked_eval(&mut checker, module, expr, expected)
     })

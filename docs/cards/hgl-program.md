@@ -330,3 +330,7 @@ Scalar-key delta construction uses ParsedLiteral constant callbacks. Exact map
 keys and set members may retain provider recipes in cold preparation; fixed
 list/tuple indices remain constant i64. hgl-delta-check owns the conversion from
 checked parts to typed key/payload IR, preserving source argument order.
+
+Prepared test operations share hgl-static-values::PreparedLexicalScope, retaining
+immutable key origins across setup, arguments and expectations. Source checking
+proves key eligibility without substituting local initializers into constructors.
