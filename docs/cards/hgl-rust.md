@@ -123,7 +123,7 @@ independent. Sharing generated type definitions bounds compiler memory growth
 without changing execution or reducing test cases.
 
 Finite evaluation emits graph-local cold capacity maxima from already materialized
-configuration values. Before binding globals it allocates record slots, then after
+configuration values and proved direct generator arrival counts. Before binding globals it allocates record slots, then after
 instantiation prepares scalar, atomic, and every finite keyed descendant output.
 Configuration source arenas own independent typed slots. Captures are extracted as
 owning values after simulation; generated hook recording copies into reserved slots.

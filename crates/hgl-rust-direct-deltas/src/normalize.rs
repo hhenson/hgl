@@ -19,6 +19,9 @@ pub fn prepare(plan: &Plan) -> Plan {
             &mut Aliases::new(),
         );
         statements(&mut node.stop, &mut node.configuration, &mut Aliases::new());
+        if let Some(body) = &mut node.generator {
+            generator_payloads(body, &mut node.configuration);
+        }
         for (guard, body) in &mut node.handlers {
             if let Some(guard) = guard {
                 rewrite(guard, &mut node.configuration, &Aliases::new());
@@ -127,5 +130,33 @@ fn retain(value: &mut Value, config: &mut Vec<Value>) {
         let id = config.len();
         config.push(value.clone());
         value.kind = Kind::Configuration(id);
+    }
+}
+
+fn generator_payloads(body: &mut [Statement], config: &mut Vec<Value>) {
+    for statement in body {
+        match statement {
+            Statement::Yield(value) | Statement::TimedYield(_, value) if value.closed() => {
+                let id = config.len();
+                config.push(value.clone());
+                value.kind = Kind::Configuration(id);
+            }
+            Statement::If(_, yes, no) => {
+                generator_payloads(yes, config);
+                generator_payloads(no, config);
+            }
+            Statement::While(_, body) | Statement::For(_, _, body) => {
+                generator_payloads(body, config);
+            }
+            Statement::Let(..)
+            | Statement::Var(..)
+            | Statement::Borrow(..)
+            | Statement::Return(_)
+            | Statement::Call(_)
+            | Statement::Assign(..)
+            | Statement::Exit
+            | Statement::Yield(_)
+            | Statement::TimedYield(..) => {}
+        }
     }
 }

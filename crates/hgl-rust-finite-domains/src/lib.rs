@@ -9,4 +9,4 @@ pub use hgl_rust_mutation_bounds::mutations;
 mod widths;
 pub use widths::widths;
 
-pub use hgl_rust_execution_proof::prepared;
+pub use hgl_rust_execution_proof::{direct_arrivals, prepared};

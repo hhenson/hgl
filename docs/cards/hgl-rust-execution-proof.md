@@ -10,7 +10,7 @@ constructors remain unproved until prepared local/constructor transport supplies
 their complete key-path and payload bounds.
 
 The current replay schedule proof recognizes a single increasing index traversal
-of one retained configuration list, with at most one yield per row. Other source
+of one retained configuration list, with at most one yield per row. Unproved source
 schedules retain the existing generic adapter. This decision evaluates no source
 expression or user hook, changes no source admission, and never switches storage
 mid-publication. Only proved plans prepare destinations, forward through prepared
@@ -23,3 +23,10 @@ At a return boundary, hgl-rust-direct-deltas::supported certifies the exact spar
 constructor lowering. The same expression at an arbitrary owning local boundary
 continues to require its ordinary storage proof; constructor support does not
 broaden all Delta expressions automatically.
+
+`direct_arrivals(plan)` returns a checked sum of direct generator publications.
+Loop-free sequences add yields and conditional branches take their maximum.
+Recognized replay loops contribute through their retained configuration lengths;
+other loops remain unproved. This analysis never evaluates conditions, payloads,
+providers, or hooks. Capacity planning adds direct arrivals to the eval horizon
+for recording and duration-window storage before any source runs.

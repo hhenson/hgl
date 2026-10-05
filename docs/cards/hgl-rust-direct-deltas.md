@@ -26,3 +26,8 @@ string aliases, direct keys, nested string payloads, and removal/reinsertion;
 semantic compatibility tests for plans whose bounds remain unproved.
 
 Growing returned constructors validate their constant index ranges against destination length and prepare typed children before direct scalar or nested publication. Their sparse index, value and removal storage has no transient owning vectors.
+Generator normalization retains closed literal-only yield payloads in immutable
+configuration slots, including owning aggregates. It leaves the time expression
+and every call/provider expression at their original execution point. Repeated
+normalization is idempotent. This supplies prepared transport for finite direct
+generator schedules without constructing owning values during evaluation.

@@ -36,18 +36,46 @@ fn replay(body: &[Statement]) -> bool {
         && local(left, *id)
         && matches!(right.kind, Kind::Literal(Literal::Int(1)))
 }
+fn direct(body: &[Statement]) -> Option<usize> {
+    body.iter().try_fold(0usize, |count, statement| {
+        let arrivals = match statement {
+            Statement::Yield(_) | Statement::TimedYield(..) => 1,
+            Statement::If(_, yes, no) => direct(yes)?.max(direct(no)?),
+            Statement::While(..) | Statement::For(..) => return None,
+            Statement::Let(..)
+            | Statement::Var(..)
+            | Statement::Borrow(..)
+            | Statement::Return(_)
+            | Statement::Call(_)
+            | Statement::Assign(..)
+            | Statement::Exit => 0,
+        };
+        count.checked_add(arrivals)
+    })
+}
+/// Total direct source arrivals; replay loops are bounded separately by configuration lengths.
+/// Unknown loops or arithmetic overflow leave the complete adapter unproved.
+pub fn direct_arrivals(plan: &Plan) -> Option<usize> {
+    plan.nodes.iter().try_fold(0usize, |count, node| {
+        let arrivals = match &node.generator {
+            None => 0,
+            Some(body) if replay(body) => 0,
+            Some(body) => direct(body)?,
+        };
+        count.checked_add(arrivals)
+    })
+}
 /// Choose finite prepared transport only when membership, owning width and replay count are proved.
 /// Unknown plans retain the existing whole-adapter execution path; no hook is evaluated here.
 pub fn prepared(plan: &Plan) -> bool {
     owning::finite(plan)
+        && direct_arrivals(plan).is_some()
         && plan.nodes.iter().all(|node| {
-            node.generator.as_ref().is_none_or(|body| replay(body))
-                && std::iter::once(&node.start)
-                    .chain(std::iter::once(&node.stop))
-                    .chain(node.handlers.iter().map(|(_, body)| body))
-                    .all(|body| {
-                        hgl_rust_mutation_bounds::mutation_width(body, |_| "1usize".into())
-                            .is_some()
-                    })
+            std::iter::once(&node.start)
+                .chain(std::iter::once(&node.stop))
+                .chain(node.handlers.iter().map(|(_, body)| body))
+                .all(|body| {
+                    hgl_rust_mutation_bounds::mutation_width(body, |_| "1usize".into()).is_some()
+                })
         })
 }

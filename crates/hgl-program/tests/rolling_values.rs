@@ -34,6 +34,13 @@ fn shared_rolling_cases_execute_without_tick_allocations() -> Result<(), Box<dyn
     )
 }
 fn run_shared(source: &str, measure: bool) -> Result<(), Box<dyn std::error::Error>> {
+    run_with_runtime(source, measure, "")
+}
+fn run_with_runtime(
+    source: &str,
+    measure: bool,
+    runtime: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
     use std::{fmt::Write as _, fs, process::Command, time::SystemTime};
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
@@ -67,6 +74,7 @@ fn measured_simulation(graph:&mut hgl_kernel::Graph, store:&mut hgl_store::Store
 "#);
     }
     code.push_str("struct Provider;\n");
+    code.push_str(runtime);
     fs::write(dir.join("src/main.rs"), code)?;
     let mut manifest = String::from(
         "[package]\nname=\"rolling-test\"\nversion=\"0.0.0\"\nedition=\"2024\"\n[workspace]\n[dependencies]\n",
@@ -181,5 +189,73 @@ test {test concat {
 }}
 "#,
         true,
+    )
+}
+
+#[test]
+fn direct_finite_sources_prepare_tick_duration_and_owning_arrivals()
+-> Result<(), Box<dyn std::error::Error>> {
+    run_shared(
+        r#"
+module hgraph.std part direct_sources
+fn context(value:i64) {when {}}
+fn ticks()->rolling<i64,2> {yield 1us:1
+yield 1us:2}
+fn duration()->rolling<i64,5us,0us> {yield 1us:1
+yield 1us:2
+yield 1us:3}
+fn strings()->rolling<str,2> {yield 1us:"one"
+yield 1us:"longer"
+yield 1us:"one"}
+fn tick_graph(value:i64)->rolling<i64,2> {context(value)
+ticks()}
+fn duration_graph(value:i64)->rolling<i64,5us,0us> {context(value)
+duration()}
+fn string_graph(value:i64)->rolling<str,2> {context(value)
+strings()}
+test {
+ test direct_ticks {assert eval(tick_graph,value:[0,0,0,0]) == [_,1,2,_]}
+ test direct_duration {assert eval(duration_graph,value:[0,0,0,0]) == [_,1,2,3]}
+ test direct_strings {assert eval(string_graph,value:[0,0,0,0]) == [_,"one","longer","one"]}
+}
+"#,
+        true,
+    )
+}
+#[test]
+fn finite_source_proof_never_executes_native_payloads_or_lifecycle_hooks()
+-> Result<(), Box<dyn std::error::Error>> {
+    run_with_runtime(
+        r"
+module hgraph.std part direct_once
+native const fn mark(value:i64)->i64 throws
+native const fn mark(value:i64)->i64 throws {}
+native const fn configuration(value:i64)->i64 throws
+native const fn configuration(value:i64)->i64 throws {}
+native const fn begin(value:i64) throws
+native const fn begin(value:i64) throws {}
+native const fn end(value:i64) throws
+native const fn end(value:i64) throws {}
+fn context(value:i64) {start {begin(0)}
+stop {end(0)}
+when {}}
+const fn seed()->i64 => configuration(1)
+fn source(const seed:i64)->rolling<i64,2> {if true {yield 1us:mark(seed)
+yield 1us:mark(2)} else {yield 1us:mark(3)}}
+fn graph(value:i64)->rolling<i64,2> {context(value)
+source(seed())}
+test once {assert eval(graph,value:[0,0,0,0]) == [_,1,2,_]}
+",
+        true,
+        r"
+mod native {
+static CALLS:std::sync::atomic::AtomicUsize=std::sync::atomic::AtomicUsize::new(0);
+static STARTS:std::sync::atomic::AtomicUsize=std::sync::atomic::AtomicUsize::new(0);
+static CONFIGS:std::sync::atomic::AtomicUsize=std::sync::atomic::AtomicUsize::new(0);
+pub fn configuration_i64(value:i64)->hgl_types::NodeResult<i64> {assert_eq!(CONFIGS.fetch_add(1,std::sync::atomic::Ordering::SeqCst),0);Ok(value)}
+pub fn mark_i64(value:i64)->hgl_types::NodeResult<i64> {CALLS.fetch_add(1,std::sync::atomic::Ordering::SeqCst);Ok(value)}
+pub fn begin_i64(_:i64)->hgl_types::NodeResult {assert_eq!(STARTS.fetch_add(1,std::sync::atomic::Ordering::SeqCst),0);assert_eq!(CALLS.load(std::sync::atomic::Ordering::SeqCst),0);Ok(())}
+pub fn end_i64(_:i64)->hgl_types::NodeResult {assert_eq!(CONFIGS.load(std::sync::atomic::Ordering::SeqCst),1);assert_eq!(STARTS.load(std::sync::atomic::Ordering::SeqCst),1);assert_eq!(CALLS.load(std::sync::atomic::Ordering::SeqCst),2);Ok(())}
+}",
     )
 }

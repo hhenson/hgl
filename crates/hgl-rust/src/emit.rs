@@ -594,9 +594,18 @@ fn capacities(plan: &Plan) -> String {
     if !hgl_rust_finite_domains::prepared(plan) {
         return String::new();
     }
+    let Some(arrivals) = hgl_rust_finite_domains::direct_arrivals(plan) else {
+        return String::new();
+    };
     let capacity = hgl_rust_capacity::Capacity::new(plan);
     let mut code = capacity.declaration();
     code += "fn prepare_capacity(configurations:&Configurations,store:&mut hgl_store::Store,horizon:usize)->Result<FiniteCapacity,String>{let mut capacity=FiniteCapacity::default();let mut cycles=horizon;";
+    append(
+        &mut code,
+        format_args!(
+            "cycles=cycles.checked_add({arrivals}usize).ok_or(\"finite arrival count overflow\")?;"
+        ),
+    );
     for (i, node) in plan.nodes.iter().enumerate() {
         for (id, value) in node.configuration.iter().enumerate() {
             append(

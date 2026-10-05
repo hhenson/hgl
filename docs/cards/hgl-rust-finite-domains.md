@@ -20,3 +20,6 @@ Constant integer induction loops use exact iteration counts from
 execution via the reexported `prepared(plan)` proof decision.
 
 Growing child paths merge by their exact constant indices without multiplying nested domains. Removed-only indices reuse the capacity established by prior admitted appends.
+`direct_arrivals(plan)` reexports the source schedule proof count. Capacity planning
+adds this count once across independent generators; replay list lengths remain
+accounted for separately.
