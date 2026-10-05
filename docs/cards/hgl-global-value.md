@@ -59,3 +59,7 @@ forget typed descendant reclamation.
 Ordinary tuple preparation uses `OrdinaryType::Tuple` and positional child
 layouts. Generated tuple GlobalValue implementations retain, prepare, commit
 and reclaim recursively under the same ownership contract as nominal structs.
+
+CivilDateTime, ZoneId and ZonedDateTime are concrete typed scalar implementations.
+Zone-bearing values retain exact owned names fallibly at retention boundaries;
+prepared borrowed projections neither allocate nor consult a provider.

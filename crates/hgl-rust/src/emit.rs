@@ -116,7 +116,16 @@ fn node_build(
     if n.handlers.iter().any(|(guard, _)| guard.is_some()) {
         out.push("valid_inputs: Some(vec![]),\n".into());
     }
-    out.push(format!("uses_scheduler: {}, ..hgl_types::NodeType::default() }}\n}}\nfn build(ports: &mut hgl_describe::Ports<'_>) -> Result<Self,hgl_describe::BuildError> {{\nOk(Self {{\n",n.alarm));
+    let prepared = node_prepared(n);
+    out.push(format!(
+        "uses_scheduler: {}, ..hgl_types::NodeType::default() }}\n}}\n",
+        n.alarm
+    ));
+    if prepared {
+        out.push(format!("fn build(_: &mut hgl_describe::Ports<'_>)->Result<Self,hgl_describe::BuildError> {{Err(hgl_describe::BuildError::InvalidNodeType {{node:{:?},what:\"prepared configuration required\".into()}})}} }}\nimpl Node{index} {{\nfn build_prepared(ports: &mut hgl_describe::Ports<'_>,{}) -> Result<Self,hgl_describe::BuildError> {{\nOk(Self {{\n",n.name,n.configuration.iter().enumerate().map(|(id,v)|format!("configuration{id}:{}",owned_type(&v.ty))).collect::<Vec<_>>().join(",")));
+    } else {
+        out.push("fn build(ports: &mut hgl_describe::Ports<'_>) -> Result<Self,hgl_describe::BuildError> {\nOk(Self {\n".into());
+    }
     if let Some(generator) = generator {
         out.push(generator.initialize());
     }
@@ -127,6 +136,10 @@ fn node_build(
         ));
     }
     for (id, value) in n.configuration.iter().enumerate() {
+        if prepared {
+            out.push(format!("configuration{id},\n"));
+            continue;
+        }
         out.push(format!("configuration{id}: (|| -> Result<{}, Box<hgl_types::NodeError>> {{ Ok({}) }})().map_err(|e| hgl_describe::BuildError::InvalidNodeType {{ node: {:?}, what: e.message }})?,\n", owned_type(&value.ty), condition_code(plan, value), n.name));
     }
     for (i, (name, _, ty)) in n.inputs.iter().enumerate() {
@@ -213,7 +226,11 @@ pub fn emit(plan: &Plan) -> String {
     for i in 0..plan.nodes.len() {
         out.push(format!("registry.register::<Node{i}>()?;\n"));
     }
-    out.push("Ok(())\n}\n/// Construct the checked entry graph without executing it.\npub fn main(registry: &hgl_describe::Registry) -> Result<hgl_describe::GraphDescription,hgl_describe::BuildError> {\nlet mut builder = hgl_describe::Builder::new(\"hgl.program\",registry);\n" .to_owned());
+    out.push("Ok(())\n}\n".into());
+    if plan.nodes.iter().any(node_prepared) {
+        register_prepared(plan, &mut out);
+    }
+    out.push("/// Construct the checked entry graph without executing it.\npub fn main(registry: &hgl_describe::Registry) -> Result<hgl_describe::GraphDescription,hgl_describe::BuildError> {\nlet mut builder = hgl_describe::Builder::new(\"hgl.program\",registry);\n" .to_owned());
     for (i, n) in plan.nodes.iter().enumerate() {
         out.push(format!(
             "let _wire{i} = builder.node({:?}, &[])?;\n",
@@ -357,4 +374,132 @@ fn native_arg_type(ty: &Ty) -> &'static str {
     } else {
         rust_type(ty)
     }
+}
+
+fn prepared_values(value: &Value, out: &mut std::collections::BTreeMap<usize, Ty>) {
+    match &value.kind {
+        Kind::Prepared(id) => {
+            out.insert(*id, value.ty.clone());
+        }
+        Kind::List(values) | Kind::ValueCall(values, _) => {
+            for v in values {
+                prepared_values(v, out);
+            }
+        }
+        Kind::Construct(fields) => {
+            for (_, v) in fields {
+                prepared_values(v, out);
+            }
+        }
+        Kind::Delta(parts) => {
+            for p in parts {
+                if let crate::ir::DeltaEntry::Child(_, v) = p {
+                    prepared_values(v, out);
+                }
+            }
+        }
+        Kind::Field(v, _)
+        | Kind::Length(v)
+        | Kind::Unary(_, v)
+        | Kind::IsPresent(v)
+        | Kind::Present(v) => prepared_values(v, out),
+        Kind::Index(a, b) | Kind::Push(a, b) | Kind::Binary(_, a, b) => {
+            prepared_values(a, out);
+            prepared_values(b, out);
+        }
+        Kind::Literal(_)
+        | Kind::TemporalLiteral(_)
+        | Kind::WiringFailure(_)
+        | Kind::ObservedLocal(_)
+        | Kind::Configuration(_)
+        | Kind::GlobalGet(_)
+        | Kind::BorrowedLocal(..)
+        | Kind::GlobalSet(..)
+        | Kind::GeneratorLocal(_)
+        | Kind::Wire(_)
+        | Kind::Input(..)
+        | Kind::Cache(_)
+        | Kind::Local(_)
+        | Kind::MutableLocal(_)
+        | Kind::Native(..)
+        | Kind::Query(..)
+        | Kind::Output
+        | Kind::Capability
+        | Kind::Void => {}
+    }
+}
+fn node_prepared(node: &Node) -> bool {
+    let mut values = std::collections::BTreeMap::new();
+    for v in &node.configuration {
+        prepared_values(v, &mut values);
+    }
+    !values.is_empty()
+}
+fn register_prepared(plan: &Plan, out: &mut Vec<String>) {
+    let mut bindings = std::collections::BTreeMap::new();
+    for node in &plan.nodes {
+        for v in &node.configuration {
+            prepared_values(v, &mut bindings);
+        }
+    }
+    out.push("pub fn register_prepared(registry:&mut hgl_describe::Registry,values:&[hgl_rust_ir::Value])->Result<(),String> {\n".into());
+    for (id, ty) in bindings {
+        out.push(format!(
+            "let prepared{id}={};\n",
+            hgl_rust_preparation::decode(
+                &ty,
+                &format!("values.get({id}).ok_or(\"missing prepared value\")?")
+            )
+        ));
+    }
+    for (i, node) in plan.nodes.iter().enumerate() {
+        if !node_prepared(node) {
+            out.push(format!(
+                "registry.register::<Node{i}>().map_err(|e|format!(\"{{e:?}}\"))?;\n"
+            ));
+            continue;
+        }
+        out.push("{\n".into());
+        for (id, v) in node.configuration.iter().enumerate() {
+            out.push(format!("let configuration{id}=(||->hgl_types::NodeResult<{}>{{Ok({})}})().map_err(|e|e.message)?;\n",owned_type(&v.ty),condition_code(plan,v)));
+        }
+        let args=node.configuration.iter().enumerate().map(|(id,v)|format!("<{} as hgl_store::GlobalValue>::retain(&configuration{id}).map_err(|e|hgl_describe::BuildError::InvalidNodeType {{node:{:?},what:e.message}})?",global_type(&v.ty),node.name)).collect::<Vec<_>>().join(",");
+        out.push(format!("registry.register_with(<Node{i} as hgl_describe::Buildable>::node_type(),move |ports|Node{i}::build_prepared(ports,{args})).map_err(|e|format!(\"{{e:?}}\"))?;\n}}\n"));
+    }
+    out.push("Ok(())\n}\n".into());
+}
+
+/// Emit fresh graph execution from already constructed owning arguments.
+pub fn emit_prepared_test_body(plan: &Plan) -> String {
+    let legacy = emit_test_body(plan, None);
+    let adapters = legacy.split("pub fn test()").next().unwrap_or_default();
+    let mut out=vec![adapters.into(),"pub fn run(prepared:hgl_harness_ir::PreparedEval)->Result<hgl_harness_ir::CapturedEval,String> {\nlet mut registry=hgl_describe::Registry::new();\n".into()];
+    if plan.construction_error.is_some() {
+        out.push("register(&mut registry).map_err(|e|format!(\"{e:?}\"))?; main(&registry).map_err(|e|format!(\"{e:?}\"))?; Ok(hgl_harness_ir::CapturedEval {length:prepared.input_length,ticks:Vec::new()}) }\n".into());
+        return out.concat();
+    }
+    if plan.nodes.iter().any(node_prepared) {
+        out.push("register_prepared(&mut registry,&prepared.arguments)?;\n".into());
+    } else {
+        out.push("register(&mut registry).map_err(|e|format!(\"{e:?}\"))?;\n".into());
+    }
+    out.push("let graph=main(&registry).map_err(|e|format!(\"{e:?}\"))?;\nlet mut store=hgl_store::Store::new();store.global_state().provision();\nlet mut built=hgl_describe::instantiate_complete(&graph,&registry,&mut store).map_err(|e|format!(\"{e:?}\"))?;\n".into());
+    if let Some((key, ty)) = &plan.recording {
+        out.push(format!("let recording=store.global_state().bind::<{}>({key:?}).map_err(|e|format!(\"{{e:?}}\"))?;\n",global_type(ty)));
+    }
+    out.push("hgl_kernel::run_simulation(&mut built.graph,&mut store,&hgl_kernel::RunConfig {start_time:hgl_types::EngineTime::MIN_START,end_time:hgl_types::EngineTime::MAX_END}).map_err(|e|format!(\"{e:?}\"))?;\n".into());
+    if let Some((_, ty)) = &plan.output {
+        let payload = ty
+            .clone()
+            .delta()
+            .unwrap_or_else(|_| unreachable!("checked output delta"));
+        out.push(format!("let ticks=store.global_state().get(recording).map_err(|e|e.message)?.into_iter().collect();drop(built);\nlet observed=hgl_testkit::evaluation::observe(ticks,prepared.input_length)?;\nlet (length,ticks)=observed.into_parts(); Ok(hgl_harness_ir::CapturedEval {{length,ticks:ticks.iter().map(|(i,v)|(*i,{})).collect()}})\n",hgl_rust_preparation::encode(&payload,"v")));
+    } else {
+        out.push(
+            "Ok(hgl_harness_ir::CapturedEval {length:prepared.input_length,ticks:Vec::new()})\n"
+                .into(),
+        );
+    }
+    out.push("}\n".into());
+    out.concat()
 }

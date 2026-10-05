@@ -173,3 +173,10 @@ structural children and retains the payload's exact canonical ordinary identity.
 `OrdinaryType::Tuple(Vec<OrdinaryType>)` represents positional ordinary values;
 OrdinaryType derives Hash alongside equality. Scalar atomic source spellings
 normalize before runtime lowering and continue to use `TsType::Ts`.
+
+## Temporal scalar preparation
+
+Temporal scalar data now lives in hgl-time-values and is re-exported here.
+ScalarType and ScalarValue add CivilDateTime, TimeZone and ZonedDateTime with
+the corresponding concrete data types. May use hgl-time-values; the existing
+250-line budget is unchanged. See hgl-time-values.md for ownership and identity.

@@ -84,6 +84,12 @@ pub fn lex(text: &str) -> Result<Vec<Token>, String> {
                         break;
                     }
                 }
+                if text.as_bytes().get(pos) == Some(&b'[') {
+                    let end = text[pos + 1..]
+                        .find(']')
+                        .ok_or("unterminated timezone annotation")?;
+                    pos += end + 2;
+                }
             }
             b'a'..=b'z' | b'A'..=b'Z' | b'_' => {
                 while pos < text.len()

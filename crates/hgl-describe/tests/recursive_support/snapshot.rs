@@ -136,7 +136,10 @@ pub(crate) fn snapshot(
                 | ScalarType::Date
                 | ScalarType::Time
                 | ScalarType::DateTime
-                | ScalarType::Duration,
+                | ScalarType::Duration
+                | ScalarType::CivilDateTime
+                | ScalarType::TimeZone
+                | ScalarType::ZonedDateTime,
             ) => unreachable!("observed separately"),
         }
     } else {
@@ -219,6 +222,14 @@ pub(crate) fn output(store: &Store, id: OutputId, t: i64, path: &str, rows: &mut
             ScalarValue::Time(v) => v.0.to_string(),
             ScalarValue::DateTime(v) => v.micros().to_string(),
             ScalarValue::Duration(v) => v.micros().to_string(),
+            ScalarValue::CivilDateTime(v) => v.micros().to_string(),
+            ScalarValue::TimeZone(v) => v.as_str().into(),
+            ScalarValue::ZonedDateTime(v) => format!(
+                "{}@{}:{}",
+                v.instant().micros(),
+                v.zone().as_str(),
+                v.offset_seconds()
+            ),
         }
     };
     let delta = if !valid || !modified {

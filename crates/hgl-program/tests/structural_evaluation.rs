@@ -18,7 +18,7 @@ fn structural_values_and_nested_generator_effects_execute_in_both_profiles()
     direct_images(&dir)?;
     positive_images(&dir)?;
     let calls = failure_images(&dir)?;
-    let modules = (0..11)
+    let modules = (0..12)
         .map(|i| format!("mod failure{i};\n"))
         .collect::<Vec<_>>()
         .concat();
@@ -33,6 +33,12 @@ fn structural_values_and_nested_generator_effects_execute_in_both_profiles()
         "hgl-store",
         "hgl-kernel",
         "hgl-describe",
+        "hgl-harness",
+        "hgl-harness-ir",
+        "hgl-rust-ir",
+        "hgl-source",
+        "hgl-value-eval",
+        "hgl-time-context",
         "hgl-testkit",
         "hgl-std-native",
     ] {
@@ -66,6 +72,7 @@ fn structural_values_and_nested_generator_effects_execute_in_both_profiles()
 fn failure_images(dir: &Path) -> Result<String, Box<dyn std::error::Error>> {
     let mut calls = String::new();
     for (index, shape, slots, position) in [
+        (11, "list<i64,0>", "[delta<list<i64,0>>() ]", 0),
         (
             0,
             "set<i64>",
@@ -98,11 +105,17 @@ fn failure_images(dir: &Path) -> Result<String, Box<dyn std::error::Error>> {
         );
         let suite = compile_tests(&with_std(source))?;
         let mut code = emit_tests(&suite);
-        let diagnostic =
-            format!("eval: input delta outside publication profile: value at position {position}:");
+        let diagnostic = format!(
+            "eval: input delta outside publication profile: value at position {position}:{}",
+            if index == 11 {
+                " empty structural publication"
+            } else {
+                ""
+            }
+        );
         writeln!(
             code,
-            "pub fn verify() {{crate::STARTS.store(0,std::sync::atomic::Ordering::SeqCst); let error=case0::test().unwrap_err(); assert!(error.contains({diagnostic:?}),\"{{error}}\"); assert_eq!(crate::STARTS.load(std::sync::atomic::Ordering::SeqCst),0);}}"
+            "pub fn verify() {{crate::STARTS.store(0,std::sync::atomic::Ordering::SeqCst); let error=test0::test().unwrap_err(); assert!(error.contains({diagnostic:?}),\"{{error}}\"); assert_eq!(crate::STARTS.load(std::sync::atomic::Ordering::SeqCst),0);}}"
         )?;
         fs::write(dir.join(format!("src/failure{index}.rs")), code)?;
         writeln!(calls, "failure{index}::verify();")?;
@@ -124,7 +137,7 @@ fn failure_images(dir: &Path) -> Result<String, Box<dyn std::error::Error>> {
         let mut code = emit_tests(&suite);
         writeln!(
             code,
-            "pub fn verify() {{let error=case0::test().unwrap_err(); assert!(error.contains(\"payload or presence differs\"),\"{{error}}\");}}"
+            "pub fn verify() {{let error=test0::test().unwrap_err(); assert!(error.contains(\"payload or presence differs\"),\"{{error}}\");}}"
         )?;
         fs::write(dir.join(format!("src/failure{index}.rs")), code)?;
         writeln!(calls, "failure{index}::verify();")?;

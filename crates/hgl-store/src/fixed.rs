@@ -1,6 +1,6 @@
 //! Construction of recursive endpoints; scalar evaluation stays typed.
 use crate::{BindError, In, InputId, Kind, Out, OutputId, Reference, Scalar, Store, Wake};
-use hgl_types::{EngineTime, NodeId, ScalarType};
+use hgl_types::{CivilDateTime, EngineTime, NodeId, ScalarType, ZonedDateTime};
 use std::marker::PhantomData;
 impl Store {
     /// Adapt a statically prepared scalar input, without a repeated type test.
@@ -46,6 +46,9 @@ impl Store {
                 ScalarType::Time => self.add_output::<hgl_types::Time>(owner).id(),
                 ScalarType::DateTime => self.add_output::<EngineTime>(owner).id(),
                 ScalarType::Duration => self.add_output::<hgl_types::EngineDelta>(owner).id(),
+                ScalarType::CivilDateTime => self.add_output::<CivilDateTime>(owner).id(),
+                ScalarType::TimeZone => self.add_output::<hgl_types::ZoneId>(owner).id(),
+                ScalarType::ZonedDateTime => self.add_output::<ZonedDateTime>(owner).id(),
                 ScalarType::Text => self.add_output::<String>(owner).id(),
             };
         }

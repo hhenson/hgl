@@ -67,3 +67,9 @@ failure. Ordinary evaluation shares this classifier across its phase boundary.
 Plan recording metadata carries its ordinary key and exact retained list type.
 The eval run owner reads that prepared entry after stop; no node-private capture
 buffer is needed. Source replay configuration consists of ordinary value data.
+
+## Temporal scalar preparation
+
+Kind::TemporalLiteral(TemporalLiteral) retains contextual scalar construction;
+Kind::Prepared(usize) references a statically typed cold configuration binding.
+Neither is a closed compile-time value; Prepared is never a node-hook operand.

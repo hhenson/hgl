@@ -133,7 +133,9 @@ fn expression(value: &Value, live: &BTreeMap<usize, bool>) -> Result<(), String>
         | Kind::IsPresent(value)
         | Kind::Present(value)
         | Kind::Unary(_, value) => expression(value, live)?,
-        Kind::WiringFailure(_)
+        Kind::TemporalLiteral(_)
+        | Kind::Prepared(_)
+        | Kind::WiringFailure(_)
         | Kind::BorrowedLocal(..)
         | Kind::Literal(_)
         | Kind::Wire(_)
@@ -315,7 +317,12 @@ pub fn prepare_node(
     for p in &signature.parameters {
         if p.constant {
             let value = env.get_mut(&p.name).ok_or("missing configuration")?;
-            if matches!(value.ty, Ty::List(..) | Ty::Struct(..) | Ty::Delta(_)) {
+            if matches!(value.kind, Kind::Prepared(_))
+                || matches!(
+                    value.ty,
+                    Ty::Tuple(_) | Ty::List(..) | Ty::Struct(..) | Ty::Delta(_)
+                )
+            {
                 let id = node.configuration.len();
                 node.configuration.push(value.clone());
                 value.kind = Kind::Configuration(id);
@@ -357,7 +364,13 @@ pub fn binary_type(op: &str, a: &Ty, b: &Ty) -> Result<Ty, String> {
         ">" | "<" | ">=" | "<="
             if matches!(
                 *a,
-                Ty::I64 | Ty::F64 | Ty::Date | Ty::DateTime | Ty::Time | Ty::Duration
+                Ty::I64
+                    | Ty::F64
+                    | Ty::Date
+                    | Ty::DateTime
+                    | Ty::CivilDateTime
+                    | Ty::Time
+                    | Ty::Duration
             ) =>
         {
             Ty::Bool
@@ -381,3 +394,5 @@ pub fn binary_type(op: &str, a: &Ty, b: &Ty) -> Result<Ty, String> {
     };
     Ok(ty)
 }
+
+pub use hgl_value_constant::context_free;

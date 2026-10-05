@@ -32,3 +32,23 @@ or result-only structural inference is introduced.
 `instantiated` matches explicit materializations against fully resolved exact
 source types, retaining nominal origins, phantom arguments and recursive shape.
 Implementation binding uses the same nested signature inference as declarations.
+
+## Prepared ordinary arguments
+
+Expose bind_prepared(signature: &Signature, args: &[(Option<String>, Value)],
+runtime: bool, hint: Option<&Ty>, declared: &BTreeMap<String, Ty>) ->
+Result<(Vec<Value>, BTreeMap<String, Ty>, Ty), String>. It checks cold prepared
+arguments with typed binding markers, then restores their original checked
+expressions. It never evaluates an input, fabricates a scalar, or marks provider
+recipes as compile-time constants. Existing runtime binding restrictions remain.
+
+ordered_call(signature: &Signature, values: Vec<Value>, supplied:
+&[(Option<String>, Value)]) -> Result<(Vec<Value>, Vec<usize>), String> maps
+checked declaration-order values into supplied source order followed by omitted
+defaults in declaration order. Its second vector maps parameter positions to
+lexical argument positions. It never evaluates values. Ordinary helper bodies
+read the once-constructed lexical parameter, including const parameters.
+
+Parameter literal defaults admit both fixed scalar literals and contextual
+TemporalLiteral recipes. Materialize an omitted contextual default at invocation
+preparation, after supplied arguments; supplied arguments suppress that default.

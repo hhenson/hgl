@@ -114,6 +114,21 @@ pub fn generator_body(cursor: &mut Cursor<'_>) -> Result<(Vec<String>, Vec<Stmt>
     Ok((services, body))
 }
 
+/// Parse a composition body and reject unsupported trailing syntax.
+pub fn composition_body(cursor: &mut Cursor<'_>) -> Result<Vec<Stmt>, String> {
+    let statements = if cursor.take("=>") {
+        cursor.lines();
+        vec![Stmt::Return(cursor.expr()?)]
+    } else {
+        cursor.block()?
+    };
+    cursor.lines();
+    if !cursor.at("") {
+        return Err("unsupported graph body suffix".into());
+    }
+    Ok(statements)
+}
+
 #[cfg(test)]
 mod tests {
     use super::statement_constructs;

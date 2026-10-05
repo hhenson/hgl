@@ -116,7 +116,7 @@ construction preflight; binding does not initialize an entry. Direct annotated
 initializers, returns, assignments and conditions supply get expected types;
 nested expression and overload-argument inference are outside this subset.
 
-Initialized runtime `var` bindings of the eight primitive scalar types are
+Initialized runtime `var` bindings of the eleven admitted scalar types are
 writable owned locals, including in lifecycle hooks and lifted ordinary value
 function bodies. `let`, parameters and `for` bindings remain read-only. Branch
 scopes preserve each binding identity across shadowing. Scalar assignments
@@ -143,7 +143,7 @@ Imported structs preserve qualified identity and declared layouts. Local names
 precede imports; cross-module access requires export, and selected exported
 layouts reject unexported reachable struct fields (ADR 0013). Declaration
 checks remain lazy in this executable subset: unused schemas are not certified.
-All eight primitive field types are covered by source eval assertions.
+All eleven admitted scalar field types are covered by source eval assertions.
 
 The checked constructor preserves supplied source order and declared-field
 indices after validating the entire call (`struct-constructor-order.md`).
@@ -269,7 +269,7 @@ the selected graph with an operation failure.
 Ordinary return expressions in composition are evaluated before a void result is
 discarded, preserving construction failures and ordinary effects.
 
-Finite nonrecursive nominal fields admit non-null fixed scalar defaults. Complete
+Finite nonrecursive nominal fields admit non-null scalar literal defaults; contextual calendar defaults remain recipes until run preparation. Complete
 ordinary constructors retain supplied fields in written order, then omitted
 defaults in declaration order. Sparse deltas never apply those defaults. Generic
 specialization checks default types; unsupported non-fixed expressions and null
@@ -282,3 +282,40 @@ results. Preserve let/var access rules and fresh eval lifecycle per invocation.
 Constant list/tuple expressions may reference already evaluated ordinary locals
 inside const functions or tests; closed value evaluation, not literal-only IR
 shape, determines their compile-time data. Unknown/open values remain errors.
+
+## Temporal scalar preparation
+
+Temporal publication preparation follows the pinned temporal-scalar contract.
+Check executable test setup into ordered hgl-harness-ir instead of executing
+provider-dependent inputs in the compiler. Type/layout/topology selection remains
+compile-time; never fabricate a scalar to specialize a graph. Prepare supplied
+constant and temporal arguments in one written order, once for the selected
+callable. Ordinary assertions and eval expectations retain their source order.
+Provider-dependent node-hook construction remains outside this eval increment;
+report unsupported use without adding a source injectable. May use the new
+hgl-harness-ir and hgl-rust-preparation boundaries; no budget increase.
+
+Source discovery delegates to hgl-library-files; compiler-only static preparation
+provenance delegates to hgl-value-access::StaticValues. Ordinary helper calls
+retain supplied values once in written order and bind readonly lexical parameter
+locals. Omitted contextual defaults follow supplied arguments. Direct readonly
+composition aliases preserve already prepared configuration; new contextual
+construction inside composition and node hooks is explicitly unsupported.
+
+## Contextual local bindings
+
+Initialized local checking delegates to hgl-local-check (spec f5ed703).
+Composition tracks temporal var authority independently of the port's identity;
+compatible rebinding preserves earlier aliases and consumed connections. Scalar
+locals remain ordinary, including annotated i64-to-f64 widening. Assignments
+cannot cross categories through automatic lifting, even when unused. Temporal
+scalar binary expressions use existing checked arithmetic and ordinary nodes;
+compound assignments validate the resulting category and type. Node execution
+locals retain ordinary ownership and observation rules. Uninitialized declarations
+and temporal graph conditionals remain explicitly unsupported; this change does
+not claim definite-assignment or dynamic-branch lowering support. Ordinary wiring-time conditionals with connection assignments delegate to
+hgl-wiring-locals, retaining only the selected branch's values and binary nodes.
+Both branches check fixed categories and lexical authority. This narrow branch
+profile admits local declarations, name assignments and scalar/binary expressions;
+arbitrary calls remain explicitly unsupported. Existing ordinary-only blocks
+retain their broader established execution path.

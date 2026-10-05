@@ -21,6 +21,9 @@ pub fn ordinary(ty: &Ty) -> bool {
             | Ty::Date
             | Ty::Time
             | Ty::DateTime
+            | Ty::CivilDateTime
+            | Ty::TimeZone
+            | Ty::ZonedDateTime
             | Ty::Duration
             | Ty::Struct(..)
             | Ty::Delta(_)
@@ -157,4 +160,49 @@ pub fn project(ty: &Ty) -> Ty {
         return Ty::Set(Box::new(project(child)));
     }
     ty.clone()
+}
+
+/// Compiler-only provenance for values known before graph topology selection.
+#[derive(Debug, Default)]
+pub struct StaticValues {
+    /// Original checked expressions behind cold eval argument bindings.
+    pub prepared: Vec<Value>,
+    /// Current node's readonly ordinary configurations.
+    pub configuration: Vec<Value>,
+    /// Static ordinary constant parameter metadata in the current lexical scope.
+    pub locals: std::collections::BTreeMap<usize, Value>,
+}
+impl StaticValues {
+    /// Follow known static origins without evaluating their expressions.
+    pub fn resolve<'a>(&'a self, value: &'a Value) -> &'a Value {
+        if let Kind::Prepared(id) = value.kind {
+            return self.resolve(&self.prepared[id]);
+        }
+        if let Kind::Configuration(id) = value.kind {
+            return self.resolve(&self.configuration[id]);
+        }
+        if let Kind::Local(id) = value.kind {
+            return self.locals.get(&id).map_or(value, |v| self.resolve(v));
+        }
+        value
+    }
+    /// Map checked constant parameter origins into the source-order local slots.
+    pub fn arguments(
+        &self,
+        signature: &hgl_library::Signature,
+        args: &[Value],
+        positions: &[usize],
+    ) -> std::collections::BTreeMap<usize, Value> {
+        signature
+            .parameters
+            .iter()
+            .zip(positions)
+            .filter(|(p, _)| p.constant)
+            .filter_map(|(_, id)| {
+                let value = self.resolve(&args[*id]);
+                (!matches!(value.kind, Kind::Local(_) | Kind::MutableLocal(_)))
+                    .then(|| (*id, value.clone()))
+            })
+            .collect()
+    }
 }

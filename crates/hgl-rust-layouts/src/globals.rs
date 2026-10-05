@@ -251,6 +251,8 @@ fn value_types(value: &hgl_rust_ir::Value, types: &mut BTreeMap<String, Ty>) {
         | Kind::MutableLocal(_)
         | Kind::Output
         | Kind::Capability
+        | Kind::TemporalLiteral(_)
+        | Kind::Prepared(_)
         | Kind::Void => {}
     }
 }

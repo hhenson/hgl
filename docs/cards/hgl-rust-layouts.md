@@ -28,3 +28,9 @@ fallible staging and infallible move-commit contract.
 `delta_storage(&Ty) -> Ty` exposes the backend-only synthetic owning layout,
 whose NUL-prefixed canonical name cannot alias a source nominal declaration.
 These helpers perform compiler-time shape selection, never runtime dispatch.
+
+## Temporal scalar preparation
+
+Scalar spelling helpers may delegate to hgl-rust-scalars with existing public
+paths retained. Extend exact typed layouts for the three temporal scalar leaves;
+no provider object or recipe is stored in a published value. Budget unchanged.

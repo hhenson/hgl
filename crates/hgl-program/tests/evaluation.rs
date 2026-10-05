@@ -255,6 +255,19 @@ fn actual_stdlib_and_harness_regressions_run_on_rust() -> Result<(), Box<dyn std
     parts.retain(|p| p.extension().is_some_and(|e| e == "hgl"));
     parts.sort();
     parts.push(root.join("native/stdlib/rust.hgl"));
+    parts.push(root.join("external/hgraph_spec/language/examples/contextual-local-bindings.hgl"));
+    for fixture in [
+        "graph_compound",
+        "graph_scalar_local",
+        "node_scalar_local",
+        "ordinary_widening",
+        "wire_rebind",
+    ] {
+        parts.push(root.join(format!(
+            "external/hgraph_spec/compiler/contextual_bindings/{fixture}.hgl"
+        )));
+    }
+    parts.push(root.join("crates/hgl-program/tests/fixtures/contextual_locals.hgl"));
     let suite = compile_tests_files(&parts, &[library])?;
     let dir = std::env::temp_dir().join(format!(
         "hgl-eval-{}-{}",
@@ -305,7 +318,7 @@ _ => panic!("unknown test image") } }
 }
 fn check_images(binary: &Path) -> Result<(), Box<dyn std::error::Error>> {
     for (name, success, message) in [
-        ("standard", true, "131 tests, 247 evaluations, 0 failures"),
+        ("standard", true, "170 tests, 346 evaluations, 0 failures"),
         ("source_operators", true, "0 failures"),
         (
             "replay_order_failure",
@@ -659,6 +672,12 @@ fn manifest(root: &Path, dir: &Path) -> std::io::Result<()> {
         "hgl-store",
         "hgl-kernel",
         "hgl-describe",
+        "hgl-harness",
+        "hgl-harness-ir",
+        "hgl-rust-ir",
+        "hgl-source",
+        "hgl-value-eval",
+        "hgl-time-context",
         "hgl-testkit",
         "hgl-std-native",
     ] {

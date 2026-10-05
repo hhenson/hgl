@@ -1,41 +1,7 @@
 //! Source tokens, expressions and statements shared by HGL compiler stages.
 pub use hgl_lex::{Token, lex};
+pub use hgl_literals::{Literal, ParsedLiteral, TemporalLiteral};
 pub use hgl_type_shape::{Nominal, Ty, application, delta_argument};
-#[derive(Debug, Clone, PartialEq)]
-/// A fixed scalar value in HGL source.
-pub enum Literal {
-    /// Signed integer value.
-    Int(i64),
-    /// Floating value.
-    Float(f64),
-    /// Boolean.
-    Bool(bool),
-    /// UTF-8 text.
-    Str(String),
-    /// Microsecond interval.
-    Duration(i64),
-    /// Calendar date.
-    Date(i64),
-    /// Time of day.
-    Time(i64),
-    /// UTC instant.
-    DateTime(i64),
-}
-impl Literal {
-    /// The literal scalar type.
-    pub fn ty(&self) -> Ty {
-        match self {
-            Self::Int(_) => Ty::I64,
-            Self::Float(_) => Ty::F64,
-            Self::Bool(_) => Ty::Bool,
-            Self::Str(_) => Ty::Str,
-            Self::Duration(_) => Ty::Duration,
-            Self::Date(_) => Ty::Date,
-            Self::Time(_) => Ty::Time,
-            Self::DateTime(_) => Ty::DateTime,
-        }
-    }
-}
 #[derive(Debug, Clone)]
 /// An expression before name and type resolution.
 pub enum Expr {
@@ -47,6 +13,8 @@ pub enum Expr {
     Index(Box<Self>, Box<Self>),
     /// Fixed scalar.
     Literal(Literal),
+    /// A source literal requiring the execution context before construction.
+    TemporalLiteral(TemporalLiteral),
     /// Unresolved identifier.
     Name(String),
     /// Dense harness cells; absent cells carry no tick.
@@ -319,8 +287,11 @@ impl<'a> Cursor<'a> {
         }
         let negative = self.take("-");
         let text = self.consume()?;
-        if let Some(literal) = numeric_literal(&text, negative)? {
-            return Ok(Expr::Literal(literal));
+        if let Some(literal) = hgl_literals::numeric(&text, negative)? {
+            return Ok(match literal {
+                ParsedLiteral::Value(value) => Expr::Literal(value),
+                ParsedLiteral::Contextual(value) => Expr::TemporalLiteral(value),
+            });
         }
         if negative {
             self.pos -= 1;
@@ -586,6 +557,7 @@ impl Expr {
                 _ => None,
             },
             Self::Null
+            | Self::TemporalLiteral(_)
             | Self::Property(..)
             | Self::Index(..)
             | Self::Name(_)
@@ -596,47 +568,6 @@ impl Expr {
             | Self::Tuple(_) => None,
         }
     }
-}
-
-fn numeric_literal(text: &str, negative: bool) -> Result<Option<Literal>, String> {
-    if let Some(text) = text.strip_prefix('@') {
-        if negative {
-            return Err("cannot negate a calendar literal".into());
-        }
-        let value = if text.contains('T') {
-            Literal::DateTime(hgl_calendar::datetime(text)?.micros())
-        } else if text.contains(':') {
-            Literal::Time(hgl_calendar::time(text)?.0)
-        } else {
-            Literal::Date(hgl_calendar::date(text)?.0)
-        };
-        return Ok(Some(value));
-    }
-    if !text.as_bytes()[0].is_ascii_digit() {
-        return Ok(None);
-    }
-    if text.contains('.') || text.contains('e') || text.contains('E') {
-        let value = text
-            .parse::<f64>()
-            .map_err(|e| format!("invalid float: {e}"))?;
-        if !value.is_finite() {
-            return Err("float literal is outside the finite f64 range".into());
-        }
-        return Ok(Some(Literal::Float(if negative { -value } else { value })));
-    }
-    let digits = text.bytes().take_while(u8::is_ascii_digit).count();
-    if digits < text.len() {
-        let value = hgl_calendar::duration(text)?.micros();
-        return Ok(Some(Literal::Duration(if negative {
-            -value
-        } else {
-            value
-        })));
-    }
-    let value = format!("{}{text}", if negative { "-" } else { "" })
-        .parse::<i64>()
-        .map_err(|e| format!("invalid i64: {e}"))?;
-    Ok(Some(Literal::Int(value)))
 }
 
 impl Expr {
@@ -688,6 +619,7 @@ fn expand_selectors(expr: Expr, inputs: &[(Option<String>, Expr)]) -> (Expr, u8)
         | Expr::Property(..)
         | Expr::Index(..)
         | Expr::Literal(_)
+        | Expr::TemporalLiteral(_)
         | Expr::Name(_)
         | Expr::Sequence(_)
         | Expr::Sparse(_)

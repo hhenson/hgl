@@ -11,3 +11,11 @@ literals require Z. Integral compound durations use checked arithmetic.
 
 Acceptance: Gregorian leap boundaries, pre-epoch dates, fractional seconds,
 overflow rejection and Python-compatible negative duration normalization.
+
+## Temporal scalar preparation
+
+Add civil_datetime(&str) -> Result<CivilDateTime, String> and
+offset_datetime(&str) -> Result<(EngineTime, i32), String>, using hgl-time-values.
+Validate fixed-width calendar fields, explicit offset and representable civil/UTC
+range with checked arithmetic. Existing Z datetime syntax remains unchanged.
+No provider lookup or alias normalization occurs here.

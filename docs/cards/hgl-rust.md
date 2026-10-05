@@ -106,3 +106,12 @@ It does not inspect a recorder node's private storage or inject replay data.
 closed expected values after stop and uses shape-specific sparse comparison.
 Recorded construction errors return before generating references to absent
 node/layout declarations. Expected emission is a fallible owning boundary.
+
+## Prepared test execution
+
+Expose emit_prepared_test_body(&Plan) -> String beside emit_test_body. It emits
+a generated run(PreparedEval) -> Result<CapturedEval, String> adapter that
+binds exact native prepared configurations before graph construction and encodes
+independent captures after teardown. May use hgl-rust-preparation for cold typed
+conversion; existing emit_test_body remains available. Prepared values never
+reach node hooks or control graph topology.

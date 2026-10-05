@@ -68,3 +68,7 @@ allocation-free or performance-parity claim is made.
 Acceptance: all eight scalar payloads; nullable reads and bounds errors; empty/unbegun
 capture; repeated begin; timestamp validation and retained captures; independent
 owned strings and runs; invalid binding manifests and duplicate writers.
+
+BufferScalar delegates to Scalar::try_clone for every concrete runtime scalar,
+including CivilDateTime, ZoneId and ZonedDateTime. Owned zone identities are
+retained independently without provider access.

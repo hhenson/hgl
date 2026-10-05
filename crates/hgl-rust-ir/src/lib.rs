@@ -52,6 +52,10 @@ pub enum Kind {
     Present(Box<Value>),
     /// A compile-time scalar literal.
     Literal(Literal),
+    /// A provider-dependent recipe executed during ordered preparation.
+    TemporalLiteral(hgl_source::TemporalLiteral),
+    /// Cold prepared configuration binding; never a node-hook expression.
+    Prepared(usize),
     /// Graph wiring marker containing the producing node index.
     Wire(usize),
     /// Port index and whether its declared parameter is signal.
@@ -189,7 +193,9 @@ impl Value {
             Kind::Literal(_) | Kind::Void => true,
             Kind::List(items) => items.iter().all(Value::closed),
             Kind::Construct(fields) => fields.iter().all(|(_, value)| value.closed()),
-            Kind::WiringFailure(_)
+            Kind::TemporalLiteral(_)
+            | Kind::Prepared(_)
+            | Kind::WiringFailure(_)
             | Kind::Index(..)
             | Kind::Length(_)
             | Kind::Push(..)

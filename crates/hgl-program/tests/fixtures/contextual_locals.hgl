@@ -1,0 +1,121 @@
+module tests.contextual_locals
+fn identity(value:i64)->i64 {when {return value}}
+fn snapshots(first:i64,second:i64)->i64 {
+    var selected:i64=first
+    let consumed=identity(selected)
+    let alias=selected
+    selected=second
+    var offset:f64=1
+    offset=2
+    return consumed + alias + selected
+}
+fn ordinary_snapshot(value:i64)->i64 {
+    var offset=1
+    let prior=value+offset
+    offset=3
+    return prior+offset
+}
+fn hook_snapshot(value:i64)->i64 {
+    when {
+        var local=value
+        let original=local
+        local+=2
+        return original+local
+    }
+}
+fn widening(value:f64)->f64 {
+    var offset:f64=1
+    offset=2
+    return value+offset
+}
+fn nested(value:i64)->i64 {
+    var local=1
+    if true {local=3}
+    return value+local
+}
+test local_snapshots {
+    assert eval(snapshots,first:[1,2],second:[10,20]) == [12,24]
+    assert eval(ordinary_snapshot,value:[1,2]) == [5,6]
+    assert eval(hook_snapshot,value:[1,2]) == [4,6]
+    assert eval(widening,value:[1.0,2.0]) == [3.0,4.0]
+    assert eval(nested,value:[1,2]) == [4,5]
+}
+fn ordinary_atomic_observation(value:atomic<tuple<i64,i64>>)->atomic<tuple<i64,i64>> {
+    when {
+        let local=delta_value(value)
+        let ordinary:tuple<i64,i64> = local
+        return ordinary
+    }
+}
+test atomic_local_observation {
+    assert eval(ordinary_atomic_observation,value:[(1,2),_,(3,4)]) == [(1,2),_,(3,4)]
+}
+fn conditional_locals(first:i64,second:i64,const choose:bool,const nested:bool)->i64 {
+    var selected=first
+    let original=selected
+    let consumed=identity(selected)
+    var offset=0
+    if choose {
+        selected=second
+        offset=2
+        if nested {selected+=1}
+        let branch_local=selected
+    } else {selected+=3}
+    return original+consumed+selected+offset
+}
+fn shadowed_connection(first:i64,second:i64)->i64 {
+    var selected=first
+    if true {var selected=second
+        selected+=1}
+    return selected
+}
+fn discarded_branch(first:f64,second:f64)->f64 {
+    var selected=first
+    if true {selected=second} else {selected=first/0.0}
+    return selected
+}
+test conditional_connections {
+    assert eval(conditional_locals,first:[1,2],second:[10,20],choose:true,nested:true) == [15,27]
+    assert eval(conditional_locals,first:[1,2],second:[10,20],choose:true,nested:false) == [14,26]
+    assert eval(conditional_locals,first:[1,2],second:[10,20],choose:false,nested:true) == [6,9]
+    assert eval(shadowed_connection,first:[1,2],second:[10,20]) == [1,2]
+    assert eval(discarded_branch,first:[1.0,2.0],second:[10.0,20.0]) == [10.0,20.0]
+}
+
+fn assigned_before_shadow(first:i64,second:i64)->i64 {
+    var selected=first
+    if true {selected=second
+        let selected=first}
+    return selected
+}
+fn nested_before_shadow(first:i64,second:i64)->i64 {
+    var selected=first
+    if true {if true {selected=second}
+        let selected=first}
+    return selected
+}
+test assignments_before_shadows {
+    assert eval(assigned_before_shadow,first:[1,2],second:[10,20]) == [10,20]
+    assert eval(nested_before_shadow,first:[1,2],second:[10,20]) == [10,20]
+}
+
+fn discarded_ordinary_failure(value:i64)->i64 {
+    var selected=value
+    if false {var failed=1%0
+        selected+=failed}
+    return selected
+}
+test unselected_construction_failure {
+    assert eval(discarded_ordinary_failure,value:[1,2]) == [1,2]
+}
+
+const fn ordinary_helper(value:i64)->i64 {return value+1}
+fn ordinary_shadow_with_call(value:i64)->i64 {
+    var selected=value
+    if true {var selected=1
+        selected=ordinary_helper(selected)}
+    return selected
+}
+test ordinary_shadow_keeps_existing_calls {
+    assert eval(ordinary_shadow_with_call,value:[1,2]) == [1,2]
+}

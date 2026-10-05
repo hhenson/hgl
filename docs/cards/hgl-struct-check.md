@@ -30,3 +30,8 @@ written field order, repeated argument conflicts, and read-only borrowing/copies
 `schema_sizes` discovers declaration-owned size expressions in reachable nominal
 fields for evaluation by the normal source checker before schema specialization.
 Dependencies also include hgl-type-sizes; recursive references are visited once.
+
+Omitted schema defaults may contain ParsedLiteral::Contextual. Emit the typed
+TemporalLiteral recipe after supplied fields, in declaration order, for ordered
+construction. Existing fixed literal defaults and sparse-delta omission rules
+remain unchanged. Contexts without provider construction reject recipe use.

@@ -12,6 +12,7 @@ line-budget = 2200
 workspace = true
 
 [dependencies]
+hgl-library-files = { path = "../hgl-library-files" }
 hgl-source = { path = "../hgl-source" }
 hgl-documentation = { path = "../hgl-documentation" }
 hgl-library = { path = "../hgl-library" }
@@ -28,3 +29,7 @@ hgl-endpoint-check = { path = "../hgl-endpoint-check" }
 hgl-type-sizes = { path = "../hgl-type-sizes" }
 hgl-eval-data = { path = "../hgl-eval-data" }
 hgl-value-access = { path = "../hgl-value-access" }
+hgl-harness-ir = { path = "../hgl-harness-ir" }
+hgl-rust-preparation = { path = "../hgl-rust-preparation" }
+hgl-local-check = { path = "../hgl-local-check" }
+hgl-wiring-locals = { path = "../hgl-wiring-locals" }

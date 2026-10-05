@@ -78,6 +78,9 @@ pub fn constructor<'a>(
             | Ty::F64
             | Ty::Bool
             | Ty::Str
+            | Ty::CivilDateTime
+            | Ty::TimeZone
+            | Ty::ZonedDateTime
             | Ty::Duration
             | Ty::Date
             | Ty::Time
@@ -100,6 +103,9 @@ fn member_key(value: &Literal) -> Result<i64, String> {
         Literal::Bool(value) => Ok(i64::from(*value)),
         Literal::Float(_)
         | Literal::Str(_)
+        | Literal::CivilDateTime(_)
+        | Literal::TimeZone(_)
+        | Literal::ZonedDateTime(_)
         | Literal::Duration(_)
         | Literal::Date(_)
         | Literal::Time(_)
@@ -155,6 +161,9 @@ fn sparse<'a>(
             | Ty::F64
             | Ty::Bool
             | Ty::Str
+            | Ty::CivilDateTime
+            | Ty::TimeZone
+            | Ty::ZonedDateTime
             | Ty::Duration
             | Ty::Date
             | Ty::Time

@@ -226,7 +226,12 @@ impl Constructor {
             .collect::<Result<Vec<_>, String>>()?;
         for (index, default) in self.schema.defaults {
             if !fields.iter().any(|(field, _)| *field == index) {
-                fields.push((index, Value::new(default.ty(), Kind::Literal(default))));
+                let ty = default.ty();
+                let kind = match default {
+                    hgl_source::ParsedLiteral::Value(v) => Kind::Literal(v),
+                    hgl_source::ParsedLiteral::Contextual(v) => Kind::TemporalLiteral(v),
+                };
+                fields.push((index, Value::new(ty, kind)));
             }
         }
         Ok(Value::new(
@@ -271,6 +276,7 @@ fn needs_context(library: &Library, module: &str, expr: &Expr) -> bool {
         Expr::Applied(..)
         | Expr::Sparse(_)
         | Expr::Tuple(_)
+        | Expr::TemporalLiteral(_)
         | Expr::Literal(_)
         | Expr::Name(_)
         | Expr::Property(..)

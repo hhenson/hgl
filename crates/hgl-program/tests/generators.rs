@@ -44,26 +44,7 @@ fn generator_sources_execute_spec_and_scalar_payloads() -> Result<(), Box<dyn st
         emit_tests(&suite).replace("fn main() {", "pub fn main() {"),
     )?;
     effects(&dir)?;
-    let mut manifest = String::from(
-        "[package]\nname=\"generator-test\"\nversion=\"0.0.0\"\nedition=\"2024\"\n[workspace]\n[dependencies]\n",
-    );
-    for name in [
-        "hgl-types",
-        "hgl-store",
-        "hgl-kernel",
-        "hgl-describe",
-        "hgl-testkit",
-        "hgl-std-native",
-    ] {
-        let path = root
-            .join("crates")
-            .join(name)
-            .to_string_lossy()
-            .replace('\\', "\\\\")
-            .replace('"', "\\\"");
-        writeln!(manifest, "{name}={{path=\"{path}\"}}")?;
-    }
-    fs::write(dir.join("Cargo.toml"), manifest)?;
+    manifest(&root, &dir)?;
     for profile in [vec![], vec!["--release"]] {
         let output = Command::new(env!("CARGO"))
             .args(["run", "--offline", "--quiet"])
@@ -78,6 +59,36 @@ fn generator_sources_execute_spec_and_scalar_payloads() -> Result<(), Box<dyn st
         );
     }
     fs::remove_dir_all(dir)?;
+    Ok(())
+}
+
+fn manifest(root: &Path, dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let mut manifest = String::from(
+        "[package]\nname=\"generator-test\"\nversion=\"0.0.0\"\nedition=\"2024\"\n[workspace]\n[dependencies]\n",
+    );
+    for name in [
+        "hgl-types",
+        "hgl-store",
+        "hgl-kernel",
+        "hgl-describe",
+        "hgl-harness",
+        "hgl-harness-ir",
+        "hgl-rust-ir",
+        "hgl-source",
+        "hgl-value-eval",
+        "hgl-time-context",
+        "hgl-testkit",
+        "hgl-std-native",
+    ] {
+        let path = root
+            .join("crates")
+            .join(name)
+            .to_string_lossy()
+            .replace('\\', "\\\\")
+            .replace('"', "\\\"");
+        writeln!(manifest, "{name}={{path=\"{path}\"}}")?;
+    }
+    fs::write(dir.join("Cargo.toml"), manifest)?;
     Ok(())
 }
 

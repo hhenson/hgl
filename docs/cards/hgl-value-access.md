@@ -19,3 +19,15 @@ projection and lexical borrow authority rules are unchanged.
 
 Acceptance: source borrowed global tests plus structural delta observation,
 retention, typed alias and helper-escape checking tests.
+
+## Static preparation provenance
+
+Compiler-only `StaticValues` derives Default and exposes `prepared: Vec<Value>`,
+`configuration: Vec<Value>`, and `locals: BTreeMap<usize, Value>`.
+`resolve<'a>(&'a self, value: &'a Value) -> &'a Value` follows known cold binding
+provenance. `arguments(&self, signature: &hgl_library::Signature, args: &[Value],
+positions: &[usize]) -> BTreeMap<usize, Value>` retains static constant-parameter
+metadata under the source-order lexical argument mapping. May use hgl-library.
+Neither method evaluates an expression, fabricates data, or invokes a provider.
+Unresolved local values remain unresolved. Existing runtime access authority is
+unchanged; this data is never installed in the runtime store.

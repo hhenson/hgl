@@ -84,6 +84,7 @@ fn expression_value(expr: &Expr) -> Result<Value, String> {
         | Expr::Sequence(_)
         | Expr::Sparse(_)
         | Expr::Tuple(_)
+        | Expr::TemporalLiteral(_)
         | Expr::Null => Err("list size requires a resolved constant expression".into()),
     }
 }

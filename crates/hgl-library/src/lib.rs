@@ -1,5 +1,5 @@
 //! Module parts, imports, declarations and test-scope indexing for HGL.
-use hgl_source::{Cursor, Expr, Literal, Token, lex};
+use hgl_source::{Cursor, Expr, ParsedLiteral, Token, lex};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -78,7 +78,7 @@ pub struct RequiredStruct {
     /// Declaration-ordered source field types.
     pub fields: Vec<(String, String)>,
     /// Declaration-indexed non-null fixed scalar defaults.
-    pub defaults: Vec<(usize, Literal)>,
+    pub defaults: Vec<(usize, ParsedLiteral)>,
     /// Supported finite type-domain constraint.
     pub type_domain: Option<(String, Vec<String>)>,
 }
@@ -339,9 +339,7 @@ impl Decl {
                 if matches!(expr, Expr::Null) {
                     return Err("struct field optionality is not supported".into());
                 }
-                let value = expr
-                    .fixed()
-                    .ok_or("struct defaults require supported non-null fixed scalar expressions")?;
+                let value = scalar_default(expr)?;
                 defaults.push((fields.len(), value));
             }
             if !c.at("}") && !c.at("\n") {
@@ -545,4 +543,13 @@ fn parse_native_requirement(c: &mut Cursor<'_>) -> Result<(String, Vec<String>, 
         .collect::<Result<Vec<_>, _>>()?;
     c.need("->")?;
     Ok((name, args, c.name()?))
+}
+
+fn scalar_default(expr: Expr) -> Result<ParsedLiteral, String> {
+    if let Expr::TemporalLiteral(value) = expr {
+        return Ok(ParsedLiteral::Contextual(value));
+    }
+    expr.fixed()
+        .map(ParsedLiteral::Value)
+        .ok_or_else(|| "struct defaults require supported non-null fixed scalar expressions".into())
 }

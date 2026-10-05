@@ -32,3 +32,13 @@ Canonical generic arguments normalize before occurrence checks and matching;
 an ordinary composite V alone never determines an atomic origin for `delta<T>`.
 These rules follow the atomic-scalar-equivalence and atomic-delta-publications
 contracts. Unsupported source scalar families remain explicit diagnostics.
+
+## Temporal scalar preparation
+
+Add CivilDateTime, TimeZone and ZonedDateTime scalar variants and source
+spellings; scalar atomic normalization and delta reduction apply identically.
+The same eleven leaves are admitted recursively under the pinned publication
+profile; zoned_time remains excluded. Existing shape/key restrictions remain.
+
+May use hgl-type-syntax for pure spelling decomposition, preserving existing
+application/delta_argument exports and Ty::list_parts. See its card.

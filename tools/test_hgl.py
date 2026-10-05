@@ -27,7 +27,7 @@ def run(args, build):
         (source / 'native.rs').write_text('')
     manifest = ['[package]', 'name="hgl-eval-tests"', 'version="0.0.0"',
                 'edition="2024"', '[workspace]', '[dependencies]']
-    for name in ('hgl-describe', 'hgl-kernel', 'hgl-store', 'hgl-types', 'hgl-testkit', 'hgl-std-native'):
+    for name in ('hgl-describe', 'hgl-kernel', 'hgl-store', 'hgl-types', 'hgl-testkit', 'hgl-std-native', 'hgl-harness', 'hgl-harness-ir', 'hgl-rust-ir', 'hgl-source', 'hgl-value-eval', 'hgl-time-context'):
         manifest.append(f'{name} = {{ path = {json.dumps(str(ROOT / "crates" / name))} }}')
     (build / 'Cargo.toml').write_text('\n'.join(manifest) + '\n')
     subprocess.run(['cargo', 'run', '--quiet', '--offline', '--manifest-path', str(build / 'Cargo.toml')], check=True)

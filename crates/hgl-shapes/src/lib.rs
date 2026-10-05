@@ -244,3 +244,19 @@ impl<S: Shape> Output<S> {
             .map(|id| Output::project(b, id))
     }
 }
+
+impl Shape for hgl_types::CivilDateTime {
+    fn shape() -> TsType {
+        TsType::Ts(ScalarType::CivilDateTime)
+    }
+}
+impl Shape for hgl_types::ZoneId {
+    fn shape() -> TsType {
+        TsType::Ts(ScalarType::TimeZone)
+    }
+}
+impl Shape for hgl_types::ZonedDateTime {
+    fn shape() -> TsType {
+        TsType::Ts(ScalarType::ZonedDateTime)
+    }
+}

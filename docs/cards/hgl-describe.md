@@ -71,3 +71,14 @@ List requirements use exact recursive element types and optional fixed lengths.
 Preflight reconciles them across root nodes, child templates and owner bindings;
 a list type conflict fails before constructors/start, like nominal conflicts.
 Native host payload length validation occurs at retention before any replacement.
+
+## Temporal scalar preparation
+
+Registry::register_with<T: hgl_kernel::Node + 'static>(&mut self,
+node_type: hgl_types::NodeType, constructor: impl Fn(&mut Ports<'_>) ->
+Result<T, BuildError> + Send + Sync + 'static) -> Result<(), BuildError> accepts
+a typed construction closure holding prepared ordinary configuration. Existing
+register<T: Buildable> delegates without changing behavior. Registry cloning may
+share immutable factories with Arc only on the construction path. No refcount,
+name lookup or factory dispatch enters graph ticks. Test independent graph
+construction from owning configurations and release after registry teardown.
