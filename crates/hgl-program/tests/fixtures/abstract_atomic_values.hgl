@@ -1,0 +1,136 @@
+module hgraph.std part abstract_atomic_values_tests
+
+abstract struct PublicationEvent {
+    label: str
+}
+struct PublicationFirst: PublicationEvent {
+    items: list<i64>
+    count: i64 = null
+}
+struct PublicationSecond: PublicationEvent {
+    items: list<i64>
+    count: i64 = null
+}
+abstract struct PublicationSubEvent: PublicationEvent { }
+struct PublicationNestedEvent: PublicationSubEvent { items: list<i64> }
+abstract struct PublicationGenericEvent<T> {
+    value: T
+}
+struct PublicationGenericFirst<T>: PublicationGenericEvent<T> { }
+struct PublicationGenericSecond<T>: PublicationGenericEvent<T> { }
+
+struct PublicationEventEnvelope {
+    event: PublicationEvent
+}
+
+test {
+    fn family_snapshot(value: atomic<PublicationEvent>) -> atomic<PublicationEvent> => pass_through(value)
+    fn family_list(value: atomic<list<PublicationEvent>>) -> atomic<list<PublicationEvent>> => pass_through(value)
+    fn family_envelope(value: atomic<PublicationEventEnvelope>) -> atomic<PublicationEventEnvelope> => pass_through(value)
+    fn generic_family_snapshot(value: atomic<PublicationGenericEvent<str>>) -> atomic<PublicationGenericEvent<str>> => pass_through(value)
+
+    # Equal field layouts do not make distinct concrete members interchangeable.
+    test atomic_family_publications_retain_exact_concrete_members {
+        let first: PublicationEvent = PublicationFirst(label: "same", items: [1])
+        let second: PublicationEvent = PublicationSecond(label: "same", items: [1])
+        assert first != second
+        let captured = eval(family_snapshot, [first, second])
+        let captured_first = captured[0]
+        let captured_second = captured[1]
+        if captured_first != null {
+            if captured_second != null {
+                assert captured_first != captured_second
+            } else { assert false }
+        } else { assert false }
+        assert eval(family_snapshot, [first, first, _, second, first, _]) == [
+            PublicationFirst(label: "same", items: [1]), PublicationFirst(label: "same", items: [1]), _,
+            PublicationSecond(label: "same", items: [1]), PublicationFirst(label: "same", items: [1]), _
+        ]
+        assert eval(family_snapshot, []) == []
+        assert eval(family_snapshot, [_, _, _]) == [_, _, _]
+
+        # An ancestor binding retains the concrete member held by a subfamily.
+        var child: PublicationNestedEvent = PublicationNestedEvent(label: "nested", items: [1])
+        let narrow: PublicationSubEvent = child
+        let ancestor: PublicationEvent = narrow
+        push(child.items, 2)
+        assert eval(family_snapshot, [ancestor, _, ancestor]) == [
+            PublicationNestedEvent(label: "nested", items: [1]), _, PublicationNestedEvent(label: "nested", items: [1])
+        ]
+    }
+
+    test atomic_family_replacement_retains_optional_field_presence {
+        let zero: PublicationEvent = PublicationFirst(label: "", items: [], count: 0)
+        let unset: PublicationEvent = PublicationFirst(label: "", items: [])
+        let other: PublicationEvent = PublicationSecond(label: "", items: [], count: 0)
+        assert eval(family_snapshot, [zero, unset, _, other, unset]) == [
+            PublicationFirst(label: "", items: [], count: 0), PublicationFirst(label: "", items: [], count: null), _,
+            PublicationSecond(label: "", items: [], count: 0), PublicationFirst(label: "", items: [], count: null)
+        ]
+    }
+
+    test atomic_family_captures_isolate_mutable_concrete_children {
+        var items: list<i64> = []
+        push(items, 1)
+        var source: PublicationFirst = PublicationFirst(label: "first", items: items)
+        let retained: PublicationEvent = source
+        push(items, 2)
+        source.label = "second"
+        source.items = items
+        let second: PublicationEvent = source
+        push(items, 3)
+        assert eval(family_snapshot, [retained, second, _, retained]) == [
+            PublicationFirst(label: "first", items: [1]), PublicationFirst(label: "second", items: [1, 2]), _,
+            PublicationFirst(label: "first", items: [1])
+        ]
+    }
+
+    test atomic_families_nest_in_ordinary_containers {
+        let first: PublicationEvent = PublicationFirst(label: "a", items: [1])
+        let second: PublicationEvent = PublicationSecond(label: "b", items: [])
+        var events: list<PublicationEvent> = []
+        push(events, first)
+        let retained: list<PublicationEvent> = events
+        push(events, second)
+        let empty: list<PublicationEvent> = []
+        assert eval(family_list, [retained, events, _, empty]) == [retained, events, _, empty]
+        let a: PublicationEventEnvelope = PublicationEventEnvelope(event: first)
+        let b: PublicationEventEnvelope = PublicationEventEnvelope(event: second)
+        assert eval(family_envelope, [a, b, _, a]) == [a, b, _, a]
+    }
+
+    test atomic_generic_families_preserve_specialized_member_identity {
+        let first: PublicationGenericEvent<str> = PublicationGenericFirst<str>(value: "same")
+        let second: PublicationGenericEvent<str> = PublicationGenericSecond<str>(value: "same")
+        assert eval(generic_family_snapshot, [first, _, second, first]) == [
+            PublicationGenericFirst<str>(value: "same"), _, PublicationGenericSecond<str>(value: "same"), PublicationGenericFirst<str>(value: "same")
+        ]
+    }
+
+    fn family_replay_context(tick: i64) { when { } }
+    fn family_replayed(tick: i64, const samples: list<TimedValue<atomic<PublicationEvent>>>) -> atomic<PublicationEvent> {
+        family_replay_context(tick)
+        replay(samples)
+    }
+    test atomic_family_replay_retains_tags_across_mutation_and_runs {
+        var source: PublicationFirst = PublicationFirst(label: "first", items: [1])
+        var sample: TimedValue<atomic<PublicationEvent>> = TimedValue<atomic<PublicationEvent>>(
+            time: @1970-01-01T00:00:00.000001Z, value: source
+        )
+        var samples: list<TimedValue<atomic<PublicationEvent>>> = []
+        push(samples, sample)
+        source.label = "changed"
+        sample.time = @1970-01-01T00:00:00.000003Z
+        sample.value = PublicationSecond(label: "second", items: [])
+        push(samples, sample)
+        sample.value = source
+        assert eval(family_replayed, tick: [1, 1, 1, 1], samples: samples) == [
+            PublicationFirst(label: "first", items: [1]), _, PublicationSecond(label: "second", items: []), _
+        ]
+        assert eval(family_replayed, tick: [1, 1, 1, 1], samples: samples) == [
+            PublicationFirst(label: "first", items: [1]), _, PublicationSecond(label: "second", items: []), _
+        ]
+        let empty: list<TimedValue<atomic<PublicationEvent>>> = []
+        assert eval(family_replayed, tick: [1, 1], samples: empty) == [_, _]
+    }
+}

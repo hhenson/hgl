@@ -1,6 +1,8 @@
 //! Canonical checked source shapes and invariant nominal applications.
 pub use hgl_type_syntax::{application, delta_argument};
 use std::fmt;
+/// Fixed declared membership for an abstract atomic family.
+pub type FamilyType = hgl_nominal_batch::Family<Nominal, Ty>;
 /// Finite recursive source batch with invariant concrete nominal identity.
 pub type RecursiveType = hgl_nominal_batch::Batch<Nominal, Ty>;
 /// Concrete recursive member schema retained at cold checked boundaries.
@@ -28,15 +30,7 @@ impl Nominal {
         if self.arguments.is_empty() {
             return self.origin.clone();
         }
-        format!(
-            "{}<{}>",
-            self.origin,
-            self.arguments
-                .iter()
-                .map(Ty::source_name)
-                .collect::<Vec<_>>()
-                .join(",")
-        )
+        format!("{}<{}>", self.origin, type_names(&self.arguments))
     }
 }
 impl From<String> for Nominal {
@@ -60,6 +54,8 @@ impl fmt::Display for Nominal {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 /// Types admitted by the executable source compiler.
 pub enum Ty {
+    /// Closed declared concrete membership of an abstract atomic family.
+    Family(FamilyType),
     /// Complete finite recursive batch, or nominal edge within such a batch.
     Recursive(RecursiveType),
     /// A declared nominal enum scalar.
@@ -147,7 +143,7 @@ impl Ty {
             Self::Set(_) => "set",
             Self::Nullable(_) => "contextual nullable",
             Self::Void => "void",
-            Self::Struct(..) | Self::Recursive(_) => "struct",
+            Self::Struct(..) | Self::Recursive(_) | Self::Family(_) => "struct",
             Self::List(..) => "list",
             Self::Map(..) => "map",
             Self::Tuple(..) => "tuple",
@@ -215,15 +211,9 @@ impl Ty {
             Self::Enum(ty) => ty.origin.clone(),
             Self::Struct(identity, _, _) => identity.source_name(),
             Self::Recursive(batch) => batch.identity().source_name(),
+            Self::Family(family) => family.identity().source_name(),
             Self::Delta(origin) => format!("delta<{}>", origin.source_name()),
-            Self::Tuple(children) => format!(
-                "tuple<{}>",
-                children
-                    .iter()
-                    .map(Self::source_name)
-                    .collect::<Vec<_>>()
-                    .join(",")
-            ),
+            Self::Tuple(children) => format!("tuple<{}>", type_names(children)),
             Self::Map(key, child) => format!("map<{},{}>", key.source_name(), child.source_name()),
             Self::List(element, size) => match size {
                 Some(size) => format!("list<{},{}>", element.source_name(), size),
@@ -273,7 +263,8 @@ impl Ty {
                 optional.is_empty() && fields.iter().all(|(_, child)| child.publication())
             }
             Self::Map(key, child) => key.scalar() && child.publication(),
-            Self::Recursive(_)
+            Self::Family(_)
+            | Self::Recursive(_)
             | Self::List(_, None)
             | Self::Delta(_)
             | Self::Ref(_)
@@ -309,7 +300,7 @@ impl Ty {
     }
     /// Whether an ordinary value belongs to the finite complete-payload profile.
     pub fn atomic_payload(&self) -> bool {
-        if matches!(self, Self::Recursive(_)) {
+        if matches!(self, Self::Recursive(_) | Self::Family(_)) {
             return true;
         }
         if let Self::List(child, _) = self {
@@ -341,4 +332,12 @@ impl Ty {
                 | Self::Duration
         )
     }
+}
+
+fn type_names(types: &[Ty]) -> String {
+    types
+        .iter()
+        .map(Ty::source_name)
+        .collect::<Vec<_>>()
+        .join(",")
 }

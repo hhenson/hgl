@@ -5,6 +5,9 @@ use std::collections::BTreeMap;
 
 /// Rust marker identifying an exact prepared entry type.
 pub fn global_type(ty: &Ty) -> String {
+    if let Ty::Family(family) = ty {
+        return global_type(&crate::family_storage(family));
+    }
     if let Ty::Enum(identity) = ty {
         return hgl_rust_enums::marker_type(identity);
     }
@@ -52,6 +55,7 @@ pub fn global_schema(ty: &Ty) -> String {
     if matches!(
         ty,
         Ty::Recursive(_)
+            | Ty::Family(_)
             | Ty::Enum(_)
             | Ty::Tuple(_)
             | Ty::Delta(_)
@@ -97,7 +101,9 @@ pub fn global_markers(plan: &Plan) -> String {
     global_types(plan)
         .values()
         .map(|ty| {
-            if let Ty::Enum(identity) = ty {
+            if let Ty::Family(family) = ty {
+                hgl_rust_structs::marker(&crate::family_storage(family), global_type, global_schema)
+            } else if let Ty::Enum(identity) = ty {
                 hgl_rust_enums::marker(identity)
             } else {
                 hgl_rust_structs::marker(ty, global_type, global_schema)
@@ -106,6 +112,17 @@ pub fn global_markers(plan: &Plan) -> String {
         .collect()
 }
 fn collect(ty: &Ty, types: &mut BTreeMap<String, Ty>) {
+    if let Ty::Family(family) = ty {
+        if types
+            .insert(family.identity().source_name(), ty.clone())
+            .is_none()
+        {
+            for (_, member) in family.members() {
+                collect(member, types);
+            }
+        }
+        return;
+    }
     if let Ty::Recursive(batch) = ty {
         for definition in batch.definitions() {
             let name = definition.identity().source_name();

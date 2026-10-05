@@ -3,7 +3,7 @@ use hgl_rust_ir::{Kind, Value};
 use hgl_source::Ty;
 /// Whether the checked type admits ordinary owning retention.
 pub fn ordinary(ty: &Ty) -> bool {
-    if matches!(ty, Ty::Recursive(_)) {
+    if matches!(ty, Ty::Recursive(_) | Ty::Family(_)) {
         return true;
     }
     if let Ty::Struct(_, fields, _) = ty {
@@ -30,8 +30,6 @@ pub fn ordinary(ty: &Ty) -> bool {
             | Ty::ZonedTime
             | Ty::ZonedDateTime
             | Ty::Duration
-            | Ty::Recursive(_)
-            | Ty::Struct(..)
             | Ty::Delta(_)
     )
 }
@@ -67,10 +65,7 @@ pub fn field(parent: Value, name: &str) -> Result<Value, String> {
 }
 /// Return the entry and access mode carried by an aggregate view.
 pub fn provenance(value: &Value) -> Option<(usize, bool)> {
-    if !matches!(
-        value.ty,
-        Ty::Tuple(_) | Ty::Recursive(_) | Ty::Struct(..) | Ty::List(..) | Ty::Delta(_)
-    ) {
+    if !aggregate(&value.ty) {
         return None;
     }
     if let Kind::BorrowedLocal(_, entry, writable) = value.kind {
@@ -89,10 +84,7 @@ pub fn binding(id: usize, value: &Value, mutable: bool, annotated: bool) -> Resu
         }
         Kind::ObservedLocal(id)
     } else if let Kind::GlobalGet(entry) = value.kind
-        && matches!(
-            value.ty,
-            Ty::Tuple(_) | Ty::Recursive(_) | Ty::Struct(..) | Ty::List(..) | Ty::Delta(_)
-        )
+        && aggregate(&value.ty)
     {
         if !annotated {
             return Err("aggregate get requires a typed let or var binding".into());
@@ -129,10 +121,7 @@ pub fn helper_argument(value: &Value) -> Result<(), String> {
 }
 /// Whether a structural delta is an evaluation-local input observation.
 pub fn observed(value: &Value) -> bool {
-    if !matches!(
-        value.ty,
-        Ty::Delta(_) | Ty::Recursive(_) | Ty::Struct(..) | Ty::List(..) | Ty::Tuple(_)
-    ) {
+    if !aggregate(&value.ty) {
         return false;
     }
     if let Kind::Field(parent, _) | Kind::Index(parent, _) = &value.kind {
@@ -173,3 +162,15 @@ pub fn project(ty: &Ty) -> Ty {
 }
 
 pub use hgl_static_values::StaticValues;
+
+fn aggregate(ty: &Ty) -> bool {
+    matches!(
+        ty,
+        Ty::Family(_)
+            | Ty::Recursive(_)
+            | Ty::Struct(..)
+            | Ty::List(..)
+            | Ty::Tuple(_)
+            | Ty::Delta(_)
+    )
+}

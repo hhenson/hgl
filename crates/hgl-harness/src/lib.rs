@@ -169,6 +169,10 @@ fn compare(expected: &[Option<Value>], actual: &CapturedEval) -> Result<(), Stri
     Ok(())
 }
 fn equal(a: &Value, b: &Value) -> bool {
+    let (a, b) = (
+        hgl_family_values::concrete(a),
+        hgl_family_values::concrete(b),
+    );
     if a.ty != b.ty {
         return false;
     }

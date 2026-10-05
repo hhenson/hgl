@@ -90,3 +90,8 @@ plan contains checked expressions and signatures, never runtime provider state.
 Kind::Captured(length, Vec<(usize,Value)>) owns a harness result's dense logical
 horizon and increasing present slots. It is closed cold data; no silent cells
 are allocated. It never enters node runtime storage or ordinary list mutation.
+
+Plan and Native implement Clone for deterministic cold preparation passes. Internal
+Unary("family",operand) is a checked ordinary family widening; its cold canonical
+result is Construct([(member_index, concrete_value)]), retaining the exact concrete
+nominal type. No source cast or temporal projection is introduced.

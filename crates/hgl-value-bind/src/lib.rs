@@ -296,6 +296,7 @@ pub fn signature_types(
             || matches!(
                 value.ty,
                 Ty::Recursive(_)
+                    | Ty::Family(_)
                     | Ty::Struct(..)
                     | Ty::List(..)
                     | Ty::Delta(_)

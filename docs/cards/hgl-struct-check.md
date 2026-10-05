@@ -44,3 +44,8 @@ for required fields before evaluating any constructor argument. Omitted or
 explicitly null optional fields contribute no payload to Kind::Construct;
 present fields retain their normal exact type and written evaluation order.
 An empty Construct for an all-optional schema is a present complete value.
+
+Abstract constructors are rejected. Inherited fields retain ancestor-first order,
+source declaration scopes, introducing optionality/defaults and exact generic
+substitutions. Expected family membership can supply an exact concrete member's
+generic arguments before field checking. Widening itself belongs to family-values.

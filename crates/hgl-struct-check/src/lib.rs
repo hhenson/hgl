@@ -11,6 +11,7 @@ pub struct Constructor {
     module: String,
     declaration: Decl,
     schema: RequiredStruct,
+    patterns: Vec<hgl_inheritance::Pattern>,
     bindings: BTreeMap<String, Ty>,
     fields: Vec<usize>,
     values: Vec<Option<Value>>,
@@ -28,7 +29,10 @@ impl Constructor {
         let (base, explicit) =
             application(name).map_or((name, None), |(base, args)| (base, Some(args)));
         let declaration = declaration(library, module, base)?.ok_or("explicit generic arguments require a struct constructor; generic function calls are not admitted")?.clone();
-        let schema = declaration.required_struct()?;
+        let (schema, patterns) = hgl_inheritance::schema(library, &declaration)?;
+        if schema.abstract_type {
+            return Err("abstract structs are not constructible".into());
+        }
         let mut bindings = BTreeMap::new();
         if let Some(explicit) = explicit {
             if explicit.len() != schema.generics.len() {
@@ -47,8 +51,7 @@ impl Constructor {
                 );
             }
         }
-        if let Some(identity) =
-            expected.and_then(|ty| ty.structure().ok().map(|(identity, _, _)| identity))
+        if let Some(identity) = expected.and_then(|ty| expected_identity(ty, &declaration))
             && !schema.generics.is_empty()
         {
             if identity.origin != format!("{}::{}", declaration.module, declaration.name) {
@@ -90,6 +93,7 @@ impl Constructor {
             module: module.into(),
             declaration,
             schema,
+            patterns,
             bindings,
             fields,
             values: vec![None; args.len()],
@@ -125,10 +129,9 @@ impl Constructor {
         for (index, (_, expr)) in args.iter().enumerate() {
             if self.values[index].is_none()
                 && !matches!(expr, Expr::Null)
-                && let Ok(ty) = substitute(
+                && let Ok(ty) = hgl_value_types::field_type(
                     library,
-                    &self.declaration.module,
-                    &self.schema.fields[self.fields[index]].1,
+                    &self.patterns[self.fields[index]],
                     &self.bindings,
                     &mut BTreeSet::new(),
                 )
@@ -180,12 +183,9 @@ impl Constructor {
     }
     /// Unify and retain the checked field once, without executing its expression.
     pub fn checked(&mut self, library: &Library, index: usize, value: Value) -> Result<(), String> {
-        let pattern = &self.schema.fields[self.fields[index]].1;
-        let projected = ordinary_pattern(pattern);
-        let resolved = substitute(
+        let resolved = hgl_value_types::field_type(
             library,
-            &self.declaration.module,
-            pattern,
+            &self.patterns[self.fields[index]],
             &self.bindings,
             &mut BTreeSet::new(),
         );
@@ -196,13 +196,13 @@ impl Constructor {
             self.values[index] = Some(value);
             return Ok(());
         }
-        unify(
-            library,
-            &self.declaration.module,
-            &projected,
+        hgl_family_types::infer_field(
+            &self.patterns[self.fields[index]],
             &value.ty,
-            &self.schema.generics,
             &mut self.bindings,
+            |module, name, actual, parameters, bindings| {
+                unify(library, module, name, actual, parameters, bindings)
+            },
         )
         .map_err(|error| format!("struct construction: missing or wrong-type argument: {error}"))?;
         self.values[index] = Some(value);
@@ -370,4 +370,16 @@ fn ordinary_pattern(pattern: &str) -> String {
         }
     }
     pattern.into()
+}
+
+fn expected_identity<'a>(ty: &'a Ty, decl: &Decl) -> Option<&'a hgl_source::Nominal> {
+    if let Ty::Family(family) = ty {
+        family
+            .members()
+            .iter()
+            .find(|(id, _)| id.origin == format!("{}::{}", decl.module, decl.name))
+            .map(|(id, _)| id)
+    } else {
+        ty.structure().ok().map(|(identity, _, _)| identity)
+    }
 }

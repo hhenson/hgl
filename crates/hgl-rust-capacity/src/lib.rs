@@ -5,6 +5,9 @@ use hgl_source::Ty;
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 fn fields(ty: &Ty) -> Vec<Ty> {
+    if let Ty::Family(family) = ty {
+        return fields(&hgl_rust_layouts::family_storage(family));
+    }
     if let Ty::Struct(_, fields, _) = ty {
         return fields.iter().map(|(_, ty)| ty.clone()).collect();
     }
@@ -243,7 +246,7 @@ impl Capacity {
                 self.bounds(child)
             );
         }
-        if matches!(ty, Ty::Struct(..) | Ty::Tuple(_)) {
+        if matches!(ty, Ty::Family(_) | Ty::Struct(..) | Ty::Tuple(_)) {
             let args = fields(ty)
                 .iter()
                 .enumerate()
@@ -375,6 +378,7 @@ impl Capacity {
             | Ty::Ref(_)
             | Ty::Nullable(_)
             | Ty::Recursive(_)
+            | Ty::Family(_)
             | Ty::Void => format!(
                 "store.prepared().prepare_scalar::<{}>({id},{})?;",
                 global_type(ty),
@@ -386,4 +390,5 @@ impl Capacity {
 
 fn optional(ty: &Ty, index: usize) -> bool {
     matches!(ty,Ty::Struct(_,_,optional) if optional.contains(&index))
+        || matches!(ty, Ty::Family(_)) && index > 0
 }

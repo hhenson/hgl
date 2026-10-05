@@ -16,3 +16,4 @@ hgl-harness-ir = { path = "../hgl-harness-ir" }
 hgl-rust-layouts = { path = "../hgl-rust-layouts" }
 hgl-rust-values = { path = "../hgl-rust-values" }
 hgl-rust-checked-data={path="../hgl-rust-checked-data"}
+hgl-rust-families = { path = "../hgl-rust-families" }

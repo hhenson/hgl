@@ -4,10 +4,14 @@ mod delta;
 mod globals;
 pub use delta::{delta_storage, delta_type};
 pub use globals::{global_markers, global_schema, global_type, global_types};
+pub use hgl_rust_families::{family_coerce, family_member, family_storage};
 
 pub use hgl_rust_scalars::{rust_type, scalar_type};
 /// Rust owned representation of a concrete ordinary type.
 pub fn owned_type(ty: &Ty) -> String {
+    if let Ty::Family(family) = ty {
+        return owned_type(&family_storage(family));
+    }
     if matches!(ty, Ty::Recursive(_)) {
         return format!("Owned{}", global_type(ty));
     }
@@ -72,6 +76,7 @@ pub fn whole_payload(ty: &Ty) -> Option<&Ty> {
         | Ty::Set(_)
         | Ty::Nullable(_)
         | Ty::Recursive(_)
+        | Ty::Family(_)
         | Ty::Void => None,
     }
 }

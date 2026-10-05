@@ -97,3 +97,5 @@ Re-export ParsedLiteral with Literal and TemporalLiteral for schema defaults.
 
 Reexports RecursiveType and NominalDefinition alongside Ty and Nominal. Recursive
 batch formation belongs to semantic resolution; syntax introduces no new type.
+
+Reexports FamilyType with the other exact checked nominal carriers.

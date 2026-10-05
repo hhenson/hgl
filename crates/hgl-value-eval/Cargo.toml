@@ -12,6 +12,7 @@ line-budget = 500
 workspace = true
 
 [dependencies]
+hgl-family-values = { path = "../hgl-family-values" }
 hgl-source = { path = "../hgl-source" }
 hgl-rust-ir = { path = "../hgl-rust-ir" }
 hgl-delta-check = { path = "../hgl-delta-check" }

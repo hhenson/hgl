@@ -1,6 +1,19 @@
 use super::{Kind, Plan, Value, global_type, value};
 use hgl_source::Ty;
 pub(super) fn forward(plan: &Plan, value: &Value) -> Option<String> {
+    if let Kind::Configuration(id) = value.kind
+        && value.ty.atomic_payload()
+    {
+        return Some(format!(
+            "{}return Ok(());\n",
+            hgl_rust_observed::apply(
+                &value.ty.clone().atomic(),
+                "self._output",
+                "&self.configuration_columns",
+                &format!("self.configuration_slot{id}")
+            )
+        ));
+    }
     if let Some(code) = hgl_rust_direct_deltas::publish(value, |v| super::value(plan, v)) {
         return Some(code);
     }

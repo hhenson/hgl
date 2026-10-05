@@ -40,3 +40,6 @@ occurs through finite payloads, never recursive schema expansion.
 Enumerate callbacks recursively through conditional steps, including bound evals.
 Callbacks remain statically selected by checked plan index; only an executed
 branch invokes its callback. Preserve one result per named lexical test.
+
+Family decode/encode delegate to hgl-rust-families with recursive child converters.
+Captures retain the actual concrete member tag and its optional/owning fields.

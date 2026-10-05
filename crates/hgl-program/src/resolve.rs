@@ -1155,11 +1155,20 @@ impl Checker {
         runtime: bool,
         expected: Option<&Ty>,
     ) -> Result<Value, String> {
-        if let Expr::Applied(name, args) = expr {
-            return self.constructor(module, (name, args), env, runtime, expected);
-        }
-        if let Expr::Call(name, args) = expr
-            && self.struct_declaration(module, name)?.is_some()
+        let value = self.expected_inner(module, expr, env, runtime, expected)?;
+        hgl_family_values::coerce(expected, value)
+    }
+    fn expected_inner(
+        &mut self,
+        module: &str,
+        expr: &Expr,
+        env: &Env,
+        runtime: bool,
+        expected: Option<&Ty>,
+    ) -> Result<Value, String> {
+        if let Expr::Applied(name, args) | Expr::Call(name, args) = expr
+            && (matches!(expr, Expr::Applied(..))
+                || self.struct_declaration(module, name)?.is_some())
         {
             return self.constructor(module, (name, args), env, runtime, expected);
         }

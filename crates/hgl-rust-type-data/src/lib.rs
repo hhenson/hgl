@@ -40,6 +40,16 @@ fn recursive(batch: &hgl_source::RecursiveType) -> String {
 /// Emit exact checked source type metadata.
 pub fn ty(t: &Ty) -> String {
     let inner = match t {
+        Ty::Family(f) => format!(
+            "Family(hgl_source::FamilyType::new({},{},{}).unwrap_or_else(|_|unreachable!(\"checked family\")))",
+            nominal(f.identity()),
+            list(f.ancestors(), nominal),
+            list(f.members(), |(id, t)| format!(
+                "({},{})",
+                nominal(id),
+                ty(t)
+            ))
+        ),
         Ty::Recursive(batch) => format!("Recursive({})", recursive(batch)),
         Ty::Enum(e) => format!("Enum({})", enum_data(e)),
         Ty::Atomic(t) => format!("Atomic(Box::new({}))", ty(t)),

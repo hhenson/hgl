@@ -123,7 +123,12 @@ impl Execution<'_, '_> {
             Kind::ValueCall(args, body) => return self.call(args, body, &value.ty),
             Kind::Binary(op, a, b) => return self.binary(op, a, b),
             Kind::Unary(op, operand) => {
-                return operators::unary(op, &self.value(operand)?);
+                let operand = self.value(operand)?;
+                if op == "family" {
+                    return hgl_family_values::retain(&value.ty, operand)
+                        .map_err(|message| unsupported(&message));
+                }
+                return operators::unary(op, &operand);
             }
             Kind::IsPresent(operand) => Kind::Literal(Literal::Bool(!matches!(
                 self.value(operand)?.kind,

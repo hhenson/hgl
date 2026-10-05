@@ -4,6 +4,8 @@ use hgl_source::{Nominal, Ty, application, delta_argument};
 pub use hgl_struct_names::{declaration, identity};
 use hgl_value_check::ordinary;
 use std::collections::{BTreeMap, BTreeSet};
+mod family;
+pub use family::field_type;
 /// Resolve a finite ordinary type, retaining nominal identity.
 pub fn resolve(
     library: &Library,
@@ -91,13 +93,25 @@ pub fn specialize(
     arguments: Vec<Ty>,
     active: &mut BTreeSet<String>,
 ) -> Result<Ty, String> {
-    let schema = decl.required_struct()?;
+    let (schema, patterns) = hgl_inheritance::schema(library, decl)?;
     if schema.generics.len() != arguments.len() {
         return Err(format!(
             "{}: struct application requires {} complete type arguments",
             decl.name,
             schema.generics.len()
         ));
+    }
+    if schema.abstract_type {
+        return hgl_family_types::resolve(
+            library,
+            decl,
+            &arguments,
+            active,
+            |decl, args, active| specialize(library, decl, args, active),
+            |module, name, bindings| {
+                substitute(library, module, name, bindings, &mut BTreeSet::new())
+            },
+        );
     }
     if let Some(ty) =
         hgl_recursive_types::resolve(library, decl, &arguments, |owner, pattern, bindings| {
@@ -133,8 +147,8 @@ pub fn specialize(
         return Err("recursive ordinary structs are not supported".into());
     }
     let mut fields = Vec::new();
-    for (index, (name, ty)) in schema.fields.into_iter().enumerate() {
-        let ty = substitute(library, &decl.module, &ty, &bindings, active)?;
+    for (index, (name, _)) in schema.fields.into_iter().enumerate() {
+        let ty = field_type(library, &patterns[index], &bindings, active)?;
         if !ordinary(&ty) && !ty.publication() {
             return Err("ordinary struct fields require ordinary value types".into());
         }
@@ -224,6 +238,8 @@ pub fn unify(
             .ok_or_else(|| format!("unresolved ordinary type {base}"))?;
         let identity = if let Ty::Recursive(batch) = actual {
             batch.identity()
+        } else if let Ty::Family(family) = actual {
+            family.identity()
         } else {
             actual.structure()?.0
         };
@@ -293,14 +309,9 @@ fn unify_delta(
 
 fn source_argument(library: &Library, ty: &Ty) -> Result<Ty, String> {
     if let Ok((identity, _, _)) = ty.structure() {
-        let decl = library
-            .declarations
-            .iter()
-            .find(|decl| {
-                decl.role == hgl_library::Role::Struct
-                    && format!("{}::{}", decl.module, decl.name) == identity.origin
-            })
-            .ok_or("unresolved nominal source argument")?;
+        let missing = "unresolved nominal source argument";
+        let (module, name) = identity.origin.rsplit_once("::").ok_or(missing)?;
+        let decl = declaration(library, module, name)?.ok_or(missing)?;
         return specialize(
             library,
             decl,

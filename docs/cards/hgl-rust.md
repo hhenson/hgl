@@ -128,6 +128,9 @@ instantiation prepares scalar, atomic, and every finite keyed descendant output.
 Configuration source arenas own independent typed slots. Captures are extracted as
 owning values after simulation; generated hook recording copies into reserved slots.
 
+Emission normalizes literal-only family publications through hgl-rust-families
+before node construction, prepared adapters and execution-body generation. Native
+provider/call expressions are never moved by this narrow preparation pass.
 Prepared eval transport is selected as one complete path by
 `hgl-rust-execution-proof::prepared(plan)`. Unproved plans retain existing ordinary
 publication and recording behavior; no per-insertion fallback or hook replay is

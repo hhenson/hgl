@@ -95,6 +95,9 @@ fn value(plan: &Plan, v: &Value) -> String {
             if plan.natives[*i].throws { "?" } else { "" }
         ),
         Kind::Binary(op, a, b) => binary(plan, &v.ty, op, a, b),
+        Kind::Unary(op, operand) if op == "family" => {
+            hgl_rust_layouts::family_coerce(&v.ty, &operand.ty, &value(plan, operand))
+        }
         Kind::Unary(op, v) => unary(plan, op, v),
         Kind::Query(op, args) => {
             if op.contains('.') {
@@ -156,7 +159,7 @@ fn construct(plan: &Plan, ty: &Ty, fields: &[(usize, Value)]) -> String {
         })
         .collect::<Vec<_>>()
         .join(",");
-    let prefix = if matches!(ty, Ty::Recursive(_)) {
+    let prefix = if matches!(ty, Ty::Recursive(_) | Ty::Family(_)) {
         format!("Owned{}", global_type(ty))
     } else {
         String::new()
@@ -198,7 +201,7 @@ fn retained(source: &str, ty: &Ty) -> String {
             global_type(ty)
         );
     }
-    if matches!(ty, Ty::Recursive(_) | Ty::Struct(..)) {
+    if matches!(ty, Ty::Recursive(_) | Ty::Family(_) | Ty::Struct(..)) {
         return format!(
             "<{} as hgl_store::GlobalValue>::retain(&({source}))?",
             global_type(ty)
@@ -348,10 +351,9 @@ fn assignment(plan: &Plan, target: &Value, v: &Value) -> String {
 /// Emit the checked condition code form.
 pub fn condition_code(plan: &Plan, condition: &Value) -> String {
     let code = value(plan, condition);
-    if matches!(
-        condition.kind,
-        Kind::Binary(..) | Kind::Unary(..) | Kind::Query(..)
-    ) && code.starts_with('(')
+    if (matches!(condition.kind, Kind::Binary(..) | Kind::Query(..))
+        || matches!(&condition.kind,Kind::Unary(op,_) if op!="family"))
+        && code.starts_with('(')
         && code.ends_with(')')
     {
         code[1..code.len() - 1].into()

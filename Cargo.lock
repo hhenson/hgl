@@ -184,6 +184,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "hgl-family-types"
+version = "0.0.0"
+dependencies = [
+ "hgl-inheritance",
+ "hgl-library",
+ "hgl-source",
+ "hgl-struct-names",
+ "hgl-value-access",
+]
+
+[[package]]
+name = "hgl-family-values"
+version = "0.0.0"
+dependencies = [
+ "hgl-rust-ir",
+ "hgl-source",
+]
+
+[[package]]
 name = "hgl-fixed-bench"
 version = "0.0.0"
 dependencies = [
@@ -234,6 +253,7 @@ name = "hgl-harness"
 version = "0.0.0"
 dependencies = [
  "hgl-eval-data",
+ "hgl-family-values",
  "hgl-harness-ir",
  "hgl-rust-ir",
  "hgl-source",
@@ -259,6 +279,16 @@ version = "0.0.0"
 dependencies = [
  "hgl-rust-ir",
  "hgl-source",
+]
+
+[[package]]
+name = "hgl-inheritance"
+version = "0.0.0"
+dependencies = [
+ "hgl-enums",
+ "hgl-library",
+ "hgl-source",
+ "hgl-struct-names",
 ]
 
 [[package]]
@@ -289,6 +319,7 @@ name = "hgl-library"
 version = "0.0.0"
 dependencies = [
  "hgl-source",
+ "hgl-struct-declarations",
 ]
 
 [[package]]
@@ -411,6 +442,7 @@ dependencies = [
  "hgl-endpoint-check",
  "hgl-enums",
  "hgl-eval-data",
+ "hgl-family-values",
  "hgl-flow-check",
  "hgl-harness-check",
  "hgl-harness-ir",
@@ -470,6 +502,7 @@ dependencies = [
  "hgl-rust-capacity",
  "hgl-rust-deltas",
  "hgl-rust-direct-deltas",
+ "hgl-rust-families",
  "hgl-rust-finite-domains",
  "hgl-rust-generators",
  "hgl-rust-ir",
@@ -544,6 +577,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "hgl-rust-families"
+version = "0.0.0"
+dependencies = [
+ "hgl-rust-ir",
+ "hgl-rust-type-data",
+ "hgl-source",
+]
+
+[[package]]
 name = "hgl-rust-finite-domains"
 version = "0.0.0"
 dependencies = [
@@ -589,6 +631,7 @@ name = "hgl-rust-layouts"
 version = "0.0.0"
 dependencies = [
  "hgl-rust-enums",
+ "hgl-rust-families",
  "hgl-rust-ir",
  "hgl-rust-prepared-values",
  "hgl-rust-scalars",
@@ -619,6 +662,7 @@ version = "0.0.0"
 dependencies = [
  "hgl-harness-ir",
  "hgl-rust-checked-data",
+ "hgl-rust-families",
  "hgl-rust-ir",
  "hgl-rust-layouts",
  "hgl-rust-recursive-convert",
@@ -808,12 +852,21 @@ name = "hgl-struct-check"
 version = "0.0.0"
 dependencies = [
  "hgl-enums",
+ "hgl-family-types",
+ "hgl-inheritance",
  "hgl-library",
  "hgl-rust-ir",
  "hgl-source",
  "hgl-type-sizes",
  "hgl-value-access",
  "hgl-value-types",
+]
+
+[[package]]
+name = "hgl-struct-declarations"
+version = "0.0.0"
+dependencies = [
+ "hgl-source",
 ]
 
 [[package]]
@@ -923,6 +976,7 @@ name = "hgl-value-eval"
 version = "0.0.0"
 dependencies = [
  "hgl-delta-check",
+ "hgl-family-values",
  "hgl-rust-ir",
  "hgl-source",
  "hgl-time-values",
@@ -940,6 +994,7 @@ dependencies = [
 name = "hgl-value-operations"
 version = "0.0.0"
 dependencies = [
+ "hgl-family-values",
  "hgl-rust-ir",
  "hgl-source",
 ]
@@ -949,6 +1004,8 @@ name = "hgl-value-types"
 version = "0.0.0"
 dependencies = [
  "hgl-enums",
+ "hgl-family-types",
+ "hgl-inheritance",
  "hgl-library",
  "hgl-recursive-types",
  "hgl-shape-obligations",

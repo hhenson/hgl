@@ -81,7 +81,12 @@ fn expression(value: &Value, live: &BTreeMap<usize, bool>) -> Result<(), String>
             conflict(*entry, false, live)?;
             if matches!(
                 value.ty,
-                Ty::Tuple(_) | Ty::Recursive(_) | Ty::Struct(..) | Ty::List(..) | Ty::Delta(_)
+                Ty::Tuple(_)
+                    | Ty::Recursive(_)
+                    | Ty::Family(_)
+                    | Ty::Struct(..)
+                    | Ty::List(..)
+                    | Ty::Delta(_)
             ) {
                 return Err("aggregate get requires a typed let or var binding".into());
             }
@@ -107,7 +112,7 @@ fn expression(value: &Value, live: &BTreeMap<usize, bool>) -> Result<(), String>
             }
             block(body, &mut live.clone())?;
         }
-        Kind::Index(parent, index) | Kind::Push(parent, index) => {
+        Kind::Index(parent, index) | Kind::Push(parent, index) | Kind::Binary(_, parent, index) => {
             expression(parent, live)?;
             expression(index, live)?;
         }
@@ -121,10 +126,6 @@ fn expression(value: &Value, live: &BTreeMap<usize, bool>) -> Result<(), String>
                 helper_argument(value)?;
                 expression(value, live)?;
             }
-        }
-        Kind::Binary(_, a, b) => {
-            expression(a, live)?;
-            expression(b, live)?;
         }
         Kind::Length(value)
         | Kind::Field(value, _)
@@ -319,7 +320,12 @@ pub fn prepare_node(
             if matches!(value.kind, Kind::Prepared(_))
                 || matches!(
                     value.ty,
-                    Ty::Tuple(_) | Ty::List(..) | Ty::Recursive(_) | Ty::Struct(..) | Ty::Delta(_)
+                    Ty::Tuple(_)
+                        | Ty::List(..)
+                        | Ty::Recursive(_)
+                        | Ty::Family(_)
+                        | Ty::Struct(..)
+                        | Ty::Delta(_)
                 )
             {
                 let id = node.configuration.len();
@@ -374,12 +380,14 @@ pub fn binary_type(op: &str, a: &Ty, b: &Ty) -> Result<Ty, String> {
         {
             Ty::Bool
         }
+        "==" | "!=" if matches!(a, Ty::Family(_)) => Ty::Bool,
         "==" | "!="
             if !matches!(
                 *a,
                 Ty::Void
                     | Ty::Set(_)
                     | Ty::Recursive(_)
+                    | Ty::Family(_)
                     | Ty::Struct(..)
                     | Ty::List(..)
                     | Ty::Delta(_)

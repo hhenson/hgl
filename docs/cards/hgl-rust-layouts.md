@@ -57,3 +57,8 @@ including silent-input roots. Recursive owned representations are named tuple
 structs; edge schemas use exact RecursiveReference identities instead of expanding
 the target. Bare internal edge metadata supplies a name only and is never emitted
 as an empty struct definition.
+
+Family types map to the fixed tagged nominal storage emitted by hgl-rust-families.
+The collector visits every declared concrete member, including unobserved members.
+Reexports family_storage, family_member and family_coerce; their ownership contract
+is specified by the hgl-rust-families card.

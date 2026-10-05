@@ -42,3 +42,8 @@ Recursive roots use typed PreparedValue::Bounds fields instead of scalar size
 maxima. include visits actual materialized finite values, and bounds clones those
 finite descriptions before each independent destination allocation. An empty or
 all-silent recursive input retains its type but allocates no recursive child.
+
+Family capacity includes every declared concrete member schema. Its fixed tagged
+storage bounds combine the existing scalar/child maxima and source/configuration
+construction recipes; membership is never narrowed to members observed in inputs.
+Prepared optional member slots remain inactive until the exact member is copied.

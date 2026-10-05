@@ -84,3 +84,7 @@ Struct construction emits supplied payloads in written order, then assembles
 all declaration positions, inserting Some/None only at optional fields.
 Struct retention delegates to its generated GlobalValue marker so field
 presence survives owning boundaries. This introduces no optional read syntax.
+
+Internal family widening preserves tuple-valued expression parentheses and exact
+discriminators. Returning immutable configuration payloads uses typed prepared
+slot publication, avoiding an owning clone in the evaluation hook.

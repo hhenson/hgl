@@ -2,7 +2,8 @@
 pub use hgl_lex::{Token, lex};
 pub use hgl_literals::{Literal, ParsedLiteral, TemporalLiteral};
 pub use hgl_type_shape::{
-    EnumType, Nominal, NominalDefinition, RecursiveType, Ty, application, delta_argument,
+    EnumType, FamilyType, Nominal, NominalDefinition, RecursiveType, Ty, application,
+    delta_argument,
 };
 #[derive(Debug, Clone)]
 /// An expression before name and type resolution.

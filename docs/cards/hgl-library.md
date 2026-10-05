@@ -1,7 +1,7 @@
 # Card: hgl-library
 
 Index source modules, parts, imports, operator instances and test contexts.
-Uses `hgl-source`; budget 500 lines. Allocation happens during compilation.
+Uses `hgl-source` and `hgl-struct-declarations`; budget 500 lines. Allocation happens during compilation.
 
 Surface: `load(&[(String,String)]) -> Result<Library,String>`;
 `Library { declarations, root, imports, instances }`;
@@ -25,8 +25,7 @@ contexts; invalid context members; production helper isolation.
 `Role::Struct` indexes ordinary struct declarations without treating them as
 functions. `Decl::required_struct() -> Result<RequiredStruct, String>`
 parses finite nonrecursive fields, preserving source type names and checked
-non-null scalar literal defaults (including contextual calendar recipes) for frontend resolution. Duplicate fields, optional
-fields, inheritance and unsupported generic declarations are diagnosed.
+non-null scalar literal defaults (including contextual calendar recipes) for frontend resolution. Duplicate fields and unsupported generic declarations are diagnosed.
 
 `RequiredStruct { generics, fields, defaults, type_domain }` and `Decl::required_struct`
 retain ordered type parameters and the supported finite type-domain constraint.
@@ -34,8 +33,8 @@ retain ordered type parameters and the supported finite type-domain constraint.
 use the existing source fixed-expression evaluator; other constant expressions
 remain unsupported. Concrete specialization checks each default against its field
 type even when construction supplies that field or constructs only a delta.
-Type parameters are distinct; const parameters, generic defaults, optional
-fields, inheritance and unsupported constraints are diagnosed explicitly.
+Type parameters are distinct; const parameters, generic defaults and unsupported
+constraints are diagnosed explicitly.
 
 Explicit instantiate arguments preserve complete nested type syntax (including
 contextual delta<T>); wildcard `_` remains a retained generic argument. The
@@ -60,5 +59,10 @@ scalar and contextual temporal profile.
 
 `RequiredStruct::optional: Vec<usize>` records fields introduced with a null
 default; `defaults` retains that Expr::Null along with existing scalar defaults.
-The parser admits optional ordinary fields without admitting inheritance or
-new default-expression operations. Field types remain their declared types.
+The parser admits optional ordinary fields without new default-expression
+operations. Field types remain their declared types.
+
+RequiredStruct parsing is owned by hgl-struct-declarations. abstract_type and
+parent retain abstract declaration status and one source ancestor application;
+Role::Struct indexes both concrete and abstract declarations. Multiple parents
+remain explicitly unsupported. Semantic inheritance/closure checking is separate.

@@ -57,6 +57,7 @@ pub fn shape_marker(ty: &Ty) -> String {
         | Ty::Ref(_)
         | Ty::Nullable(_)
         | Ty::Recursive(_)
+        | Ty::Family(_)
         | Ty::Void => rust_type(ty).into(),
     }
 }
@@ -67,7 +68,12 @@ fn operations(ty: &Ty) -> String {
 pub fn publish(ty: &Ty, payload: &str) -> String {
     if matches!(
         ty,
-        Ty::Enum(_) | Ty::Recursive(_) | Ty::List(..) | Ty::Tuple(_) | Ty::Struct(..)
+        Ty::Enum(_)
+            | Ty::Recursive(_)
+            | Ty::Family(_)
+            | Ty::List(..)
+            | Ty::Tuple(_)
+            | Ty::Struct(..)
     ) {
         return format!(
             "_ctx.set_atomic::<{}>(self._output,{payload})?;",
@@ -164,6 +170,7 @@ fn children(ty: &Ty) -> Vec<&Ty> {
         | Ty::Set(_)
         | Ty::Nullable(_)
         | Ty::Recursive(_)
+        | Ty::Family(_)
         | Ty::Void => vec![],
     }
 }
@@ -266,39 +273,21 @@ fn origin(ty: &Ty, types: &mut BTreeSet<Ty>) {
         return;
     }
     types.insert(ty.clone());
-    match ty {
-        Ty::List(child, _) | Ty::Set(child) | Ty::Map(_, child) => origin(child, types),
-        Ty::Struct(_, fields, _) => {
-            for (_, child) in fields {
-                origin(child, types);
-            }
+    if let Ty::List(child, _) | Ty::Set(child) | Ty::Map(_, child) = ty {
+        origin(child, types);
+    }
+    if let Ty::Struct(_, fields, _) = ty {
+        for (_, child) in fields {
+            origin(child, types);
         }
-        Ty::Tuple(children) => {
-            for child in children {
-                origin(child, types);
-            }
+    }
+    if let Ty::Tuple(children) = ty {
+        for child in children {
+            origin(child, types);
         }
-        Ty::Atomic(_)
-        | Ty::Delta(_)
-        | Ty::I64
-        | Ty::F64
-        | Ty::Bool
-        | Ty::Str
-        | Ty::CivilDateTime
-        | Ty::TimeZone
-        | Ty::Enum(_)
-        | Ty::ZonedTime
-        | Ty::ZonedDateTime
-        | Ty::Duration
-        | Ty::Date
-        | Ty::Time
-        | Ty::DateTime
-        | Ty::Ref(_)
-        | Ty::Nullable(_)
-        | Ty::Recursive(_)
-        | Ty::Void => {}
     }
 }
+
 fn collect(ty: &Ty, types: &mut BTreeSet<Ty>) {
     match ty {
         Ty::Delta(ty) => origin(ty, types),
@@ -328,6 +317,7 @@ fn collect(ty: &Ty, types: &mut BTreeSet<Ty>) {
         | Ty::Set(_)
         | Ty::Nullable(_)
         | Ty::Recursive(_)
+        | Ty::Family(_)
         | Ty::Void => {}
     }
 }

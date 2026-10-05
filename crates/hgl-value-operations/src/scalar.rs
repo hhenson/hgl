@@ -38,8 +38,13 @@ pub fn unary(op: &str, operand: &Value) -> Result<Value, EvalError> {
 fn as_float(value: i64) -> f64 {
     value as f64
 }
-/// Evaluate a checked ordinary scalar binary operation.
+/// Evaluate a checked ordinary scalar or family equality operation.
 pub fn binary(op: &str, a: &Value, b: &Value) -> Result<Value, EvalError> {
+    if matches!(a.ty, hgl_source::Ty::Family(_)) && matches!(op, "==" | "!=") {
+        return Ok(value(Literal::Bool(
+            hgl_family_values::equal(a, b) == (op == "=="),
+        )));
+    }
     let (a, b) = (scalar(a)?, scalar(b)?);
     if a.ty() == b.ty() && matches!(op, "==" | "!=") && !matches!(a, Literal::Float(_)) {
         return Ok(value(Literal::Bool((a == b) == (op == "=="))));

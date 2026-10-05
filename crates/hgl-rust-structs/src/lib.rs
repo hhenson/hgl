@@ -166,7 +166,7 @@ fn representation(ty: &Ty, global_type: fn(&Ty) -> String) -> (String, String, S
             field_marker(ty, optional.contains(&i), global_type)
         )
     }));
-    let recursive = matches!(ty, Ty::Recursive(_));
+    let recursive = matches!(ty, Ty::Recursive(_) | Ty::Family(_));
     let declaration = if recursive {
         format!(
             "#[derive(Debug,Clone,PartialEq)] struct Owned{name}{value};\nimpl hgl_store::RecursiveTarget for {name} {{ const IDENTITY:&'static str={identity:?}; }}\n"

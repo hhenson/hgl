@@ -16,3 +16,5 @@ hgl-rust-ir = { path = "../hgl-rust-ir" }
 hgl-type-sizes = { path = "../hgl-type-sizes" }
 hgl-value-access = { path = "../hgl-value-access" }
 hgl-enums = { path = "../hgl-enums" }
+hgl-inheritance = { path = "../hgl-inheritance" }
+hgl-family-types = { path = "../hgl-family-types" }

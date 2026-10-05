@@ -71,3 +71,9 @@ atomic payloads, never structural publication roots. StructFields and
 Ty::structure()->Result<StructFields,String> resolve complete root fields and
 presence positions; a bare internal edge is an explicit unresolved-schema error.
 May use hgl-nominal-batch. Source formation follows spec6baa056/ADR0012.
+
+FamilyType aliases immutable Family<Nominal,Ty>. Ty::Family is an ordinary atomic
+payload retaining declaration-fixed concrete members and explicit ancestor
+specializations. Its source identity is the exact applied abstract declaration;
+structural family publication remains unsupported. Family fields are not exposed
+through Ty::structure. This is the nonrecursive family slice of spec97c791f.

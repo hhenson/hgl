@@ -54,3 +54,10 @@ schema expansion. Generic arguments preserve source boundaries and all invariant
 arguments. Ordinary projection and constructor inference retain complete batches.
 Optional fields and the finite recursive atomic profile are admitted; structural
 recursive roots and const-generic declarations remain outside this profile.
+
+Abstract declarations resolve to a complete immutable FamilyType. All compatible
+declared concrete descendants are collected at wiring, independently of replay
+inputs. Single inheritance uses hgl-inheritance scoped patterns; field_type
+resolves those patterns with the existing exact ordinary type resolver. Family
+formation uses hgl-family-types and rejects recursive family expansion. Explicit
+ancestor identities preserve subfamily-to-ancestor nominal membership.

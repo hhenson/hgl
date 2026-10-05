@@ -18,3 +18,9 @@ specializations before forming complete batches. Each standalone checked root
 carries all reachable definitions, including silent-input roots. No registry is
 consulted during evaluation. Generic parameters separate identity and field
 storage from Ty without introducing a cyclic crate dependency.
+
+Family<I,T>::new(identity,ancestors,members) freezes a sorted, duplicate-free
+concrete member closure and explicit transitive ancestor identities. Read-only
+identity/ancestors/members accessors expose it; equality/order use exact identity
+only. Coincident member sets never imply an ancestor relation. Source checking
+owns closure completeness and invariant specialization validation.

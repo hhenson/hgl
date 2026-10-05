@@ -1,0 +1,14 @@
+# Card: hgl-inheritance
+
+Scoped finite single-inheritance patterns for ordinary constructors and closed
+abstract family membership. Depends on source, library and struct-names; budget
+300 source lines. All work occurs during source checking.
+
+Pattern is Parameter(root parameter) or Named(declaration module, base, arguments).
+resolve substitutes checked arguments through a caller-owned type resolver;
+infer propagates a caller-decomposed actual application into root bindings.
+schema(library,decl) returns RequiredStruct and parallel scoped field patterns,
+flattened ancestor first; introducing defaults and optional indices are retained.
+ancestors(library,decl) returns scoped transitive applications nearest first.
+Cycles, incomplete ancestor applications and field redeclarations are diagnosed.
+No field projection, dispatch, cast or runtime nominal lookup is introduced.
