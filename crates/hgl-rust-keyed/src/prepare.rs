@@ -92,8 +92,8 @@ fn collect(value: &Value, keys: &mut Vec<Value>, origins: &StaticValues) {
             for part in parts {
                 match part {
                     DeltaEntry::Add(k) | DeltaEntry::Remove(k) | DeltaEntry::Keyed(k, _) => {
-                        if let Ok((key, Some(_))) = origins.key(origins.resolve(k).clone()) {
-                            keys.push(key);
+                        if let Ok((_, Some(key))) = origins.key(k.clone()) {
+                            keys.push(Value::new(key.ty(), Kind::Literal(key)));
                         }
                     }
                     DeltaEntry::Child(..) => {}

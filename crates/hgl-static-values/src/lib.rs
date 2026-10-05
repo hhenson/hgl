@@ -10,6 +10,8 @@ pub struct StaticValues {
     pub configuration: Vec<Value>,
     /// Static ordinary constant parameter metadata in the current lexical scope.
     pub locals: BTreeMap<usize, Value>,
+    /// Immutable key aliases, excluded from general configuration/global-key lookup.
+    pub cold_locals: BTreeMap<usize, Value>,
 }
 impl StaticValues {
     /// Follow known static origins without evaluating their expressions.
@@ -25,20 +27,28 @@ impl StaticValues {
         }
         value
     }
+    fn key_origin<'a>(&'a self, value: &'a Value) -> &'a Value {
+        if let Kind::Local(id) = value.kind
+            && let Some(origin) = self.cold_locals.get(&id)
+        {
+            return self.key_origin(origin);
+        }
+        self.resolve(value)
+    }
     /// Retain immutable origins while excluding mutable and runtime expression aliases.
     pub fn bind(&mut self, id: usize, value: &Value, mutable: bool) {
-        let origin = self.resolve(value).clone();
-        self.locals.remove(&id);
+        let origin = self.key_origin(value).clone();
+        self.cold_locals.remove(&id);
         if !mutable
             && (matches!(origin.kind, Kind::TemporalLiteral(_))
                 || hgl_value_constant::context_free(&origin))
         {
-            self.locals.insert(id, origin);
+            self.cold_locals.insert(id, origin);
         }
     }
     /// Prove key eligibility without replacing a retained local or resolving a provider.
     pub fn key(&self, value: Value) -> Result<(Value, Option<hgl_source::Literal>), String> {
-        let origin = self.resolve(&value);
+        let origin = self.key_origin(&value);
         if matches!(origin.kind, Kind::TemporalLiteral(_)) {
             return Ok((value, None));
         }

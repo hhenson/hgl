@@ -5,7 +5,9 @@ preparation. Uses hgl-rust-ir, hgl-source, hgl-library, hgl-value-constant and
 hgl-value-eval. Budget 150 source lines. No provider execution or runtime store.
 
 StaticValues derives Default/Clone and exposes prepared/configuration Vec<Value>
-and locals BTreeMap<usize,Value>. resolve follows checked cold origins; arguments
+and locals/cold_locals BTreeMap<usize,Value>. cold_locals are sparse-key-only
+alias proofs; they never broaden general configuration or global-state key
+admission. resolve follows checked cold origins; arguments
 maps known const parameters into source-order lexical slots. bind records only
 immutable cold recipes or closed constant origins and removes stale mutable
 identities. key(Value) returns the retained checked Value and Option<Literal>
