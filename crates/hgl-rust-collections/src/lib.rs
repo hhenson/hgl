@@ -126,3 +126,34 @@ pub fn equal(ty: &Ty, a: &str, b: &str) -> String {
         checks.join(" && ")
     }
 }
+
+/// Emit an independent owning read using the exact source layout.
+pub fn retained(source: &str, ty: &Ty, global_type: fn(&Ty) -> String) -> String {
+    if matches!(ty, Ty::Nullable(_)) {
+        return format!("({source}).as_ref().map(hgl_store::Scalar::try_clone).transpose()?");
+    }
+    if matches!(
+        ty,
+        Ty::Tuple(_)
+            | Ty::List(..)
+            | Ty::Set(_)
+            | Ty::Map(..)
+            | Ty::Delta(_)
+            | Ty::Recursive(_)
+            | Ty::Family(_)
+            | Ty::Struct(..)
+    ) {
+        return format!(
+            "<{} as hgl_store::GlobalValue>::retain(&({source}))?",
+            global_type(ty)
+        );
+    }
+    if matches!(
+        ty,
+        Ty::Str | Ty::TimeZone | Ty::Enum(_) | Ty::ZonedTime | Ty::ZonedDateTime
+    ) {
+        format!("hgl_store::Scalar::try_clone(&({source}))?")
+    } else {
+        format!("({source})")
+    }
+}

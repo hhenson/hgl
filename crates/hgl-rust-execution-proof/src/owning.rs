@@ -30,6 +30,7 @@ fn value(plan: &Plan, input: &Value, looping: bool) -> bool {
         Kind::Push(parent, item) => {
             !looping && value(plan, parent, looping) && value(plan, item, looping)
         }
+        Kind::List(_) if !input.closed() => false,
         Kind::List(args) | Kind::Query(_, args) => args.iter().all(|arg| value(plan, arg, looping)),
         Kind::Construct(fields) => fields.iter().all(|(_, child)| value(plan, child, looping)),
         Kind::Delta(parts) => {

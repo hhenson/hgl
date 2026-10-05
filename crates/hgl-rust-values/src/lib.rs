@@ -194,34 +194,6 @@ fn place(plan: &Plan, v: &Value) -> String {
     }
     value(plan, v)
 }
-fn retained(source: &str, ty: &Ty) -> String {
-    if matches!(ty, Ty::Nullable(_)) {
-        return format!("({source}).as_ref().map(hgl_store::Scalar::try_clone).transpose()?");
-    }
-    if matches!(
-        ty,
-        Ty::Tuple(_) | Ty::List(..) | Ty::Set(_) | Ty::Map(..) | Ty::Delta(_)
-    ) {
-        return format!(
-            "<{} as hgl_store::GlobalValue>::retain(&({source}))?",
-            global_type(ty)
-        );
-    }
-    if matches!(ty, Ty::Recursive(_) | Ty::Family(_) | Ty::Struct(..)) {
-        return format!(
-            "<{} as hgl_store::GlobalValue>::retain(&({source}))?",
-            global_type(ty)
-        );
-    }
-    if matches!(
-        ty,
-        Ty::Str | Ty::TimeZone | Ty::Enum(_) | Ty::ZonedTime | Ty::ZonedDateTime
-    ) {
-        format!("hgl_store::Scalar::try_clone(&({source}))?")
-    } else {
-        format!("({source})")
-    }
-}
 
 fn binary(plan: &Plan, result: &Ty, op: &str, a: &Value, b: &Value) -> String {
     if matches!(a.ty, Ty::Set(_) | Ty::Map(..)) && matches!(op, "==" | "!=") {
@@ -725,4 +697,8 @@ fn atomic_place(plan: &Plan, value: &Value) -> Option<String> {
         return atomic_place(plan, parent).map(|slot| format!("hgl_store::ValueSlot::<{}>::bind(&mut hgl_store::list_index(_ctx.store().atomic_values().list(({slot}).fields()), {})?.as_slice())", global_type(&value.ty), self::value(plan, index)));
     }
     None
+}
+
+fn retained(source: &str, ty: &Ty) -> String {
+    hgl_rust_collections::retained(source, ty, global_type)
 }

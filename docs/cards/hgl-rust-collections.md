@@ -14,3 +14,5 @@ checking before each map value. `equal(&Ty,&str,&str)->String` recursively emits
 unordered collection comparison and ordered descendant comparison.
 Acceptance: generated debug/release shared snapshots and complete nested
 retention, equal empty publications, replay/record and sparse atomic children.
+
+retained(&str,&Ty,fn(&Ty)->String)->String emits independent owning reads through exact composite markers and the existing scalar copy contract. The layout callback selects the concrete marker without runtime type tests.

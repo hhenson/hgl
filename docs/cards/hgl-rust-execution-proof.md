@@ -22,3 +22,4 @@ At a return boundary, hgl-rust-direct-deltas::supported certifies the exact spar
 constructor lowering. The same expression at an arbitrary owning local boundary
 continues to require its ordinary storage proof; constructor support does not
 broaden all Delta expressions automatically.
+Nonclosed ordinary List/Set/Map construction has no admitted prepared owning capacity proof and selects the complete generic adapter. Harness-only Captured values never establish a hot storage proof.
