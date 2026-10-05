@@ -158,3 +158,38 @@ fn invalid_family_construction_and_widening_are_rejected() {
         assert!(compile_tests(&sources(&source)).is_err(), "{statement}");
     }
 }
+
+#[test]
+fn concrete_inheritance_bases_are_rejected_through_generic_and_imported_names() {
+    for (base, child, construction) in [
+        (
+            "struct Base {value:i64}",
+            "struct Child:base::Base {extra:i64}",
+            "Child(value:1,extra:2)",
+        ),
+        (
+            "struct Base<T> {value:T}",
+            "struct Child<T>:base::Base<T> {extra:i64}",
+            "Child<i64>(value:1,extra:2)",
+        ),
+        (
+            "struct Base<T> {value:T}",
+            "abstract struct Child<T>:base::Base<T> {extra:i64}\nstruct Member:Child<i64>{}",
+            "Member(value:1,extra:2)",
+        ),
+    ] {
+        let imported = format!("module ancestor\nexport {base}");
+        let root = format!(
+            "module consumer\nuse ancestor as base\n{child}\nexport fn main() {{let value={construction}}}"
+        );
+        let error = hgl_program::compile(
+            &[("root.hgl".into(), root), ("base.hgl".into(), imported)],
+            "main",
+        )
+        .expect_err("concrete bases must never enter a family");
+        assert!(
+            error.contains("inheritance requires an abstract base"),
+            "{error}"
+        );
+    }
+}

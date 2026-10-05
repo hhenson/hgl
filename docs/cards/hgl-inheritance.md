@@ -10,5 +10,7 @@ infer propagates a caller-decomposed actual application into root bindings.
 schema(library,decl) returns RequiredStruct and parallel scoped field patterns,
 flattened ancestor first; introducing defaults and optional indices are retained.
 ancestors(library,decl) returns scoped transitive applications nearest first.
-Cycles, incomplete ancestor applications and field redeclarations are diagnosed.
+Every resolved ancestor declaration must be abstract, including imported aliases
+and generic applications. Concrete bases, cycles, incomplete ancestor applications
+and field redeclarations are diagnosed.
 No field projection, dispatch, cast or runtime nominal lookup is introduced.

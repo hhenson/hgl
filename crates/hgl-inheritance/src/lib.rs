@@ -121,7 +121,7 @@ fn flatten(
         let (base, args) = application(parent).unwrap_or((parent.as_str(), Vec::new()));
         let parent = hgl_struct_names::declaration(library, &decl.module, base)?
             .ok_or("unresolved struct ancestor")?;
-        let parameters = parent.required_struct()?.generics;
+        let parameters = abstract_schema(parent)?.generics;
         if parameters.len() != args.len() {
             return Err("ancestor requires complete type arguments".into());
         }
@@ -178,7 +178,7 @@ pub fn ancestors(library: &Library, decl: &Decl) -> Result<Vec<Pattern>, String>
         let (base, args) = application(&parent).unwrap_or((&parent, Vec::new()));
         let next = hgl_struct_names::declaration(library, &current.module, base)?
             .ok_or("unresolved struct ancestor")?;
-        let parameters = next.required_struct()?.generics;
+        let parameters = abstract_schema(next)?.generics;
         if parameters.len() != args.len() {
             return Err("ancestor requires complete type arguments".into());
         }
@@ -192,4 +192,12 @@ pub fn ancestors(library: &Library, decl: &Decl) -> Result<Vec<Pattern>, String>
         current = next;
     }
     Ok(out)
+}
+
+fn abstract_schema(decl: &Decl) -> Result<RequiredStruct, String> {
+    let schema = decl.required_struct()?;
+    if !schema.abstract_type {
+        return Err("struct inheritance requires an abstract base".into());
+    }
+    Ok(schema)
 }
