@@ -7,7 +7,12 @@ fn exact_derived_shapes_and_scalar_reduction() {
     ] {
         assert_eq!(Ty::parse(&format!("delta<{scalar}>")), Ty::parse(scalar));
     }
-    for source in ["map<i64,tuple<i64,set<bool>>>", "list<map<i64,str>,3>"] {
+    for source in [
+        "map<i64,tuple<i64,set<bool>>>",
+        "list<map<i64,str>,3>",
+        "list<i64>",
+        "list<list<str>>",
+    ] {
         let ty = Ty::parse(source);
         let ty = ty.unwrap();
         assert!(ty.publication());
@@ -24,7 +29,7 @@ fn exact_derived_shapes_and_scalar_reduction() {
 #[test]
 fn unsupported_origins_fail_formation() {
     for source in [
-        "list<i64>",
+        "list<ref<i64>>",
         "set<list<str,2>>",
         "map<tuple<bool>,i64>",
         "ref<i64>",

@@ -45,3 +45,4 @@ Family decode/encode delegate to hgl-rust-families with recursive child converte
 Captures retain the actual concrete member tag and its optional/owning fields.
 
 decode and encode are reexported from hgl-rust-value-convert. This crate owns lexical runner callback emission and recursive-marker assembly.
+Growing sparse delta decoding/encoding retains exact Child indices and Remove scalar indices in its three-field ordinary storage; complete atomic ordinary lists remain separate.

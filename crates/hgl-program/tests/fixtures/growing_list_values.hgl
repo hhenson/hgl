@@ -1,0 +1,93 @@
+module hgraph.std part growing_list_values_tests
+
+test {
+    fn growing_numbers(value: list<i64>) -> list<i64> => pass_through(value)
+    fn explicit_unbounded(value: list<i64, unbounded>) -> list<i64> => pass_through(value)
+    fn growing_pairs(value: list<tuple<i64, str>>) -> list<tuple<i64, str>> => pass_through(value)
+    fn growing_nested(value: list<list<i64>>) -> list<list<i64>> => pass_through(value)
+    fn growing_snapshots(value: list<atomic<list<i64>>>) -> list<atomic<list<i64>>> => pass_through(value)
+
+    # Sparse child updates preserve untouched positions; removals truncate a complete tail.
+    test growing_list_append_update_shrink_and_regrow {
+        assert eval(growing_numbers, [
+            delta<list<i64>>(items: [0: 1, 1: 2]),
+            delta<list<i64>>(items: [1: 2, 2: 3]), _,
+            delta<list<i64>>(items: [0: 4], remove: [1, 2]),
+            delta<list<i64>>(remove: [0]),
+            delta<list<i64>>(items: [0: 5]), _
+        ]) == [
+            delta<list<i64>>(items: [1: 2, 0: 1]),
+            delta<list<i64>>(items: [2: 3, 1: 2]), _,
+            delta<list<i64>>(items: [0: 4], remove: [2, 1]),
+            delta<list<i64>>(remove: [0]),
+            delta<list<i64>>(items: [0: 5]), _
+        ]
+        assert eval(growing_numbers, []) == []
+        assert eval(growing_numbers, [_, _, _]) == [_, _, _]
+        assert eval(explicit_unbounded, [delta<list<i64>>(items: [0: 0]), delta<list<i64>>(remove: [0])]) == [
+            delta<list<i64, unbounded>>(items: [0: 0]), delta<list<i64, unbounded>>(remove: [0])
+        ]
+    }
+
+    # A newly appended bundle may be partially valid; no held sibling enters its delta.
+    test growing_list_children_preserve_partial_structural_publications {
+        assert eval(growing_pairs, [
+            delta<list<tuple<i64, str>>>(items: [0: delta<tuple<i64, str>>(items: [1: ""])]),
+            delta<list<tuple<i64, str>>>(items: [0: delta<tuple<i64, str>>(items: [0: 7]), 1: delta<tuple<i64, str>>(items: [0: 0])]), _,
+            delta<list<tuple<i64, str>>>(remove: [0, 1])
+        ]) == [
+            delta<list<tuple<i64, str>>>(items: [0: delta<tuple<i64, str>>(items: [1: ""])]),
+            delta<list<tuple<i64, str>>>(items: [1: delta<tuple<i64, str>>(items: [0: 0]), 0: delta<tuple<i64, str>>(items: [0: 7])]), _,
+            delta<list<tuple<i64, str>>>(remove: [1, 0])
+        ]
+    }
+
+    test nested_growing_lists_keep_independent_lengths {
+        assert eval(growing_nested, [
+            delta<list<list<i64>>>(items: [0: delta<list<i64>>(items: [0: 1, 1: 2])]),
+            delta<list<list<i64>>>(items: [0: delta<list<i64>>(remove: [1]), 1: delta<list<i64>>(items: [0: 3])]),
+            delta<list<list<i64>>>(remove: [1]),
+            delta<list<list<i64>>>(items: [0: delta<list<i64>>(remove: [0])]), _
+        ]) == [
+            delta<list<list<i64>>>(items: [0: delta<list<i64>>(items: [0: 1, 1: 2])]),
+            delta<list<list<i64>>>(items: [0: delta<list<i64>>(remove: [1]), 1: delta<list<i64>>(items: [0: 3])]),
+            delta<list<list<i64>>>(remove: [1]),
+            delta<list<list<i64>>>(items: [0: delta<list<i64>>(remove: [0])]), _
+        ]
+    }
+
+    test growing_lists_can_append_complete_empty_atomic_children {
+        let empty: list<i64> = []
+        let one: list<i64> = [1]
+        assert eval(growing_snapshots, [
+            delta<list<atomic<list<i64>>>>(items: [0: empty]),
+            delta<list<atomic<list<i64>>>>(items: [0: one, 1: empty]),
+            delta<list<atomic<list<i64>>>>(remove: [1]),
+            delta<list<atomic<list<i64>>>>(items: [0: empty])
+        ]) == [
+            delta<list<atomic<list<i64>>>>(items: [0: empty]),
+            delta<list<atomic<list<i64>>>>(items: [0: one, 1: empty]),
+            delta<list<atomic<list<i64>>>>(remove: [1]),
+            delta<list<atomic<list<i64>>>>(items: [0: empty])
+        ]
+    }
+
+    fn growing_replay_context(tick: i64) { when { } }
+    fn growing_replayed(tick: i64, const samples: list<TimedValue<list<i64>>>) -> list<i64> {
+        growing_replay_context(tick)
+        replay(samples)
+    }
+    test growing_list_replay_retains_deltas_across_shrink_and_fresh_runs {
+        var sample: TimedValue<list<i64>> = TimedValue<list<i64>>(time: @1970-01-01T00:00:00.000001Z, value: delta<list<i64>>(items: [0: 1, 1: 2]))
+        var samples: list<TimedValue<list<i64>>> = []
+        push(samples, sample)
+        sample.time = @1970-01-01T00:00:00.000003Z
+        sample.value = delta<list<i64>>(remove: [0, 1])
+        push(samples, sample)
+        sample.value = delta<list<i64>>(items: [0: 9])
+        assert eval(growing_replayed, tick: [1, 1, 1, 1], samples: samples) == [delta<list<i64>>(items: [0: 1, 1: 2]), _, delta<list<i64>>(remove: [1, 0]), _]
+        assert eval(growing_replayed, tick: [1, 1, 1, 1], samples: samples) == [delta<list<i64>>(items: [0: 1, 1: 2]), _, delta<list<i64>>(remove: [1, 0]), _]
+        let empty: list<TimedValue<list<i64>>> = []
+        assert eval(growing_replayed, tick: [1, 1], samples: empty) == [_, _]
+    }
+}

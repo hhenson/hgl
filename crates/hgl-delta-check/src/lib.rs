@@ -50,11 +50,11 @@ pub fn constructor<'a>(
                     });
                 }
             }
+            Ty::List(_, None) if name == "remove" => {
+                parts.extend(removals(expr, &mut fixed, &mut removed, &Ty::I64, true)?);
+            }
             Ty::Map(member, _) if name == "remove" => {
-                for value in members(expr, member, &mut fixed)? {
-                    remember(&value, member, &mut removed, "map key")?;
-                    parts.push(Part::Removed(value.0));
-                }
+                parts.extend(removals(expr, &mut fixed, &mut removed, member, false)?);
             }
             Ty::Map(..) | Ty::List(..) | Ty::Tuple(_)
                 if matches!(
@@ -201,6 +201,7 @@ fn sparse<'a>(
             {
                 child.as_ref()
             }
+            Ty::List(child, None) if index >= 0 => child.as_ref(),
             Ty::Tuple(children) => children
                 .get(usize::try_from(index).map_err(|_range| "delta index out of bounds")?)
                 .ok_or("delta index out of bounds")?,
@@ -278,4 +279,36 @@ fn structural_origin(origin: &Ty) -> Result<(), String> {
         return Err("delta constructor requires a supported structural publication shape".into());
     }
     Ok(())
+}
+
+fn nonnegative(value: &(Value, Option<Value>)) -> Result<(), String> {
+    if matches!(&value.1,Some(Value {kind:Kind::Literal(Literal::Int(index)),..}) if *index>=0) {
+        Ok(())
+    } else {
+        Err("delta index requires nonnegative constant i64".into())
+    }
+}
+
+fn removals<'a>(
+    expr: &Expr,
+    fixed: &mut impl FnMut(&Expr, &Ty) -> Result<(Value, Option<Value>), String>,
+    removed: &mut BTreeSet<Key>,
+    member: &Ty,
+    index: bool,
+) -> Result<Vec<Part<'a>>, String> {
+    members(expr, member, fixed)?
+        .into_iter()
+        .map(|value| {
+            if index {
+                nonnegative(&value)?;
+            }
+            remember(
+                &value,
+                member,
+                removed,
+                if index { "index" } else { "map key" },
+            )?;
+            Ok(Part::Removed(value.0))
+        })
+        .collect()
 }

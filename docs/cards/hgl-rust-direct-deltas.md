@@ -24,3 +24,5 @@ expressions retain the existing ordinary constructor path and whole-plan proof.
 Acceptance: complete generated evaluate allocation counts for repeated retained
 string aliases, direct keys, nested string payloads, and removal/reinsertion;
 semantic compatibility tests for plans whose bounds remain unproved.
+
+Growing returned constructors validate their constant index ranges against destination length and prepare typed children before direct scalar or nested publication. Their sparse index, value and removal storage has no transient owning vectors.

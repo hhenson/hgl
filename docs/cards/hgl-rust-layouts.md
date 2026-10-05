@@ -64,3 +64,4 @@ Reexports family_storage, family_member and family_coerce; their ownership contr
 is specified by the hgl-rust-families card.
 
 Ordinary Set/Map layouts use exact schema markers emitted by hgl-rust-collections with independently retained Vec members or key/value pairs. Reachable pair and nested payload layouts are collected with other ordinary descendants.
+Growing delta storage has index, child-publication and removed-index vectors, retaining its exact synthetic nominal origin.

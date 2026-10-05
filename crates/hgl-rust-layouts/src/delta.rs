@@ -11,6 +11,11 @@ pub fn delta_storage(origin: &Ty) -> Ty {
             ("keys".into(), list(Ty::I64)),
             ("values".into(), list(delta_type(child))),
         ],
+        Ty::List(child, None) => vec![
+            ("keys".into(), list(Ty::I64)),
+            ("values".into(), list(delta_type(child))),
+            ("removed".into(), list(Ty::I64)),
+        ],
         Ty::Map(key, child) => vec![
             ("keys".into(), list((**key).clone())),
             ("values".into(), list(delta_type(child))),
@@ -28,7 +33,6 @@ pub fn delta_storage(origin: &Ty) -> Ty {
         Ty::Rolling(..)
         | Ty::Atomic(_)
         | Ty::Delta(_)
-        | Ty::List(..)
         | Ty::I64
         | Ty::F64
         | Ty::Bool

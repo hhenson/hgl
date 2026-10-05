@@ -212,7 +212,10 @@ impl Capacity {
             let children = fields(ty);
             let lengths = if let Ty::List(_, Some(n)) = origin.as_ref() {
                 vec![n.to_string(); children.len()]
-            } else if matches!(origin.as_ref(), Ty::Map(..) | Ty::Set(_)) {
+            } else if matches!(
+                origin.as_ref(),
+                Ty::Map(..) | Ty::Set(_) | Ty::List(_, None)
+            ) {
                 (0..children.len())
                     .map(|i| format!("capacity.width{}_{i}", self.index(ty)))
                     .collect()
@@ -335,7 +338,7 @@ impl Capacity {
             );
         }
         match ty {
-            Ty::Map(_, child) => format!(
+            Ty::Map(_, child) | Ty::List(child,None) => format!(
                 "{{let output={id};let domain={domain};let keys=domain.children.keys().copied().collect::<Vec<_>>();store.prepare_collection(output,&keys,|store,owner|store.add_shaped_output(owner,<{} as hgl_store::shapes::Shape>::shape()));for (&key,domain) in &domain.children {{let child=store.prepared().bindings.prepared_output(output,key).expect(\"prepared domain child\");{}}}}}",hgl_rust_deltas::shape_marker(child),self.output_with(child,"child","domain")
             ),
             Ty::Set(key) => {
@@ -374,7 +377,6 @@ impl Capacity {
             Ty::Enum(_)
             | Ty::Atomic(_) | Ty::Rolling(..)
             | Ty::Delta(_)
-            | Ty::List(_, None)
             | Ty::I64
             | Ty::F64
             | Ty::Bool

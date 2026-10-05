@@ -256,7 +256,7 @@ impl Ty {
         if let Self::Set(member) = self {
             return member.collection_key();
         }
-        if let Self::List(child, Some(_)) = self {
+        if let Self::List(child, _) = self {
             return child.publication();
         }
         if let Self::Map(key, child) = self {

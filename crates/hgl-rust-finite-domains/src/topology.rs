@@ -18,7 +18,7 @@ pub fn include(ty: &Ty, value: &str, domain: &str) -> String {
             global_type(key)
         );
     }
-    if let Ty::List(child, Some(_)) = ty {
+    if let Ty::List(child, _) = ty {
         return format!(
             "for (key,value) in ({value}).0.iter().zip(&({value}).1) {{let domain=({domain}).children.entry(*key).or_default();{}}}",
             include(child, "value", "domain")

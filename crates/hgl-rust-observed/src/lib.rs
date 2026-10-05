@@ -140,6 +140,25 @@ fn ensure() -> String {
 }
 
 fn application(ty: &Ty) -> String {
+    if let Ty::List(child, None) = ty {
+        let indices = |field| {
+            format!(
+                "(0..source.list(slot.fields().{field}.fields()).len()).map(|index|*source.scalar::<i64>(({}).fields()))",
+                element(
+                    &Ty::I64,
+                    &format!("slot.fields().{field}"),
+                    "index",
+                    "source"
+                )
+            )
+        };
+        return format!(
+            "hgl_types::validate_growing_distinct(_ctx.store().bindings().output(output.id()).members.live.len(),{},{}).map_err(hgl_types::NodeError::new)?;{}",
+            indices(0),
+            indices(2),
+            application(&Ty::Map(Box::new(Ty::I64), child.clone()))
+        );
+    }
     if let Ty::Map(key_ty, child) = ty {
         return format!(
             "for index in 0..source.list(slot.fields().2.fields()).len() {{let key={};if output.member(_ctx.store().bindings(),key).is_none() {{return Err(hgl_types::NodeError::new(\"noncanonical map removal\"));}}_ctx.remove_shaped(output.id(),key);}}for index in 0..source.list(slot.fields().0.fields()).len() {{let key={};{}let value={};{}}}",
@@ -182,6 +201,9 @@ fn application(ty: &Ty) -> String {
     fields(ty).iter().enumerate().fold(String::new(),|mut code,(i,child)|{append(&mut code,format_args!("for index in 0..source.list(slot.fields().{i}.fields()).len() {{let child=output.field::<{i}>(_ctx.store().bindings());let value={};{}}}",element(&delta_type(child),&format!("slot.fields().{i}"),"index","source"),apply(child,"child","source","value")));code})
 }
 fn observation(ty: &Ty) -> String {
+    if let Ty::List(child, None) = ty {
+        return observation(&Ty::Map(Box::new(Ty::I64), child.clone()));
+    }
     let count = if matches!(ty, Ty::Map(..)) {
         3
     } else if matches!(ty, Ty::Set(_) | Ty::List(..)) {
@@ -237,6 +259,12 @@ fn observation(ty: &Ty) -> String {
     code
 }
 fn passing(ty: &Ty) -> String {
+    if let Ty::List(child, None) = ty {
+        return format!(
+            "hgl_types::validate_growing_distinct(_ctx.store().bindings().output(output.id()).members.live.len(),_ctx.store().bindings().changed_keys(input.id()).iter().copied().filter(|key|input.member(_ctx.store().bindings(),*key).is_some()),(0.._ctx.store().bindings().input(input.id()).members.initial.len()).filter_map(|index|{{let (key,was)=_ctx.store().bindings().input(input.id()).members.initial.item(index)?;(*was && input.member(_ctx.store().bindings(),key).is_none()).then_some(key)}})).map_err(hgl_types::NodeError::new)?;{}",
+            passing(&Ty::Map(Box::new(Ty::I64), child.clone()))
+        );
+    }
     if let Ty::Map(_, child) | Ty::Set(child) = ty {
         let is_set = matches!(ty, Ty::Set(_));
         let child = if is_set { &Ty::Bool } else { child.as_ref() };
@@ -265,6 +293,9 @@ fn passing(ty: &Ty) -> String {
 }
 
 fn validation(ty: &Ty) -> String {
+    if let Ty::List(child, None) = ty {
+        return validation(&Ty::Map(Box::new(Ty::I64), child.clone()));
+    }
     let list_len = |i| format!("source.list(slot.fields().{i}.fields()).len()");
     let (nonempty, children) = if let Ty::Set(_) = ty {
         (vec![0, 1], Vec::new())

@@ -206,7 +206,11 @@ impl Bindings {
     pub(crate) fn sync_members(&mut self, input: InputId, now: EngineTime) {
         if !matches!(
             self.input(input).kind,
-            Kind::Dictionary(_) | Kind::Set(_) | Kind::KeyedDictionary(..) | Kind::KeyedSet(_)
+            Kind::Growing(_)
+                | Kind::Dictionary(_)
+                | Kind::Set(_)
+                | Kind::KeyedDictionary(..)
+                | Kind::KeyedSet(_)
         ) {
             return;
         }

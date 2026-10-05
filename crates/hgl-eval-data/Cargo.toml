@@ -9,6 +9,7 @@ line-budget = 350
 [lints]
 workspace = true
 [dependencies]
+hgl-growing-range = { path = "../hgl-growing-range" }
 hgl-value-eval = { path = "../hgl-value-eval" }
 hgl-source = { path = "../hgl-source" }
 hgl-rust-ir = { path = "../hgl-rust-ir" }

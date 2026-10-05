@@ -18,3 +18,5 @@ its own input publication width. Independent nodes never multiply one another.
 Constant integer induction loops use exact iteration counts from
 `hgl-rust-mutation-bounds`; unknown mutation loop bounds select existing whole-adapter
 execution via the reexported `prepared(plan)` proof decision.
+
+Growing child paths merge by their exact constant indices without multiplying nested domains. Removed-only indices reuse the capacity established by prior admitted appends.

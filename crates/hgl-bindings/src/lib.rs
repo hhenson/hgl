@@ -369,7 +369,11 @@ impl Bindings {
             return;
         }
         match &self.output(output).kind {
-            Kind::Dictionary(_) | Kind::Set(_) | Kind::KeyedDictionary(..) | Kind::KeyedSet(_) => {
+            Kind::Growing(_)
+            | Kind::Dictionary(_)
+            | Kind::Set(_)
+            | Kind::KeyedDictionary(..)
+            | Kind::KeyedSet(_) => {
                 let children =
                     std::mem::take(&mut self.endpoints.outputs[output.0 as usize].members.live);
                 for &child in children.values() {

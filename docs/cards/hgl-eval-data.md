@@ -71,3 +71,4 @@ Fresh-trace membership uses hgl-composite-keys complete identities, including
 optional presence and exact nominal type. An independently equal key addresses
 the same child; redundant additions stay invalid. Parent removal resets its
 child trace state, and a later exact-key insertion begins fresh.
+Fresh growing-list state tracks dense child membership. Before applying children, hgl-growing-range validates complete tail removal and contiguous append; removed descendants are discarded before retained child updates. Errors retain the first bad input position.

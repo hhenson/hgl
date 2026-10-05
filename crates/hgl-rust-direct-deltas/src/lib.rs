@@ -138,6 +138,9 @@ fn delta(
     if parts.is_empty() {
         return "return Err(hgl_types::NodeError::new(\"empty structural delta application is outside the supported profile\"));".into();
     }
+    let growing = matches!(origin.as_ref(), Ty::List(_, None));
+    let mut appended = Vec::new();
+    let mut tail = Vec::new();
     let mut keys = Vec::new();
     let mut validate = Vec::new();
     let mut removed = Vec::new();
@@ -148,6 +151,7 @@ fn delta(
         match part {
             DeltaEntry::Remove(k) => {
                 let key = key_code(k, emit, prelude);
+                tail.push(key.clone());
                 keys.push(key.clone());
                 validate.push(format!(
                     "if {output}.member(_ctx.store().bindings(),{key}).is_none() {{return Err(hgl_types::NodeError::new(\"noncanonical removal\"));}}"
@@ -172,6 +176,13 @@ fn delta(
                 updates.push(format!("{{{}{body}}}", ensure(output, &key, &destination)));
             }
             DeltaEntry::Child(index, v) => {
+                if growing {
+                    let key = format!("{index}_i64");
+                    appended.push(key.clone());
+                    let body = child(v, &destination, emit, prelude);
+                    updates.push(format!("{{{}{body}}}", ensure(output, &key, &destination)));
+                    continue;
+                }
                 let project = if matches!(origin.as_ref(), Ty::List(..)) {
                     format!("{output}.index(_ctx.store().bindings(),{index})")
                 } else {
@@ -187,5 +198,14 @@ fn delta(
             prelude.push(format!("if {key}=={prior} {{return Err(hgl_types::NodeError::new(\"duplicate or overlapping sparse key\"));}}"));
         }
     }
-    validate.concat() + &removed.concat() + &updates.concat()
+    let range = if growing {
+        format!(
+            "hgl_types::validate_growing_distinct(_ctx.store().bindings().output({output}.id()).members.live.len(),[{}].into_iter(),[{}].into_iter()).map_err(hgl_types::NodeError::new)?;",
+            appended.join(","),
+            tail.join(",")
+        )
+    } else {
+        String::new()
+    };
+    range + &validate.concat() + &removed.concat() + &updates.concat()
 }

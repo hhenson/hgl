@@ -98,6 +98,18 @@ test atomic_pair {let first:Pair=Pair(label:"first",values:[1,2])
 assert eval(atomic_pair,value:[first,Pair(label:"longer retained value",values:[]),_,first]) == [first,Pair(label:"longer retained value",values:[]),_,first]}
 "#;
 #[test]
+fn growing_list_publications_use_prepared_storage() -> Result<(), Box<dyn std::error::Error>> {
+    execute(
+        format!(
+            "{}\n{}",
+            include_str!("fixtures/growing_list_values.hgl"),
+            GROWING_CONSTRUCTORS
+        ),
+        RUNTIME,
+        true,
+    )
+}
+#[test]
 fn finite_owning_publications_use_prepared_storage() -> Result<(), Box<dyn std::error::Error>> {
     execute(
         format!("{SOURCE}{}{}", scaling_source(), branch_source()),
@@ -121,7 +133,12 @@ fn execute(
         .parent()
         .ok_or("workspace parent")?;
     let mut sources = vec![("prepared_execution.hgl".into(), source)];
-    for file in ["replay_record.hgl", "impl/replay_record.hgl"] {
+    for file in [
+        "replay_record.hgl",
+        "impl/replay_record.hgl",
+        "control.hgl",
+        "impl/control.hgl",
+    ] {
         sources.push((
             file.into(),
             fs::read_to_string(root.join("external/hgraph_std/hgl/hgraph").join(file))?,
@@ -330,4 +347,10 @@ pub fn limit_i64(value:i64)->hgl_types::NodeResult<i64> {CALLS.fetch_add(1,std::
 pub fn begin_i64(_:i64)->hgl_types::NodeResult {assert_eq!(STARTS.fetch_add(1,std::sync::atomic::Ordering::SeqCst),0);Ok(())}
 pub fn end_i64(_:i64)->hgl_types::NodeResult {assert_eq!(CALLS.load(std::sync::atomic::Ordering::SeqCst),1);assert_eq!(STARTS.load(std::sync::atomic::Ordering::SeqCst),1);Ok(())}
 }
+";
+
+const GROWING_CONSTRUCTORS: &str = r"fn growing_concrete(value:list<i64>)->list<i64> {when {return delta_value(value)}}
+test growing_concrete_compute {assert eval(growing_concrete,[delta<list<i64>>(items:[0:1,1:2]),delta<list<i64>>(remove:[0,1]),delta<list<i64>>(items:[0:3])]) == [delta<list<i64>>(items:[1:2,0:1]),delta<list<i64>>(remove:[1,0]),delta<list<i64>>(items:[0:3])]}
+fn growing_construct(value:i64)->list<i64> {when {if value>0 {return delta<list<i64>>(items:[0:value])} else {return delta<list<i64>>(remove:[0])}}}
+test growing_constructed_child {assert eval(growing_construct,[1,2,0,3]) == [delta<list<i64>>(items:[0:1]),delta<list<i64>>(items:[0:2]),delta<list<i64>>(remove:[0]),delta<list<i64>>(items:[0:3])]}
 ";

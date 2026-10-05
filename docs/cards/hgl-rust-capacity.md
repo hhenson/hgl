@@ -57,3 +57,4 @@ Rolling outputs reserve ordinary arrival bounds independently for every retained
 ring slot before start. FiniteCapacity.arrivals carries the finite input/replay
 horizon; duration windows use it directly and tick windows cap it by Max. Nested
 structural child preparation recursively installs the same static window storage.
+Growing outputs reserve only reachable per-parent index paths and independent descendant capacities. Sparse recording reserves all three delta fields from finite recipe widths.

@@ -38,3 +38,4 @@ are traversed only for their checked shape/key metadata and never evaluated.
 Known key preparation consumes retained complete Values from StaticValues rather
 than reconstructing scalar literals. This preserves the full tuple/struct key
 schema and written-order contextual recipes for the separate cold materializer.
+Constructor topology treats growing removed indices as the third sparse storage field, preserving written operands and parent-specific child paths.

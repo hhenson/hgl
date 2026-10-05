@@ -97,6 +97,8 @@ impl ScalarValue {
 pub enum TsType {
     /// One arrival window with exact ordinary payload and resolved bounds.
     Rolling(OrdinaryType, Window),
+    /// Dense dynamic temporal children with canonical tail truncation.
+    Growing(Box<TsType>),
     /// A scalar column.
     Ts(ScalarType),
     /// One complete ordinary payload.
@@ -129,7 +131,9 @@ impl TsType {
     /// Stored member shape: dictionary values or set occupancy markers.
     pub fn member(&self) -> Option<&Self> {
         match self {
-            Self::Dictionary(child) | Self::KeyedDictionary(_, child) => Some(child),
+            Self::Growing(child) | Self::Dictionary(child) | Self::KeyedDictionary(_, child) => {
+                Some(child)
+            }
             Self::Set(_) | Self::KeyedSet(_) => Some(&Self::Ts(ScalarType::Bool)),
             Self::Ts(_)
             | Self::Atomic(_)
@@ -149,6 +153,7 @@ impl TsType {
             | Self::Rolling(..)
             | Self::KeyedDictionary(..)
             | Self::KeyedSet(_)
+            | Self::Growing(_)
             | Self::Dictionary(_)
             | Self::Set(_)
             | Self::Reference(_) => 0,
@@ -168,6 +173,7 @@ impl TsType {
             | Self::Rolling(..)
             | Self::KeyedDictionary(..)
             | Self::KeyedSet(_)
+            | Self::Growing(_)
             | Self::Dictionary(_)
             | Self::Set(_)
             | Self::Reference(_)
@@ -358,3 +364,7 @@ impl NodeError {
         })
     }
 }
+
+pub use hgl_growing_range::{
+    validate as validate_growing, validate_distinct as validate_growing_distinct,
+};

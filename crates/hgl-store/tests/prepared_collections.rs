@@ -241,3 +241,37 @@ fn runtime_key_pool_retains_removal_identity_and_prebound_projections() {
     assert_eq!(allocations, 0);
     assert_eq!(store.bindings().storage_counts(), counts);
 }
+
+#[test]
+fn growing_tail_removal_keeps_empty_root_valid_and_can_reappend_without_allocation() {
+    let mut store = Store::new();
+    let kind = Kind::Growing(Box::new(Kind::Ts(ScalarType::I64)));
+    let root = store.add_shaped_output(NodeId(0), kind.clone());
+    store.prepare_collection(root, &[0, 1], |store, owner| {
+        store.add_output::<i64>(owner).id()
+    });
+    let input = store.add_shaped_input(NodeId(1), kind, true);
+    store.bind(input, root).unwrap();
+    store.prepare_collection_inputs();
+    assert!(!store.input_valid(input));
+    let mut wakes = Wakes::default();
+    let ((), allocations) = count_in(|| {
+        for cycle in 0..4 {
+            let now = time(1 + cycle * 2);
+            let child = store.get_or_create_shaped(root, 0, now, &mut wakes);
+            let out = store.scalar_output::<i64>(child).unwrap();
+            store.set(out, cycle, now, NodeId(0), &mut wakes);
+            assert!(store.bindings().all_valid(input));
+            let now = time(2 + cycle * 2);
+            store.remove_shaped(root, 0, now, &mut wakes);
+            assert!(store.input_valid(input));
+            assert!(store.bindings().modified(input, now));
+            assert!(store.bindings().all_valid(input));
+            assert_eq!(store.bindings().keys(input).count(), 0);
+            let mut removed = store.bindings().removed_keys(input);
+            assert_eq!(removed.next(), Some(0));
+            assert_eq!(removed.next(), None);
+        }
+    });
+    assert_eq!(allocations, 0);
+}

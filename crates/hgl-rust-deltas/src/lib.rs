@@ -31,6 +31,7 @@ pub fn shape_marker(ty: &Ty) -> String {
         Ty::Rolling(..) => hgl_rust_windows::marker(ty),
         Ty::Enum(_) => format!("hgl_store::shapes::Atomic<{}>", global_type(ty)),
         Ty::Atomic(payload) => format!("hgl_store::shapes::Atomic<{}>", global_type(payload)),
+        Ty::List(child, None) => format!("hgl_store::shapes::Growing<{}>", shape_marker(child)),
         Ty::List(child, Some(n)) => {
             format!("hgl_store::shapes::Fixed<{}, {n}>", shape_marker(child))
         }
@@ -42,7 +43,6 @@ pub fn shape_marker(ty: &Ty) -> String {
         Ty::Set(key) => format!("hgl_store::shapes::Set<{}>", global_type(key)),
         Ty::Tuple(_) | Ty::Struct(..) => format!("Shape{}", identity(ty)),
         Ty::Delta(_)
-        | Ty::List(..)
         | Ty::I64
         | Ty::F64
         | Ty::Bool
@@ -200,7 +200,7 @@ pub fn construct(value: &Value, emit: impl Fn(&Value) -> String) -> String {
             DeltaEntry::Add(key) | DeltaEntry::Remove(key) => {
                 let slot = if matches!(entry, DeltaEntry::Add(_)) {
                     0
-                } else if matches!(origin.as_ref(), Ty::Map(..)) {
+                } else if matches!(origin.as_ref(), Ty::Map(..) | Ty::List(_, None)) {
                     2
                 } else {
                     1

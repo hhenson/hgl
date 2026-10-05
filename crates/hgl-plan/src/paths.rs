@@ -64,9 +64,8 @@ pub fn check_edge(
         })?;
     let out = project(out, &edge.source.path, false)?;
     let input = project(input, &edge.target.path, false)?;
-    let follows = matches!(out, TsType::Reference(child) if child.as_ref() == input);
-    let captures = matches!(input,TsType::Reference(child) if child.as_ref()==out);
-    if input != out && !follows && !captures {
+    let follows = |a: &TsType, b| matches!(a,TsType::Reference(child) if child.as_ref()==b);
+    if input != out && !follows(out, input) && !follows(input, out) {
         return Err(BuildError::wrong_type(&nodes[target].label, name));
     }
     for previous in bound.iter() {

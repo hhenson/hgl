@@ -140,9 +140,10 @@ pub fn encode(t: &Ty, expression: &str) -> String {
 fn delta_decode(origin: &Ty, expression: &str) -> String {
     let storage=match origin {
         Ty::Set(key)=>["Add","Remove"].iter().map(|tag|format!("parts.iter().filter_map(|p|if let hgl_rust_ir::DeltaEntry::{tag}(m)=p {{Some(m)}} else {{None}}).map(|m|Ok({})).collect::<Result<Vec<_>,String>>()?,",decode(key,"m"))).collect::<Vec<_>>().concat(),
-        Ty::List(child,_) => {
+        Ty::List(child,size) => {
+            let removed=if size.is_none() {format!("parts.iter().filter_map(|p|if let hgl_rust_ir::DeltaEntry::Remove(k)=p {{Some(k)}} else {{None}}).map(|k|Ok({})).collect::<Result<Vec<_>,String>>()?,",decode(&Ty::I64,"k"))}else{String::new()};
             let child=child.clone().delta().unwrap_or_else(|_|unreachable!("checked child delta"));
-            format!("parts.iter().filter_map(|p|if let hgl_rust_ir::DeltaEntry::Child(i,_)=p {{Some(*i)}} else {{None}}).collect::<Vec<_>>(),parts.iter().filter_map(|p|if let hgl_rust_ir::DeltaEntry::Child(_,v)=p {{Some(v)}} else {{None}}).map(|v|Ok({})).collect::<Result<Vec<_>,String>>()?,",decode(&child,"v"))
+            format!("parts.iter().filter_map(|p|if let hgl_rust_ir::DeltaEntry::Child(i,_)=p {{Some(*i)}} else {{None}}).collect::<Vec<_>>(),parts.iter().filter_map(|p|if let hgl_rust_ir::DeltaEntry::Child(_,v)=p {{Some(v)}} else {{None}}).map(|v|Ok({})).collect::<Result<Vec<_>,String>>()?,{removed}",decode(&child,"v"))
         }
         Ty::Map(key,child)=> {
             let child=child.clone().delta().unwrap_or_else(|_|unreachable!("checked child delta"));
@@ -166,7 +167,13 @@ fn delta_encode(origin: &Ty, expression: &str) -> String {
                 ));
             }
         }
-        Ty::List(child, _) => {
+        Ty::List(child, size) => {
+            if size.is_none() {
+                body.push(format!(
+                    "for key in &v.2 {{parts.push(hgl_rust_ir::DeltaEntry::Remove({}));}}",
+                    encode(&Ty::I64, "key")
+                ));
+            }
             body.push(format!("for (key,item) in v.0.iter().zip(&v.1) {{parts.push(hgl_rust_ir::DeltaEntry::Child(*key,{}));}}",encode(&child.clone().delta().unwrap_or_else(|_|unreachable!("checked child")),"item")));
         }
         Ty::Map(key, child) => {

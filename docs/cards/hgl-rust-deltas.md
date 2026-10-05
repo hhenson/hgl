@@ -45,3 +45,4 @@ observation, and direct pass-through emission to `hgl-rust-observed`. Existing
 ordinary owning delta construction and post-run comparison remain available.
 
 publish accepts complete ordinary Set/Map payloads through atomic whole-value transport, separately from Kind::Delta sparse mutation data.
+Growing publication emission preserves sparse owning index/value/removal triples and order-independent equality. Runtime application validates append/tail rules before using typed child membership; fixed-list removal remains outside its profile.

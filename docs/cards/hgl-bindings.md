@@ -201,3 +201,5 @@ dynamic allocation and runtime rewiring keep their existing semantics.
 `prepare_pool(OutputId)` permits primitive key values to arrive after startup in
 a bounded prebuilt collection. `prepared_output` mutably claims a permanent slot
 and its prebuilt projections for the first occurrence of each key.
+
+Growing endpoints participate in prepared keyed membership, synchronization and retirement. Their i64 keys are dense source indices validated by the publication layer; removal to zero publishes a valid empty root. Held capacity and child generations survive removal/reappend.

@@ -89,3 +89,4 @@ resolved size kind and both bounds. It is inherently temporal, excluded from
 ordinary payloads and keys. Its delta is V. Equivalent duration spellings and
 omitted Min normalize before identity. Structural children may be rolling;
 ordinary V alone cannot infer a rolling context. Uses hgl-window-types.
+Unbounded list<S> is an admitted structural publication shape whenever S is admitted. Its exact delta origin remains distinct from fixed lists and complete atomic ordinary lists.

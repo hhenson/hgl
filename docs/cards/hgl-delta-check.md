@@ -36,3 +36,4 @@ construction has exact contextual K. Known complete keys include nominal identit
 field positions and optional presence; partial provider recipes defer identity.
 Only structural child positions require a known Literal::Int. Compound key fields
 are never treated as sparse delta children.
+Growing-list items require constant nonnegative positions; remove accepts constant nonnegative i64 tail positions. Formation rejects duplicates and overlap independently of trace length; tail/gap validation belongs to pre-start publication state.

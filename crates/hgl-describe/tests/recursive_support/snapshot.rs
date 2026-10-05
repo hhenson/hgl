@@ -44,7 +44,10 @@ pub(crate) fn snapshot(
     let mut fields = BTreeMap::new();
     let mut delta_fields = BTreeMap::new();
     let kind = &b.input(input).kind;
-    let dictionary = matches!(kind, Kind::Dictionary(_) | Kind::KeyedDictionary(..));
+    let dictionary = matches!(
+        kind,
+        Kind::Growing(_) | Kind::Dictionary(_) | Kind::KeyedDictionary(..)
+    );
     let children: Vec<_> = if dictionary {
         b.keys(input)
             .map(|k| {
@@ -127,7 +130,10 @@ pub(crate) fn snapshot(
                 "[{}]",
                 fields.values().cloned().collect::<Vec<_>>().join(",")
             ),
-            Kind::Bundle(_) | Kind::Dictionary(_) | Kind::KeyedDictionary(..) => object(&fields),
+            Kind::Bundle(_)
+            | Kind::Growing(_)
+            | Kind::Dictionary(_)
+            | Kind::KeyedDictionary(..) => object(&fields),
             Kind::Atomic(_)
             | Kind::Rolling(..)
             | Kind::Reference(_)

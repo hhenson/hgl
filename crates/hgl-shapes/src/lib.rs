@@ -272,3 +272,15 @@ impl Shape for hgl_types::ZonedTime {
         TsType::Ts(ScalarType::ZonedTime)
     }
 }
+
+/// Dense growing temporal list with independently retained child endpoints.
+#[derive(Debug)]
+pub struct Growing<S>(PhantomData<S>);
+impl<S: Shape> Shape for Growing<S> {
+    fn shape() -> TsType {
+        TsType::Growing(Box::new(S::shape()))
+    }
+}
+impl<S: Shape> Elements for Growing<S> {
+    type Child = S;
+}

@@ -103,7 +103,7 @@ fn malformed_constructors_and_incompatible_origins() {
             "delta<map<tuple<bool>,i64>>()",
             "unsupported publication shape",
         ),
-        ("delta<list<i64>>()", "unsupported publication shape"),
+        ("delta<list<ref<i64>>>()", "unsupported publication shape"),
     ] {
         let actual=check(&format!("fn source()->i64 {{ start {{ let d={value} }}\nwhen {{return 1}} }}\nfn main()->i64=>source()")).unwrap_err();
         assert!(actual.contains(error), "{value}: {actual}");

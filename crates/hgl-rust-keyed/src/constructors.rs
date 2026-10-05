@@ -78,7 +78,7 @@ fn paths(
             DeltaEntry::Add(k) | DeltaEntry::Remove(k) | DeltaEntry::Keyed(k, _) => {
                 let removed = matches!(part, DeltaEntry::Remove(_));
                 let field = if removed {
-                    if matches!(origin.as_ref(), Ty::Map(..)) {
+                    if matches!(origin.as_ref(), Ty::Map(..) | Ty::List(_, None)) {
                         2
                     } else {
                         1

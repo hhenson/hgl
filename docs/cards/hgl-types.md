@@ -199,3 +199,4 @@ Struct identity and finite field descriptions; recursive targets never expand
 while forming schema metadata. It adds no source reference or nullable type.
 
 OrdinaryType::Set(Box<OrdinaryType>) and Map(Box<OrdinaryType>,Box<OrdinaryType>) retain complete ordinary schema identity separately from temporal keyed shapes.
+TsType::Growing(Box<TsType>) has exact growing-list identity and a repeated member shape, without fixed children. Re-export validate_growing and validate_growing_distinct from hgl-growing-range.
