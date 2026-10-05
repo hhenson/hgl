@@ -15,3 +15,9 @@ multiple parents remain errors; families add no temporal field projection.
 
 Ancestor arguments preserve complete nested nominal schemas and fixed list lengths;
 identity never substitutes an empty-field placeholder for a concrete argument.
+
+`source_argument(&Library, &Ty, &mut specialize) -> Result<Ty,String>` restores
+canonical declaration-owned nominal schemas before generic inference, including
+inside ordinary list/tuple/set/map arguments. The callback re-specializes an
+exact declaration and its invariant arguments; recursive schemas retain their
+existing finite batch resolver. This does not alter the projected payload.

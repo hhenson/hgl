@@ -354,3 +354,27 @@ test {
         true,
     )
 }
+#[test]
+fn inferred_inherited_arguments_restore_source_atomic_boundaries()
+-> Result<(), Box<dyn std::error::Error>> {
+    run_shared(
+        r#"module hgraph.std part inferred_atomic_identity
+struct Child {number:i64}
+struct Book {snapshot:atomic<Child>}
+struct Box<T> {value:T}
+struct Derived<T>:Box<T> {label:str}
+test {
+ const fn data()->Derived<Book> {
+  let inferred=Derived(value:Book(snapshot:Child(number:7)),label:"source")
+  let exact:Derived<Book> = inferred
+  return exact
+ }
+ fn pass(value:atomic<Derived<Book>>)->atomic<Derived<Book>> {when {return delta_value(value)}}
+ test canonical_identity {
+  assert eval(pass,[data(),_,data()])==[data(),_,data()]
+ }
+}
+"#,
+        true,
+    )
+}

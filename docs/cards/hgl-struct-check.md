@@ -49,3 +49,7 @@ Abstract constructors are rejected. Inherited fields retain ancestor-first order
 source declaration scopes, introducing optionality/defaults and exact generic
 substitutions. Expected family membership can supply an exact concrete member's
 generic arguments before field checking. Widening itself belongs to family-values.
+
+Unresolved inherited/direct generic field inference first recovers the canonical
+source argument schema. Ordinary field payloads remain projected; inferred and
+explicit nominal specializations retain identical nested atomic boundaries.

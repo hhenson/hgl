@@ -66,3 +66,8 @@ concrete(&Library,&str,&str,&BTreeMap<String,Ty>)->Result<Ty,String> resolves a 
 Rolling bounds normalize before substitution and generic unification. A pattern
 rolling<V,Max,Min> matches only a rolling actual with the exact normalized bounds,
 then unifies V. Neither an ordinary arrival nor its delta invents window identity.
+
+`source_argument(&Library,&Ty) -> Result<Ty,String>` recovers declaration-owned
+nominal argument identity from projected ordinary payloads through the scoped
+family inference helper. Constructor inference and direct unification share
+this recovery, preserving nested atomic source boundaries in exact arguments.

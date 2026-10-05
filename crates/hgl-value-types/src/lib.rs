@@ -316,28 +316,9 @@ fn unify_delta(
     unify(library, module, origin, actual_origin, generics, bindings)
 }
 
-fn source_argument(library: &Library, ty: &Ty) -> Result<Ty, String> {
-    if let Ok((identity, _, _)) = ty.structure() {
-        let missing = "unresolved nominal source argument";
-        let (module, name) = identity.origin.rsplit_once("::").ok_or(missing)?;
-        let decl = declaration(library, module, name)?.ok_or(missing)?;
-        return specialize(
-            library,
-            decl,
-            identity.arguments.clone(),
-            &mut BTreeSet::new(),
-        );
-    }
-    if let Ty::List(child, size) = ty {
-        return Ok(Ty::List(Box::new(source_argument(library, child)?), *size));
-    }
-    if let Ty::Tuple(children) = ty {
-        return Ok(Ty::Tuple(
-            children
-                .iter()
-                .map(|child| source_argument(library, child))
-                .collect::<Result<_, _>>()?,
-        ));
-    }
-    Ok(ty.clone())
+/// Recover canonical declaration-owned arguments from ordinary projected payloads.
+pub fn source_argument(library: &Library, ty: &Ty) -> Result<Ty, String> {
+    hgl_family_types::source_argument(library, ty, &mut |decl, args| {
+        specialize(library, decl, args, &mut BTreeSet::new())
+    })
 }

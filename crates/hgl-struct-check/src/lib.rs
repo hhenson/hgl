@@ -198,7 +198,7 @@ impl Constructor {
         }
         hgl_family_types::infer_field(
             &self.patterns[self.fields[index]],
-            &value.ty,
+            &hgl_value_types::source_argument(library, &value.ty)?,
             &mut self.bindings,
             |module, name, actual, parameters, bindings| {
                 unify(library, module, name, actual, parameters, bindings)
