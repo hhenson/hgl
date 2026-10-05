@@ -361,8 +361,8 @@ fn inferred_inherited_arguments_restore_source_atomic_boundaries()
         r#"module hgraph.std part inferred_atomic_identity
 struct Child {number:i64}
 struct Book {snapshot:atomic<Child>}
-struct Box<T> {value:T}
-struct Derived<T>:Box<T> {label:str}
+abstract struct Base<T> {value:T}
+struct Derived<T>:Base<T> {label:str}
 test {
  const fn data()->Derived<Book> {
   let inferred=Derived(value:Book(snapshot:Child(number:7)),label:"source")
@@ -387,7 +387,8 @@ struct Child {number:i64}
 struct Book {snapshot:atomic<Child>
 optional:atomic<Child> =null}
 struct Box<T> {value:T}
-struct Derived<T>:Box<T> {label:str}
+abstract struct Base<T> {value:T}
+struct Derived<T>:Base<T> {label:str}
 test {
  const fn data()->Derived<map<i64,Book>> {
   let inferred=Derived(value:map<i64,Book>(items:[1:Book(snapshot:Child(number:7),optional:Child(number:8))]),label:"source")
