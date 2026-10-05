@@ -1,5 +1,6 @@
 //! Cold typed conversion and checked lexical test emission.
 use hgl_harness_ir::{Argument, Step, Test};
+use hgl_rust_enums::metadata as enum_data;
 use hgl_rust_ir::{DeltaEntry, Kind, Statement, Value};
 use hgl_source::{Literal, TemporalLiteral, Ty};
 fn list<T>(items: &[T], f: impl Fn(&T) -> String) -> String {
@@ -8,25 +9,41 @@ fn list<T>(items: &[T], f: impl Fn(&T) -> String) -> String {
         items.iter().map(f).collect::<Vec<_>>().join(",")
     )
 }
-fn enum_data(e: &hgl_source::EnumType) -> String {
+fn nominal(n: &hgl_source::Nominal) -> String {
     format!(
-        "hgl_source::EnumType {{origin:{:?}.into(),members:{}}}",
-        e.origin,
-        list(&e.members, |(name, number)| format!(
-            "({name:?}.into(),{number})"
-        ))
+        "hgl_source::Nominal {{origin:{:?}.into(),arguments:{}}}",
+        n.origin,
+        list(&n.arguments, ty)
+    )
+}
+fn recursive(batch: &hgl_source::RecursiveType) -> String {
+    if batch.definitions().is_empty() {
+        return format!(
+            "hgl_source::RecursiveType::reference({})",
+            nominal(batch.identity())
+        );
+    }
+    let definitions = list(batch.definitions(), |d| {
+        format!(
+            "hgl_source::NominalDefinition::new({},{},vec!{:?})",
+            nominal(d.identity()),
+            list(d.fields(), |(name, t)| format!(
+                "({name:?}.into(),{})",
+                ty(t)
+            )),
+            d.optional()
+        )
+    });
+    format!(
+        "hgl_source::RecursiveType::new({},{definitions}).unwrap_or_else(|_|unreachable!(\"checked nominal batch\"))",
+        nominal(batch.identity())
     )
 }
 /// Emit exact checked source type metadata.
 pub fn ty(t: &Ty) -> String {
     let inner = match t {
-        Ty::Enum(e) => format!(
-            "Enum(hgl_source::EnumType {{origin:{:?}.into(),members:{}}})",
-            e.origin,
-            list(&e.members, |(name, number)| format!(
-                "({name:?}.into(),{number})"
-            ))
-        ),
+        Ty::Recursive(batch) => format!("Recursive({})", recursive(batch)),
+        Ty::Enum(e) => format!("Enum({})", enum_data(e)),
         Ty::Atomic(t) => format!("Atomic(Box::new({}))", ty(t)),
         Ty::Ref(t) => format!("Ref(Box::new({}))", ty(t)),
         Ty::Nullable(t) => format!("Nullable(Box::new({}))", ty(t)),
@@ -36,9 +53,8 @@ pub fn ty(t: &Ty) -> String {
         Ty::List(t, n) => format!("List(Box::new({}),{n:?})", ty(t)),
         Ty::Tuple(ts) => format!("Tuple({})", list(ts, ty)),
         Ty::Struct(n, fields, optional) => format!(
-            "Struct(hgl_source::Nominal {{origin:{:?}.into(),arguments:{}}},{},vec!{optional:?})",
-            n.origin,
-            list(&n.arguments, ty),
+            "Struct({},{},vec!{optional:?})",
+            nominal(n),
             list(fields, |(name, t)| format!("({name:?}.into(),{})", ty(t)))
         ),
         Ty::I64

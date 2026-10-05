@@ -78,3 +78,8 @@ create ownership; the marker and arena identity remain caller contracts.
 Construction-time allocation recognizes OptionalField as one initially empty
 presence descriptor. Optional payload representation and typed operations are
 owned by hgl-optional; unset fields allocate no descendant payload.
+
+Schema-driven allocate rejects a bare RecursiveReference with an unresolved-edge
+error. Admitted recursive fields place the reference beneath OptionalField;
+actual descendants are installed by statically typed Recursive markers, never by
+looking up a name during evaluation.

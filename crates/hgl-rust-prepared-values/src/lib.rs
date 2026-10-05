@@ -63,7 +63,7 @@ pub fn structure_fields(name: &str, markers: &[String]) -> String {
     };
     format!(
         r"
-#[derive(Default)] struct PreparedBounds{name} {{ {bounds} }}
+#[derive(Default,Clone)] struct PreparedBounds{name} {{ {bounds} }}
 impl hgl_store::PreparedValue for {name} {{
  type Bounds=PreparedBounds{name};
  fn include(bounds:&mut Self::Bounds,value:&Self::Value) {{ {include} }}

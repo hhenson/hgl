@@ -17,3 +17,9 @@ marker. No runtime schema search, source type coercion or optional field access
 is introduced. Optional values use native Option only as their internal owning
 field representation. Shared optional fixture execution verifies the emitted
 representations and capture conversions in both build profiles.
+
+Finite recursive members emit named owning tuple structs and RecursiveTarget
+identities. Optional internal edges select Optional<Recursive<T>> markers;
+ordinary nonrecursive fields retain their existing storage markers. Typed owning
+retention recurses through finite present values; prepared bounds and copies use
+the same declared field positions without schema lookup.

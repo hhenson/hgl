@@ -81,7 +81,7 @@ fn expression(value: &Value, live: &BTreeMap<usize, bool>) -> Result<(), String>
             conflict(*entry, false, live)?;
             if matches!(
                 value.ty,
-                Ty::Tuple(_) | Ty::Struct(..) | Ty::List(..) | Ty::Delta(_)
+                Ty::Tuple(_) | Ty::Recursive(_) | Ty::Struct(..) | Ty::List(..) | Ty::Delta(_)
             ) {
                 return Err("aggregate get requires a typed let or var binding".into());
             }
@@ -318,7 +318,7 @@ pub fn prepare_node(
             if matches!(value.kind, Kind::Prepared(_))
                 || matches!(
                     value.ty,
-                    Ty::Tuple(_) | Ty::List(..) | Ty::Struct(..) | Ty::Delta(_)
+                    Ty::Tuple(_) | Ty::List(..) | Ty::Recursive(_) | Ty::Struct(..) | Ty::Delta(_)
                 )
             {
                 let id = node.configuration.len();
@@ -378,6 +378,7 @@ pub fn binary_type(op: &str, a: &Ty, b: &Ty) -> Result<Ty, String> {
                 *a,
                 Ty::Void
                     | Ty::Set(_)
+                    | Ty::Recursive(_)
                     | Ty::Struct(..)
                     | Ty::List(..)
                     | Ty::Delta(_)

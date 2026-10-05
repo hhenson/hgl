@@ -31,3 +31,8 @@ Optional struct encode/decode preserves missing field indices as unset and
 present fields as independently retained payloads. Decode rejects missing
 required fields. Encoding an all-unset struct still creates a present Construct;
 only dense eval silence remains an absent sequence cell.
+
+recursive_markers(plan)->String delegates typed cold recursive conversion methods
+to hgl-rust-recursive-convert, an allowed dependency. decode/encode dispatch
+recursive ordinary values to their statically selected member methods; recursion
+occurs through finite payloads, never recursive schema expansion.

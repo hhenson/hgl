@@ -53,3 +53,6 @@ PreparedValue, ListBounds, append_slot and commit_append are reexported.
 
 Optional<T> is reexported from hgl-optional for internal field-presence storage
 through the ordinary global-value facade.
+
+Reexports Recursive and RecursiveTarget from hgl-recursive-value for generated
+internal owning recursive fields. No ordinary source operation is added.

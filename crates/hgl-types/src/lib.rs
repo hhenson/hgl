@@ -189,6 +189,8 @@ impl TsType {
 pub enum OrdinaryType {
     /// Internal field presence and its ordinary payload; not a source type.
     OptionalField(Box<OrdinaryType>),
+    /// Exact nominal target inside a finite optional recursive field.
+    RecursiveReference(&'static str),
     /// Exact module-qualified enum identity, backed by a declared i64 member.
     Enum(&'static str),
     /// One of the eight owning primitive values.

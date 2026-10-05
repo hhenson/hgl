@@ -242,7 +242,7 @@ fn slot_publication(ty: &Ty, slot: &str) -> String {
         format!("{marker}::apply_slot(self._output,&self.configuration_columns,{slot},_ctx)?;")
     } else if matches!(
         ty,
-        Ty::Enum(_) | Ty::List(..) | Ty::Tuple(_) | Ty::Struct(..)
+        Ty::Recursive(_) | Ty::Enum(_) | Ty::List(..) | Ty::Tuple(_) | Ty::Struct(..)
     ) {
         format!(
             "_ctx.prepared().atomic_from::<{marker}>(&self.configuration_columns,{slot},self._output)?;"

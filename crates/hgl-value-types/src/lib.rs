@@ -99,6 +99,19 @@ pub fn specialize(
             schema.generics.len()
         ));
     }
+    if let Some(ty) =
+        hgl_recursive_types::resolve(library, decl, &arguments, |owner, pattern, bindings| {
+            substitute(
+                library,
+                &owner.module,
+                pattern,
+                bindings,
+                &mut BTreeSet::new(),
+            )
+        })?
+    {
+        return Ok(ty);
+    }
     hgl_shape_obligations::validate(library, decl, &arguments)?;
     hgl_struct_names::exported_fields(library, decl)?;
     let bindings = schema
@@ -209,8 +222,10 @@ pub fn unify(
         }
         let decl = declaration(library, module, base)?
             .ok_or_else(|| format!("unresolved ordinary type {base}"))?;
-        let Ty::Struct(identity, _, _) = actual else {
-            return Err("struct field type mismatch".into());
+        let identity = if let Ty::Recursive(batch) = actual {
+            batch.identity()
+        } else {
+            actual.structure()?.0
         };
         if identity.origin != format!("{}::{}", decl.module, decl.name)
             || identity.arguments.len() != arguments.len()
@@ -277,7 +292,7 @@ fn unify_delta(
 }
 
 fn source_argument(library: &Library, ty: &Ty) -> Result<Ty, String> {
-    if let Ty::Struct(identity, _, _) = ty {
+    if let Ok((identity, _, _)) = ty.structure() {
         let decl = library
             .declarations
             .iter()

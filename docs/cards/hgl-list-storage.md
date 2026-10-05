@@ -29,3 +29,7 @@ owning boundary outside evaluation and includes only active elements.
 Acceptance lives in hgl-store/tests/prepared_values.rs alongside all unchanged
 ordinary list regressions. It measures first/repeated/empty/larger publication,
 atomic pass, record append and independent retained captures.
+
+ListBounds implements Clone when its child bounds implement Clone. This copies
+finite capacity descriptions during cold destination preparation; it does not
+copy or alias value storage.

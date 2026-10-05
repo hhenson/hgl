@@ -12,6 +12,7 @@ line-budget = 350
 workspace = true
 
 [dependencies]
+hgl-recursive-types = { path = "../hgl-recursive-types" }
 hgl-shape-obligations = { path = "../hgl-shape-obligations" }
 hgl-source = { path = "../hgl-source" }
 hgl-library = { path = "../hgl-library" }

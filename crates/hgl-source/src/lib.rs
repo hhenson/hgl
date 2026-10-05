@@ -1,7 +1,9 @@
 //! Source tokens, expressions and statements shared by HGL compiler stages.
 pub use hgl_lex::{Token, lex};
 pub use hgl_literals::{Literal, ParsedLiteral, TemporalLiteral};
-pub use hgl_type_shape::{EnumType, Nominal, Ty, application, delta_argument};
+pub use hgl_type_shape::{
+    EnumType, Nominal, NominalDefinition, RecursiveType, Ty, application, delta_argument,
+};
 #[derive(Debug, Clone)]
 /// An expression before name and type resolution.
 pub enum Expr {

@@ -95,6 +95,7 @@ pub fn constructor<'a>(
             | Ty::Set(_)
             | Ty::Nullable(_)
             | Ty::Atomic(_)
+            | Ty::Recursive(_)
             | Ty::Void => return Err(format!("unknown delta argument {name}")),
         }
     }
@@ -200,6 +201,7 @@ fn sparse<'a>(
             | Ty::Set(_)
             | Ty::Nullable(_)
             | Ty::Atomic(_)
+            | Ty::Recursive(_)
             | Ty::Void => return Err("delta index out of bounds".into()),
         };
         parts.push(Part::Child(index, child.clone().delta()?, payload));

@@ -81,17 +81,7 @@ pub fn bind(
 
 /// Check supported type at the typed call boundary.
 pub fn supported_type(ty: &Ty) -> Result<(), String> {
-    if matches!(
-        ty,
-        Ty::Atomic(_)
-            | Ty::Struct(..)
-            | Ty::List(..)
-            | Ty::Map(..)
-            | Ty::Tuple(_)
-            | Ty::Delta(_)
-            | Ty::Set(_)
-    ) && !ty.publication()
-    {
+    if !ty.publication() && !matches!(ty, Ty::Void | Ty::Ref(_) | Ty::Nullable(_)) {
         return Err("unsupported temporal publication shape".into());
     }
     if let Ty::Ref(child) = ty {
@@ -305,7 +295,12 @@ pub fn signature_types(
         } else if signature.generics.iter().any(|name| name == formal)
             || matches!(
                 value.ty,
-                Ty::Struct(..) | Ty::List(..) | Ty::Delta(_) | Ty::Map(..) | Ty::Tuple(_)
+                Ty::Recursive(_)
+                    | Ty::Struct(..)
+                    | Ty::List(..)
+                    | Ty::Delta(_)
+                    | Ty::Map(..)
+                    | Ty::Tuple(_)
             )
             || hgl_source::application(&parameter.ty)
                 .is_some_and(|(base, _)| matches!(base, "delta" | "atomic"))

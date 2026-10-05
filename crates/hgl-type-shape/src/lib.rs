@@ -1,6 +1,10 @@
 //! Canonical checked source shapes and invariant nominal applications.
 pub use hgl_type_syntax::{application, delta_argument};
 use std::fmt;
+/// Finite recursive source batch with invariant concrete nominal identity.
+pub type RecursiveType = hgl_nominal_batch::Batch<Nominal, Ty>;
+/// Concrete recursive member schema retained at cold checked boundaries.
+pub type NominalDefinition = hgl_nominal_batch::Definition<Nominal, Ty>;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 /// An exact nominal enum declaration with its assigned members.
@@ -56,6 +60,8 @@ impl fmt::Display for Nominal {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 /// Types admitted by the executable source compiler.
 pub enum Ty {
+    /// Complete finite recursive batch, or nominal edge within such a batch.
+    Recursive(RecursiveType),
     /// A declared nominal enum scalar.
     Enum(EnumType),
     /// Complete ordinary payload behind one temporal boundary.
@@ -103,7 +109,24 @@ pub enum Ty {
     /// No result.
     Void,
 }
+/// Borrowed concrete field schema at a checked ordinary root.
+pub type StructFields<'a> = (&'a Nominal, &'a [(String, Ty)], &'a [usize]);
 impl Ty {
+    /// Resolve a concrete root schema; internal edges require their enclosing batch.
+    pub fn structure(&self) -> Result<StructFields<'_>, String> {
+        if let Self::Struct(id, fields, optional) = self {
+            return Ok((id, fields, optional));
+        }
+        if let Self::Recursive(batch) = self {
+            let definition = batch.definition(batch.identity())?;
+            return Ok((
+                definition.identity(),
+                definition.fields(),
+                definition.optional(),
+            ));
+        }
+        Err("ordinary struct required".into())
+    }
     /// Canonical scalar spelling; constructed types retain their child separately.
     pub fn name(&self) -> &'static str {
         match self {
@@ -124,7 +147,7 @@ impl Ty {
             Self::Set(_) => "set",
             Self::Nullable(_) => "contextual nullable",
             Self::Void => "void",
-            Self::Struct(..) => "struct",
+            Self::Struct(..) | Self::Recursive(_) => "struct",
             Self::List(..) => "list",
             Self::Map(..) => "map",
             Self::Tuple(..) => "tuple",
@@ -191,6 +214,7 @@ impl Ty {
         match self {
             Self::Enum(ty) => ty.origin.clone(),
             Self::Struct(identity, _, _) => identity.source_name(),
+            Self::Recursive(batch) => batch.identity().source_name(),
             Self::Delta(origin) => format!("delta<{}>", origin.source_name()),
             Self::Tuple(children) => format!(
                 "tuple<{}>",
@@ -249,7 +273,8 @@ impl Ty {
                 optional.is_empty() && fields.iter().all(|(_, child)| child.publication())
             }
             Self::Map(key, child) => key.scalar() && child.publication(),
-            Self::List(_, None)
+            Self::Recursive(_)
+            | Self::List(_, None)
             | Self::Delta(_)
             | Self::Ref(_)
             | Self::Nullable(_)
@@ -284,6 +309,9 @@ impl Ty {
     }
     /// Whether an ordinary value belongs to the finite complete-payload profile.
     pub fn atomic_payload(&self) -> bool {
+        if matches!(self, Self::Recursive(_)) {
+            return true;
+        }
         if let Self::List(child, _) = self {
             return child.atomic_payload();
         }

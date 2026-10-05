@@ -352,3 +352,7 @@ Re-exports `Optional` through hgl-global for generated concrete struct field
 markers. The six shared optional cases pass debug/release capture semantics and
 zero allocations measured across every actual graph.evaluate call, including
 first publication, pass-through and recording.
+
+Reexports Recursive and RecursiveTarget through hgl-global. Complete recursive
+publication uses the existing prepared atomic facade; boxes are materialized and
+captured only at cold owning boundaries, while per-tick copies reuse descendants.

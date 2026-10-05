@@ -20,6 +20,7 @@ pub fn rust_type(ty: &Ty) -> &'static str {
         | Ty::Map(..)
         | Ty::Tuple(_)
         | Ty::Delta(_)
+        | Ty::Recursive(_)
         | Ty::Struct(..)
         | Ty::List(..)
         | Ty::Nullable(_) => {
@@ -52,6 +53,7 @@ pub fn scalar_type(ty: &Ty) -> &'static str {
         | Ty::Ref(_)
         | Ty::Set(_)
         | Ty::Nullable(_)
+        | Ty::Recursive(_)
         | Ty::Struct(..)
         | Ty::List(..)
         | Ty::Void => {

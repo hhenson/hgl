@@ -10,6 +10,17 @@ pub struct ListBounds<T: PreparedValue> {
     /// Capacity maxima shared by each independently allocated element.
     pub element: T::Bounds,
 }
+impl<T: PreparedValue> Clone for ListBounds<T>
+where
+    T::Bounds: Clone,
+{
+    fn clone(&self) -> Self {
+        Self {
+            len: self.len,
+            element: self.element.clone(),
+        }
+    }
+}
 impl<T: PreparedValue> Default for ListBounds<T> {
     fn default() -> Self {
         Self {

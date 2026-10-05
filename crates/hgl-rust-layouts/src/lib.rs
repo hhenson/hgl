@@ -3,11 +3,14 @@ use hgl_source::Ty;
 mod delta;
 mod globals;
 pub use delta::{delta_storage, delta_type};
-pub use globals::{global_markers, global_schema, global_type};
+pub use globals::{global_markers, global_schema, global_type, global_types};
 
 pub use hgl_rust_scalars::{rust_type, scalar_type};
 /// Rust owned representation of a concrete ordinary type.
 pub fn owned_type(ty: &Ty) -> String {
+    if matches!(ty, Ty::Recursive(_)) {
+        return format!("Owned{}", global_type(ty));
+    }
     if let Ty::Tuple(children) = ty {
         return owned_type(&tuple_storage(children));
     }
@@ -68,6 +71,7 @@ pub fn whole_payload(ty: &Ty) -> Option<&Ty> {
         | Ty::Ref(_)
         | Ty::Set(_)
         | Ty::Nullable(_)
+        | Ty::Recursive(_)
         | Ty::Void => None,
     }
 }

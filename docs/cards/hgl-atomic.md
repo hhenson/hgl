@@ -49,3 +49,7 @@ publication remains a separate final Bindings operation in hgl-prepared-store.
 OptionalField contributes one descriptor position to the root layout. Complete
 snapshot replacement delegates presence retention and reclamation to the
 optional field marker; an all-unset struct remains a valid published root.
+
+RecursiveReference is one descriptor position when calculating finite root
+widths. Concrete recursive payload operations remain compiler-selected typed
+GlobalValue/PreparedValue implementations with exact nominal schemas.

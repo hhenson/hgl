@@ -62,3 +62,12 @@ not a nullable source type. Ordinary projection preserves it. Complete atomic
 payload admission permits optional fields recursively; structural publication
 roots with optional fields remain outside this admission. Delta of an atomic
 struct is its complete ordinary value, including field presence.
+
+RecursiveType aliases immutable Batch<Nominal,Ty>; NominalDefinition aliases its
+ordered definition record. Ty::Recursive carries a complete finite batch at every
+standalone root and nominal references on recursive edges. Identity/order compare
+exact Nominal only; field metadata never changes identity. Such roots are ordinary
+atomic payloads, never structural publication roots. StructFields and
+Ty::structure()->Result<StructFields,String> resolve complete root fields and
+presence positions; a bare internal edge is an explicit unresolved-schema error.
+May use hgl-nominal-batch. Source formation follows spec6baa056/ADR0012.

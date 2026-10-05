@@ -207,6 +207,7 @@ dependencies = [
  "hgl-list",
  "hgl-optional",
  "hgl-prepared-value",
+ "hgl-recursive-value",
  "hgl-types",
 ]
 
@@ -344,6 +345,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "hgl-nominal-batch"
+version = "0.0.0"
+
+[[package]]
 name = "hgl-optional"
 version = "0.0.0"
 dependencies = [
@@ -425,6 +430,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "hgl-recursive-types"
+version = "0.0.0"
+dependencies = [
+ "hgl-enums",
+ "hgl-library",
+ "hgl-shape-obligations",
+ "hgl-source",
+ "hgl-struct-names",
+ "hgl-value-access",
+]
+
+[[package]]
+name = "hgl-recursive-value"
+version = "0.0.0"
+dependencies = [
+ "hgl-global-value",
+ "hgl-prepared-value",
+ "hgl-types",
+]
+
+[[package]]
 name = "hgl-rust"
 version = "0.0.0"
 dependencies = [
@@ -459,6 +485,7 @@ name = "hgl-rust-checked-data"
 version = "0.0.0"
 dependencies = [
  "hgl-harness-ir",
+ "hgl-rust-enums",
  "hgl-rust-ir",
  "hgl-source",
 ]
@@ -580,6 +607,7 @@ dependencies = [
  "hgl-rust-checked-data",
  "hgl-rust-ir",
  "hgl-rust-layouts",
+ "hgl-rust-recursive-convert",
  "hgl-rust-values",
  "hgl-source",
 ]
@@ -596,6 +624,16 @@ name = "hgl-rust-pure-bounds"
 version = "0.0.0"
 dependencies = [
  "hgl-rust-ir",
+ "hgl-source",
+]
+
+[[package]]
+name = "hgl-rust-recursive-convert"
+version = "0.0.0"
+dependencies = [
+ "hgl-rust-checked-data",
+ "hgl-rust-ir",
+ "hgl-rust-layouts",
  "hgl-source",
 ]
 
@@ -794,6 +832,7 @@ version = "0.0.0"
 name = "hgl-type-shape"
 version = "0.0.0"
 dependencies = [
+ "hgl-nominal-batch",
  "hgl-type-syntax",
 ]
 
@@ -880,6 +919,7 @@ version = "0.0.0"
 dependencies = [
  "hgl-enums",
  "hgl-library",
+ "hgl-recursive-types",
  "hgl-shape-obligations",
  "hgl-source",
  "hgl-struct-names",

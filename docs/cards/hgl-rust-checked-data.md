@@ -20,3 +20,7 @@ and assigned member number; it never substitutes an ordinary integer.
 
 value(&Value) -> String exposes exact checked expression serialization for the
 cold finite collection key seeding owner.
+
+Serialize complete recursive root batches and nominal internal edges explicitly.
+Definitions remain canonical and immutable when reconstructed. May use
+hgl-rust-enums::metadata for exact enum metadata shared by type/literal emission.

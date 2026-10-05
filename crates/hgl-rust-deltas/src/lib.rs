@@ -56,6 +56,7 @@ pub fn shape_marker(ty: &Ty) -> String {
         | Ty::DateTime
         | Ty::Ref(_)
         | Ty::Nullable(_)
+        | Ty::Recursive(_)
         | Ty::Void => rust_type(ty).into(),
     }
 }
@@ -64,7 +65,10 @@ fn operations(ty: &Ty) -> String {
 }
 /// Emit publication of an already retained owning payload.
 pub fn publish(ty: &Ty, payload: &str) -> String {
-    if matches!(ty, Ty::Enum(_)) {
+    if matches!(
+        ty,
+        Ty::Enum(_) | Ty::Recursive(_) | Ty::List(..) | Ty::Tuple(_) | Ty::Struct(..)
+    ) {
         return format!(
             "_ctx.set_atomic::<{}>(self._output,{payload})?;",
             global_type(ty)
@@ -74,11 +78,6 @@ pub fn publish(ty: &Ty, payload: &str) -> String {
         format!(
             "{}::apply(self._output,{payload},_ctx)?;",
             operations(origin)
-        )
-    } else if matches!(ty, Ty::List(..) | Ty::Tuple(_) | Ty::Struct(..)) {
-        format!(
-            "_ctx.set_atomic::<{}>(self._output,{payload})?;",
-            global_type(ty)
         )
     } else {
         format!("_ctx.set(self._output,{payload});")
@@ -164,6 +163,7 @@ fn children(ty: &Ty) -> Vec<&Ty> {
         | Ty::Ref(_)
         | Ty::Set(_)
         | Ty::Nullable(_)
+        | Ty::Recursive(_)
         | Ty::Void => vec![],
     }
 }
@@ -295,6 +295,7 @@ fn origin(ty: &Ty, types: &mut BTreeSet<Ty>) {
         | Ty::DateTime
         | Ty::Ref(_)
         | Ty::Nullable(_)
+        | Ty::Recursive(_)
         | Ty::Void => {}
     }
 }
@@ -326,6 +327,7 @@ fn collect(ty: &Ty, types: &mut BTreeSet<Ty>) {
         | Ty::Ref(_)
         | Ty::Set(_)
         | Ty::Nullable(_)
+        | Ty::Recursive(_)
         | Ty::Void => {}
     }
 }

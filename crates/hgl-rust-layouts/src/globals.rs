@@ -21,31 +21,50 @@ pub fn global_type(ty: &Ty) -> String {
             size.map_or(-1_i128, |size| size as i128)
         );
     }
+    if let Ty::Recursive(batch) = ty {
+        return nominal_marker(batch.identity());
+    }
     if let Ty::Struct(name, _, _) = ty {
-        let identity = name
-            .source_name()
-            .bytes()
-            .map(|byte| format!("{byte:02x}"))
-            .collect::<Vec<_>>()
-            .concat();
-        format!("GlobalStruct{identity}")
+        nominal_marker(name)
     } else {
         rust_type(ty).into()
     }
 }
+fn nominal_marker(name: &hgl_source::Nominal) -> String {
+    let identity = name
+        .source_name()
+        .bytes()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<Vec<_>>()
+        .concat();
+    format!("GlobalStruct{identity}")
+}
 /// Construction-only exact ordinary type descriptor.
 pub fn global_schema(ty: &Ty) -> String {
+    if let Ty::Recursive(batch) = ty
+        && batch.definitions().is_empty()
+    {
+        return format!(
+            "hgl_types::OrdinaryType::RecursiveReference({:?})",
+            batch.identity().source_name()
+        );
+    }
     if matches!(
         ty,
-        Ty::Enum(_) | Ty::Tuple(_) | Ty::Delta(_) | Ty::Struct(..) | Ty::List(..)
+        Ty::Recursive(_)
+            | Ty::Enum(_)
+            | Ty::Tuple(_)
+            | Ty::Delta(_)
+            | Ty::Struct(..)
+            | Ty::List(..)
     ) {
         format!("<{} as hgl_store::GlobalValue>::schema()", global_type(ty))
     } else {
         format!("hgl_types::ScalarType::{}.into()", scalar_type(ty))
     }
 }
-/// Emit nominal value layouts reached by this plan's prepared entries.
-pub fn global_markers(plan: &Plan) -> String {
+/// Collect complete nominal definitions reached by this plan's prepared entries.
+pub fn global_types(plan: &Plan) -> BTreeMap<String, Ty> {
     let mut types = BTreeMap::new();
     for node in &plan.nodes {
         for ty in std::iter::once(&node.result).chain(node.inputs.iter().map(|(_, _, ty)| ty)) {
@@ -72,6 +91,10 @@ pub fn global_markers(plan: &Plan) -> String {
         }
     }
     types
+}
+/// Emit nominal value layouts reached by this plan's prepared entries.
+pub fn global_markers(plan: &Plan) -> String {
+    global_types(plan)
         .values()
         .map(|ty| {
             if let Ty::Enum(identity) = ty {
@@ -83,6 +106,24 @@ pub fn global_markers(plan: &Plan) -> String {
         .collect()
 }
 fn collect(ty: &Ty, types: &mut BTreeMap<String, Ty>) {
+    if let Ty::Recursive(batch) = ty {
+        for definition in batch.definitions() {
+            let name = definition.identity().source_name();
+            if types.contains_key(&name) {
+                continue;
+            }
+            let rooted = hgl_source::RecursiveType::new(
+                definition.identity().clone(),
+                batch.definitions().to_vec(),
+            )
+            .unwrap_or_else(|_| unreachable!("validated finite batch"));
+            types.insert(name, Ty::Recursive(rooted));
+            for (_, field) in definition.fields() {
+                collect(field, types);
+            }
+        }
+        return;
+    }
     if let Ty::Enum(identity) = ty {
         types.insert(identity.origin.clone(), ty.clone());
     }

@@ -43,3 +43,17 @@ fn ids(keys:&hgl_store::Keys)->&[i64] {{<i64 as hgl_store::Key>::ids(keys)}}
 "
     ) + &hgl_rust_prepared_values::enumeration(&name)
 }
+
+/// Emit complete checked enum metadata at a cold serialization boundary.
+pub fn metadata(e: &EnumType) -> String {
+    let members = e
+        .members
+        .iter()
+        .map(|(name, number)| format!("({name:?}.into(),{number})"))
+        .collect::<Vec<_>>()
+        .join(",");
+    format!(
+        "hgl_source::EnumType {{origin:{:?}.into(),members:vec![{members}]}}",
+        e.origin
+    )
+}

@@ -10,4 +10,5 @@ line-budget = 300
 workspace = true
 
 [dependencies]
+hgl-nominal-batch = { path = "../hgl-nominal-batch" }
 hgl-type-syntax = { path = "../hgl-type-syntax" }

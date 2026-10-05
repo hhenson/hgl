@@ -10,6 +10,7 @@ description = "Run-owned ordinary values with construction-bound typed handles."
 line-budget = 200
 
 [dependencies]
+hgl-recursive-value = { path = "../hgl-recursive-value" }
 hgl-optional = { path = "../hgl-optional" }
 hgl-prepared-value = { path = "../hgl-prepared-value" }
 hgl-list = { path = "../hgl-list" }

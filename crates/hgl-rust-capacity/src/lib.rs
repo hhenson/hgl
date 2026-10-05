@@ -202,6 +202,9 @@ impl Capacity {
     }
     /// Assemble exact typed bounds; structural deltas include every possible changed member.
     pub fn bounds(&self, ty: &Ty) -> String {
+        if matches!(ty, Ty::Recursive(_)) {
+            return format!("capacity.limit{}.clone()", self.index(ty));
+        }
         if let Ty::Delta(origin) = ty {
             let children = fields(ty);
             let lengths = if let Ty::List(_, Some(n)) = origin.as_ref() {
@@ -260,8 +263,20 @@ impl Capacity {
     }
     /// Emit a compact cold capacity record without runtime type lookup.
     pub fn declaration(&self) -> String {
-        let fields = (0..self.types.len())
-            .map(|i| format!("limit{i}:usize,"))
+        let fields = self
+            .types
+            .values()
+            .enumerate()
+            .map(|(i, ty)| {
+                if matches!(ty, Ty::Recursive(_)) {
+                    format!(
+                        "limit{i}:<{} as hgl_store::PreparedValue>::Bounds,",
+                        global_type(ty)
+                    )
+                } else {
+                    format!("limit{i}:usize,")
+                }
+            })
             .collect::<Vec<_>>()
             .concat();
         let domains = self
@@ -359,6 +374,7 @@ impl Capacity {
             | Ty::ZonedDateTime
             | Ty::Ref(_)
             | Ty::Nullable(_)
+            | Ty::Recursive(_)
             | Ty::Void => format!(
                 "store.prepared().prepare_scalar::<{}>({id},{})?;",
                 global_type(ty),

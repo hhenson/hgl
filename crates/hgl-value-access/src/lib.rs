@@ -3,6 +3,9 @@ use hgl_rust_ir::{Kind, Value};
 use hgl_source::Ty;
 /// Whether the checked type admits ordinary owning retention.
 pub fn ordinary(ty: &Ty) -> bool {
+    if matches!(ty, Ty::Recursive(_)) {
+        return true;
+    }
     if let Ty::Struct(_, fields, _) = ty {
         return fields.iter().all(|(_, ty)| ordinary(&project(ty)));
     }
@@ -27,6 +30,7 @@ pub fn ordinary(ty: &Ty) -> bool {
             | Ty::ZonedTime
             | Ty::ZonedDateTime
             | Ty::Duration
+            | Ty::Recursive(_)
             | Ty::Struct(..)
             | Ty::Delta(_)
     )
@@ -43,9 +47,7 @@ pub fn writable(value: &Value) -> bool {
 }
 /// Resolve a declared ordinary field without changing its parent's authority.
 pub fn field(parent: Value, name: &str) -> Result<Value, String> {
-    let Ty::Struct(_, fields, optional) = &parent.ty else {
-        return Err("field access requires an ordinary struct or direct injected clock".into());
-    };
+    let (_, fields, optional) = parent.ty.structure()?;
     if matches!(parent.kind, Kind::Input(..) | Kind::Wire(_) | Kind::Output) {
         return Err(
             "temporal child projection is outside the admitted publication-delta profile".into(),
@@ -65,7 +67,7 @@ pub fn field(parent: Value, name: &str) -> Result<Value, String> {
 pub fn provenance(value: &Value) -> Option<(usize, bool)> {
     if !matches!(
         value.ty,
-        Ty::Tuple(_) | Ty::Struct(..) | Ty::List(..) | Ty::Delta(_)
+        Ty::Tuple(_) | Ty::Recursive(_) | Ty::Struct(..) | Ty::List(..) | Ty::Delta(_)
     ) {
         return None;
     }
@@ -87,7 +89,7 @@ pub fn binding(id: usize, value: &Value, mutable: bool, annotated: bool) -> Resu
     } else if let Kind::GlobalGet(entry) = value.kind
         && matches!(
             value.ty,
-            Ty::Tuple(_) | Ty::Struct(..) | Ty::List(..) | Ty::Delta(_)
+            Ty::Tuple(_) | Ty::Recursive(_) | Ty::Struct(..) | Ty::List(..) | Ty::Delta(_)
         )
     {
         if !annotated {
@@ -127,7 +129,7 @@ pub fn helper_argument(value: &Value) -> Result<(), String> {
 pub fn observed(value: &Value) -> bool {
     if !matches!(
         value.ty,
-        Ty::Delta(_) | Ty::Struct(..) | Ty::List(..) | Ty::Tuple(_)
+        Ty::Delta(_) | Ty::Recursive(_) | Ty::Struct(..) | Ty::List(..) | Ty::Tuple(_)
     ) {
         return false;
     }

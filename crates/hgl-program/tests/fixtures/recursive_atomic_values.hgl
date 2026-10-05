@@ -1,0 +1,128 @@
+module hgraph.std part recursive_atomic_values_tests
+
+struct PublicationChain {
+    value: i64
+    items: list<i64>
+    next: atomic<PublicationChain> = null
+}
+
+struct PublicationLeft {
+    value: i64
+    other: atomic<PublicationRight> = null
+}
+struct PublicationRight {
+    value: i64
+    other: atomic<PublicationLeft> = null
+}
+
+struct PublicationLink<T> {
+    value: T
+    next: atomic<PublicationLink<T>> = null
+}
+
+struct PublicationSwap<A, B> {
+    left: A
+    right: B
+    next: atomic<PublicationSwap<B, A>> = null
+}
+
+test {
+    fn chain_snapshot(value: atomic<PublicationChain>) -> atomic<PublicationChain> => pass_through(value)
+    fn mutual_snapshot(value: atomic<PublicationLeft>) -> atomic<PublicationLeft> => pass_through(value)
+    fn generic_chain_snapshot(value: atomic<PublicationLink<str>>) -> atomic<PublicationLink<str>> => pass_through(value)
+    fn swapped_chain_snapshot(value: atomic<PublicationSwap<str, i64>>) -> atomic<PublicationSwap<str, i64>> => pass_through(value)
+    fn chain_list(value: atomic<list<PublicationChain>>) -> atomic<list<PublicationChain>> => pass_through(value)
+    fn chain_child(value: list<atomic<PublicationChain>, 2>) -> list<atomic<PublicationChain>, 2> => pass_through(value)
+
+    # Replacing a complete tree with a leaf removes every former descendant.
+    test recursive_atomic_snapshots_preserve_depth_and_replace_whole_trees {
+        let deep: PublicationChain = PublicationChain(value: 1, items: [], next: PublicationChain(value: 2, items: [2], next: PublicationChain(value: 3, items: [3])))
+        let leaf: PublicationChain = PublicationChain(value: 9, items: [])
+        assert eval(chain_snapshot, [deep, deep, _, leaf, deep, _]) == [
+            deep, deep, _, PublicationChain(value: 9, items: [], next: null), deep, _
+        ]
+        assert eval(chain_snapshot, []) == []
+        assert eval(chain_snapshot, [_, _, _]) == [_, _, _]
+    }
+
+    test recursive_owning_capture_retains_nested_mutable_children {
+        var items: list<i64> = []
+        push(items, 1)
+        var leaf: PublicationChain = PublicationChain(value: 1, items: items)
+        let root: PublicationChain = PublicationChain(value: 0, items: [], next: leaf)
+        push(items, 2)
+        leaf.value = 9
+        leaf.items = items
+        let second: PublicationChain = PublicationChain(value: 0, items: [], next: leaf)
+        push(items, 3)
+        assert eval(chain_snapshot, [root, second, _, root]) == [
+            PublicationChain(value: 0, items: [], next: PublicationChain(value: 1, items: [1])),
+            PublicationChain(value: 0, items: [], next: PublicationChain(value: 9, items: [1, 2])), _,
+            PublicationChain(value: 0, items: [], next: PublicationChain(value: 1, items: [1]))
+        ]
+    }
+
+    test mutual_recursive_snapshots_keep_alternating_nominal_types {
+        let deep: PublicationLeft = PublicationLeft(value: 1, other: PublicationRight(value: 2, other: PublicationLeft(value: 3)))
+        let leaf: PublicationLeft = PublicationLeft(value: 0)
+        assert eval(mutual_snapshot, [deep, _, leaf, leaf, deep]) == [deep, _, leaf, leaf, deep]
+        assert eval(mutual_snapshot, [_, _]) == [_, _]
+    }
+
+    test recursive_generic_snapshots_keep_finite_specializations {
+        let deep: PublicationLink<str> = PublicationLink<str>(value: "a", next: PublicationLink<str>(value: "b"))
+        let leaf: PublicationLink<str> = PublicationLink<str>(value: "")
+        assert eval(generic_chain_snapshot, [deep, _, leaf, deep]) == [deep, _, leaf, deep]
+        assert eval(generic_chain_snapshot, []) == []
+
+        # Swapping the parameters reaches two specializations, then repeats.
+        let swapped: PublicationSwap<str, i64> = PublicationSwap<str, i64>(
+            left: "a", right: 1, next: PublicationSwap<i64, str>(
+                left: 2, right: "b", next: PublicationSwap<str, i64>(left: "c", right: 3)
+            )
+        )
+        let swapped_leaf: PublicationSwap<str, i64> = PublicationSwap<str, i64>(left: "", right: 0)
+        assert eval(swapped_chain_snapshot, [swapped, _, swapped_leaf, swapped]) == [swapped, _, swapped_leaf, swapped]
+    }
+
+    test recursive_complete_values_nest_in_containers_and_sparse_children {
+        let root: PublicationChain = PublicationChain(value: 0, items: [], next: PublicationChain(value: 1, items: [1]))
+        let leaf: PublicationChain = PublicationChain(value: 2, items: [])
+        var values: list<PublicationChain> = []
+        push(values, root)
+        let first: list<PublicationChain> = values
+        push(values, leaf)
+        let empty: list<PublicationChain> = []
+        assert eval(chain_list, [first, values, empty, _, first]) == [first, values, empty, _, first]
+        assert eval(chain_child, [delta<list<atomic<PublicationChain>, 2>>(items: [0: root]), _, delta<list<atomic<PublicationChain>, 2>>(items: [0: leaf])]) == [
+            delta<list<atomic<PublicationChain>, 2>>(items: [0: root]), _, delta<list<atomic<PublicationChain>, 2>>(items: [0: leaf])
+        ]
+    }
+
+    fn chain_replay_context(tick: i64) { when { } }
+    fn chain_replayed(tick: i64, const samples: list<TimedValue<atomic<PublicationChain>>>) -> atomic<PublicationChain> {
+        chain_replay_context(tick)
+        replay(samples)
+    }
+    test recursive_timed_replay_owns_trees_across_mutation_and_runs {
+        var leaf: PublicationChain = PublicationChain(value: 1, items: [1])
+        var sample: TimedValue<atomic<PublicationChain>> = TimedValue<atomic<PublicationChain>>(
+            time: @1970-01-01T00:00:00.000001Z, value: PublicationChain(value: 0, items: [], next: leaf)
+        )
+        var samples: list<TimedValue<atomic<PublicationChain>>> = []
+        push(samples, sample)
+        leaf.value = 9
+        sample.time = @1970-01-01T00:00:00.000003Z
+        sample.value = PublicationChain(value: 2, items: [])
+        push(samples, sample)
+        sample.value = leaf
+        assert eval(chain_replayed, tick: [1, 1, 1, 1], samples: samples) == [
+            PublicationChain(value: 0, items: [], next: PublicationChain(value: 1, items: [1])), _, PublicationChain(value: 2, items: []), _
+        ]
+        assert eval(chain_replayed, tick: [1, 1, 1, 1], samples: samples) == [
+            PublicationChain(value: 0, items: [], next: PublicationChain(value: 1, items: [1])), _, PublicationChain(value: 2, items: []), _
+        ]
+        let empty: list<TimedValue<atomic<PublicationChain>>> = []
+        assert eval(chain_replayed, tick: [1, 1], samples: empty) == [_, _]
+    }
+}

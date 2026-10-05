@@ -150,6 +150,9 @@ pub fn allocate(
     slots: &mut Vec<usize>,
 ) -> hgl_types::NodeResult {
     match ty {
+        OrdinaryType::RecursiveReference(_) => {
+            return Err(NodeError::new("unresolved recursive schema edge"));
+        }
         OrdinaryType::Tuple(fields) => {
             for field in fields {
                 allocate(field, columns, slots)?;

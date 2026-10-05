@@ -2,34 +2,24 @@
 use super::ty;
 use hgl_source::Ty;
 fn fields(t: &Ty) -> Vec<Ty> {
-    match t {
-        Ty::Struct(_, fields, _) => fields.iter().map(|(_, t)| t.clone()).collect(),
-        Ty::Tuple(ts) => ts.clone(),
-        Ty::Atomic(_)
-        | Ty::Map(..)
-        | Ty::Delta(_)
-        | Ty::List(..)
-        | Ty::I64
-        | Ty::F64
-        | Ty::Bool
-        | Ty::Str
-        | Ty::Duration
-        | Ty::Date
-        | Ty::Time
-        | Ty::DateTime
-        | Ty::CivilDateTime
-        | Ty::TimeZone
-        | Ty::Enum(_)
-        | Ty::ZonedTime
-        | Ty::ZonedDateTime
-        | Ty::Ref(_)
-        | Ty::Set(_)
-        | Ty::Nullable(_)
-        | Ty::Void => unreachable!("checked aggregate"),
+    if let Ty::Tuple(fields) = t {
+        return fields.clone();
     }
+    t.structure()
+        .unwrap_or_else(|_| unreachable!("checked aggregate root"))
+        .1
+        .iter()
+        .map(|(_, ty)| ty.clone())
+        .collect()
 }
 /// Decode a constructed checked value into its exact native owning representation.
 pub fn decode(t: &Ty, expression: &str) -> String {
+    if matches!(t, Ty::Recursive(_)) {
+        return format!(
+            "{}::decode_recursive({expression})?",
+            hgl_rust_layouts::global_type(t)
+        );
+    }
     let body = match t {
         Ty::Enum(_) => "let hgl_rust_ir::Kind::Literal(hgl_source::Literal::Enum(_,number))=&v.kind else {return Err(\"prepared enum required\".into())}; *number".into(),
         Ty::Delta(origin) => return delta_decode(origin, expression),
@@ -86,13 +76,13 @@ pub fn decode(t: &Ty, expression: &str) -> String {
                 | Ty::Ref(_)
                 | Ty::Set(_)
                 | Ty::Nullable(_)
-                | Ty::Void => unreachable!("checked scalar"),
+                | Ty::Recursive(_) | Ty::Void => unreachable!("checked scalar"),
             };
             format!(
                 "let hgl_rust_ir::Kind::Literal(hgl_source::Literal::{variant}(item))=&v.kind else {{return Err(\"prepared scalar type mismatch\".into())}}; {result}"
             )
         }
-        Ty::Atomic(_) | Ty::Map(..) | Ty::Set(_) | Ty::Ref(_) | Ty::Nullable(_) | Ty::Void => {
+        Ty::Atomic(_) | Ty::Map(..) | Ty::Set(_) | Ty::Ref(_) | Ty::Nullable(_) | Ty::Recursive(_) | Ty::Void => {
             unreachable!("checked prepared ordinary type")
         }
     };
@@ -100,6 +90,12 @@ pub fn decode(t: &Ty, expression: &str) -> String {
 }
 /// Encode an independently owned native capture as its exact checked value.
 pub fn encode(t: &Ty, expression: &str) -> String {
+    if matches!(t, Ty::Recursive(_)) {
+        return format!(
+            "{}::encode_recursive({expression})",
+            hgl_rust_layouts::global_type(t)
+        );
+    }
     let kind = match t {
         Ty::Enum(_) => format!(
             "hgl_rust_ir::Kind::Literal(hgl_source::Literal::Enum({{let hgl_source::Ty::Enum(identity)={} else {{unreachable!()}};identity}},*v))",
@@ -110,29 +106,7 @@ pub fn encode(t: &Ty, expression: &str) -> String {
             "hgl_rust_ir::Kind::List(v.iter().map(|item|{}).collect())",
             encode(child, "item")
         ),
-        Ty::Struct(..) | Ty::Tuple(_) => {
-            let optional = if let Ty::Struct(_, _, optional) = t {
-                optional.as_slice()
-            } else {
-                &[]
-            };
-            let entries = fields(t)
-                .iter()
-                .enumerate()
-                .map(|(i, t)| {
-                    if optional.contains(&i) {
-                        format!(
-                            "if let Some(field)=&v.{i} {{ fields.push(({i},{})); }}",
-                            encode(t, "field")
-                        )
-                    } else {
-                        format!("fields.push(({i},{}));", encode(t, &format!("&v.{i}")))
-                    }
-                })
-                .collect::<Vec<_>>()
-                .concat();
-            format!("{{let mut fields=Vec::new(); {entries} hgl_rust_ir::Kind::Construct(fields)}}")
-        }
+        Ty::Struct(..) | Ty::Tuple(_) => encode_fields(t),
         Ty::Bool
         | Ty::I64
         | Ty::F64
@@ -168,11 +142,18 @@ pub fn encode(t: &Ty, expression: &str) -> String {
                 | Ty::Ref(_)
                 | Ty::Set(_)
                 | Ty::Nullable(_)
+                | Ty::Recursive(_)
                 | Ty::Void => unreachable!("checked scalar"),
             };
             format!("hgl_rust_ir::Kind::Literal(hgl_source::Literal::{variant}({expression}))")
         }
-        Ty::Atomic(_) | Ty::Map(..) | Ty::Set(_) | Ty::Ref(_) | Ty::Nullable(_) | Ty::Void => {
+        Ty::Atomic(_)
+        | Ty::Map(..)
+        | Ty::Set(_)
+        | Ty::Ref(_)
+        | Ty::Nullable(_)
+        | Ty::Recursive(_)
+        | Ty::Void => {
             unreachable!("checked capture type")
         }
     };
@@ -193,7 +174,7 @@ fn delta_decode(origin: &Ty, expression: &str) -> String {
             format!("parts.iter().filter_map(|p|if let hgl_rust_ir::DeltaEntry::Keyed(k,_)=p {{Some(k)}} else {{None}}).map(|k|Ok({})).collect::<Result<Vec<_>,String>>()?,parts.iter().filter_map(|p|if let hgl_rust_ir::DeltaEntry::Keyed(_,v)=p {{Some(v)}} else {{None}}).map(|v|Ok({})).collect::<Result<Vec<_>,String>>()?,parts.iter().filter_map(|p|if let hgl_rust_ir::DeltaEntry::Remove(k)=p {{Some(k)}} else {{None}}).map(|k|Ok({})).collect::<Result<Vec<_>,String>>()?,",decode(key,"k"),decode(&child,"v"),decode(key,"k"))
         }
         Ty::Tuple(_) | Ty::Struct(..)=>fields(origin).iter().enumerate().map(|(i,t)|format!("parts.iter().filter_map(|p|if let hgl_rust_ir::DeltaEntry::Child(id,v)=p {{if *id=={i} {{Some(v)}} else {{None}}}} else {{None}}).map(|v|Ok({})).collect::<Result<Vec<_>,String>>()?,",decode(&t.clone().delta().unwrap_or_else(|_|unreachable!("checked child")),"v"))).collect::<Vec<_>>().concat(),
-        Ty::Atomic(_) | Ty::Delta(_) | Ty::I64 | Ty::F64 | Ty::Bool | Ty::Str | Ty::Duration | Ty::Date | Ty::Time | Ty::DateTime | Ty::CivilDateTime | Ty::TimeZone | Ty::Enum(_) | Ty::ZonedTime | Ty::ZonedDateTime | Ty::Ref(_) | Ty::Nullable(_) | Ty::Void => unreachable!("checked structural delta"),
+        Ty::Atomic(_) | Ty::Delta(_) | Ty::I64 | Ty::F64 | Ty::Bool | Ty::Str | Ty::Duration | Ty::Date | Ty::Time | Ty::DateTime | Ty::CivilDateTime | Ty::TimeZone | Ty::Enum(_) | Ty::ZonedTime | Ty::ZonedDateTime | Ty::Ref(_) | Ty::Nullable(_) | Ty::Recursive(_) | Ty::Void => unreachable!("checked structural delta"),
     };
     format!(
         "{{let hgl_rust_ir::Kind::Delta(parts)=&({expression}).kind else {{return Err(\"prepared delta required\".into())}}; ({storage})}}"
@@ -250,6 +231,7 @@ fn delta_encode(origin: &Ty, expression: &str) -> String {
         | Ty::ZonedDateTime
         | Ty::Ref(_)
         | Ty::Nullable(_)
+        | Ty::Recursive(_)
         | Ty::Void => unreachable!("checked structural delta"),
     }
     let body = body.concat();
@@ -257,4 +239,28 @@ fn delta_encode(origin: &Ty, expression: &str) -> String {
         "{{let v={expression}; let mut parts=Vec::new(); {body} hgl_rust_ir::Value::new({},hgl_rust_ir::Kind::Delta(parts))}}",
         ty(&Ty::Delta(Box::new(origin.clone())))
     )
+}
+
+fn encode_fields(t: &Ty) -> String {
+    let optional = if let Ty::Struct(_, _, optional) = t {
+        optional.as_slice()
+    } else {
+        &[]
+    };
+    let entries = fields(t)
+        .iter()
+        .enumerate()
+        .map(|(i, t)| {
+            if optional.contains(&i) {
+                format!(
+                    "if let Some(field)=&v.{i} {{ fields.push(({i},{})); }}",
+                    encode(t, "field")
+                )
+            } else {
+                format!("fields.push(({i},{}));", encode(t, &format!("&v.{i}")))
+            }
+        })
+        .collect::<Vec<_>>()
+        .concat();
+    format!("{{let mut fields=Vec::new(); {entries} hgl_rust_ir::Kind::Construct(fields)}}")
 }

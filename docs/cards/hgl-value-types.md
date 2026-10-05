@@ -10,8 +10,7 @@ preserve qualified identity; ordinary lists preserve recursive element type and
 exact fixedness. Visibility and recursive-schema checks remain source checks.
 Type-generic required-field schemas retain the complete invariant specialization
 identity. Non-null fixed scalar field defaults are checked after substitution and do not
-change nominal identity or sparse publication shape. Optional, recursive and
-const-generic schemas are not admitted.
+change nominal identity or sparse publication shape. Unsupported schemas fail before publication formation.
 
 Acceptance: existing imported/nominal struct checks and ordinary nested
 struct/list construction and global configuration fixtures in hgl-program.
@@ -48,3 +47,10 @@ May use hgl-enums.
 
 resolve_ordinary resolves a complete source type with a fresh recursion scope,
 then projects its ordinary payload for argument hints.
+
+Delegates finite recursive declaration batches to hgl-recursive-types before
+ordinary acyclic expansion. Exact canonical edge/root identities unify without
+schema expansion. Generic arguments preserve source boundaries and all invariant
+arguments. Ordinary projection and constructor inference retain complete batches.
+Optional fields and the finite recursive atomic profile are admitted; structural
+recursive roots and const-generic declarations remain outside this profile.

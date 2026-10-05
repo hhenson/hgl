@@ -5,6 +5,7 @@ pub use hgl_list::{
 };
 pub use hgl_optional::Optional;
 pub use hgl_prepared_value::PreparedValue;
+pub use hgl_recursive_value::{Recursive, RecursiveTarget};
 use hgl_types::{NodeError, NodeResult, OrdinaryType};
 use std::{collections::HashMap, fmt::Debug};
 

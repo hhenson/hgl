@@ -18,3 +18,7 @@ enum identity independently of the membership token.
 
 Nominal markers also delegate additive PreparedValue emission to
 hgl-rust-prepared-values, retaining exact identity in independently prepared slots.
+
+metadata(&EnumType)->String emits complete cold checked enum metadata, shared by
+checked type and enum literal serialization. Numbers and nominal origins are
+retained exactly.

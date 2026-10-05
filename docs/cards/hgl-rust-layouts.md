@@ -50,3 +50,10 @@ May use hgl-rust-structs for concrete nominal GlobalValue emission. Optional
 positions become Option payloads and Optional field markers; marker collection
 retains exact nominal identity and existing declaration indices. Tuple and
 delta storage schemas remain required-field forms.
+
+global_types(plan)->BTreeMap<String,Ty> collects complete immutable nominal batches
+before emitting any member. Every reachable recursive definition is collected once,
+including silent-input roots. Recursive owned representations are named tuple
+structs; edge schemas use exact RecursiveReference identities instead of expanding
+the target. Bare internal edge metadata supplies a name only and is never emitted
+as an empty struct definition.

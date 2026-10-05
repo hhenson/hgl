@@ -9,6 +9,7 @@ line-budget = 300
 [lints]
 workspace = true
 [dependencies]
+hgl-rust-recursive-convert = { path = "../hgl-rust-recursive-convert" }
 hgl-source = { path = "../hgl-source" }
 hgl-rust-ir = { path = "../hgl-rust-ir" }
 hgl-harness-ir = { path = "../hgl-harness-ir" }

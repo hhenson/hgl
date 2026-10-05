@@ -124,8 +124,8 @@ fn unary(plan: &Plan, op: &str, operand: &Value) -> String {
     }
 }
 fn construct(plan: &Plan, ty: &Ty, fields: &[(usize, Value)]) -> String {
-    let (count, optional) = if let Ty::Struct(_, all, optional) = ty {
-        (all.len(), optional.as_slice())
+    let (count, optional) = if let Ok((_, all, optional)) = ty.structure() {
+        (all.len(), optional)
     } else if let Ty::Tuple(all) = ty {
         (all.len(), &[][..])
     } else {
@@ -142,7 +142,9 @@ fn construct(plan: &Plan, ty: &Ty, fields: &[(usize, Value)]) -> String {
         .map(|index| {
             if optional.contains(&index) {
                 if fields.iter().any(|(i, _)| *i == index) {
-                    format!("Some(field{index})")
+                    if ty.structure().is_ok_and(|(_,all,_)|matches!(&all[index].1,Ty::Recursive(batch) if batch.definitions().is_empty())) {
+                        format!("Some(Box::new(field{index}))")
+                    } else { format!("Some(field{index})") }
                 } else {
                     "None".into()
                 }
@@ -152,7 +154,12 @@ fn construct(plan: &Plan, ty: &Ty, fields: &[(usize, Value)]) -> String {
         })
         .collect::<Vec<_>>()
         .join(",");
-    code.push(format!("({fields},) }}"));
+    let prefix = if matches!(ty, Ty::Recursive(_)) {
+        format!("Owned{}", global_type(ty))
+    } else {
+        String::new()
+    };
+    code.push(format!("{prefix}({fields},) }}"));
     code.concat()
 }
 fn place(plan: &Plan, v: &Value) -> String {
@@ -189,7 +196,7 @@ fn retained(source: &str, ty: &Ty) -> String {
             global_type(ty)
         );
     }
-    if matches!(ty, Ty::Struct(..)) {
+    if matches!(ty, Ty::Recursive(_) | Ty::Struct(..)) {
         return format!(
             "<{} as hgl_store::GlobalValue>::retain(&({source}))?",
             global_type(ty)

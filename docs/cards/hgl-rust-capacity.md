@@ -38,3 +38,7 @@ hooks. Cold preparation never evaluates those runtime child payloads.
 Optional field limits inspect only present native payloads and reserve independent
 child capacity for every prepared destination. Logical presence remains unset
 until the complete value is copied and published.
+Recursive roots use typed PreparedValue::Bounds fields instead of scalar size
+maxima. include visits actual materialized finite values, and bounds clones those
+finite descriptions before each independent destination allocation. An empty or
+all-silent recursive input retains its type but allocates no recursive child.

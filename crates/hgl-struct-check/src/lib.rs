@@ -47,7 +47,8 @@ impl Constructor {
                 );
             }
         }
-        if let Some(Ty::Struct(identity, _, _)) = expected
+        if let Some(identity) =
+            expected.and_then(|ty| ty.structure().ok().map(|(identity, _, _)| identity))
             && !schema.generics.is_empty()
         {
             if identity.origin != format!("{}::{}", declaration.module, declaration.name) {

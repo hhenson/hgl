@@ -192,3 +192,8 @@ remains the i64 compatibility shape; Set remains built-in scalar membership.
 `OrdinaryType::OptionalField(Box<OrdinaryType>)` is an internal field-presence
 descriptor, distinct from its present payload and required fields. It is never
 an HGL annotation or a whole temporal-null publication type.
+
+OrdinaryType::RecursiveReference(&'static str) is internal schema metadata for an
+exact fully applied nominal edge. Concrete root schemas retain their existing
+Struct identity and finite field descriptions; recursive targets never expand
+while forming schema metadata. It adds no source reference or nullable type.

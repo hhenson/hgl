@@ -14,3 +14,7 @@ markers reuse i64 storage operations without losing their checked nominal type.
 Acceptance is the generated finite owning-publication allocation and retention
 suite in hgl-program, including strings, provider-backed scalars, nominal structs,
 fixed collections, atomic values and structural map removal/reinsertion.
+
+Generated nominal bounds additionally implement Clone for cold independent
+capacity allocation. Recursive fields terminate bounds at absent Optional entries;
+boxes in present edge bounds follow actual finite payload depth.

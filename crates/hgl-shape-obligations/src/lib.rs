@@ -1,12 +1,25 @@
 //! Symbolic generic occurrence requirements, intersected before specialization.
 use hgl_library::{Decl, Library};
 use hgl_source::{Ty, application, delta_argument};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
+#[derive(Default)]
+struct Requirements {
+    active: BTreeSet<String>,
+    known: BTreeMap<String, Vec<u8>>,
+}
 
 /// Check every declared occurrence against complete canonical source arguments.
 pub fn validate(library: &Library, declaration: &Decl, arguments: &[Ty]) -> Result<(), String> {
-    let requirements = requirements(library, declaration, &mut BTreeSet::new())?;
+    let mut state = Requirements::default();
+    let requirements = loop {
+        let previous = state.known.clone();
+        let result = requirements(library, declaration, &mut state)?;
+        if previous == state.known {
+            break result;
+        }
+    };
     for (argument, requirement) in arguments.iter().zip(requirements) {
+        let requirement = if requirement == 0 { 1 } else { requirement };
         if requirement & 1 != 0 && !hgl_value_access::ordinary(argument) {
             return Err(
                 "struct type argument requires an ordinary value type at every ordinary occurrence"
@@ -22,13 +35,17 @@ pub fn validate(library: &Library, declaration: &Decl, arguments: &[Ty]) -> Resu
 fn requirements(
     library: &Library,
     decl: &Decl,
-    active: &mut BTreeSet<String>,
+    state: &mut Requirements,
 ) -> Result<Vec<u8>, String> {
     let identity = format!("{}::{}", decl.module, decl.name);
-    if !active.insert(identity.clone()) {
-        return Err("recursive ordinary structs are not supported".into());
-    }
     let schema = decl.required_struct()?;
+    if !state.active.insert(identity.clone()) {
+        return Ok(state
+            .known
+            .get(&identity)
+            .cloned()
+            .unwrap_or_else(|| vec![0; schema.generics.len()]));
+    }
     let mut result = vec![0; schema.generics.len()];
     for (_, field) in schema.fields {
         occurrences(
@@ -37,15 +54,16 @@ fn requirements(
             &field,
             1,
             (&schema.generics, &mut result),
-            active,
+            state,
         )?;
     }
-    active.remove(&identity);
-    for requirement in &mut result {
-        if *requirement == 0 {
-            *requirement = 1;
+    state.active.remove(&identity);
+    if let Some(previous) = state.known.get(&identity) {
+        for (requirement, old) in result.iter_mut().zip(previous) {
+            *requirement |= old;
         }
     }
+    state.known.insert(identity, result.clone());
     Ok(result)
 }
 fn occurrences(
@@ -54,14 +72,14 @@ fn occurrences(
     pattern: &str,
     requirement: u8,
     (parameters, result): (&[String], &mut [u8]),
-    active: &mut BTreeSet<String>,
+    state: &mut Requirements,
 ) -> Result<(), String> {
     if let Some(index) = parameters.iter().position(|parameter| parameter == pattern) {
         result[index] |= requirement;
         return Ok(());
     }
     if let Some(origin) = delta_argument(pattern) {
-        return occurrences(library, module, origin, 2, (parameters, result), active);
+        return occurrences(library, module, origin, 2, (parameters, result), state);
     }
     let Some((base, arguments)) = application(pattern) else {
         return Ok(());
@@ -78,7 +96,7 @@ fn occurrences(
                 argument,
                 requirement,
                 (parameters, result),
-                active,
+                state,
             )?;
         }
         return Ok(());
@@ -88,7 +106,7 @@ fn occurrences(
     }
     let decl = hgl_struct_names::declaration(library, module, base)?
         .ok_or_else(|| format!("unresolved generic struct application {base}"))?;
-    let forwarded = requirements(library, decl, active)?;
+    let forwarded = requirements(library, decl, state)?;
     if forwarded.len() != arguments.len() {
         return Err("generic struct argument count mismatch".into());
     }
@@ -99,7 +117,7 @@ fn occurrences(
             argument,
             requirement,
             (parameters, result),
-            active,
+            state,
         )?;
     }
     Ok(())

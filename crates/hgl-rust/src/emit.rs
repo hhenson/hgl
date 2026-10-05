@@ -242,7 +242,9 @@ pub fn shared_layouts(plans: &[Plan]) -> String {
         nodes,
         ..Plan::default()
     };
-    global_markers(&types) + &hgl_rust_deltas::markers(&types)
+    global_markers(&types)
+        + &hgl_rust_preparation::recursive_markers(&types)
+        + &hgl_rust_deltas::markers(&types)
 }
 fn emit_inner(plan: &Plan, layouts: bool) -> String {
     let normalized = hgl_rust_direct_deltas::prepare(plan);
@@ -280,6 +282,7 @@ fn emit_inner(plan: &Plan, layouts: bool) -> String {
     }
     if layouts {
         out.push(global_markers(plan));
+        out.push(hgl_rust_preparation::recursive_markers(plan));
         out.push(hgl_rust_deltas::markers(plan));
     }
     for (i, n) in plan.nodes.iter().enumerate() {
