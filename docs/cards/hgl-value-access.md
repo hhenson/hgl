@@ -32,3 +32,8 @@ fields and whole-value owning bindings keep existing behavior. No optional
 clearing or mutation surface follows from admitting complete snapshots.
 
 Ordinary sets/maps are owning aggregates at existing retention and borrow boundaries. This adds no element projection or mutation syntax.
+
+Ordinary collection grammar checks K/V recursively before payload projection.
+Nominal fields may carry declared atomic boundaries, while explicit composite
+atomic container arguments remain temporal shapes. Key/profile admission uses
+the resulting ordinary projection; nominal source identities stay exact.

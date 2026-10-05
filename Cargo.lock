@@ -105,6 +105,7 @@ dependencies = [
  "hgl-collection-values",
  "hgl-rust-ir",
  "hgl-source",
+ "hgl-value-access",
  "hgl-value-constant",
  "hgl-value-eval",
 ]

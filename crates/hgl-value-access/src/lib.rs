@@ -12,8 +12,14 @@ pub fn ordinary(ty: &Ty) -> bool {
     if let Ty::Tuple(children) = ty {
         return children.iter().all(ordinary);
     }
-    if matches!(ty, Ty::Set(_) | Ty::Map(..)) {
-        return ty.atomic_payload();
+    if let Ty::Set(key) = ty {
+        return ordinary(key) && project(key).collection_key();
+    }
+    if let Ty::Map(key, value) = ty {
+        return ordinary(key)
+            && project(key).collection_key()
+            && ordinary(value)
+            && project(value).atomic_payload();
     }
     if let Ty::List(element, _) = ty {
         return ordinary(element);

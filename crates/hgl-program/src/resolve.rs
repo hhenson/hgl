@@ -1637,7 +1637,7 @@ impl Checker {
         }
         if hgl_source::application(&name).is_some_and(|(base, _)| matches!(base, "set" | "map")) {
             let ty = hgl_value_types::concrete(&self.library, module, &name, &self.types)?;
-            return hgl_collection_check::constructor(ty, args, |expr, ty| {
+            return hgl_collection_check::constructor(&ty, args, |expr, ty| {
                 self.expected_expression(module, expr, env, runtime, Some(ty))
             });
         }

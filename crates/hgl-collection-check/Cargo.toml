@@ -14,3 +14,4 @@ hgl-rust-ir = { path = "../hgl-rust-ir" }
 hgl-value-eval = { path = "../hgl-value-eval" }
 hgl-value-constant = { path = "../hgl-value-constant" }
 hgl-collection-values = { path = "../hgl-collection-values" }
+hgl-value-access = { path = "../hgl-value-access" }

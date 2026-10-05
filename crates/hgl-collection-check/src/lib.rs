@@ -3,10 +3,14 @@ use hgl_rust_ir::{Kind, Value};
 use hgl_source::{Expr, Ty};
 /// Check the sole named items argument with exact key and payload expectations.
 pub fn constructor(
-    ty: Ty,
+    ty: &Ty,
     args: &[(Option<String>, Expr)],
     mut check: impl FnMut(&Expr, &Ty) -> Result<Value, String>,
 ) -> Result<Value, String> {
+    if !hgl_value_access::ordinary(ty) {
+        return Err("unsupported ordinary collection payload".into());
+    }
+    let ty = hgl_value_access::project(ty);
     if !ty.atomic_payload() {
         return Err("unsupported ordinary collection payload".into());
     }

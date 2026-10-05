@@ -378,3 +378,46 @@ test {
         true,
     )
 }
+#[test]
+fn collection_payloads_project_nominal_atomic_fields_and_preserve_source_arguments()
+-> Result<(), Box<dyn std::error::Error>> {
+    run_shared(
+        r#"module hgraph.std part projected_collection_payload
+struct Child {number:i64}
+struct Book {snapshot:atomic<Child>
+optional:atomic<Child> =null}
+struct Box<T> {value:T}
+struct Derived<T>:Box<T> {label:str}
+test {
+ const fn data()->Derived<map<i64,Book>> {
+  let inferred=Derived(value:map<i64,Book>(items:[1:Book(snapshot:Child(number:7),optional:Child(number:8))]),label:"source")
+  let exact:Derived<map<i64,Book>> = inferred
+  return exact
+ }
+ fn pass(value:atomic<Derived<map<i64,Book>>>)->atomic<Derived<map<i64,Book>>> {when {return delta_value(value)}}
+ test projection {
+  let inferred=Box(value:set<Book>(items:[Book(snapshot:Child(number:7))]))
+  let exact:Box<set<Book>> = inferred
+  assert exact.value==set<Book>(items:[Book(snapshot:Child(number:7))])
+  let nested=map<i64,list<Book>>(items:[1:[Book(snapshot:Child(number:9))]])
+  assert nested==map<i64,list<Book>>(items:[1:[Book(snapshot:Child(number:9))]])
+  assert eval(pass,[data(),_,data()])==[data(),_,data()]
+ }
+}
+"#,
+        true,
+    )
+}
+#[test]
+fn collection_type_arguments_do_not_admit_direct_composite_atomic_boundaries() {
+    for ty in [
+        "set<atomic<Child>>",
+        "map<i64,atomic<Child>>",
+        "map<i64,list<atomic<Child>>>",
+    ] {
+        let source = format!(
+            "module invalid_collection\nstruct Child {{number:i64}}\ntest invalid {{let value={ty}(items:[])}}"
+        );
+        assert!(compile_tests(&sources(&source)).is_err(), "admitted {ty}");
+    }
+}
