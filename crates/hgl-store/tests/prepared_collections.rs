@@ -203,3 +203,41 @@ fn string_and_provider_owning_keys_publish_remove_and_reinsert_without_allocatin
         .map_err(|error| format!("{error:?}"))?;
     Ok(())
 }
+#[test]
+fn runtime_key_pool_retains_removal_identity_and_prebound_projections() {
+    let mut store = Store::new();
+    let shape = Kind::Dictionary(Box::new(Kind::Ts(ScalarType::I64)));
+    let root = store.add_shaped_output(NodeId(0), shape.clone());
+    store.prepare_collection(root, &[0, 1, 2], |store, owner| {
+        store.add_output::<i64>(owner).id()
+    });
+    store.prepared().bindings.prepare_pool(root);
+    let input = store.add_shaped_input(NodeId(1), shape, true);
+    store.bind(input, root).unwrap_or_else(|_| unreachable!());
+    store.prepare_collection_inputs();
+    let counts = store.bindings().storage_counts();
+    let mut wake = Wakes::default();
+    let ((), allocations) = count_in(|| {
+        let first = store.get_or_create_shaped(root, i64::MIN, time(1), &mut wake);
+        let second = store.get_or_create_shaped(root, i64::MAX, time(1), &mut wake);
+        assert_ne!(first, second);
+        let held = store.reference(first);
+        let view = store
+            .bindings()
+            .child_input(input, i64::MIN)
+            .unwrap_or_else(|| unreachable!());
+        store.remove_shaped(root, i64::MIN, time(2), &mut wake);
+        assert_eq!(store.bindings().removed_input(input, i64::MIN), Some(view));
+        store.begin_cycle(time(3));
+        assert!(store.bindings().resolve(held).is_none());
+        let again = store.get_or_create_shaped(root, i64::MIN, time(3), &mut wake);
+        assert_eq!(first, again);
+        assert_eq!(store.bindings().child_input(input, i64::MIN), Some(view));
+        let third = store.get_or_create_shaped(root, 16, time(3), &mut wake);
+        assert_ne!(first, third);
+        assert_ne!(second, third);
+        assert_eq!(store.bindings().keys(input).count(), 3);
+    });
+    assert_eq!(allocations, 0);
+    assert_eq!(store.bindings().storage_counts(), counts);
+}

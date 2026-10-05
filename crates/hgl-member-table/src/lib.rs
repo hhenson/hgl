@@ -13,6 +13,8 @@ pub struct Table<T> {
     slots: Vec<Slot<T>>,
     active: Vec<usize>,
     prepared: bool,
+    lookup: Vec<Option<usize>>,
+    assigned: usize,
 }
 impl<T> Default for Table<T> {
     fn default() -> Self {
@@ -21,6 +23,8 @@ impl<T> Default for Table<T> {
             slots: Vec::new(),
             active: Vec::new(),
             prepared: false,
+            lookup: Vec::new(),
+            assigned: 0,
         }
     }
 }
@@ -42,19 +46,69 @@ impl<T> Table<T> {
         self.slots.dedup_by_key(|slot| slot.key);
         self.active = Vec::with_capacity(self.slots.len());
         self.prepared = true;
+        self.lookup.clear();
+        self.assigned = 0;
     }
     /// Whether storage has a fixed prepared domain.
     pub fn prepared(&self) -> bool {
         self.prepared
     }
-    fn index(&self, key: i64) -> Option<usize> {
-        self.slots.binary_search_by_key(&key, |slot| slot.key).ok()
+    /// Turn an empty prepared domain into a bounded pool of runtime key identities.
+    /// # Panics
+    /// Storage must be prepared and empty.
+    pub fn pool(&mut self) {
+        assert!(self.is_empty() && self.prepared, "pool before publication");
+        self.lookup = vec![None; (self.slots.len() * 2 + 1).next_power_of_two()];
+        self.assigned = 0;
+    }
+    /// Whether key identities are assigned at first runtime use.
+    pub fn pooled(&self) -> bool {
+        !self.lookup.is_empty()
+    }
+    fn bucket(&self, key: i64) -> usize {
+        let hash = u64::from_ne_bytes(key.to_ne_bytes()).wrapping_mul(0x9e37_79b9_7f4a_7c15);
+        usize::try_from(hash & (self.lookup.len() - 1) as u64).unwrap_or_else(|_| unreachable!())
+    }
+    /// Cold-domain slot index, including absent keys.
+    pub fn domain_index(&self, key: i64) -> Option<usize> {
+        if !self.pooled() {
+            return self.slots.binary_search_by_key(&key, |slot| slot.key).ok();
+        }
+        let mut bucket = self.bucket(key);
+        loop {
+            let index = self.lookup[bucket]?;
+            if self.slots[index].key == key {
+                return Some(index);
+            }
+            bucket = (bucket + 1) & (self.lookup.len() - 1);
+        }
+    }
+    /// Assign one previously unseen key to a permanent prepared slot.
+    /// # Panics
+    /// The prepared pool must have enough distinct-key slots.
+    pub fn register(&mut self, key: i64) -> usize {
+        if let Some(index) = self.domain_index(key) {
+            return index;
+        }
+        assert!(
+            self.pooled() && self.assigned < self.slots.len(),
+            "prepared key pool capacity exceeded"
+        );
+        let index = self.assigned;
+        self.assigned += 1;
+        self.slots[index].key = key;
+        let mut bucket = self.bucket(key);
+        while self.lookup[bucket].is_some() {
+            bucket = (bucket + 1) & (self.lookup.len() - 1);
+        }
+        self.lookup[bucket] = Some(index);
+        index
     }
     /// Find an occupied slot.
     pub fn get(&self, key: i64) -> Option<&T> {
         if self.prepared {
             self.slots
-                .get(self.index(key)?)
+                .get(self.domain_index(key)?)
                 .and_then(|slot| slot.value.as_ref())
         } else {
             self.dynamic.get(&key)
@@ -78,7 +132,7 @@ impl<T> Table<T> {
             return self.dynamic.insert(key, value);
         }
         let index = self
-            .index(key)
+            .domain_index(key)
             .unwrap_or_else(|| unreachable!("key outside prepared domain"));
         let slot = &mut self.slots[index];
         if slot.value.is_none() {
@@ -98,7 +152,7 @@ impl<T> Table<T> {
         if !self.prepared {
             return self.dynamic.remove(&key);
         }
-        let index = self.index(key)?;
+        let index = self.domain_index(key)?;
         let value = self.slots[index].value.take()?;
         let position = self.slots[index].position;
         self.active.swap_remove(position);

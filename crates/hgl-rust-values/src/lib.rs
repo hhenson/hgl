@@ -278,7 +278,7 @@ pub fn statements(plan: &Plan, body: &[Statement], out: &mut Vec<String>) {
             },
             Statement::Var(i, v) => format!("let mut local{i} = {};\n", condition_code(plan, v)),
             Statement::Return(v) => {
-                if let Some(code)=prepared::forward(v) {out.push(code);continue;}
+                if plan.recording.is_some() && let Some(code)=prepared::forward(v) {out.push(code);continue;}
                 let publish = if matches!(v.ty, Ty::Ref(_)) { "_ctx.set_reference(self._output, publication)?;" } else { "" };
                 let publish = if publish.is_empty() { hgl_rust_deltas::publish(&v.ty,"publication") } else { publish.into() };
                 format!("let publication = {};\n{publish}\nreturn Ok(());\n", condition_code(plan, v))

@@ -605,8 +605,9 @@ fn capacities(plan: &Plan) -> String {
         }
     }
     code += &capacity.constants(plan, |value| condition_code(plan, value));
-    code += &capacity.scalar_sets();
+    code += &capacity.scalar_sets(plan);
     code += &capacity.native_limits(plan);
+    code += &capacity.text_limits(plan);
     for node in &plan.nodes {
         for (key, ty) in &node.globals {
             append(

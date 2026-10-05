@@ -197,3 +197,7 @@ KeyedDictionary and KeyedSet metadata preserve the exact ordinary key type.
 The zero-allocation guarantee covers the finite prepared publication profile,
 including its first insertion and repeated removal/reinsertion. Unprepared
 dynamic allocation and runtime rewiring keep their existing semantics.
+
+`prepare_pool(OutputId)` permits primitive key values to arrive after startup in
+a bounded prebuilt collection. `prepared_output` mutably claims a permanent slot
+and its prebuilt projections for the first occurrence of each key.

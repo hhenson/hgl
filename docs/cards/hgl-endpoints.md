@@ -81,3 +81,8 @@ membership or validity.
 validity and held input observations after the removal cycle while retaining
 prepared storage and subscriptions. It advances endpoint generations; exhaustion
 fails explicitly and never wraps. Pooled future children remain absent.
+
+`Members::pool` enables bounded runtime keys, and `claim` assigns the same retained
+child index in live/removed/initial tables. `Endpoints::prepared_child` assigns
+new output keys and their already bound watcher projections together, preserving
+parent links and removed-slot generation policy.

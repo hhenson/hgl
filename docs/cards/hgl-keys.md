@@ -22,3 +22,8 @@ Tests cover cold ownership, aliases, zero/infinities, hash collisions, unknown
 keys and allocation-free first/repeated lookups after preparation.
 
 `Key::with_value` visits a retained typed key by reference; fixed inline values may use a stack temporary. Owning String and provider identities borrow their cold table entry. It performs no owning capture allocation.
+
+Boolean and i64 keys use their exact inline identity directly for `id`, `value`
+and capture; runtime values need no cold registration. `ids` lists only explicitly
+registered cold recipes. Other owning key representations keep their existing
+prepared retention tables.

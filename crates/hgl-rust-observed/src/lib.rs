@@ -321,3 +321,6 @@ fn validation(ty: &Ty) -> String {
     }
     code
 }
+
+mod text;
+pub use text::text;

@@ -137,6 +137,47 @@ impl<W: Wake> PreparedTick<'_, W> {
         self.storage.bindings.publish(output, self.now, self.wake);
         Ok(())
     }
+    /// Compose text directly into its reserved destination after a complete size check.
+    /// The generated closures must only read inputs and append the measured bytes.
+    pub fn text(
+        &mut self,
+        output: OutputId,
+        generation: u32,
+        measure: impl FnOnce(Observation<'_>) -> NodeResult<usize>,
+        compose: impl FnOnce(&mut String, Observation<'_>),
+    ) -> NodeResult {
+        validate_write(
+            self.storage.bindings,
+            output,
+            generation,
+            self.now,
+            self.writer,
+        );
+        let observation = Observation {
+            columns: self.storage.columns,
+            bindings: self.storage.bindings,
+            atomic: self.storage.atomic,
+            keys: self.storage.keys,
+        };
+        let bytes = measure(observation)?;
+        let slot = self.storage.bindings.output(output).slot as usize;
+        if scalar_values::<String>(self.storage.columns)[slot].capacity() < bytes {
+            return Err(NodeError::new("prepared text capacity exceeded"));
+        }
+        let mut destination =
+            std::mem::take(&mut scalar_values::<String>(self.storage.columns)[slot]);
+        destination.clear();
+        let observation = Observation {
+            columns: self.storage.columns,
+            bindings: self.storage.bindings,
+            atomic: self.storage.atomic,
+            keys: self.storage.keys,
+        };
+        compose(&mut destination, observation);
+        scalar_values::<String>(self.storage.columns)[slot] = destination;
+        self.storage.bindings.publish(output, self.now, self.wake);
+        Ok(())
+    }
     /// Publish one native complete ordinary payload without retaining an intermediate.
     pub fn atomic<T: PreparedValue>(
         &mut self,
@@ -239,4 +280,8 @@ pub fn validate_write(
         endpoint.alive && endpoint.generation == generation,
         "TS-23: expired output handle"
     );
+}
+
+fn scalar_values<T: Scalar>(columns: &mut Columns) -> &mut Vec<T> {
+    T::column_mut(columns)
 }

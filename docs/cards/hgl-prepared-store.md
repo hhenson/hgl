@@ -35,3 +35,9 @@ Acceptance: unchanged Store lifetime/notification tests plus first/repeated
 prepared publication, direct pass and global capture allocation/isolation tests.
 Full generated graph.evaluate allocation evidence belongs to compiler integration;
 native passing tests alone are not a claim about every generated hook.
+
+`PreparedTick::text` composes a checked pure text expression directly into reserved
+scalar storage. A generated measurement closure validates all sources and full
+byte length before an infallible append closure writes the independent destination.
+The destination is temporarily moved out of its column to permit safe disjoint
+source borrowing, then restored before its single publication.

@@ -54,13 +54,17 @@ impl Capacity {
         for value in hgl_rust_finite_domains::constants(plan) {
             collect(&value.ty, &mut types);
         }
-        let scalar_sets = plan
+        let mut scalar_sets: Vec<_> = plan
             .nodes
             .iter()
             .filter_map(|node| {
                 if let Ty::Set(key) = &node.result {
                     if matches!(key.as_ref(), Ty::I64 | Ty::Bool)
-                        && node.inputs.iter().any(|(_, _, ty)| ty == key.as_ref())
+                        && (hgl_rust_finite_domains::mutations(&node.start) > 0
+                            || node
+                                .handlers
+                                .iter()
+                                .any(|(_, body)| hgl_rust_finite_domains::mutations(body) > 0))
                     {
                         Some((**key).clone())
                     } else {
@@ -71,6 +75,8 @@ impl Capacity {
                 }
             })
             .collect();
+        scalar_sets.sort();
+        scalar_sets.dedup();
         Self { types, scalar_sets }
     }
     fn index(&self, ty: &Ty) -> usize {
@@ -108,39 +114,39 @@ impl Capacity {
                     .map(|(i, child)| self.include(child, &format!("&({value}).{i}")))
                     .collect::<String>();
         }
-        let mut result = format!(
+        format!(
             "<{} as hgl_store::PreparedValue>::include(&mut capacity.limit{index},{value});",
             global_type(ty)
-        );
-        if self.scalar_sets.contains(ty) {
-            let root = self.index(&Ty::Delta(Box::new(Ty::Set(Box::new(ty.clone())))));
-            let id = if *ty == Ty::Bool {
-                format!("i64::from(*({value}))")
-            } else {
-                format!("*({value})")
-            };
-            write!(
-                result,
-                "capacity.topology{root}.children.entry({id}).or_default();"
-            )
-            .unwrap_or_else(|_| unreachable!("String formatting"));
-            if *ty == Ty::I64 {
-                write!(
-                    result,
-                    "capacity.topology{root}.children.entry(({id}).wrapping_neg()).or_default();"
-                )
-                .unwrap_or_else(|_| unreachable!("String formatting"));
-            }
-        }
-        result
+        )
     }
     /// Merge checked compile-time constants without moving hook evaluation earlier.
     pub fn constants(&self, plan: &Plan, emit: impl Fn(&hgl_rust_ir::Value) -> String) -> String {
         hgl_rust_finite_domains::constants(plan).into_iter().map(|value|format!("{{let value=(||->hgl_types::NodeResult<_>{{Ok({})}})().map_err(|e|e.message)?;{}}}",emit(value),self.include(&value.ty,"&value"))).collect::<Vec<_>>().concat()
     }
     /// Retain finite primitive domains for the pre-existing scalar-to-set operators.
-    pub fn scalar_sets(&self) -> String {
-        self.scalar_sets.iter().map(|ty|{let index=self.index(&Ty::Delta(Box::new(Ty::Set(Box::new(ty.clone())))));let value=if *ty==Ty::Bool {"(key!=0)"}else{"key"};format!("for &key in capacity.topology{index}.children.keys() {{<{} as hgl_store::Key>::prepare(&mut store.keys,&{value}).map_err(|e|e.message)?;}}capacity.width{index}_0=capacity.width{index}_0.max(capacity.topology{index}.children.len());capacity.width{index}_1=capacity.width{index}_1.max(capacity.topology{index}.children.len());",global_type(ty))}).collect::<Vec<_>>().concat()
+    pub fn scalar_sets(&self, plan: &Plan) -> String {
+        let mut code = hgl_rust_finite_domains::widths(plan, |ty| {
+            let index = self.index(&delta_type(ty));
+            format!("capacity.width{index}_0.max(capacity.width{index}_1).max(1)")
+        });
+        for ty in &self.scalar_sets {
+            let index = self.index(&Ty::Delta(Box::new(Ty::Set(Box::new(ty.clone())))));
+            let width = plan
+                .nodes
+                .iter()
+                .enumerate()
+                .filter(|(_, node)| node.result == Ty::Set(Box::new(ty.clone())))
+                .fold("1usize".to_owned(), |width, (node, _)| {
+                    format!("({width}).max(width{node})")
+                });
+            let capacity = if *ty == Ty::Bool {
+                "2"
+            } else {
+                "cycles.checked_add(1).and_then(|cycles|cycles.checked_mul(width)).ok_or(\"prepared key pool capacity overflow\")?"
+            };
+            write!(code,"{{let width={width};capacity.pool{index}={capacity};capacity.width{index}_0=width;capacity.width{index}_1=width;}}").unwrap_or_else(|_|unreachable!("String formatting"));
+        }
+        code
     }
     /// Reserve the fixed textual envelope of built-in scalar formatters.
     pub fn native_limits(&self, plan: &Plan) -> String {
@@ -157,6 +163,17 @@ impl Capacity {
         } else {
             String::new()
         }
+    }
+    /// Widen retained text for checked pure concatenation expressions.
+    pub fn text_limits(&self, plan: &Plan) -> String {
+        let factor = hgl_rust_pure_bounds::text_factor(plan);
+        if factor == 1 {
+            return String::new();
+        }
+        let index = self.index(&Ty::Str);
+        format!(
+            "capacity.limit{index}=capacity.limit{index}.checked_mul({factor}).ok_or(\"prepared text capacity overflow\")?;"
+        )
     }
     /// Assemble exact typed bounds; structural deltas include every possible changed member.
     pub fn bounds(&self, ty: &Ty) -> String {
@@ -222,7 +239,7 @@ impl Capacity {
             .filter_map(|(index, ty)| {
                 if matches!(ty, Ty::Delta(_)) {
                     Some(format!(
-                        "topology{index}:FiniteTopology,{}",
+                        "topology{index}:FiniteTopology,pool{index}:usize,{}",
                         (0..self::fields(ty).len())
                             .map(|i| format!("width{index}_{i}:usize,"))
                             .collect::<Vec<_>>()
@@ -257,9 +274,15 @@ impl Capacity {
         }
         match ty {
             Ty::Map(_, child) => format!(
-                "{{let output={id};let domain={domain};let keys=domain.children.keys().copied().collect::<Vec<_>>();store.prepare_collection(output,&keys,|store,owner|store.add_shaped_output(owner,<{} as hgl_store::shapes::Shape>::shape()));for (&key,domain) in &domain.children {{let child=store.bindings().prepared_output(output,key).expect(\"prepared domain child\");{}}}}}",hgl_rust_deltas::shape_marker(child),self.output_with(child,"child","domain")
+                "{{let output={id};let domain={domain};let keys=domain.children.keys().copied().collect::<Vec<_>>();store.prepare_collection(output,&keys,|store,owner|store.add_shaped_output(owner,<{} as hgl_store::shapes::Shape>::shape()));for (&key,domain) in &domain.children {{let child=store.prepared().bindings.prepared_output(output,key).expect(\"prepared domain child\");{}}}}}",hgl_rust_deltas::shape_marker(child),self.output_with(child,"child","domain")
             ),
-            Ty::Set(_) => format!("{{let output={id};let domain={domain};let keys=domain.children.keys().copied().collect::<Vec<_>>();store.prepare_collection(output,&keys,|store,owner|store.add_output::<bool>(owner).id());}}"),
+            Ty::Set(key) => {
+                let pooled=self.scalar_sets.contains(key);
+                let index=self.index(&delta_type(ty));
+                let keys=if pooled {format!("(0..capacity.pool{index}).map(|n|i64::try_from(n).expect(\"bounded key capacity\")).collect::<Vec<_>>()")} else {"domain.children.keys().copied().collect::<Vec<_>>()".into()};
+                let prepare=if pooled {"store.prepared().bindings.prepare_pool(output);"}else{""};
+                format!("{{let output={id};let domain={domain};let keys={keys};store.prepare_collection(output,&keys,|store,owner|store.add_output::<bool>(owner).id());{prepare}}}")
+            },
             Ty::List(child, Some(_)) => format!(
                 "{{let output={id};let domain={domain};for index in 0..store.bindings().output(output).fixed.len() {{let child=store.bindings().output(output).fixed[index];let domain=domain.children.get(&(index as i64)).unwrap_or(&empty);{}}}}}",
                 self.output_with(child, "child","domain")

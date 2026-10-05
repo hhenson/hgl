@@ -1,6 +1,9 @@
 use super::{Kind, Plan, Value, global_type, value};
 use hgl_source::Ty;
 pub(super) fn forward(value: &Value) -> Option<String> {
+    if let Some(code) = hgl_rust_observed::text(value) {
+        return Some(code);
+    }
     let (ty, input) = if let Kind::Query(op, args) = &value.kind {
         if op != "delta_value" {
             return None;

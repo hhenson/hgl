@@ -74,11 +74,25 @@ impl<I: Copy> Members<I> {
     }
     /// One permanently allocated child, including an absent member.
     pub fn prepared_child(&self, key: i64) -> Option<I> {
-        self.prepared
-            .binary_search_by_key(&key, |&(key, _)| key)
-            .ok()
+        self.live
+            .domain_index(key)
             .map(|index| self.prepared[index].1)
     }
+    /// Retain children while allowing their primitive keys to arrive during execution.
+    pub fn pool(&mut self) {
+        self.live.pool();
+        self.removed.pool();
+        self.initial.pool();
+    }
+    /// Bind a new runtime key to the corresponding retained child and bookkeeping slots.
+    pub fn claim(&mut self, key: i64) -> I {
+        let index = self.live.register(key);
+        self.removed.register(key);
+        self.initial.register(key);
+        self.prepared[index].0 = key;
+        self.prepared[index].1
+    }
+
     /// Retain first membership and move the child into the live set.
     pub fn insert(&mut self, key: i64, child: I) {
         self.initial
@@ -405,3 +419,29 @@ pub use scopes::{Phase, Scope, Scopes};
 
 mod assemblies;
 pub use assemblies::Assemblies;
+
+impl Endpoints {
+    /// Resolve or assign a permanently retained child and its prebound projections.
+    /// # Panics
+    /// Fixed domains must contain the key; bounded pools must have capacity.
+    pub fn prepared_child(&mut self, root: OutputId, key: i64) -> Option<OutputId> {
+        if let Some(child) = self.output(root).members.prepared_child(key) {
+            return Some(child);
+        }
+        if !self.output(root).members.live.pooled() {
+            assert!(
+                !self.output(root).members.live.prepared(),
+                "key outside prepared collection domain"
+            );
+            return None;
+        }
+        let child = self.outputs[root.0 as usize].members.claim(key);
+        self.outputs[child.0 as usize].parent = Some((root, key));
+        for position in 0..self.output(root).watchers.len() {
+            let input = self.output(root).watchers[position];
+            let view = self.inputs[input.0 as usize].members.claim(key);
+            self.inputs[view.0 as usize].parent = Some((input, key));
+        }
+        Some(child)
+    }
+}

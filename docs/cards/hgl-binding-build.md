@@ -22,3 +22,6 @@ Construction may allocate; activation of a known prepared member may not.
 Projection construction preserves the destination input's active/passive state
 and scope. Tests in hgl-store cover nested domains, partial fields, notifications,
 retention, removal and first/repeated allocation-free activation.
+
+Projection preparation mirrors an output's bounded runtime-key pool in each input
+view; child subscriptions remain attached to matching prepared slot indices.

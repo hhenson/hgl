@@ -15,3 +15,18 @@ input bound. It does not claim native formatter implementations allocate nothing
 Finite configurations are constructed once, then borrowed by capacity planning
 and independently retained into graph nodes. Planning does not re-execute ordinary
 configuration helpers or provider recipes.
+
+`scalar_sets(plan)` reserves bounded primitive membership pools from the finite
+replay horizon and per-output publication widths along actual dependencies.
+Nested added-element loops multiply their source widths; independent outputs
+combine by maximum, and key types are deduplicated. Values
+may arrive from opaque native calls or multiple input expressions; those hooks
+execute normally once. Removed keys retain their assigned slots for reinsertion.
+Downstream projections and cycle work queues are allocated cold. Per-cycle record
+width remains separate from total distinct-key capacity, avoiding quadratic
+record pools. `text_limits(plan)` widens retained text for pure local concatenations.
+
+Runtime while bodies do not have a general iteration proof in this finite planner;
+their single-traversal estimate does not establish an allocation guarantee for
+arbitrary mutation loops. Such loops can exhaust the prepared pool, a remaining
+behavioral limitation distinct from the validated finite publication matrix.

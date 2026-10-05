@@ -131,11 +131,10 @@ impl Key for bool {
     fn prepare(keys: &mut Keys, value: &Self::Value) -> NodeResult {
         keys.bools.prepare(i64::from(*value))
     }
-    fn id(keys: &Keys, value: &Self::Value) -> NodeResult<i64> {
-        keys.bools.require(i64::from(*value))
+    fn id(_: &Keys, value: &Self::Value) -> NodeResult<i64> {
+        Ok(i64::from(*value))
     }
-    fn value(keys: &Keys, id: i64) -> NodeResult<Self::Value> {
-        keys.bools.require(id)?;
+    fn value(_: &Keys, id: i64) -> NodeResult<Self::Value> {
         Ok(id != 0)
     }
     fn ids(keys: &Keys) -> &[i64] {
@@ -146,11 +145,10 @@ impl Key for i64 {
     fn prepare(keys: &mut Keys, value: &Self::Value) -> NodeResult {
         keys.integers.prepare(*value)
     }
-    fn id(keys: &Keys, value: &Self::Value) -> NodeResult<i64> {
-        keys.integers.require(*value)
+    fn id(_: &Keys, value: &Self::Value) -> NodeResult<i64> {
+        Ok(*value)
     }
-    fn value(keys: &Keys, id: i64) -> NodeResult<Self::Value> {
-        keys.integers.require(id)?;
+    fn value(_: &Keys, id: i64) -> NodeResult<Self::Value> {
         Ok(id)
     }
     fn ids(keys: &Keys) -> &[i64] {

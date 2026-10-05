@@ -22,3 +22,10 @@ absent domain keys. Removal updates the moved entry's dense position.
 Acceptance: middle removal, replacement, reinsertion and clear preserve occupied
 entries with a large mostly unused domain. Full publication allocation tests
 live in hgl-store and include the first membership change.
+
+`pool()` converts empty prepared storage into bounded runtime-key slots.
+`pooled()`, `domain_index(key)` and `register(key)` expose that assignment protocol.
+A preallocated open-address index assigns each exact primitive key a permanent
+slot; removing/clearing occupancy retains the assignment. No key value is reserved
+as a sentinel. Lookups and first assignments allocate nothing. Pool overflow is
+an internal capacity proof failure; legacy dynamic tables remain unchanged.

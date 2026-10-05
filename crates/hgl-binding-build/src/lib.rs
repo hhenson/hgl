@@ -72,6 +72,9 @@ fn projection(endpoints: &mut Endpoints, scopes: &mut Scopes, id: InputId, sourc
         children.push((key, child));
     }
     endpoints.inputs[id.0 as usize].members.prepare(children);
+    if endpoints.output(source).members.live.pooled() {
+        endpoints.inputs[id.0 as usize].members.pool();
+    }
     scopes.current = previous;
 }
 /// Prepare every bound finite collection view after wiring, before any target starts.

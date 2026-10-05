@@ -20,6 +20,29 @@ fn legacy_bools(value:bool)->set<bool> {inject out
 when {upsert(out,value)}}
 test legacy_members {assert eval(legacy_members,value:[1,2,-1,1]) == [delta<set<i64>>(added:[1]),delta<set<i64>>(added:[2]),delta<set<i64>>(removed:[1]),delta<set<i64>>(added:[1])]}
 test legacy_bools {assert eval(legacy_bools,value:[true,false,true]) == [delta<set<bool>>(added:[true]),delta<set<bool>>(added:[false]),_]}
+native const fn opaque(value:i64)->i64 throws
+native const fn opaque(value:i64)->i64 throws {}
+native const fn key_start(value:i64) throws
+native const fn key_start(value:i64) throws {}
+native const fn key_stop(value:i64) throws
+native const fn key_stop(value:i64) throws {}
+fn opaque_members(value:i64,other:i64)->set<i64> {inject out
+start {key_start(0)}
+stop {key_stop(0)}
+when {let key=opaque(value+other)
+if key>=0 {upsert(out,key)
+upsert(out,key+100)} else {discard(out,-key)
+discard(out,-key+100)}}}
+test opaque_members {assert eval(opaque_members,value:[1,2,-3,1],other:[1,1,1,1]) == [delta<set<i64>>(added:[2,102]),delta<set<i64>>(added:[3,103]),delta<set<i64>>(removed:[2,102]),delta<set<i64>>(added:[2,102])]}
+fn paired_members(left:set<i64>,right:set<i64>)->set<i64> {inject out
+when {for a in elements(left,added) {for b in elements(right,added) {upsert(out,a*100+b)}}}}
+test paired_members {assert eval(paired_members,left:[delta<set<i64>>(added:[1,2])],right:[delta<set<i64>>(added:[3,4,5])]) == [delta<set<i64>>(added:[103,104,105,203,204,205])]}
+fn computed_text(value:str)->str {when {return value+":"+value}}
+test computed_text {assert eval(computed_text,value:["a","longer",""]) == ["a:a","longer:longer",":"]}
+fn computed_members(value:i64)->set<i64> {inject out
+when {let key=value+1
+if value>=0 {upsert(out,key)} else {discard(out,-key)}}}
+test computed_members {assert eval(computed_members,value:[1,2,-3,1]) == [delta<set<i64>>(added:[2]),delta<set<i64>>(added:[3]),delta<set<i64>>(removed:[2]),delta<set<i64>>(added:[2])]}
 fn text(value:str)->str {when {return delta_value(value)}}
 fn zone(value:timezone)->timezone {when {return delta_value(value)}}
 fn clock(value:zoned_time)->zoned_time {when {return delta_value(value)}}
@@ -57,7 +80,7 @@ fn finite_owning_publications_use_prepared_storage() -> Result<(), Box<dyn std::
         .ok_or("workspace parent")?;
     let mut sources = vec![(
         "prepared_execution.hgl".into(),
-        format!("{SOURCE}{}", scaling_source()),
+        format!("{SOURCE}{}{}", scaling_source(), branch_source()),
     )];
     for file in ["replay_record.hgl", "impl/replay_record.hgl"] {
         sources.push((
@@ -77,34 +100,9 @@ fn finite_owning_publications_use_prepared_storage() -> Result<(), Box<dyn std::
         .replace("hgl_kernel::run_simulation(", "crate::measured_simulation(")
         .replace(
             "store.prepare_collection_inputs();",
-            "crate::verify_pool(&mut store,&built);store.prepare_collection_inputs();",
+            "crate::verify_pool(&mut store,&built,&graph);store.prepare_collection_inputs();",
         );
-    code.push_str(r#"
-struct Provider;
-mod native {pub fn configuration_marker_i64(value:i64)->hgl_types::NodeResult<i64> {assert_eq!(super::CONFIGURATION_CALLS.fetch_add(1,std::sync::atomic::Ordering::SeqCst),0,"configuration initializer executed more than once");Ok(value)}}
-static CONFIGURATION_CALLS:std::sync::atomic::AtomicUsize=std::sync::atomic::AtomicUsize::new(0);
-#[global_allocator] static ALLOCATOR:hgl_alloc_count::CountingAllocator=hgl_alloc_count::CountingAllocator;
-fn verify_pool(store:&mut hgl_store::Store,built:&hgl_describe::BuiltGraph) {
- fn count(store:&hgl_store::Store,id:hgl_store::OutputId)->usize {let output=store.bindings().output(id);1+output.members.prepared.iter().map(|(_,child)|count(store,*child)).sum::<usize>()+output.fixed.iter().map(|child|count(store,*child)).sum::<usize>()}
- let Some(root)=built.outputs.iter().flatten().copied().find(|id|store.bindings().output(*id).members.prepared.len()>=8) else{return;};
- let n=store.bindings().output(root).members.prepared.len();let mut depth=0;let mut node=root;
- while let Some((_,child))=store.bindings().output(node).members.prepared.first() {depth+=1;node=*child;}
- let descendants=built.outputs.iter().flatten().map(|id|count(store,*id)).sum::<usize>();
- assert_eq!(descendants,2*(1+n*depth),"finite topology must preserve per-parent reachability");
- let (scalars,lists)=store.global_state().values().slot_counts();let rows=6*n+1;
- assert!(scalars<=rows*(depth+3)+1,"record scalar pool grew beyond finite recipe bounds: {scalars}");
- assert!(lists<=rows*3*depth+2,"record list pool grew beyond finite recipe bounds: {lists}");
- println!("prepared scaling N={n} depth={depth}: temporal endpoints={descendants}, record scalar slots={scalars}, record list slots={lists}");
-}
-fn measured_simulation(graph:&mut hgl_kernel::Graph, store:&mut hgl_store::Store, config:&hgl_kernel::RunConfig)->Result<u64,hgl_kernel::EngineError> {
- graph.start(store,config.start_time).map_err(hgl_kernel::EngineError::Node)?;
- let mut cycles=0; let mut total=0; let mut now=config.start_time;
- while !graph.stop_requested() {let next=graph.next_scheduled_time();if next>=config.end_time {break;}now=next;
- let (result,count)=hgl_alloc_count::count_in(||graph.evaluate(store,now));result.map_err(hgl_kernel::EngineError::Node)?;total+=count;cycles+=1;}
- graph.stop(store,now).map_err(hgl_kernel::EngineError::Node)?;
- assert_eq!(total,0,"complete generated publication and recording allocated across {cycles} cycles");Ok(cycles)
-}
-"#);
+    code.push_str(RUNTIME);
     fs::write(dir.join("src/main.rs"), code)?;
     manifest(root, &dir)?;
     for profile in [vec![], vec!["--release"]] {
@@ -115,7 +113,7 @@ fn measured_simulation(graph:&mut hgl_kernel::Graph, store:&mut hgl_store::Store
             .output()?;
         for line in String::from_utf8_lossy(&output.stdout)
             .lines()
-            .filter(|line| line.starts_with("prepared scaling"))
+            .filter(|line| line.starts_with("prepared "))
         {
             println!("{line}");
         }
@@ -198,6 +196,56 @@ fn scaling_source() -> String {
             let rows = rows.join(",");
             write!(source,"\nfn scale_{depth}_{n}(value:{})->{} {{when {{return delta_value(value)}}}}\ntest scale_{depth}_{n} {{assert eval(scale_{depth}_{n},value:[{rows}]) == [{rows}]}}\n",ty(depth),ty(depth)).unwrap_or_else(|_|unreachable!("String formatting"));
         }
+    }
+    source
+}
+
+const RUNTIME: &str = r#"
+struct Provider;
+mod native {pub fn key_stop_i64(_:i64)->hgl_types::NodeResult {assert_eq!(super::KEY_CALLS.load(std::sync::atomic::Ordering::SeqCst),4);assert_eq!(super::KEY_STARTS.load(std::sync::atomic::Ordering::SeqCst),1);Ok(())} pub fn opaque_i64(value:i64)->hgl_types::NodeResult<i64> {super::KEY_CALLS.fetch_add(1,std::sync::atomic::Ordering::SeqCst);Ok(value)} pub fn key_start_i64(_:i64)->hgl_types::NodeResult {assert_eq!(super::KEY_STARTS.fetch_add(1,std::sync::atomic::Ordering::SeqCst),0);Ok(())} pub fn configuration_marker_i64(value:i64)->hgl_types::NodeResult<i64> {assert_eq!(super::CONFIGURATION_CALLS.fetch_add(1,std::sync::atomic::Ordering::SeqCst),0,"configuration initializer executed more than once");Ok(value)}}
+static KEY_CALLS:std::sync::atomic::AtomicUsize=std::sync::atomic::AtomicUsize::new(0);
+static KEY_STARTS:std::sync::atomic::AtomicUsize=std::sync::atomic::AtomicUsize::new(0);
+static CONFIGURATION_CALLS:std::sync::atomic::AtomicUsize=std::sync::atomic::AtomicUsize::new(0);
+#[global_allocator] static ALLOCATOR:hgl_alloc_count::CountingAllocator=hgl_alloc_count::CountingAllocator;
+fn verify_pool(store:&mut hgl_store::Store,built:&hgl_describe::BuiltGraph,graph:&hgl_describe::GraphDescription) {
+ if let Some(node)=graph.nodes.iter().find(|node|node.implementation.contains("::branch_member_")) {
+ let n:usize=node.implementation.split("::branch_member_").nth(1).unwrap().split('#').next().unwrap().parse().unwrap();
+ let roots=built.outputs.iter().flatten().filter(|id|store.bindings().output(**id).members.live.pooled()).collect::<Vec<_>>();
+ assert_eq!(roots.len(),n);for &&root in &roots {assert_eq!(store.bindings().output(root).members.prepared.len(),10,"independent outputs must not multiply one another's mutation bounds");}
+ let descendants=built.outputs.iter().flatten().map(|id|count(store,*id)).sum::<usize>();assert_eq!(descendants,1+11*n);
+ println!("prepared branches N={n}: temporal endpoints={descendants}");return;
+ }
+ if !graph.nodes.iter().any(|node|node.implementation.contains("::scale_")) {return;}
+ fn count(store:&hgl_store::Store,id:hgl_store::OutputId)->usize {let output=store.bindings().output(id);1+output.members.prepared.iter().map(|(_,child)|count(store,*child)).sum::<usize>()+output.fixed.iter().map(|child|count(store,*child)).sum::<usize>()}
+ let root=built.outputs.iter().flatten().copied().find(|id|store.bindings().output(*id).members.prepared.len()>=8).expect("scaling fixture root must be prepared");
+ let n=store.bindings().output(root).members.prepared.len();let mut depth=0;let mut node=root;
+ while let Some((_,child))=store.bindings().output(node).members.prepared.first() {depth+=1;node=*child;}
+ let descendants=built.outputs.iter().flatten().map(|id|count(store,*id)).sum::<usize>();
+ assert_eq!(descendants,2*(1+n*depth),"finite topology must preserve per-parent reachability");
+ let (scalars,lists)=store.global_state().values().slot_counts();let rows=6*n+1;
+ assert!(scalars<=rows*(depth+3)+1,"record scalar pool grew beyond finite recipe bounds: {scalars}");
+ assert!(lists<=rows*3*depth+2,"record list pool grew beyond finite recipe bounds: {lists}");
+ println!("prepared scaling N={n} depth={depth}: temporal endpoints={descendants}, record scalar slots={scalars}, record list slots={lists}");
+}
+fn measured_simulation(graph:&mut hgl_kernel::Graph, store:&mut hgl_store::Store, config:&hgl_kernel::RunConfig)->Result<u64,hgl_kernel::EngineError> {
+ graph.start(store,config.start_time).map_err(hgl_kernel::EngineError::Node)?;
+ let mut cycles=0; let mut total=0; let mut now=config.start_time;
+ while !graph.stop_requested() {let next=graph.next_scheduled_time();if next>=config.end_time {break;}now=next;
+ let (result,count)=hgl_alloc_count::count_in(||graph.evaluate(store,now));result.map_err(hgl_kernel::EngineError::Node)?;total+=count;cycles+=1;}
+ graph.stop(store,now).map_err(hgl_kernel::EngineError::Node)?;
+ assert_eq!(total,0,"complete generated publication and recording allocated across {cycles} cycles");Ok(cycles)
+}
+"#;
+
+fn branch_source() -> String {
+    let mut source = String::new();
+    for n in [2, 16] {
+        writeln!(source,"fn branch_member_{n}(value:i64)->set<i64> {{inject out\nwhen {{upsert(out,value)\nupsert(out,value+100)}}}}\nfn branches_{n}(value:i64)->set<i64> {{").unwrap_or_else(|_|unreachable!());
+        for i in 1..n {
+            writeln!(source, "let member{i}=branch_member_{n}(value)")
+                .unwrap_or_else(|_| unreachable!());
+        }
+        writeln!(source,"branch_member_{n}(value)}}\ntest branches_{n} {{assert eval(branches_{n},value:[1,2]) == [delta<set<i64>>(added:[1,101]),delta<set<i64>>(added:[2,102])]}}").unwrap_or_else(|_|unreachable!());
     }
     source
 }

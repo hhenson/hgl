@@ -17,14 +17,12 @@ impl Bindings {
     /// Statically allocated output for a prepared domain; absent for legacy collections.
     /// # Panics
     /// A prepared collection must contain the requested key in its domain.
-    pub fn prepared_output(&self, id: OutputId, key: i64) -> Option<OutputId> {
-        let members = &self.output(id).members;
-        let child = members.prepared_child(key);
-        assert!(
-            !members.live.prepared() || child.is_some(),
-            "key outside prepared collection domain"
-        );
-        child
+    pub fn prepared_output(&mut self, id: OutputId, key: i64) -> Option<OutputId> {
+        self.endpoints.prepared_child(id, key)
+    }
+    /// Assign primitive runtime keys to bounded children prepared before wiring.
+    pub fn prepare_pool(&mut self, root: OutputId) {
+        self.endpoints.outputs[root.0 as usize].members.pool();
     }
     fn touch_output(&mut self, id: OutputId, now: EngineTime) {
         if self.output(id).members.epoch != now {

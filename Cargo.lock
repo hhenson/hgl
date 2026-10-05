@@ -434,6 +434,7 @@ dependencies = [
  "hgl-rust-finite-domains",
  "hgl-rust-ir",
  "hgl-rust-layouts",
+ "hgl-rust-pure-bounds",
  "hgl-source",
 ]
 
@@ -517,6 +518,7 @@ dependencies = [
 name = "hgl-rust-observed"
 version = "0.0.0"
 dependencies = [
+ "hgl-rust-ir",
  "hgl-rust-layouts",
  "hgl-source",
 ]
@@ -537,6 +539,14 @@ dependencies = [
 name = "hgl-rust-prepared-values"
 version = "0.0.0"
 dependencies = [
+ "hgl-source",
+]
+
+[[package]]
+name = "hgl-rust-pure-bounds"
+version = "0.0.0"
+dependencies = [
+ "hgl-rust-ir",
  "hgl-source",
 ]
 
