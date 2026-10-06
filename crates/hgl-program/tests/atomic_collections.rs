@@ -1,5 +1,9 @@
 //! Complete ordinary collection semantics and actual prepared evaluation allocation checks.
 use hgl_program::compile_tests;
+
+// Two tests can start within the same clock tick, and on Windows a second test
+// in the same directory then fights the first for its executable.
+static NEXT_DIR: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 fn sources(source: &str) -> Vec<(String, String)> {
     vec![
         ("atomic_collections.hgl".into(), source.into()),
@@ -48,10 +52,11 @@ fn run_program(
         .join("../..")
         .canonicalize()?;
     let dir = std::env::temp_dir().join(format!(
-        "hgl-atomic_collections-{}",
+        "hgl-atomic_collections-{}-{}",
         SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)?
-            .as_nanos()
+            .as_nanos(),
+        NEXT_DIR.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
     fs::create_dir_all(dir.join("src"))?;
     let suite = compile_tests(&sources(source))?;
@@ -79,33 +84,41 @@ fn measured_simulation(graph:&mut hgl_kernel::Graph, store:&mut hgl_store::Store
     code.push_str(provider);
     fs::write(dir.join("src/main.rs"), code)?;
     manifest(&root, &dir)?;
-    for profile in [vec![], vec!["--release"]] {
-        let output = Command::new(env!("CARGO"))
-            .args(["run", "--offline", "--quiet"])
-            .args(profile)
-            .current_dir(&dir)
-            .output()?;
+    // The gate runs the suite in both profiles; each build follows the profile of this test binary.
+    let profile: Vec<&str> = if cfg!(debug_assertions) {
+        vec![]
+    } else {
+        vec!["--release"]
+    };
+    let output = Command::new(env!("CARGO"))
+        .args(["run", "--offline", "--quiet"])
+        // One build cache for every generated program; a fresh one per test rebuilt the runtime each time.
+        .env("CARGO_TARGET_DIR", concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/source-tests"))
+        .env("CARGO_INCREMENTAL", "0")
+        .args(profile)
+        .current_dir(&dir)
+        .output()?;
+    assert!(
+        output.status.success() == failure.is_none(),
+        "{}\n{}\n{}",
+        dir.display(),
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    if let Some(message) = failure {
         assert!(
-            output.status.success() == failure.is_none(),
-            "{}\n{}\n{}",
-            dir.display(),
-            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr).contains(message),
+            "{}",
             String::from_utf8_lossy(&output.stderr)
         );
-        if let Some(message) = failure {
-            assert!(
-                String::from_utf8_lossy(&output.stderr).contains(message),
-                "{}",
-                String::from_utf8_lossy(&output.stderr)
-            );
-        }
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let actual = stdout
-            .lines()
-            .filter(|line| line.starts_with("MARK"))
-            .collect::<Vec<_>>();
-        assert_eq!(actual, marks);
     }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let actual = stdout
+        .lines()
+        .filter(|line| line.starts_with("MARK"))
+        .collect::<Vec<_>>();
+    assert_eq!(actual, marks);
+
     fs::remove_dir_all(dir)?;
     Ok(())
 }
@@ -195,7 +208,7 @@ fn manifest(
             .replace('"', "\\\"");
         writeln!(manifest, "{name}={{path=\"{path}\"}}")?;
     }
-    fs::write(dir.join("Cargo.toml"), manifest)?;
+    fs::write(dir.join("Cargo.toml"), unique_package(&manifest, dir))?;
     Ok(())
 }
 
@@ -417,4 +430,13 @@ fn collection_type_arguments_do_not_admit_direct_composite_atomic_boundaries() {
         );
         assert!(compile_tests(&sources(&source)).is_err(), "admitted {ty}");
     }
+}
+
+/// Parallel tests share one build cache, so each generated package needs a name
+/// of its own: `cargo run` would otherwise execute a sibling's binary.
+fn unique_package(manifest: &str, dir: &std::path::Path) -> String {
+    let suffix = dir
+        .file_name()
+        .map_or_else(String::new, |name| name.to_string_lossy().into_owned());
+    manifest.replacen("\"\n", &format!("-{suffix}\"\n"), 1)
 }

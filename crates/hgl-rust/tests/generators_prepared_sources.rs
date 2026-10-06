@@ -3,6 +3,10 @@ use hgl_rust::generators::Generator;
 use hgl_semantics::ir::{Kind, Plan, Statement, Value};
 use hgl_source::{Literal, Ty};
 use std::{fmt::Write as _, fs, process::Command, time::SystemTime};
+
+// Two tests can start within the same clock tick, and on Windows a second test
+// in the same directory then fights the first for its executable.
+static NEXT_DIR: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 fn at(time: i64, payload: Value) -> Statement {
     Statement::TimedYield(
         Value::new(Ty::DateTime, Kind::Literal(Literal::DateTime(time))),
@@ -75,10 +79,11 @@ fn execute(code: &str) -> Result<(), Box<dyn std::error::Error>> {
         .join("../..")
         .canonicalize()?;
     let dir = std::env::temp_dir().join(format!(
-        "hgl-prepared-generator-{}",
+        "hgl-prepared-generator-{}-{}",
         SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)?
-            .as_nanos()
+            .as_nanos(),
+        NEXT_DIR.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
     fs::create_dir_all(dir.join("src"))?;
     fs::write(dir.join("src/main.rs"), code)?;
@@ -94,20 +99,37 @@ fn execute(code: &str) -> Result<(), Box<dyn std::error::Error>> {
             .replace('"', "\\\"");
         writeln!(manifest, "{name}={{path=\"{path}\"}}")?;
     }
-    fs::write(dir.join("Cargo.toml"), manifest)?;
-    for profile in [vec![], vec!["--release"]] {
-        let result = Command::new(env!("CARGO"))
-            .args(["run", "--offline", "--quiet"])
-            .args(profile)
-            .current_dir(&dir)
-            .output()?;
-        assert!(
-            result.status.success(),
-            "{}\n{}",
-            dir.display(),
-            String::from_utf8_lossy(&result.stderr)
-        );
-    }
+    fs::write(dir.join("Cargo.toml"), unique_package(&manifest, &dir))?;
+    // The gate runs the suite in both profiles; each build follows the profile of this test binary.
+    let profile: Vec<&str> = if cfg!(debug_assertions) {
+        vec![]
+    } else {
+        vec!["--release"]
+    };
+    let result = Command::new(env!("CARGO"))
+        .args(["run", "--offline", "--quiet"])
+        // One build cache for every generated program; a fresh one per test rebuilt the runtime each time.
+        .env("CARGO_TARGET_DIR", concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/source-tests"))
+        .env("CARGO_INCREMENTAL", "0")
+        .args(profile)
+        .current_dir(&dir)
+        .output()?;
+    assert!(
+        result.status.success(),
+        "{}\n{}",
+        dir.display(),
+        String::from_utf8_lossy(&result.stderr)
+    );
+
     fs::remove_dir_all(dir)?;
     Ok(())
+}
+
+/// Parallel tests share one build cache, so each generated package needs a name
+/// of its own: `cargo run` would otherwise execute a sibling's binary.
+fn unique_package(manifest: &str, dir: &std::path::Path) -> String {
+    let suffix = dir
+        .file_name()
+        .map_or_else(String::new, |name| name.to_string_lossy().into_owned());
+    manifest.replacen("\"\n", &format!("-{suffix}\"\n"), 1)
 }

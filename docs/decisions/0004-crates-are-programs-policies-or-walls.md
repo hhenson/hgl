@@ -28,7 +28,7 @@ bindings = { budget = 1100, uses = ["endpoints"] }   # src/bindings.rs plus src/
 ```
 
 `uses` is the card's "may use" list as sibling modules; the crate root is
-always reachable. `xtask` grew by the module gate, so its budget is 540.
+always reachable. `xtask` grew by the module gate, so its budget is 560 (the gate selection that lets CI run the test profiles as parallel jobs is held there too).
 
 The workspace is the fourteen packages listed in the exploration. The
 budgets of the merged crates became module budgets, unchanged, and each

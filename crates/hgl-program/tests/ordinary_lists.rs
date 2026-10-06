@@ -2,6 +2,10 @@
 use hgl_program::{compile, compile_tests, emit_rust, emit_tests};
 use std::{fmt::Write as _, fs, path::Path, process::Command, time::SystemTime};
 
+// Two tests can start within the same clock tick, and on Windows a second test
+// in the same directory then fights the first for its executable.
+static NEXT_DIR: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
 const FIXTURE: &str = include_str!("fixtures/ordinary_lists.hgl");
 const PHASES: &str = include_str!("fixtures/ordinary_list_phases.hgl");
 const TYPES: &str = "struct Sample { amount:i64 }\nstruct Bucket { values:list<i64> }";
@@ -198,11 +202,12 @@ fn ordinary_lists_execute_source_values_borrows_and_failures()
         .join("../..")
         .canonicalize()?;
     let dir = std::env::temp_dir().join(format!(
-        "hgl-ordinary-lists-{}-{}",
+        "hgl-ordinary-lists-{}-{}-{}",
         std::process::id(),
         SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)?
-            .as_nanos()
+            .as_nanos(),
+        NEXT_DIR.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
     fs::create_dir_all(dir.join("src"))?;
     for (entry, name) in [
@@ -228,18 +233,26 @@ fn ordinary_lists_execute_source_values_borrows_and_failures()
         ),
     )?;
     manifest(&root, &dir)?;
-    for profile in [vec![], vec!["--release"]] {
-        let output = Command::new(env!("CARGO"))
-            .args(["run", "--offline", "--quiet"])
-            .args(profile)
-            .current_dir(&dir)
-            .output()?;
-        assert!(
-            output.status.success(),
-            "{}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-    }
+    // The gate runs the suite in both profiles; each build follows the profile of this test binary.
+    let profile: Vec<&str> = if cfg!(debug_assertions) {
+        vec![]
+    } else {
+        vec!["--release"]
+    };
+    let output = Command::new(env!("CARGO"))
+        .args(["run", "--offline", "--quiet"])
+        // One build cache for every generated program; a fresh one per test rebuilt the runtime each time.
+        .env("CARGO_TARGET_DIR", concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/source-tests"))
+        .env("CARGO_INCREMENTAL", "0")
+        .args(profile)
+        .current_dir(&dir)
+        .output()?;
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
     fs::remove_dir_all(dir)?;
     Ok(())
 }
@@ -357,6 +370,15 @@ fn manifest(root: &Path, dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
             .replace('"', "\\\"");
         writeln!(manifest, "{name}={{path=\"{path}\"}}")?;
     }
-    fs::write(dir.join("Cargo.toml"), manifest)?;
+    fs::write(dir.join("Cargo.toml"), unique_package(&manifest, dir))?;
     Ok(())
+}
+
+/// Parallel tests share one build cache, so each generated package needs a name
+/// of its own: `cargo run` would otherwise execute a sibling's binary.
+fn unique_package(manifest: &str, dir: &Path) -> String {
+    let suffix = dir
+        .file_name()
+        .map_or_else(String::new, |name| name.to_string_lossy().into_owned());
+    manifest.replacen("\"\n", &format!("-{suffix}\"\n"), 1)
 }

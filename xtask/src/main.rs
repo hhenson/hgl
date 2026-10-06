@@ -1,7 +1,9 @@
 //! Repository automation, run as `cargo xtask <task>`.
 //!
 //! `cargo xtask ci` runs every gate that CI runs, in the same order, and ends
-//! with one line per gate. Work is not done until it passes.
+//! with one line per gate. Work is not done until it passes. `cargo xtask ci
+//! test "test --release"` runs only the named gates, which is how CI spreads
+//! the gates over parallel jobs.
 //!
 //! `cargo xtask bench` measures one benchmark program; see [`mod@bench`].
 #![expect(clippy::print_stdout, reason = "xtask is a command-line tool")]
@@ -107,11 +109,11 @@ fn main() -> ExitCode {
         .split_first()
         .map_or(("", &[][..]), |(task, rest)| (task.as_str(), rest));
     if task == "ci" {
-        ci()
+        ci(rest)
     } else if task == "bench" {
         report(bench::run(rest))
     } else {
-        println!("usage: cargo xtask ci | bench");
+        println!("usage: cargo xtask ci [GATE...] | bench");
         ExitCode::FAILURE
     }
 }
@@ -126,19 +128,36 @@ fn report(outcome: Result<(), String>) -> ExitCode {
     }
 }
 
-fn ci() -> ExitCode {
+/// Run every gate, or only the named ones: CI runs the two test profiles as
+/// separate jobs so they overlap instead of following each other.
+fn ci(selected: &[String]) -> ExitCode {
+    let known = |name: &str| name == "budget" || GATES.iter().any(|gate| gate.name == name);
+    if let Some(unknown) = selected.iter().find(|name| !known(name)) {
+        let names: Vec<&str> = GATES.iter().map(|gate| gate.name).collect();
+        println!(
+            "unknown gate {unknown:?}; the gates are budget, {}",
+            names.join(", ")
+        );
+        return ExitCode::FAILURE;
+    }
+    let wanted = |name: &str| selected.is_empty() || selected.iter().any(|chosen| chosen == name);
     let cargo = env::var_os("CARGO").unwrap_or_else(|| OsString::from("cargo"));
-    let outcomes: Vec<Outcome> = GATES.iter().map(|gate| run(&cargo, gate)).collect();
+    let gates: Vec<&Gate> = GATES.iter().filter(|gate| wanted(gate.name)).collect();
+    let outcomes: Vec<Outcome> = gates.iter().map(|gate| run(&cargo, gate)).collect();
 
-    println!("== budget");
-    let budget = budgets();
+    let budget = wanted("budget").then(|| {
+        println!("== budget");
+        budgets()
+    });
 
     println!();
-    for (gate, outcome) in GATES.iter().zip(&outcomes) {
+    for (gate, outcome) in gates.iter().zip(&outcomes) {
         println!("{:<16}{}", gate.name, outcome.label());
     }
-    println!("{:<16}{}", "budget", budget.label());
-    if outcomes.contains(&Outcome::Failed) || budget == Outcome::Failed {
+    if let Some(budget) = budget {
+        println!("{:<16}{}", "budget", budget.label());
+    }
+    if outcomes.contains(&Outcome::Failed) || budget == Some(Outcome::Failed) {
         ExitCode::FAILURE
     } else {
         ExitCode::SUCCESS

@@ -1,5 +1,9 @@
 //! Optional atomic contract; shared fixture preserved verbatim from std821d9b7.
 use hgl_program::compile_tests;
+
+// Two tests can start within the same clock tick, and on Windows a second test
+// in the same directory then fights the first for its executable.
+static NEXT_DIR: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 fn sources(source: &str) -> Vec<(String, String)> {
     vec![
         ("optional.hgl".into(), source.into()),
@@ -49,16 +53,11 @@ fn optional_generated_cycles_allocate_nothing() -> Result<(), Box<dyn std::error
     run_shared(true)
 }
 fn run_shared(measure: bool) -> Result<(), Box<dyn std::error::Error>> {
-    use std::{fmt::Write as _, fs, process::Command, time::SystemTime};
+    use std::{fmt::Write as _, fs, process::Command};
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .canonicalize()?;
-    let dir = std::env::temp_dir().join(format!(
-        "hgl-optional-{}",
-        SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)?
-            .as_nanos()
-    ));
+    let dir = scratch_dir("hgl-optional")?;
     fs::create_dir_all(dir.join("src"))?;
     let suite = compile_tests(&sources(include_str!(
         "../../../external/hgraph_std/hgl/hgraph/tests/optional_atomic_values.hgl"
@@ -107,21 +106,29 @@ fn measured_simulation(graph:&mut hgl_kernel::Graph, store:&mut hgl_store::Store
             .replace('"', "\\\"");
         writeln!(manifest, "{name}={{path=\"{path}\"}}")?;
     }
-    fs::write(dir.join("Cargo.toml"), manifest)?;
-    for profile in [vec![], vec!["--release"]] {
-        let output = Command::new(env!("CARGO"))
-            .args(["run", "--offline", "--quiet"])
-            .args(profile)
-            .current_dir(&dir)
-            .output()?;
-        assert!(
-            output.status.success(),
-            "{}\n{}\n{}",
-            dir.display(),
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        );
-    }
+    fs::write(dir.join("Cargo.toml"), unique_package(&manifest, &dir))?;
+    // The gate runs the suite in both profiles; each build follows the profile of this test binary.
+    let profile: Vec<&str> = if cfg!(debug_assertions) {
+        vec![]
+    } else {
+        vec!["--release"]
+    };
+    let output = Command::new(env!("CARGO"))
+        .args(["run", "--offline", "--quiet"])
+        // One build cache for every generated program; a fresh one per test rebuilt the runtime each time.
+        .env("CARGO_TARGET_DIR", concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/source-tests"))
+        .env("CARGO_INCREMENTAL", "0")
+        .args(profile)
+        .current_dir(&dir)
+        .output()?;
+    assert!(
+        output.status.success(),
+        "{}\n{}\n{}",
+        dir.display(),
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
     fs::remove_dir_all(dir)?;
     Ok(())
 }
@@ -140,4 +147,22 @@ fn optional_defaults_and_generic_context_preserve_exact_present_types() {
         );
         assert!(compile_tests(&sources(&source)).is_err(), "{body}");
     }
+}
+
+/// Parallel tests share one build cache, so each generated package needs a name
+/// of its own: `cargo run` would otherwise execute a sibling's binary.
+fn unique_package(manifest: &str, dir: &std::path::Path) -> String {
+    let suffix = dir
+        .file_name()
+        .map_or_else(String::new, |name| name.to_string_lossy().into_owned());
+    manifest.replacen("\"\n", &format!("-{suffix}\"\n"), 1)
+}
+
+/// A directory of this test's own under the temp root; see `NEXT_DIR`.
+fn scratch_dir(prefix: &str) -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
+    let tick = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)?
+        .as_nanos();
+    let serial = NEXT_DIR.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    Ok(std::env::temp_dir().join(format!("{prefix}-{}-{tick}-{serial}", std::process::id())))
 }

@@ -5,11 +5,16 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+// Two tests can start within the same clock tick, and on Windows a second test
+// in the same directory then fights the first for its executable.
+static NEXT_DIR: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
 #[test]
 fn cli_checks_emits_and_preserves_output_on_failure() -> Result<(), Box<dyn std::error::Error>> {
     let directory = std::env::temp_dir().join(format!(
-        "hgl-cli-{}",
-        SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos()
+        "hgl-cli-{}-{}",
+        SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos(),
+        NEXT_DIR.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
     fs::create_dir_all(&directory)?;
     let source = directory.join("main.hgl");

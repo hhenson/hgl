@@ -1,5 +1,9 @@
 //! Compile and execute emitted Rust independently of compiler internals.
 use hgl_compiler::{Source, check, emit_rust};
+
+// Two tests can start within the same clock tick, and on Windows a second test
+// in the same directory then fights the first for its executable.
+static NEXT_DIR: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 use std::{
     fs,
     path::PathBuf,
@@ -14,14 +18,18 @@ fn generated_nodes_and_graphs_execute_the_reference_cases() -> Result<(), Box<dy
         .join("../..")
         .canonicalize()?;
     let directory = std::env::temp_dir().join(format!(
-        "hgl-bootstrap-{}-{}",
+        "hgl-bootstrap-{}-{}-{}",
         std::process::id(),
-        SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos()
+        SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos(),
+        NEXT_DIR.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
     fs::create_dir_all(directory.join("src"))?;
     prepare(&root, &directory)?;
     let output = Command::new(env!("CARGO"))
         .args(["run", "--offline", "--quiet"])
+        // One build cache for every generated program; a fresh one per test rebuilt the runtime each time.
+        .env("CARGO_TARGET_DIR", concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/source-tests"))
+        .env("CARGO_INCREMENTAL", "0")
         .current_dir(&directory)
         .output()?;
     assert!(
@@ -43,6 +51,9 @@ fn generated_nodes_and_graphs_execute_the_reference_cases() -> Result<(), Box<dy
     )?;
     let wrong = Command::new(env!("CARGO"))
         .args(["check", "--offline", "--quiet"])
+        // One build cache for every generated program; a fresh one per test rebuilt the runtime each time.
+        .env("CARGO_TARGET_DIR", concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/source-tests"))
+        .env("CARGO_INCREMENTAL", "0")
         .current_dir(&directory)
         .output()?;
     assert!(!wrong.status.success());
@@ -120,6 +131,18 @@ fn prepare(
         );
         manifest.push_str(&line);
     }
-    fs::write(directory.join("Cargo.toml"), manifest)?;
+    fs::write(
+        directory.join("Cargo.toml"),
+        unique_package(&manifest, directory),
+    )?;
     Ok(())
+}
+
+/// Parallel tests share one build cache, so each generated package needs a name
+/// of its own: `cargo run` would otherwise execute a sibling's binary.
+fn unique_package(manifest: &str, dir: &std::path::Path) -> String {
+    let suffix = dir
+        .file_name()
+        .map_or_else(String::new, |name| name.to_string_lossy().into_owned());
+    manifest.replacen("\"\n", &format!("-{suffix}\"\n"), 1)
 }

@@ -1,6 +1,10 @@
 //! Execute provider validation and lexical preparation through generated HGL tests.
 use hgl_program::{compile_tests, emit_tests};
-use std::{fmt::Write as _, fs, path::Path, process::Command, time::SystemTime};
+use std::{fmt::Write as _, fs, path::Path, process::Command};
+
+// Two tests can start within the same clock tick, and on Windows a second test
+// in the same directory then fights the first for its executable.
+static NEXT_DIR: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
 fn source(body: &str) -> Vec<(String, String)> {
     vec![
@@ -316,12 +320,7 @@ fn generated_tests_validate_before_start_and_expectations_after_run()
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .canonicalize()?;
-    let dir = std::env::temp_dir().join(format!(
-        "hgl-temporal-preparation-{}",
-        SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)?
-            .as_nanos()
-    ));
+    let dir = scratch_dir("hgl-temporal-preparation")?;
     fs::create_dir_all(dir.join("src"))?;
     let mut modules = String::new();
     let mut calls = String::new();
@@ -346,44 +345,53 @@ fn generated_tests_validate_before_start_and_expectations_after_run()
         ),
     )?;
     manifest(&root, &dir)?;
-    for release in [false, true] {
-        let mut command = Command::new(env!("CARGO"));
-        command
-            .args(["build", "--offline", "--quiet"])
-            .current_dir(&dir);
-        if release {
-            command.arg("--release");
-        }
-        let built = command.output()?;
-        assert!(
-            built.status.success(),
-            "{}",
-            String::from_utf8_lossy(&built.stderr)
-        );
-        let binary = dir
-            .join("target")
-            .join(if release { "release" } else { "debug" })
-            .join(format!(
-                "temporal-preparation{}",
-                std::env::consts::EXE_SUFFIX
-            ));
-        for (name, _, success, diagnostic, starts) in CASES {
-            let output = Command::new(&binary).arg(name).output()?;
-            let text = format!(
-                "{}{}",
-                String::from_utf8_lossy(&output.stdout),
-                String::from_utf8_lossy(&output.stderr)
-            );
-            assert_eq!(output.status.success(), success, "{name}: {text}");
-            assert!(text.contains(diagnostic), "{name}: {text}");
-            materializations(name, &text);
-            assert_eq!(
-                text.matches("TARGET_STARTED").count(),
-                starts,
-                "{name}: {text}"
-            );
-        }
+    // The gate runs the suite in both profiles; each build follows the profile of this test binary.
+    let release = !cfg!(debug_assertions);
+    let mut command = Command::new(env!("CARGO"));
+    command
+        .args(["build", "--offline", "--quiet"])
+        // One build cache for every generated program; a fresh one per test rebuilt the runtime each time.
+        .env("CARGO_TARGET_DIR", concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/source-tests"))
+        .env("CARGO_INCREMENTAL", "0")
+        .current_dir(&dir);
+    if release {
+        command.arg("--release");
     }
+    let built = command.output()?;
+    assert!(
+        built.status.success(),
+        "{}",
+        String::from_utf8_lossy(&built.stderr)
+    );
+    let suffix = dir
+        .file_name()
+        .map_or_else(String::new, |name| name.to_string_lossy().into_owned());
+    let binary = Path::new(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../target/source-tests"
+    ))
+    .join(if release { "release" } else { "debug" })
+    .join(format!(
+        "temporal-preparation-{suffix}{}",
+        std::env::consts::EXE_SUFFIX
+    ));
+    for (name, _, success, diagnostic, starts) in CASES {
+        let output = Command::new(&binary).arg(name).output()?;
+        let text = format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(output.status.success(), success, "{name}: {text}");
+        assert!(text.contains(diagnostic), "{name}: {text}");
+        materializations(name, &text);
+        assert_eq!(
+            text.matches("TARGET_STARTED").count(),
+            starts,
+            "{name}: {text}"
+        );
+    }
+
     fs::remove_dir_all(dir)?;
     Ok(())
 }
@@ -409,7 +417,7 @@ fn manifest(root: &Path, dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
             .replace('"', "\\\"");
         writeln!(manifest, "{name}={{path=\"{path}\"}}")?;
     }
-    fs::write(dir.join("Cargo.toml"), manifest)?;
+    fs::write(dir.join("Cargo.toml"), unique_package(&manifest, dir))?;
     Ok(())
 }
 
@@ -452,4 +460,22 @@ fn materializations(name: &str, text: &str) {
             "{name}: {text}"
         );
     }
+}
+
+/// Parallel tests share one build cache, so each generated package needs a name
+/// of its own: `cargo run` would otherwise execute a sibling's binary.
+fn unique_package(manifest: &str, dir: &Path) -> String {
+    let suffix = dir
+        .file_name()
+        .map_or_else(String::new, |name| name.to_string_lossy().into_owned());
+    manifest.replacen("\"\n", &format!("-{suffix}\"\n"), 1)
+}
+
+/// A directory of this test's own under the temp root; see `NEXT_DIR`.
+fn scratch_dir(prefix: &str) -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
+    let tick = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)?
+        .as_nanos();
+    let serial = NEXT_DIR.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    Ok(std::env::temp_dir().join(format!("{prefix}-{}-{tick}-{serial}", std::process::id())))
 }
