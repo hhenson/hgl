@@ -415,6 +415,17 @@ name = "hgl-member-table"
 version = "0.0.0"
 
 [[package]]
+name = "hgl-name-check"
+version = "0.0.0"
+dependencies = [
+ "hgl-enums",
+ "hgl-library",
+ "hgl-source",
+ "hgl-struct-names",
+ "hgl-type-sizes",
+]
+
+[[package]]
 name = "hgl-native"
 version = "0.0.0"
 dependencies = [
@@ -516,6 +527,7 @@ dependencies = [
  "hgl-library",
  "hgl-library-files",
  "hgl-local-check",
+ "hgl-name-check",
  "hgl-rust",
  "hgl-rust-preparation",
  "hgl-source",
@@ -580,7 +592,8 @@ version = "0.0.0"
 dependencies = [
  "hgl-diagnostics",
  "hgl-program",
- "hgl-source",
+ "hgl-test-annotations",
+ "hgl-test-units",
 ]
 
 [[package]]
@@ -952,6 +965,7 @@ dependencies = [
  "hgl-enums",
  "hgl-eval-data",
  "hgl-library",
+ "hgl-name-check",
  "hgl-source",
  "hgl-type-sizes",
  "hgl-value-check",
@@ -1054,11 +1068,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "hgl-test-annotations"
+version = "0.0.0"
+dependencies = [
+ "hgl-diagnostics",
+ "hgl-source",
+]
+
+[[package]]
 name = "hgl-test-runner"
 version = "0.0.0"
 dependencies = [
+ "hgl-diagnostics",
+ "hgl-library-files",
  "hgl-program",
  "hgl-reject",
+]
+
+[[package]]
+name = "hgl-test-units"
+version = "0.0.0"
+dependencies = [
+ "hgl-source",
 ]
 
 [[package]]

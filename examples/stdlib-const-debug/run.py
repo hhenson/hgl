@@ -16,6 +16,7 @@ def run(output):
     subprocess.run(['cargo', 'run', '--quiet', '-p', 'hgl-compiler', '--bin', 'hglc', '--',
                     'emit-rust', str(EXAMPLE / 'main.hgl'),
                     '--library', str(ROOT / 'external/hgraph_std/hgl/hgraph'), '--part', str(EXAMPLE / 'rust.hgl'),
+                    '--part', str(ROOT / 'native/stdlib/interfaces.hgl'),
                     '--out', str(output / 'src/generated.rs')], cwd=ROOT, check=True)
     subprocess.run(['rustfmt', '--edition', '2024', str(output / 'src/generated.rs')], check=True)
     for source in ('main.rs', 'native.rs'):

@@ -38,9 +38,8 @@ fn shared_rejection_fixtures_and_false_positive_controls() {
     ] {
         for name in names {
             let output = Command::new(env!("CARGO_BIN_EXE_hglc"))
-                .args(["test", "--reject"])
+                .arg("test")
                 .arg(spec.join(directory).join(format!("{name}.hgl")))
-                .env("PATH", "")
                 .output()
                 .unwrap();
             assert_eq!(
@@ -49,7 +48,9 @@ fn shared_rejection_fixtures_and_false_positive_controls() {
                 "{name}: {}",
                 String::from_utf8_lossy(&output.stderr)
             );
-            assert!(!String::from_utf8_lossy(&output.stdout).contains("... ok"));
+            if expected {
+                assert!(String::from_utf8_lossy(&output.stdout).contains("[rejection]"));
+            }
         }
     }
 }
@@ -64,9 +65,9 @@ fn ordinary_check_never_treats_an_expectation_as_permission_to_reject() {
         .unwrap();
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("rolling.size_kind"));
-    for suffix in [&["name"][..], &["--part", "unused.hgl"][..]] {
+    for suffix in [&["missing_test"][..], &["--part", "unused.hgl"][..]] {
         let output = Command::new(env!("CARGO_BIN_EXE_hglc"))
-            .args(["test", "--reject"])
+            .arg("test")
             .arg(&file)
             .args(suffix)
             .output()

@@ -72,3 +72,10 @@ owned strings and runs; invalid binding manifests and duplicate writers.
 BufferScalar delegates to Scalar::try_clone for every concrete runtime scalar,
 including CivilDateTime, ZoneId, ZonedDateTime and ZonedTime. Owned zone identities are
 retained independently without provider access.
+
+`midnight_date(Date) -> EngineTime` supplies UTC midnight for an admitted
+calendar date to the shared `to_datetime` operator. The backend interfaces part
+declares this adapter and the Rust binding part selects its provider. It uses epoch-relative days, with no zone, clock
+or DST dependency; admitted years 0001–9999 fit exactly in microseconds.
+Acceptance includes epoch/leap/calendar boundaries and the shared tick/silence
+conversion test under the pinned std date-conversion contract.

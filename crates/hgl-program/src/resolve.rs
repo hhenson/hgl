@@ -381,21 +381,13 @@ impl Checker {
         let mut candidates = Vec::new();
         let mut errors = Vec::new();
         for (id, decl) in self.library.declarations.clone().iter().enumerate() {
-            if decl.module != module
-                || decl.name != name
-                || matches!(decl.role, Role::Implementation | Role::Test | Role::Struct)
-            {
-                continue;
-            }
-            if decl.test_only && self.test_scope.as_deref() != Some(module) {
-                continue;
-            }
-            if !decl.test_only
-                && self.test_scope.as_deref() == Some(module)
-                && self.library.declarations.iter().any(|d| {
-                    d.test_only && d.module == module && d.name == name && d.role == Role::Function
-                })
-            {
+            if !hgl_name_check::visible(
+                &self.library,
+                decl,
+                module,
+                name,
+                self.test_scope.as_deref(),
+            ) {
                 continue;
             }
             let signature = match decl

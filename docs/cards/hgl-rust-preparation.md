@@ -48,3 +48,6 @@ decode and encode are reexported from hgl-rust-value-convert. This crate owns le
 Growing sparse delta decoding/encoding retains exact Child indices and Remove scalar indices in its three-field ordinary storage; complete atomic ordinary lists remain separate.
 
 Raises blocks are traversed when assembling graph callbacks. The callback failure channel preserves NodeError identity through Failure::Execution.
+
+emit_main emits named execution status rows, counts and process status for a
+checked test list. Status rows use stdout and failure details use stderr.

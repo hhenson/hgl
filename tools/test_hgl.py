@@ -51,6 +51,7 @@ def main():
             parser.error('materialize the pinned standard library first')
         args.file, *args.part = files
         args.part.append(ROOT / 'native/stdlib/rust.hgl')
+        args.part.append(ROOT / 'native/stdlib/interfaces.hgl')
         args.library = [library]
         args.native_rust = ROOT / 'native/stdlib/native.rs'
     elif args.file is None:

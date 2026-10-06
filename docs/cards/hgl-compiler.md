@@ -83,5 +83,5 @@ native-provider packaging are currently supplied by `tools/test_hgl.py`.
 May use hgl-source-check and hgl-test-runner. The CLI shares declaration-wide
 source admission before the existing standalone checker, retaining its broader
 syntax-only service admission; library compilation continues through hgl-program.
-`hglc test` runs named suites and `hglc test --reject FILE` performs structured
-source rejection matching without a Cargo build.
+`hglc test` runs executable tests alongside annotation-owned source rejection
+cases; rejected owners are checked independently and never executed.

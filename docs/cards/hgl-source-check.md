@@ -38,3 +38,10 @@ when specialization requires a call; malformed signatures remain typed errors.
 Native declarations admit only the existing `throws` suffix and an optional
 outer provider body. Provider contents stay opaque; an invalid signature suffix
 cannot hide in an unused native declaration.
+
+Deferred generic and required-constant function bodies resolve callable names
+through hgl-name-check before specialization. Lexical service bindings and
+requirements are retained; generic types and constant values are not invented.
+
+with_module_semantics checks production dependencies and root-module test scopes;
+other modules retain their own test-only declaration scopes.

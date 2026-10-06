@@ -1,21 +1,147 @@
-//! Compile-rejection fixtures: lexical annotations and exact primary-error matching.
-use hgl_diagnostics::{CATEGORIES, Diagnostic, SOURCE_CODES};
-use hgl_source::{Cursor, Expr, Literal, lex};
-use std::path::Path;
+//! Annotation-owned source probes for ordinary mixed HGL test runs.
+use hgl_diagnostics::Diagnostic;
+use hgl_test_annotations::{Expectation, annotations};
+use hgl_test_units::{Unit, mask, units};
+/// One checked rejection result; failure never prevents other valid tests from running.
 #[derive(Debug)]
-struct Expectation {
-    line: usize,
-    category: String,
-    code: String,
+pub struct Outcome {
+    /// Qualified test name or source/declaration-line identity.
+    pub name: String,
+    /// Exact diagnostic matching result.
+    pub result: Result<(), String>,
 }
-/// Check one rejection fixture without building an artifact or running a graph.
-pub fn reject(path: &Path) -> Result<(), String> {
-    let source = path.display().to_string();
-    let text = std::fs::read_to_string(path)
-        .map_err(|error| format!("infrastructure: {source}: {error}"))?;
-    let expected = annotations(&text)?;
-    let errors = hgl_program::diagnostics(&[(source.clone(), text)]);
-    match_errors(&source, &expected, &errors)
+#[derive(Debug)]
+struct Case {
+    source: usize,
+    unit: Unit,
+    expected: Vec<Expectation>,
+    selected: bool,
+}
+/// Surviving source and independently restored rejection owners.
+#[derive(Debug)]
+pub struct Plan {
+    /// Ordinary executable compilation unit with all rejection owners excluded.
+    pub sources: Vec<(String, String)>,
+    originals: Vec<(String, String)>,
+    cases: Vec<Case>,
+}
+impl Plan {
+    /// Validate metadata only in explicit target files/parts and isolate their owners.
+    pub fn prepare(sources: Vec<(String, String)>, explicit: usize) -> Result<Self, String> {
+        let mut cases: Vec<Case> = Vec::new();
+        for (source, (file, text)) in sources.iter().enumerate().take(explicit) {
+            let expected = annotations(text).map_err(|e| format!("{file}: {e}"))?;
+            if expected.is_empty() {
+                continue;
+            }
+            let units = units(text).map_err(|e| format!("{file}: {e}"))?;
+            for expectation in expected {
+                let unit = units
+                    .iter()
+                    .find(|u| {
+                        u.line <= expectation.line
+                            && expectation.line <= u.end_line
+                            && (u.line != expectation.line || u.first_on_line)
+                    })
+                    .ok_or_else(|| {
+                        format!(
+                            "{file}:{}: orphaned expectation or invalid owner",
+                            expectation.line
+                        )
+                    })?;
+                if let Some(case) = cases
+                    .iter_mut()
+                    .find(|c| c.source == source && c.unit.span == unit.span)
+                {
+                    case.expected.push(expectation);
+                } else {
+                    cases.push(Case {
+                        source,
+                        unit: unit.clone(),
+                        expected: vec![expectation],
+                        selected: true,
+                    });
+                }
+            }
+        }
+        let originals = sources.clone();
+        let sources = sources
+            .into_iter()
+            .enumerate()
+            .map(|(i, (name, text))| {
+                let ranges = cases
+                    .iter()
+                    .filter(|c| c.source == i)
+                    .map(|c| c.unit.span.clone());
+                (name, mask(&text, ranges))
+            })
+            .collect();
+        Ok(Self {
+            sources,
+            originals,
+            cases,
+        })
+    }
+    /// Apply the ordinary named-test selector rules across both kinds of case.
+    pub fn select(&mut self, names: &[&str], executable: &[String]) -> Result<(), String> {
+        let mut all = executable.to_vec();
+        all.extend(self.cases.iter().filter_map(|c| c.unit.test_name()));
+        let mut unique = std::collections::BTreeSet::new();
+        for name in &all {
+            if !unique.insert(name) {
+                return Err(format!("duplicate test {name}"));
+            }
+        }
+        for name in names {
+            if !all.iter().any(|full| selected(full, &[*name])) {
+                return Err(format!("unknown test selector {name}"));
+            }
+        }
+        for case in &mut self.cases {
+            case.selected = case
+                .unit
+                .test_name()
+                .is_none_or(|name| selected(&name, names));
+        }
+        Ok(())
+    }
+    /// Check every required rejection independently against the ordinary compiler.
+    pub fn check(&self) -> Vec<Outcome> {
+        self.cases
+            .iter()
+            .filter(|c| c.selected)
+            .map(|case| {
+                let mut sources = self.sources.clone();
+                let (file, original) = &self.originals[case.source];
+                let span = case.unit.span.clone();
+                sources[case.source]
+                    .1
+                    .replace_range(span.clone(), &original[span]);
+                let errors = hgl_program::module_diagnostics(&sources);
+                let name = case.unit.test_name().unwrap_or_else(|| {
+                    format!(
+                        "{file}:{}{}",
+                        case.unit.line,
+                        case.unit
+                            .name
+                            .as_ref()
+                            .map_or(String::new(), |name| format!(" {name}"))
+                    )
+                });
+                Outcome {
+                    name,
+                    result: match_errors(file, &case.expected, &errors),
+                }
+            })
+            .collect()
+    }
+}
+/// Match short or qualified test names, with no selector meaning every test.
+pub fn selected(name: &str, names: &[&str]) -> bool {
+    names.is_empty()
+        || names
+            .iter()
+            .any(|selector| name == *selector || name.rsplit("::").next() == Some(*selector))
 }
 fn match_errors(
     source: &str,
@@ -51,122 +177,6 @@ fn match_errors(
     } else {
         Err(failures.join("\n"))
     }
-}
-fn annotations(text: &str) -> Result<Vec<Expectation>, String> {
-    let bytes = text.as_bytes();
-    let mut index = 0;
-    let mut line = 1;
-    let mut standalone = true;
-    let mut expected = Vec::new();
-    while index < bytes.len() {
-        match bytes[index] {
-            b'\n' => {
-                line += 1;
-                standalone = true;
-                index += 1;
-            }
-            b' ' | b'\t' | b'\r' => index += 1,
-            b'/' if bytes.get(index + 1) == Some(&b'*') => {
-                standalone = false;
-                index += 2;
-                while index < bytes.len()
-                    && !(bytes[index] == b'*' && bytes.get(index + 1) == Some(&b'/'))
-                {
-                    if bytes[index] == b'\n' {
-                        line += 1;
-                    }
-                    index += 1;
-                }
-                index = (index + 2).min(bytes.len());
-            }
-            b'"' => {
-                standalone = false;
-                index += 1;
-                while index < bytes.len() {
-                    let next = bytes[index];
-                    index += 1;
-                    if next == b'\n' {
-                        line += 1;
-                    }
-                    if next == b'\\' {
-                        index = (index + 1).min(bytes.len());
-                    } else if next == b'"' {
-                        break;
-                    }
-                }
-            }
-            b'#' => {
-                let start = index + 1;
-                while index < bytes.len() && bytes[index] != b'\n' {
-                    index += 1;
-                }
-                let comment = text[start..index].trim();
-                if standalone && comment.starts_with("expect-error") {
-                    if line >= text.lines().count() {
-                        return Err(format!(
-                            "line {line}: expectation has no following source line"
-                        ));
-                    }
-                    expected.push(
-                        annotation(comment, line + 1)
-                            .map_err(|e| format!("line {line}: invalid expectation: {e}"))?,
-                    );
-                }
-            }
-            _ => {
-                standalone = false;
-                index += 1;
-            }
-        }
-    }
-    if expected.is_empty() {
-        return Err("rejection fixture requires at least one expectation".into());
-    }
-    Ok(expected)
-}
-fn annotation(comment: &str, line: usize) -> Result<Expectation, String> {
-    let suffix = comment
-        .strip_prefix("expect-error")
-        .ok_or("expected expect-error")?;
-    let tokens = lex(suffix)?;
-    let mut cursor = Cursor::new(&tokens);
-    cursor.need("(")?;
-    let mut category = cursor.name()?;
-    if cursor.take("-") {
-        category.push('-');
-        category.push_str(&cursor.name()?);
-    }
-    cursor.need(",")?;
-    let start = cursor.pos;
-    let Expr::Literal(Literal::Str(code)) = cursor.expr()? else {
-        return Err("expected literal source-error code".into());
-    };
-    if cursor.pos != start + 1 {
-        return Err("expected one string literal".into());
-    }
-    cursor.need(")")?;
-    let end = tokens
-        .get(cursor.pos.saturating_sub(1))
-        .map_or(0, |t| t.span.end);
-    if !cursor.at("") || !suffix[end..].trim().is_empty() {
-        return Err("unexpected annotation suffix".into());
-    }
-    if !CATEGORIES.contains(&category.as_str()) {
-        return Err(format!("unknown diagnostic category {category}"));
-    }
-    if category == "build" {
-        return Err("build is not an eligible source-rejection category".into());
-    }
-    if !SOURCE_CODES.contains(&(category.as_str(), code.as_str())) {
-        return Err(format!(
-            "unknown or mismatched category/code {category}[{code}]"
-        ));
-    }
-    Ok(Expectation {
-        line,
-        category,
-        code,
-    })
 }
 
 #[cfg(test)]

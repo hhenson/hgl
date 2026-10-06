@@ -29,3 +29,14 @@ fn callbacks(steps: &[Step]) -> String {
         .collect::<Vec<_>>()
         .concat()
 }
+
+/// Emit named execution outcomes and process status for a checked suite.
+pub fn emit_main(tests: &[Test]) -> String {
+    let mut out = Vec::new();
+    out.push("fn main() {\nlet mut failed=0;\nlet mut evaluations=0;\n".into());
+    for (i, test) in tests.iter().enumerate() {
+        out.push(format!("match test{i}::test() {{Ok(count)=>{{evaluations+=count; println!(\"{{}} ... ok [executed]\",{:?});}},Err(e)=>{{failed+=1;println!(\"{{}} ... FAILED [executed]\",{:?});eprintln!(\"{{e}}\");}}}}\n",test.name,test.name));
+    }
+    out.push(format!("println!(\"{} executed tests, {{evaluations}} evaluations, {{failed}} failures\");\nif failed != 0 {{std::process::exit(1);}}\n}}\n",tests.len()));
+    out.concat()
+}

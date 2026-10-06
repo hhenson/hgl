@@ -34,3 +34,5 @@ yes,no) contains lexical step blocks. Neither form changes graph composition.
 Step::Raises(code, body) owns a lexical assertion block. Failure distinguishes Execution(NodeError) from Other(String); matches excludes cleanup-only and cleanup-failed execution. Uses hgl-node-error.
 
 Suite { tests, plans } owns the checked test inventory and graph plans. select accepts short/qualified names, rejects each unknown name, and filters tests without renumbering graph plan indices.
+
+Suite is Default. require_tests preserves the ordinary empty-suite error after mixed-run orchestration.

@@ -255,6 +255,7 @@ fn actual_stdlib_and_harness_regressions_run_on_rust() -> Result<(), Box<dyn std
     parts.retain(|p| p.extension().is_some_and(|e| e == "hgl"));
     parts.sort();
     parts.push(root.join("native/stdlib/rust.hgl"));
+    parts.push(root.join("native/stdlib/interfaces.hgl"));
     parts.push(root.join("external/hgraph_spec/language/examples/contextual-local-bindings.hgl"));
     for fixture in [
         "graph_compound",
@@ -329,7 +330,7 @@ fn standard_batches(
         evaluations += check_summary(&text, &summary)?;
         observed.extend(
             text.lines()
-                .filter_map(|line| line.strip_suffix(" ... ok"))
+                .filter_map(|line| line.strip_suffix(" ... ok [executed]"))
                 .map(str::to_owned),
         );
     }
@@ -434,14 +435,14 @@ fn expected_summary(sources: &[(String, String)]) -> Result<ExpectedSummary, Str
 fn check_summary(text: &str, summary: &ExpectedSummary) -> Result<usize, String> {
     let mut reported = text
         .lines()
-        .filter_map(|line| line.strip_suffix(" ... ok"))
+        .filter_map(|line| line.strip_suffix(" ... ok [executed]"))
         .collect::<Vec<_>>();
     reported.sort_unstable();
     assert_eq!(
         reported, summary.names,
         "every named test must execute exactly once"
     );
-    let prefix = format!("{} tests, ", summary.names.len());
+    let prefix = format!("{} executed tests, ", summary.names.len());
     let evaluations = text
         .lines()
         .find_map(|line| {
@@ -469,7 +470,11 @@ fn check_images(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
         ),
         ("nullable", true, "0 failures"),
         ("recording_keys", true, "0 failures"),
-        ("globals", true, "9 tests, 17 evaluations, 0 failures"),
+        (
+            "globals",
+            true,
+            "9 executed tests, 17 evaluations, 0 failures",
+        ),
         ("globals_missing", false, "global_state: missing value"),
         ("bounds", false, "out of bounds"),
         ("past_end", false, "out of bounds"),

@@ -8,7 +8,13 @@ fn fixture(text: &str) -> Result<(), String> {
         NEXT.fetch_add(1, Ordering::Relaxed)
     ));
     std::fs::write(&path, text).map_err(|e| e.to_string())?;
-    let result = hgl_reject::reject(&path);
+    let sources = vec![(path.display().to_string(), text.into())];
+    let plan = hgl_reject::Plan::prepare(sources, 1)?;
+    let result = hgl_program::compile_suite(&plan.sources).and_then(|_| {
+        plan.check()
+            .into_iter()
+            .try_for_each(|outcome| outcome.result)
+    });
     std::fs::remove_file(path).map_err(|e| e.to_string())?;
     result
 }
@@ -19,11 +25,16 @@ fn resolved_constant_function_bound_keeps_rolling_code() -> Result<(), String> {
     )
 }
 #[test]
-fn instantiated_generic_yield_keeps_original_operand_location() -> Result<(), String> {
-    fixture(
-        "module sample\nfn source<T>(const at: T) -> i64 {\n # expect-error(type, \"yield.time_type\")\n yield at: 1\n}\nfn main() -> i64 { source(1) }\n",
-    )
+fn instantiated_generic_yield_keeps_original_operand_location() {
+    let sources=vec![("generic.hgl".into(),"module sample\nfn source<T>(const at:T)->i64 {\n yield at:1\n}\nfn main()->i64 {source(1)}\n".into())];
+    let errors = hgl_program::diagnostics(&sources);
+    assert_eq!(errors.len(), 1, "{errors:?}");
+    assert_eq!(errors[0].source, "generic.hgl");
+    assert_eq!(errors[0].line, 3);
+    assert_eq!(errors[0].issue.category, "type");
+    assert_eq!(errors[0].issue.code, Some("yield.time_type"));
 }
+
 #[test]
 fn unexpected_uncoded_test_error_is_not_hidden_by_expected_type_error() {
     let result = fixture(

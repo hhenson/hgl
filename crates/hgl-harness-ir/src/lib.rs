@@ -113,7 +113,7 @@ impl Failure {
 }
 
 /// Checked tests with their independently selected graph plans.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Suite {
     /// Named lexical tests, in source order.
     pub tests: Vec<Test>,
@@ -121,6 +121,15 @@ pub struct Suite {
     pub plans: Vec<hgl_rust_ir::Plan>,
 }
 impl Suite {
+    /// Preserve the ordinary empty-suite error for callers requiring executable tests.
+    pub fn require_tests(self) -> Result<Self, String> {
+        if self.tests.is_empty() {
+            Err("no tests found".into())
+        } else {
+            Ok(self)
+        }
+    }
+
     /// Retain requested short or qualified names, rejecting every unknown selector.
     pub fn select(&mut self, names: &[&str]) -> Result<(), String> {
         let matches = |test: &Test, name: &str| {

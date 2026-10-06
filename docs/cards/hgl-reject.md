@@ -1,10 +1,9 @@
-# Card: hgl-reject
+# hgl-reject
 
-Compile-rejection fixture runner; dependencies diagnostics, source, program;
-budget 250 source lines. Public reject(&Path)->Result<(),String> reads one file,
-validates actual standalone line-comment expectations with lexical string/block
-comment handling, runs the same structural and actual semantic validation as ordinary
-checking, and matches every primary error once by exact file, next physical
-line, category and stable code. Unknown/malformed annotations, missing/extra
-errors and successful source checking fail. Infrastructure failures are labelled
-and cannot satisfy expectations. Does not build artifacts or execute graphs.
+Status: accepted
+
+Mixed source-rejection orchestration; budget 250 source lines. No build or graph
+execution occurs here. Outcomes match every originating primary diagnostic once
+by exact source, next physical line, category and stable code.
+
+Plan::prepare assigns explicit-file annotations to safely bounded owners and masks every rejection owner preserving source locations. Imported metadata is ignored. select validates names against executable and rejection cases. check restores each selected owner independently and returns Outcome records with exact diagnostic matching. selected implements ordinary short/qualified name matching. May use hgl-test-annotations, hgl-test-units, hgl-program and hgl-diagnostics. Module cases always run; all rejected declarations are absent from other probes.

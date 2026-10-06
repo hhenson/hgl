@@ -28,7 +28,7 @@ pub fn emit_rust(program: &Program) -> String {
 }
 
 mod tests;
-pub use tests::{Suite, compile_tests, emit_tests};
+pub use tests::{Suite, compile_module_suite, compile_suite, compile_tests, emit_tests};
 
 /// Whole-source diagnostics, including deferred bounds and instantiated call failures.
 pub fn diagnostics(sources: &[(String, String)]) -> Vec<hgl_diagnostics::Diagnostic> {
@@ -39,4 +39,11 @@ pub fn diagnostics(sources: &[(String, String)]) -> Vec<hgl_diagnostics::Diagnos
 /// Render the ordinary whole-source diagnostics for command-line checking.
 pub fn check_sources(sources: &[(String, String)]) -> Result<(), String> {
     hgl_diagnostics::ensure(diagnostics(sources))
+}
+
+/// Ordinary diagnostics for one target module and its production dependencies.
+pub fn module_diagnostics(sources: &[(String, String)]) -> Vec<hgl_diagnostics::Diagnostic> {
+    hgl_source_check::with_module_semantics(sources, |library, decl| {
+        resolve::validate_declaration(library.clone(), decl)
+    })
 }

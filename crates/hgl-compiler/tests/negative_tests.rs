@@ -9,11 +9,23 @@ fn run(path: &std::path::Path, selectors: &[&str]) -> std::io::Result<std::proce
         "impl/replay_record.hgl",
         "control.hgl",
         "impl/control.hgl",
+        "standard.hgl",
+        "impl/standard.hgl",
+        "native/scalar_values.hgl",
+        "native/scalar_values_i64.hgl",
+        "native/scalar_operators.hgl",
+        "native/temporal_values.hgl",
     ] {
         command
             .arg("--part")
             .arg(root.join("external/hgraph_std/hgl/hgraph").join(part));
     }
+    command
+        .arg("--part")
+        .arg(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../native/stdlib/rust.hgl"));
+    command
+        .arg("--part")
+        .arg(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../native/stdlib/interfaces.hgl"));
     command.output()
 }
 #[test]
@@ -30,7 +42,10 @@ fn shared_runtime_assertions_execute_and_select_names() {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    assert!(String::from_utf8_lossy(&output.stdout).contains("2 tests, 6 evaluations, 0 failures"));
+    assert!(
+        String::from_utf8_lossy(&output.stdout)
+            .contains("2 executed tests, 6 evaluations, 0 failures")
+    );
     let output = run(&path, &["expected_execution_errors", "missing"]).unwrap();
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("unknown test selector missing"));
@@ -54,7 +69,7 @@ test nested {assert raises("yield.negative_duration") {assert raises("yield.nega
     .unwrap();
     let output = run(&path, &[]).unwrap();
     assert!(!output.status.success());
-    let text = String::from_utf8_lossy(&output.stderr);
+    let text = String::from_utf8_lossy(&output.stdout);
     for name in ["empty", "assertion", "wrong", "nested"] {
         assert!(
             text.contains(&format!("controls::{name} ... FAILED")),

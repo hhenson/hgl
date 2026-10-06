@@ -40,3 +40,4 @@ hgl-static-values = { path = "../hgl-static-values" }
 hgl-harness-check = { path = "../hgl-harness-check" }
 hgl-source-check = { path = "../hgl-source-check" }
 hgl-diagnostics = { path = "../hgl-diagnostics" }
+hgl-name-check = { path = "../hgl-name-check" }

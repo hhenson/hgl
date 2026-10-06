@@ -10,5 +10,6 @@ line-budget = 250
 workspace = true
 [dependencies]
 hgl-diagnostics = { path = "../hgl-diagnostics" }
-hgl-source = { path = "../hgl-source" }
 hgl-program = { path = "../hgl-program" }
+hgl-test-annotations = { path = "../hgl-test-annotations" }
+hgl-test-units = { path = "../hgl-test-units" }

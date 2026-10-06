@@ -138,13 +138,27 @@ fn execute(
         "impl/replay_record.hgl",
         "control.hgl",
         "impl/control.hgl",
+        "standard.hgl",
+        "impl/standard.hgl",
+        "native/scalar_values.hgl",
+        "native/scalar_values_i64.hgl",
+        "native/scalar_operators.hgl",
+        "native/temporal_values.hgl",
     ] {
         sources.push((
             file.into(),
             fs::read_to_string(root.join("external/hgraph_std/hgl/hgraph").join(file))?,
         ));
     }
-    let suite = hgl_program::compile_tests(&sources)?;
+    sources.push((
+        "native-rust.hgl".into(),
+        fs::read_to_string(root.join("native/stdlib/rust.hgl"))?,
+    ));
+    sources.push((
+        "backend-interfaces.hgl".into(),
+        fs::read_to_string(root.join("native/stdlib/interfaces.hgl"))?,
+    ));
+    let suite = hgl_program::compile_module_suite(&sources)?;
     let dir = std::env::temp_dir().join(format!(
         "hgl-prepared-execution-{}",
         SystemTime::now()

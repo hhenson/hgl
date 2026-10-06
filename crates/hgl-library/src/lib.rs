@@ -376,7 +376,7 @@ impl Decl {
     }
 }
 
-fn imports(library: &mut Library, module: &str, d: &mut Cursor<'_>) -> Result<(), String> {
+fn imports(library: &mut Library, module: &str, d: &mut Cursor<'_>) -> Result<(), Issue> {
     let mut target = d.name()?;
     while d.take(".") {
         target.push('.');

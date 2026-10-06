@@ -12,6 +12,20 @@ pub fn validate_sources(sources: &[(String, String)]) -> Vec<Diagnostic> {
 /// Combine declaration admission with the ordinary semantic checker, preserving origins.
 pub fn with_semantics(
     sources: &[(String, String)],
+    check: impl FnMut(&Library, &Decl) -> Result<(), Issue>,
+) -> Vec<Diagnostic> {
+    check_sources(sources, false, check)
+}
+/// Check production dependencies and only the root module's test-scoped declarations.
+pub fn with_module_semantics(
+    sources: &[(String, String)],
+    check: impl FnMut(&Library, &Decl) -> Result<(), Issue>,
+) -> Vec<Diagnostic> {
+    check_sources(sources, true, check)
+}
+fn check_sources(
+    sources: &[(String, String)],
+    module_only: bool,
     mut check: impl FnMut(&Library, &Decl) -> Result<(), Issue>,
 ) -> Vec<Diagnostic> {
     let library = match hgl_library::load_checked(sources) {
@@ -20,6 +34,12 @@ pub fn with_semantics(
     };
     let mut errors: Vec<Diagnostic> = Vec::new();
     for declaration in &library.declarations {
+        if module_only
+            && declaration.module != library.root
+            && (declaration.test_only || declaration.role == Role::Test)
+        {
+            continue;
+        }
         let mut issues = declaration_issues(&library, declaration);
         if issues.is_empty() {
             issues.extend(check(&library, declaration).err().map(|issue| {
@@ -81,10 +101,7 @@ fn declaration_issues(library: &Library, declaration: &Decl) -> Vec<Issue> {
         Role::Function | Role::Implementation | Role::Operator | Role::Native => declaration
             .signature_checked()
             .and_then(|signature| function(library, declaration, &signature)),
-        Role::Struct => declaration
-            .required_struct()
-            .map(|_| ())
-            .map_err(Issue::from),
+        Role::Struct => hgl_name_check::structure(library, declaration),
         Role::Enum => hgl_enums::resolve(library, &declaration.module, &declaration.name)
             .map(|_| ())
             .map_err(Issue::from),
@@ -100,13 +117,7 @@ fn function(library: &Library, declaration: &Decl, signature: &Signature) -> Res
         annotation(&parameter.type_tokens)?;
     }
     annotation(&signature.result_tokens)?;
-    if declaration.role == Role::Native {
-        return native_body(&signature.body);
-    }
-    if declaration.role == Role::Operator || signature.body.is_empty() {
-        return Ok(());
-    }
-    let mut environment = signature
+    let types = signature
         .parameters
         .iter()
         .filter_map(|p| {
@@ -115,13 +126,30 @@ fn function(library: &Library, declaration: &Decl, signature: &Signature) -> Res
                 .map(|ty| (p.name.clone(), ty))
         })
         .collect();
+    let mut environment = hgl_name_check::Scope {
+        types,
+        parameters: signature.generics.iter().cloned().collect(),
+        ..Default::default()
+    };
+    if let Some((name, _, _)) = &signature.requirement {
+        environment.requirements.insert(name.clone());
+    }
     let mut cursor = Cursor::new(&signature.body);
     let checker = body::Checker {
         library,
         module: &declaration.module,
+        test_only: declaration.test_only,
     };
+    hgl_name_check::signature(library, declaration, signature, &environment)?;
+    if declaration.role == Role::Native {
+        return native_body(&signature.body);
+    }
+    if declaration.role == Role::Operator || signature.body.is_empty() {
+        return Ok(());
+    }
+
     if cursor.take("=>") {
-        cursor.expr()?;
+        checker.expression(&mut cursor, &environment)?;
     } else {
         checker.block(&mut cursor, &mut environment)?;
     }
