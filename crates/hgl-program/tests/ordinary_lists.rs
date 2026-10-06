@@ -228,21 +228,26 @@ fn ordinary_lists_execute_source_values_borrows_and_failures()
         ),
     )?;
     manifest(&root, &dir)?;
-    for profile in [vec![], vec!["--release"]] {
-        let output = Command::new(env!("CARGO"))
-            .args(["run", "--offline", "--quiet"])
-            // One build cache for every generated program; a fresh one per test rebuilt the runtime each time.
-            .env("CARGO_TARGET_DIR", concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/source-tests"))
-            .env("CARGO_INCREMENTAL", "0")
-            .args(profile)
-            .current_dir(&dir)
-            .output()?;
-        assert!(
-            output.status.success(),
-            "{}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-    }
+    // The gate runs the suite in both profiles; each build follows the profile of this test binary.
+    let profile: Vec<&str> = if cfg!(debug_assertions) {
+        vec![]
+    } else {
+        vec!["--release"]
+    };
+    let output = Command::new(env!("CARGO"))
+        .args(["run", "--offline", "--quiet"])
+        // One build cache for every generated program; a fresh one per test rebuilt the runtime each time.
+        .env("CARGO_TARGET_DIR", concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/source-tests"))
+        .env("CARGO_INCREMENTAL", "0")
+        .args(profile)
+        .current_dir(&dir)
+        .output()?;
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
     fs::remove_dir_all(dir)?;
     Ok(())
 }

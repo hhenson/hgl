@@ -79,36 +79,41 @@ fn measured_simulation(graph:&mut hgl_kernel::Graph, store:&mut hgl_store::Store
     code.push_str(provider);
     fs::write(dir.join("src/main.rs"), code)?;
     manifest(&root, &dir)?;
-    for profile in [vec![], vec!["--release"]] {
-        let output = Command::new(env!("CARGO"))
-            .args(["run", "--offline", "--quiet"])
-            // One build cache for every generated program; a fresh one per test rebuilt the runtime each time.
-            .env("CARGO_TARGET_DIR", concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/source-tests"))
-            .env("CARGO_INCREMENTAL", "0")
-            .args(profile)
-            .current_dir(&dir)
-            .output()?;
+    // The gate runs the suite in both profiles; each build follows the profile of this test binary.
+    let profile: Vec<&str> = if cfg!(debug_assertions) {
+        vec![]
+    } else {
+        vec!["--release"]
+    };
+    let output = Command::new(env!("CARGO"))
+        .args(["run", "--offline", "--quiet"])
+        // One build cache for every generated program; a fresh one per test rebuilt the runtime each time.
+        .env("CARGO_TARGET_DIR", concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/source-tests"))
+        .env("CARGO_INCREMENTAL", "0")
+        .args(profile)
+        .current_dir(&dir)
+        .output()?;
+    assert!(
+        output.status.success() == failure.is_none(),
+        "{}\n{}\n{}",
+        dir.display(),
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    if let Some(message) = failure {
         assert!(
-            output.status.success() == failure.is_none(),
-            "{}\n{}\n{}",
-            dir.display(),
-            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr).contains(message),
+            "{}",
             String::from_utf8_lossy(&output.stderr)
         );
-        if let Some(message) = failure {
-            assert!(
-                String::from_utf8_lossy(&output.stderr).contains(message),
-                "{}",
-                String::from_utf8_lossy(&output.stderr)
-            );
-        }
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let actual = stdout
-            .lines()
-            .filter(|line| line.starts_with("MARK"))
-            .collect::<Vec<_>>();
-        assert_eq!(actual, marks);
     }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let actual = stdout
+        .lines()
+        .filter(|line| line.starts_with("MARK"))
+        .collect::<Vec<_>>();
+    assert_eq!(actual, marks);
+
     fs::remove_dir_all(dir)?;
     Ok(())
 }

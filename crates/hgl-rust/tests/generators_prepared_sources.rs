@@ -95,22 +95,27 @@ fn execute(code: &str) -> Result<(), Box<dyn std::error::Error>> {
         writeln!(manifest, "{name}={{path=\"{path}\"}}")?;
     }
     fs::write(dir.join("Cargo.toml"), unique_package(&manifest, &dir))?;
-    for profile in [vec![], vec!["--release"]] {
-        let result = Command::new(env!("CARGO"))
-            .args(["run", "--offline", "--quiet"])
-            // One build cache for every generated program; a fresh one per test rebuilt the runtime each time.
-            .env("CARGO_TARGET_DIR", concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/source-tests"))
-            .env("CARGO_INCREMENTAL", "0")
-            .args(profile)
-            .current_dir(&dir)
-            .output()?;
-        assert!(
-            result.status.success(),
-            "{}\n{}",
-            dir.display(),
-            String::from_utf8_lossy(&result.stderr)
-        );
-    }
+    // The gate runs the suite in both profiles; each build follows the profile of this test binary.
+    let profile: Vec<&str> = if cfg!(debug_assertions) {
+        vec![]
+    } else {
+        vec!["--release"]
+    };
+    let result = Command::new(env!("CARGO"))
+        .args(["run", "--offline", "--quiet"])
+        // One build cache for every generated program; a fresh one per test rebuilt the runtime each time.
+        .env("CARGO_TARGET_DIR", concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/source-tests"))
+        .env("CARGO_INCREMENTAL", "0")
+        .args(profile)
+        .current_dir(&dir)
+        .output()?;
+    assert!(
+        result.status.success(),
+        "{}\n{}",
+        dir.display(),
+        String::from_utf8_lossy(&result.stderr)
+    );
+
     fs::remove_dir_all(dir)?;
     Ok(())
 }

@@ -346,52 +346,53 @@ fn generated_tests_validate_before_start_and_expectations_after_run()
         ),
     )?;
     manifest(&root, &dir)?;
-    for release in [false, true] {
-        let mut command = Command::new(env!("CARGO"));
-        command
-            .args(["build", "--offline", "--quiet"])
-            // One build cache for every generated program; a fresh one per test rebuilt the runtime each time.
-            .env("CARGO_TARGET_DIR", concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/source-tests"))
-            .env("CARGO_INCREMENTAL", "0")
-            .current_dir(&dir);
-        if release {
-            command.arg("--release");
-        }
-        let built = command.output()?;
-        assert!(
-            built.status.success(),
-            "{}",
-            String::from_utf8_lossy(&built.stderr)
-        );
-        let suffix = dir
-            .file_name()
-            .map_or_else(String::new, |name| name.to_string_lossy().into_owned());
-        let binary = Path::new(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../target/source-tests"
-        ))
-        .join(if release { "release" } else { "debug" })
-        .join(format!(
-            "temporal-preparation-{suffix}{}",
-            std::env::consts::EXE_SUFFIX
-        ));
-        for (name, _, success, diagnostic, starts) in CASES {
-            let output = Command::new(&binary).arg(name).output()?;
-            let text = format!(
-                "{}{}",
-                String::from_utf8_lossy(&output.stdout),
-                String::from_utf8_lossy(&output.stderr)
-            );
-            assert_eq!(output.status.success(), success, "{name}: {text}");
-            assert!(text.contains(diagnostic), "{name}: {text}");
-            materializations(name, &text);
-            assert_eq!(
-                text.matches("TARGET_STARTED").count(),
-                starts,
-                "{name}: {text}"
-            );
-        }
+    // The gate runs the suite in both profiles; each build follows the profile of this test binary.
+    let release = !cfg!(debug_assertions);
+    let mut command = Command::new(env!("CARGO"));
+    command
+        .args(["build", "--offline", "--quiet"])
+        // One build cache for every generated program; a fresh one per test rebuilt the runtime each time.
+        .env("CARGO_TARGET_DIR", concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/source-tests"))
+        .env("CARGO_INCREMENTAL", "0")
+        .current_dir(&dir);
+    if release {
+        command.arg("--release");
     }
+    let built = command.output()?;
+    assert!(
+        built.status.success(),
+        "{}",
+        String::from_utf8_lossy(&built.stderr)
+    );
+    let suffix = dir
+        .file_name()
+        .map_or_else(String::new, |name| name.to_string_lossy().into_owned());
+    let binary = Path::new(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../target/source-tests"
+    ))
+    .join(if release { "release" } else { "debug" })
+    .join(format!(
+        "temporal-preparation-{suffix}{}",
+        std::env::consts::EXE_SUFFIX
+    ));
+    for (name, _, success, diagnostic, starts) in CASES {
+        let output = Command::new(&binary).arg(name).output()?;
+        let text = format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(output.status.success(), success, "{name}: {text}");
+        assert!(text.contains(diagnostic), "{name}: {text}");
+        materializations(name, &text);
+        assert_eq!(
+            text.matches("TARGET_STARTED").count(),
+            starts,
+            "{name}: {text}"
+        );
+    }
+
     fs::remove_dir_all(dir)?;
     Ok(())
 }

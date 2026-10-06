@@ -1,0 +1,35 @@
+name: Prepare the workspace
+description: >-
+  Materialize the pinned shared sources and restore the build caches. Each
+  gate job keys its cache by stage, so a job restores the artifacts of the
+  same stage from the last run rather than whichever job finished first.
+inputs:
+  stage:
+    description: The stage this job runs (checks, debug, release, windows); part of the cache key.
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Materialize pinned shared sources
+      shell: bash
+      run: python tools/shared_artifacts.py
+    - uses: Swatinem/rust-cache@v2
+      with:
+        cache-targets: "false"
+    - name: Identify build environment
+      id: build-environment
+      shell: bash
+      run: python tools/ci_build_cache.py key
+    - uses: actions/cache@v4
+      with:
+        path: |
+          target/debug
+          target/release
+          target/ci-source-mtimes.json
+          experiments/compiler-tools/target/debug
+        key: workspace-v2-${{ runner.os }}-${{ runner.arch }}-${{ inputs.stage }}-${{ steps.build-environment.outputs.key }}-${{ github.sha }}
+        restore-keys: |
+          workspace-v2-${{ runner.os }}-${{ runner.arch }}-${{ inputs.stage }}-${{ steps.build-environment.outputs.key }}-
+    - name: Restore timestamps of unchanged build inputs
+      shell: bash
+      run: python tools/ci_build_cache.py restore

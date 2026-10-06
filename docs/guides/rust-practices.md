@@ -17,7 +17,7 @@ is and why, how to read Rust coming from C++, and what to look for in a diff.
 | `deny.toml` | Which licences, sources and duplicate versions dependencies may have | — |
 | `.cargo/config.toml` | Defines `cargo xtask` | — |
 | `xtask/` | Repository automation as a Rust program — no shell, works on Windows | `tools/*.py`, CMake scripts |
-| `.github/workflows/ci.yml` | Linux and Windows run `cargo xtask ci`; macOS is run locally | same |
+| `.github/workflows/ci.yml` | On every pull request Linux runs the checks and the two test profiles as three parallel jobs (`cargo xtask ci <gate>`); Windows runs the whole gate nightly and on dispatch; macOS is run locally | same |
 
 Daily commands:
 
