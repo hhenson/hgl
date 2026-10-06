@@ -1,5 +1,9 @@
 //! Run the unmodified shared suite and probe the harness independently of it.
 use hgl_program::{compile_tests, emit_tests};
+
+// Two tests can start within the same clock tick, and on Windows a second test
+// in the same directory then fights the first for its executable.
+static NEXT_DIR: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 use std::{
     fmt::Write,
     fs,
@@ -272,9 +276,10 @@ fn actual_stdlib_and_harness_regressions_run_on_rust() -> Result<(), Box<dyn std
     let sources = hgl_program::library_files::sources(&parts, &[library])?;
     let summary = expected_summary(&sources)?;
     let dir = std::env::temp_dir().join(format!(
-        "hgl-eval-{}-{}",
+        "hgl-eval-{}-{}-{}",
         std::process::id(),
-        SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos()
+        SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos(),
+        NEXT_DIR.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
     fs::create_dir_all(dir.join("src"))?;
     manifest(&root, &dir)?;

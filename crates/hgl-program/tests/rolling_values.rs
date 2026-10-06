@@ -1,5 +1,9 @@
 //! Finite rolling atomic shared semantics and actual evaluation allocation checks.
 use hgl_program::compile_tests;
+
+// Two tests can start within the same clock tick, and on Windows a second test
+// in the same directory then fights the first for its executable.
+static NEXT_DIR: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 fn sources(source: &str) -> Vec<(String, String)> {
     vec![
         ("rolling.hgl".into(), source.into()),
@@ -46,10 +50,11 @@ fn run_with_runtime(
         .join("../..")
         .canonicalize()?;
     let dir = std::env::temp_dir().join(format!(
-        "hgl-rolling-{}",
+        "hgl-rolling-{}-{}",
         SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)?
-            .as_nanos()
+            .as_nanos(),
+        NEXT_DIR.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
     fs::create_dir_all(dir.join("src"))?;
     let suite = compile_tests(&sources(source))?;

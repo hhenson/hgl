@@ -1,6 +1,10 @@
 //! Exact provider membership and retained identity precede graph execution.
 use hgl_source::literals::{Literal, TemporalLiteral};
 use hgl_source::time_context::RunContext;
+
+// Two tests can start within the same clock tick, and on Windows a second test
+// in the same directory then fights the first for its executable.
+static NEXT_DIR: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 fn zoned(zone: &str, instant_micros: i64, offset_seconds: i32) -> TemporalLiteral {
     TemporalLiteral::ZonedDateTime {
         instant_micros,
@@ -67,11 +71,12 @@ fn catalog_case_aliases_offsets_and_ranges_are_strict() -> Result<(), Box<dyn st
 fn configured_catalog_has_no_synthetic_names_and_is_snapshotted()
 -> Result<(), Box<dyn std::error::Error>> {
     let root = std::env::temp_dir().join(format!(
-        "hgl-zone-catalog-{}-{}",
+        "hgl-zone-catalog-{}-{}-{}",
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)?
-            .as_nanos()
+            .as_nanos(),
+        NEXT_DIR.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
     std::fs::create_dir_all(&root)?;
     assert!(

@@ -2,6 +2,10 @@
 use hgl_program::{compile, compile_tests, emit_rust, emit_tests};
 use std::{fmt::Write as _, fs, path::Path, process::Command, time::SystemTime};
 
+// Two tests can start within the same clock tick, and on Windows a second test
+// in the same directory then fights the first for its executable.
+static NEXT_DIR: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
 const TYPES: &str =
     "struct Box { amount: i64 }\nstruct Other { amount: i64 }\nstruct Envelope { inner: Box }\n";
 fn checked(types: &str, body: &str) -> Result<String, String> {
@@ -244,11 +248,12 @@ fn val17_owned_structs_execute_independent_nested_copies_and_mutations()
         .join("../..")
         .canonicalize()?;
     let dir = std::env::temp_dir().join(format!(
-        "hgl-structs-{}-{}",
+        "hgl-structs-{}-{}-{}",
         std::process::id(),
         SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)?
-            .as_nanos()
+            .as_nanos(),
+        NEXT_DIR.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
     fs::create_dir_all(dir.join("src"))?;
     let plan = compile(

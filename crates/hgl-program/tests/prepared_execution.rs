@@ -1,5 +1,9 @@
 //! The complete generated replay, target and recording path must not allocate in ticks.
 use std::{fmt::Write as _, fs, process::Command, time::SystemTime};
+
+// Two tests can start within the same clock tick, and on Windows a second test
+// in the same directory then fights the first for its executable.
+static NEXT_DIR: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 const SOURCE: &str = r#"module prepared_execution
 fn constructed_map(value:i64)->map<str,i64> {when {return delta<map<str,i64>>(upsert:["retained":value])}}
 test constructed_map {assert eval(constructed_map,value:[1,2]) == [delta<map<str,i64>>(upsert:["retained":1]),delta<map<str,i64>>(upsert:["retained":2])]}
@@ -160,10 +164,11 @@ fn execute(
     ));
     let suite = hgl_program::compile_module_suite(&sources)?;
     let dir = std::env::temp_dir().join(format!(
-        "hgl-prepared-execution-{}",
+        "hgl-prepared-execution-{}-{}",
         SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)?
-            .as_nanos()
+            .as_nanos(),
+        NEXT_DIR.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
     fs::create_dir_all(dir.join("src"))?;
     let mut code = hgl_program::emit_tests(&suite);

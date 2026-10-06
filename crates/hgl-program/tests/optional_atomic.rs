@@ -1,5 +1,9 @@
 //! Optional atomic contract; shared fixture preserved verbatim from std821d9b7.
 use hgl_program::compile_tests;
+
+// Two tests can start within the same clock tick, and on Windows a second test
+// in the same directory then fights the first for its executable.
+static NEXT_DIR: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 fn sources(source: &str) -> Vec<(String, String)> {
     vec![
         ("optional.hgl".into(), source.into()),
@@ -54,10 +58,11 @@ fn run_shared(measure: bool) -> Result<(), Box<dyn std::error::Error>> {
         .join("../..")
         .canonicalize()?;
     let dir = std::env::temp_dir().join(format!(
-        "hgl-optional-{}",
+        "hgl-optional-{}-{}",
         SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)?
-            .as_nanos()
+            .as_nanos(),
+        NEXT_DIR.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
     fs::create_dir_all(dir.join("src"))?;
     let suite = compile_tests(&sources(include_str!(

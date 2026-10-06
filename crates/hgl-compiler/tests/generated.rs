@@ -1,5 +1,9 @@
 //! Compile and execute emitted Rust independently of compiler internals.
 use hgl_compiler::{Source, check, emit_rust};
+
+// Two tests can start within the same clock tick, and on Windows a second test
+// in the same directory then fights the first for its executable.
+static NEXT_DIR: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 use std::{
     fs,
     path::PathBuf,
@@ -14,9 +18,10 @@ fn generated_nodes_and_graphs_execute_the_reference_cases() -> Result<(), Box<dy
         .join("../..")
         .canonicalize()?;
     let directory = std::env::temp_dir().join(format!(
-        "hgl-bootstrap-{}-{}",
+        "hgl-bootstrap-{}-{}-{}",
         std::process::id(),
-        SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos()
+        SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos(),
+        NEXT_DIR.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
     fs::create_dir_all(directory.join("src"))?;
     prepare(&root, &directory)?;
