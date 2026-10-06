@@ -621,6 +621,9 @@ fn build_binary(dir: &Path) -> Result<std::path::PathBuf, Box<dyn std::error::Er
     let mut command = Command::new(env!("CARGO"));
     command
         .args(["build", "--offline", "--quiet"])
+        // One build cache for every generated program; a fresh one per test rebuilt the runtime each time.
+        .env("CARGO_TARGET_DIR", concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/source-tests"))
+        .env("CARGO_INCREMENTAL", "0")
         .current_dir(dir);
     if !cfg!(debug_assertions) {
         command.arg("--release");
@@ -631,13 +634,22 @@ fn build_binary(dir: &Path) -> Result<std::path::PathBuf, Box<dyn std::error::Er
         "{}",
         String::from_utf8_lossy(&build.stderr)
     );
-    Ok(dir
-        .join(if cfg!(debug_assertions) {
-            "target/debug"
-        } else {
-            "target/release"
-        })
-        .join(format!("eval-regressions{}", std::env::consts::EXE_SUFFIX)))
+    let suffix = dir
+        .file_name()
+        .map_or_else(String::new, |name| name.to_string_lossy().into_owned());
+    Ok(Path::new(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../target/source-tests"
+    ))
+    .join(if cfg!(debug_assertions) {
+        "debug"
+    } else {
+        "release"
+    })
+    .join(format!(
+        "eval-regressions-{suffix}{}",
+        std::env::consts::EXE_SUFFIX
+    )))
 }
 
 fn failure_images(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
@@ -855,7 +867,10 @@ fn manifest(root: &Path, dir: &Path) -> std::io::Result<()> {
             .replace('"', "\\\"");
         lines.push(format!("{name}={{path=\"{path}\"}}"));
     }
-    fs::write(dir.join("Cargo.toml"), lines.join("\n"))
+    fs::write(
+        dir.join("Cargo.toml"),
+        unique_package(&lines.join("\n"), dir),
+    )
 }
 const REGRESSIONS: &str = r#"
 fn clock_current(value:i64)->datetime {
@@ -1024,4 +1039,13 @@ fn recording_key_image(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     )?;
 
     Ok(())
+}
+
+/// Parallel tests share one build cache, so each generated package needs a name
+/// of its own: `cargo run` would otherwise execute a sibling's binary.
+fn unique_package(manifest: &str, dir: &Path) -> String {
+    let suffix = dir
+        .file_name()
+        .map_or_else(String::new, |name| name.to_string_lossy().into_owned());
+    manifest.replacen("\"\n", &format!("-{suffix}\"\n"), 1)
 }

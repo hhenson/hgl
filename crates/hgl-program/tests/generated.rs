@@ -78,6 +78,9 @@ fn library_graph_runs_sources_sinks_and_fresh_instances() -> Result<(), Box<dyn 
     manifest(&root, &dir)?;
     let output = Command::new(env!("CARGO"))
         .args(["run", "--offline", "--quiet"])
+        // One build cache for every generated program; a fresh one per test rebuilt the runtime each time.
+        .env("CARGO_TARGET_DIR", concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/source-tests"))
+        .env("CARGO_INCREMENTAL", "0")
         .current_dir(&dir)
         .output()?;
     assert!(
@@ -116,6 +119,15 @@ fn manifest(
             .replace('"', "\\\"");
         writeln!(manifest, "{name}={{path=\"{escaped}\"}}")?;
     }
-    fs::write(dir.join("Cargo.toml"), manifest)?;
+    fs::write(dir.join("Cargo.toml"), unique_package(&manifest, dir))?;
     Ok(())
+}
+
+/// Parallel tests share one build cache, so each generated package needs a name
+/// of its own: `cargo run` would otherwise execute a sibling's binary.
+fn unique_package(manifest: &str, dir: &std::path::Path) -> String {
+    let suffix = dir
+        .file_name()
+        .map_or_else(String::new, |name| name.to_string_lossy().into_owned());
+    manifest.replacen("\"\n", &format!("-{suffix}\"\n"), 1)
 }

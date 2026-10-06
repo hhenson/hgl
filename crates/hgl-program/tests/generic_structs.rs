@@ -322,10 +322,16 @@ fn generic_struct_values_configurations_and_globals_execute_in_both_profiles()
             .replace('"', "\\\"");
         writeln!(manifest, "{name}={{path=\"{path}\"}}")?;
     }
-    fs::write(directory.join("Cargo.toml"), manifest)?;
+    fs::write(
+        directory.join("Cargo.toml"),
+        unique_package(&manifest, &directory),
+    )?;
     for profile in [vec![], vec!["--release"]] {
         let output = Command::new(env!("CARGO"))
             .args(["run", "--offline", "--quiet"])
+            // One build cache for every generated program; a fresh one per test rebuilt the runtime each time.
+            .env("CARGO_TARGET_DIR", concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/source-tests"))
+            .env("CARGO_INCREMENTAL", "0")
             .args(profile)
             .current_dir(&directory)
             .output()?;
@@ -410,4 +416,13 @@ fn rolling_delta_fields_preserve_exact_window_specialization() {
         "let a:Arrival<rolling<i64,2>> = get(global_state,\"window\")\nlet b:Arrival<rolling<i64,3>> = get(global_state,\"window\")",
     );
     assert!(result.is_err(), "distinct rolling identities merged");
+}
+
+/// Parallel tests share one build cache, so each generated package needs a name
+/// of its own: `cargo run` would otherwise execute a sibling's binary.
+fn unique_package(manifest: &str, dir: &Path) -> String {
+    let suffix = dir
+        .file_name()
+        .map_or_else(String::new, |name| name.to_string_lossy().into_owned());
+    manifest.replacen("\"\n", &format!("-{suffix}\"\n"), 1)
 }

@@ -90,10 +90,13 @@ fn measured_simulation(graph:&mut hgl_kernel::Graph, store:&mut hgl_store::Store
             .replace('"', "\\\"");
         writeln!(manifest, "{name}={{path=\"{path}\"}}")?;
     }
-    fs::write(dir.join("Cargo.toml"), manifest)?;
+    fs::write(dir.join("Cargo.toml"), unique_package(&manifest, &dir))?;
     for profile in [vec![], vec!["--release"]] {
         let output = Command::new(env!("CARGO"))
             .args(["run", "--offline", "--quiet"])
+            // One build cache for every generated program; a fresh one per test rebuilt the runtime each time.
+            .env("CARGO_TARGET_DIR", concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/source-tests"))
+            .env("CARGO_INCREMENTAL", "0")
             .args(profile)
             .current_dir(&dir)
             .output()?;
@@ -191,4 +194,13 @@ fn concrete_inheritance_bases_are_rejected_through_generic_and_imported_names() 
             "{error}"
         );
     }
+}
+
+/// Parallel tests share one build cache, so each generated package needs a name
+/// of its own: `cargo run` would otherwise execute a sibling's binary.
+fn unique_package(manifest: &str, dir: &std::path::Path) -> String {
+    let suffix = dir
+        .file_name()
+        .map_or_else(String::new, |name| name.to_string_lossy().into_owned());
+    manifest.replacen("\"\n", &format!("-{suffix}\"\n"), 1)
 }

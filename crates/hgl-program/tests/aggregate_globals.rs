@@ -190,6 +190,9 @@ fn aggregate_global_source_runs_retention_borrows_failure_and_fresh_runs()
     for profile in [vec![], vec!["--release"]] {
         let output = Command::new(env!("CARGO"))
             .args(["run", "--offline", "--quiet"])
+            // One build cache for every generated program; a fresh one per test rebuilt the runtime each time.
+            .env("CARGO_TARGET_DIR", concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/source-tests"))
+            .env("CARGO_INCREMENTAL", "0")
             .args(profile)
             .current_dir(&dir)
             .output()?;
@@ -266,6 +269,15 @@ fn manifest(root: &Path, dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
             .replace('"', "\\\"");
         writeln!(manifest, "{name}={{path=\"{path}\"}}")?;
     }
-    fs::write(dir.join("Cargo.toml"), manifest)?;
+    fs::write(dir.join("Cargo.toml"), unique_package(&manifest, dir))?;
     Ok(())
+}
+
+/// Parallel tests share one build cache, so each generated package needs a name
+/// of its own: `cargo run` would otherwise execute a sibling's binary.
+fn unique_package(manifest: &str, dir: &Path) -> String {
+    let suffix = dir
+        .file_name()
+        .map_or_else(String::new, |name| name.to_string_lossy().into_owned());
+    manifest.replacen("\"\n", &format!("-{suffix}\"\n"), 1)
 }
