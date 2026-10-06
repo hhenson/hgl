@@ -71,7 +71,7 @@ pub fn yield_time(ty: &Ty, span: std::ops::Range<usize>) -> Result<(), Issue> {
             "type",
             "yield.time_type",
             span,
-            "yield time requires duration or datetime",
+            "yield time requires datetime or duration",
         ))
     }
 }
