@@ -31,3 +31,5 @@ The returned count includes only executed assertions and evaluations (including
 bound evaluations); skipped branches never contribute successful counts.
 
 Complete set/map comparison delegates to hgl-collection-values, preserving exact key/value identities while ignoring entry order.
+
+The eval callback now returns Failure. Raises executes its scope once, preserves outer writes, and matches only structured execution identity after teardown. Nested assertion failure is Other and cannot be caught. execute still renders a final String failure.

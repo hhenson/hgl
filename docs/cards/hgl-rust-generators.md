@@ -63,3 +63,5 @@ Rolling generators retain delta<result>=V in their ordinary/configuration pendin
 forms. Publication preserves the declared rolling result context and copies the
 arrival into its independent prepared ring. Statement emission carries an optional
 result type through nested blocks; ordinary helper bodies have no temporal result.
+
+Negative duration and non-increasing yield failures attach their normative stable codes at the checking operation, after operand evaluation.

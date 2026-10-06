@@ -398,7 +398,10 @@ fn step_bounds(steps: &[hgl_eval_data::TestStep]) -> (usize, usize) {
     steps.iter().fold((0, 0), |(minimum, maximum), step| {
         let (low, high) = match step {
             TestStep::Ordinary(_) => (0, 0),
-            TestStep::Eval(_) | TestStep::BindEval(..) | TestStep::Assert(_) => (1, 1),
+            TestStep::Raises(..)
+            | TestStep::Eval(_)
+            | TestStep::BindEval(..)
+            | TestStep::Assert(_) => (1, 1),
             TestStep::If(_, yes, no) => {
                 let (a, b) = step_bounds(yes);
                 let (c, d) = step_bounds(no);

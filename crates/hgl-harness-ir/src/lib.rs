@@ -13,6 +13,8 @@ pub struct Test {
 /// Setup, assertion or fresh graph execution.
 #[derive(Debug)]
 pub enum Step {
+    /// Require one exact structured execution error after successful teardown.
+    Raises(String, Vec<Self>),
     /// Checked ordinary source statement.
     Ordinary(Statement),
     /// Checked ordinary boolean assertion.
@@ -74,4 +76,65 @@ pub struct CapturedEval {
     pub length: usize,
     /// Present publications in strictly increasing cycle order.
     pub ticks: Vec<(usize, Value)>,
+}
+
+/// A graph error remains distinguishable from an assertion or build failure.
+#[derive(Debug)]
+pub enum Failure {
+    /// An error propagated by graph execution, including its cleanup context.
+    Execution(Box<hgl_node_error::NodeError>),
+    /// An unclassified failure, including every test assertion failure.
+    Other(String),
+}
+impl From<String> for Failure {
+    fn from(message: String) -> Self {
+        Self::Other(message)
+    }
+}
+impl From<&str> for Failure {
+    fn from(message: &str) -> Self {
+        Self::Other(message.into())
+    }
+}
+impl std::fmt::Display for Failure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Execution(error) => write!(f, "{error:?}"),
+            Self::Other(message) => f.write_str(message),
+        }
+    }
+}
+impl Failure {
+    /// Cleanup-only errors and errors followed by failed cleanup cannot match.
+    pub fn matches(&self, code: &str) -> bool {
+        matches!(self, Self::Execution(error) if error.code == Some(code)
+            && error.phase != hgl_node_error::Phase::Stop && error.cleanup.is_empty())
+    }
+}
+
+/// Checked tests with their independently selected graph plans.
+#[derive(Debug)]
+pub struct Suite {
+    /// Named lexical tests, in source order.
+    pub tests: Vec<Test>,
+    /// Generated graph plans addressed by each evaluation's case index.
+    pub plans: Vec<hgl_rust_ir::Plan>,
+}
+impl Suite {
+    /// Retain requested short or qualified names, rejecting every unknown selector.
+    pub fn select(&mut self, names: &[&str]) -> Result<(), String> {
+        let matches = |test: &Test, name: &str| {
+            test.name == name || test.name.rsplit("::").next() == Some(name)
+        };
+        for name in names {
+            if !self.tests.iter().any(|test| matches(test, name)) {
+                return Err(format!("unknown test selector {name}"));
+            }
+        }
+        if !names.is_empty() {
+            self.tests
+                .retain(|test| names.iter().any(|name| matches(test, name)));
+        }
+        Ok(())
+    }
 }

@@ -141,11 +141,9 @@ impl Graph {
         for rank in 0..rank_count(self.slots.len()) {
             let node = NodeId(rank);
             if let Err(error) = self.call(store, node, Phase::Start, now, false) {
-                // The start failure is the one reported, whatever the
-                // rollback's stops return.
-                let _rollback = self.stop(store, now);
+                let result = hgl_types::finish(Err(error), self.stop(store, now));
                 self.schedule.clear();
-                return Err(error);
+                return result;
             }
             self.started = rank + 1;
             self.schedule.rearm(node);

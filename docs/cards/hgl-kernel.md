@@ -337,3 +337,5 @@ sink to Store's disjoint prepared access facade. It enforces the evaluation phas
 the facade checks ownership/lifetime and performs complete-preflight publication.
 This keeps source observation, prepared record append and publication under one
 borrowed capability without adding per-value names or type dispatch.
+
+On a primary execution/start failure followed by cleanup failure, retain the first primary and attach cleanup to NodeError.cleanup; matching negative assertions can then fail without losing either error.

@@ -208,7 +208,7 @@ impl Generator {
 }
 fn timed_yield(plan: &Plan, time: &Value, payload: &Value, next: usize, result: &Ty) -> String {
     let resolution = if time.ty == Ty::Duration {
-        "{ if time.micros() < 0 { return Err(hgl_types::NodeError::new(\"generator negative yield duration\")); } hgl_types::EngineTime::from_micros(now.micros().checked_add(time.micros()).ok_or_else(|| hgl_types::NodeError::new(\"generator target time overflow\"))?) }"
+        "{ if time.micros() < 0 { return Err(hgl_types::NodeError::coded(\"generator negative yield duration\",\"yield.negative_duration\")); } hgl_types::EngineTime::from_micros(now.micros().checked_add(time.micros()).ok_or_else(|| hgl_types::NodeError::new(\"generator target time overflow\"))?) }"
     } else {
         assert_eq!(time.ty, Ty::DateTime, "checked generator time operand");
         "time"
@@ -239,7 +239,7 @@ fn timed_yield(plan: &Plan, time: &Value, payload: &Value, next: usize, result: 
         },
     );
     format!(
-        "let time = {};\nlet payload = {};\nlet now = _ctx.evaluation_time();\nlet target = {resolution};\nif self.generator_previous.is_some_and(|previous| target <= previous) {{ return Err(hgl_types::NodeError::new(\"generator yield times must strictly increase\")); }}\nself.generator_previous = Some(target);\nif target < now {{ self.generator_pc = {next}; continue; }}\nif target == now {{\n{publish} self.generator_pc = {next}; continue;\n}}\nlet delay = target.micros().checked_sub(now.micros()).ok_or_else(|| hgl_types::NodeError::new(\"generator target time difference overflow\"))?;\n_ctx.alarm_in(hgl_types::EngineDelta::from_micros(delay))?;\nself.{pending} = Some(payload); self.generator_pc = {next}; return Ok(());\n",
+        "let time = {};\nlet payload = {};\nlet now = _ctx.evaluation_time();\nlet target = {resolution};\nif self.generator_previous.is_some_and(|previous| target <= previous) {{ return Err(hgl_types::NodeError::coded(\"generator yield times must strictly increase\",\"yield.non_increasing_time\")); }}\nself.generator_previous = Some(target);\nif target < now {{ self.generator_pc = {next}; continue; }}\nif target == now {{\n{publish} self.generator_pc = {next}; continue;\n}}\nlet delay = target.micros().checked_sub(now.micros()).ok_or_else(|| hgl_types::NodeError::new(\"generator target time difference overflow\"))?;\n_ctx.alarm_in(hgl_types::EngineDelta::from_micros(delay))?;\nself.{pending} = Some(payload); self.generator_pc = {next}; return Ok(());\n",
         condition_code(plan, time),
         value
     )

@@ -134,6 +134,7 @@ version = "0.0.0"
 dependencies = [
  "hgl-documentation",
  "hgl-program",
+ "hgl-test-runner",
 ]
 
 [[package]]
@@ -290,6 +291,7 @@ dependencies = [
  "hgl-eval-data",
  "hgl-family-values",
  "hgl-harness-ir",
+ "hgl-node-error",
  "hgl-rust-ir",
  "hgl-source",
  "hgl-time-values",
@@ -312,6 +314,7 @@ dependencies = [
 name = "hgl-harness-ir"
 version = "0.0.0"
 dependencies = [
+ "hgl-node-error",
  "hgl-rust-ir",
  "hgl-source",
 ]
@@ -421,6 +424,10 @@ dependencies = [
  "hgl-store",
  "hgl-types",
 ]
+
+[[package]]
+name = "hgl-node-error"
+version = "0.0.0"
 
 [[package]]
 name = "hgl-nominal-batch"
@@ -1012,6 +1019,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "hgl-test-runner"
+version = "0.0.0"
+dependencies = [
+ "hgl-program",
+]
+
+[[package]]
 name = "hgl-testkit"
 version = "0.0.0"
 dependencies = [
@@ -1065,6 +1079,7 @@ name = "hgl-types"
 version = "0.0.0"
 dependencies = [
  "hgl-growing-range",
+ "hgl-node-error",
  "hgl-time-values",
  "hgl-window-types",
 ]

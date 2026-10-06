@@ -22,6 +22,7 @@ fn callbacks(steps: &[Step]) -> String {
             Step::Eval(e) | Step::BindEval(_, _, e) => {
                 format!("{}=>case{}::run(prepared),", e.case, e.case)
             }
+            Step::Raises(_, body) => callbacks(body),
             Step::If(_, a, b) => format!("{}{}", callbacks(a), callbacks(b)),
             Step::Ordinary(_) | Step::Assert(_) => String::new(),
         })

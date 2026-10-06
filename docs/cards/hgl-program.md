@@ -352,3 +352,5 @@ frontend adapter. Bound evals require an output; retained captures use ordinary
 index/length checking and existing binding-specific presence refinement.
 Conditional test branches use fresh binding identities and nested lexical
 scope. Named-test reporting fails on any executed nested assertion/eval error.
+
+Named suite emission accepts command-line short or qualified test names. Unknown selections fail. Raises callbacks remain independently owned graph runs.

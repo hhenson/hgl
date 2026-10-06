@@ -227,6 +227,8 @@ pub fn parameter<'a>(
 /// One parsed lexical test operation, without name or type resolution.
 #[derive(Debug)]
 pub enum TestStep {
+    /// A literal stable execution code and one lexical test block.
+    Raises(String, Vec<Self>),
     /// Ordinary setup statement.
     Ordinary(hgl_source::Stmt),
     /// Ordinary boolean assertion expression.
@@ -288,6 +290,20 @@ fn step(cursor: &mut hgl_source::Cursor<'_>) -> Result<TestStep, String> {
         return Ok(TestStep::Ordinary(ordinary));
     }
     let assertion = cursor.take("assert");
+    if assertion && cursor.take("raises") {
+        cursor.need("(")?;
+        let Expr::Literal(Literal::Str(code)) = cursor.expr()? else {
+            return Err("raises requires a literal execution code".into());
+        };
+        if !matches!(
+            code.as_str(),
+            "yield.negative_duration" | "yield.non_increasing_time"
+        ) {
+            return Err("unknown raises execution code".into());
+        }
+        cursor.need(")")?;
+        return Ok(TestStep::Raises(code, step_block(cursor)?));
+    }
     let expr = cursor.expr()?;
     let eval = matches!(&expr,Expr::Binary(_,left,_) if matches!(left.as_ref(),Expr::Call(name,_) if name=="eval"));
     if assertion && !eval {

@@ -1,12 +1,7 @@
 use crate::{emit, index, resolve};
 use hgl_harness_ir::Test;
 
-/// Checked lexical tests and independently selected graph plans.
-#[derive(Debug)]
-pub struct Suite {
-    tests: Vec<Test>,
-    plans: Vec<hgl_rust::Plan>,
-}
+pub use hgl_harness_ir::Suite;
 /// Check named tests without executing ordinary setup or supplied eval values.
 pub fn compile_tests(sources: &[(String, String)]) -> Result<Suite, String> {
     let library = index::load(sources)?;
@@ -58,7 +53,7 @@ pub fn emit_tests(suite: &Suite) -> String {
     }
     out.push("fn main() {\nlet mut failed=0;\nlet mut evaluations=0;\n".into());
     for (i, test) in suite.tests.iter().enumerate() {
-        out.push(format!("match test{i}::test() {{Ok(count)=>{{evaluations+=count; println!(\"{{}} ... ok\",{:?});}},Err(e)=>{{failed+=1;eprintln!(\"{{}}: {{e}}\",{:?});}}}}\n",test.name,test.name));
+        out.push(format!("match test{i}::test() {{Ok(count)=>{{evaluations+=count; println!(\"{{}} ... ok\",{:?});}},Err(e)=>{{failed+=1;eprintln!(\"{{}} ... FAILED: {{e}}\",{:?});}}}}\n",test.name,test.name));
     }
     out.push(format!("println!(\"{} tests, {{evaluations}} evaluations, {{failed}} failures\");\nif failed != 0 {{std::process::exit(1);}}\n}}\n",suite.tests.len()));
     out.concat()

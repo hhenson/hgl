@@ -17,6 +17,12 @@ fn run() -> Result<(), String> {
     let mut args = std::env::args().skip(1);
     let usage = "usage: hglc check|emit-rust|emit-tests|doc FILE [--part FILE] [--library DIR] [--entry NAME] [--out FILE]";
     let command = args.next().ok_or(usage)?;
+    if command == "test" {
+        return hgl_test_runner::run(
+            &args.collect::<Vec<_>>(),
+            &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."),
+        );
+    }
     if !matches!(
         command.as_str(),
         "check" | "emit-rust" | "doc" | "emit-tests"
@@ -42,6 +48,9 @@ fn run() -> Result<(), String> {
     if !libraries.is_empty() || command == "emit-tests" {
         return library::run(&files, &libraries, &entry, &command, output.as_deref());
     }
+    standalone(&files, output, &command)
+}
+fn standalone(files: &[PathBuf], output: Option<PathBuf>, command: &str) -> Result<(), String> {
     let sources = files
         .iter()
         .map(|path| {

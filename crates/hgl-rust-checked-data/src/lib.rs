@@ -180,6 +180,7 @@ fn evaluation(e: &hgl_harness_ir::Evaluation) -> String {
 }
 fn step(s: &Step) -> String {
     let s = match s {
+        Step::Raises(code, body) => format!("Raises({code:?}.into(),{})", list(body, step)),
         Step::Ordinary(s) => format!("Ordinary({})", statement(s)),
         Step::Assert(v) => format!("Assert({})", value(v)),
         Step::Eval(e) => format!("Eval({})", evaluation(e)),

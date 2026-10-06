@@ -263,6 +263,9 @@ fn eng10_the_first_of_several_failures_is_reported() {
     };
 
     assert_eq!((error.node, error.phase), (NodeId(1), Phase::Eval));
+    assert_eq!(error.cleanup.len(), 1);
+    assert_eq!(error.cleanup[0].phase, Phase::Stop);
+    assert_eq!(error.cleanup[0].message, "pulse failed to stop");
     assert_eq!(hooks(&graph, 0).last(), Some(&(Phase::Stop, at(10))));
 }
 

@@ -43,9 +43,11 @@ pub fn block(
         let binding = match &step {
             TestStep::Ordinary(Stmt::Let(name, _, _) | Stmt::Var(name, _, _))
             | TestStep::BindEval(name, _) => Some(name),
-            TestStep::Ordinary(_) | TestStep::Assert(_) | TestStep::Eval(_) | TestStep::If(..) => {
-                None
-            }
+            TestStep::Raises(..)
+            | TestStep::Ordinary(_)
+            | TestStep::Assert(_)
+            | TestStep::Eval(_)
+            | TestStep::If(..) => None,
         };
         if let Some(name) = binding
             && !names.insert(name.clone())
@@ -53,6 +55,12 @@ pub fn block(
             return Err(format!("duplicate test local {name}"));
         }
         steps.push(match step {
+            TestStep::Raises(code, source) => {
+                let mut local = scope.clone();
+                let body = block(source, &mut local, plans, checker)?;
+                scope.next = local.next;
+                Step::Raises(code, body)
+            }
             TestStep::Ordinary(statement) => Step::Ordinary(checker.statement(&statement, scope)?),
             TestStep::Assert(expr) => Step::Assert(checker.boolean(&expr, scope)?),
             TestStep::If(expr, yes, no) => {
