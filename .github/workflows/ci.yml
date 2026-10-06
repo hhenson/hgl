@@ -55,8 +55,9 @@ jobs:
       - run: cargo clippy --manifest-path experiments/compiler-tools/Cargo.toml --all-targets -- -D warnings
       - run: python experiments/compiler-tools/run.py --output "${{ runner.temp }}/compiler-tools-results"
 
-  # The two test profiles overlap instead of following each other. Debug
-  # builds check the assertions; release builds run what ships.
+  # The test stages overlap instead of following each other. Debug builds
+  # check the assertions; ci-release builds run without them. The optimised
+  # stage is the long pole, so it is sharded by package.
   tests:
     if: github.event_name != 'schedule'
     strategy:
@@ -65,8 +66,13 @@ jobs:
         include:
           - stage: debug
             gate: test
-          - stage: release
-            gate: test --release
+            shard: ""
+          - stage: release-program
+            gate: test ci-release
+            shard: "-- -p hgl-program"
+          - stage: release-rest
+            gate: test ci-release
+            shard: "-- --exclude hgl-program"
     name: tests (${{ matrix.stage }})
     runs-on: ubuntu-latest
     steps:
@@ -75,7 +81,7 @@ jobs:
         with:
           stage: ${{ matrix.stage }}
       - run: python external/hgraph_spec_audit/tools/shared_artifacts.py --offline
-      - run: cargo xtask ci "${{ matrix.gate }}"
+      - run: cargo xtask ci "${{ matrix.gate }}" ${{ matrix.shard }}
 
   windows:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'

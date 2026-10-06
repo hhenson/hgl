@@ -9,7 +9,7 @@ is and why, how to read Rust coming from C++, and what to look for in a diff.
 
 | File | What it does | C++ equivalent |
 |---|---|---|
-| `Cargo.toml` (root) | The workspace: members, shared dependency versions, the lint policy, build profiles | top-level `CMakeLists.txt` + `conanfile.py` + `.clang-tidy` |
+| `Cargo.toml` (root) | The workspace: members, shared dependency versions, the lint policy, build profiles (`release` is what ships and what benchmarks measure; `ci-release` is release without link-time optimisation, for the gate's optimised test stage) | top-level `CMakeLists.txt` + `conanfile.py` + `.clang-tidy` |
 | `Cargo.lock` | Exact versions of everything resolved. Committed, because this builds applications | Conan lockfile |
 | `rust-toolchain.toml` | Pins the compiler. rustup reads it and installs that version | a pinned compiler image |
 | `rustfmt.toml` | Formatter options. Deliberately almost empty | `.clang-format` |
@@ -17,7 +17,7 @@ is and why, how to read Rust coming from C++, and what to look for in a diff.
 | `deny.toml` | Which licences, sources and duplicate versions dependencies may have | — |
 | `.cargo/config.toml` | Defines `cargo xtask` | — |
 | `xtask/` | Repository automation as a Rust program — no shell, works on Windows | `tools/*.py`, CMake scripts |
-| `.github/workflows/ci.yml` | On every pull request Linux runs the checks and the two test profiles as three parallel jobs (`cargo xtask ci <gate>`); Windows runs the whole gate nightly and on dispatch; macOS is run locally | same |
+| `.github/workflows/ci.yml` | On every pull request Linux runs the checks, the debug tests and the optimised tests (two shards) as four parallel jobs (`cargo xtask ci <gate> [-- cargo args]`); Windows runs the whole gate nightly and on dispatch; macOS is run locally | same |
 
 Daily commands:
 

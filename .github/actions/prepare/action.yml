@@ -24,7 +24,7 @@ runs:
       with:
         path: |
           target/debug
-          target/release
+          target/ci-release
           target/ci-source-mtimes.json
           experiments/compiler-tools/target/debug
         key: workspace-v2-${{ runner.os }}-${{ runner.arch }}-${{ inputs.stage }}-${{ steps.build-environment.outputs.key }}-${{ github.sha }}
