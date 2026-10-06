@@ -9,8 +9,8 @@ line-budget=700
 [lints]
 workspace=true
 [dependencies]
-hgl-calendar={path="../hgl-calendar"}
-hgl-type-shape={path="../hgl-type-shape"}
-hgl-lex={path="../hgl-lex"}
-hgl-literals={path="../hgl-literals"}
-hgl-diagnostics={path="../hgl-diagnostics"}
+hgl-types = { path = "../hgl-types" }
+hgl-type-shape = { path = "../hgl-type-shape" }
+hgl-lex = { path = "../hgl-lex" }
+hgl-literals = { path = "../hgl-literals" }
+hgl-diagnostics = { path = "../hgl-diagnostics" }

@@ -19,4 +19,4 @@ hgl-rust-ir = { path = "../hgl-rust-ir" }
 hgl-delta-check = { path = "../hgl-delta-check" }
 hgl-value-operations = { path = "../hgl-value-operations" }
 [dev-dependencies]
-hgl-time-values = { path = "../hgl-time-values" }
+hgl-types = { path = "../hgl-types" }

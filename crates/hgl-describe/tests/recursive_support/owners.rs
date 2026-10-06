@@ -1,5 +1,5 @@
 use super::*;
-use hgl_nested::Children;
+use hgl_kernel::nested::Children;
 
 pub(super) struct Map {
     inputs: Vec<InputId>,

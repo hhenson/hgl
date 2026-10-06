@@ -38,7 +38,7 @@ impl State {
                 None
             }
         });
-        hgl_growing_range::validate(self.children.len(), items, removed.clone())
+        hgl_types::growing_range::validate(self.children.len(), items, removed.clone())
             .map_err(str::to_owned)?;
         for index in removed {
             self.children

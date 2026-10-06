@@ -40,7 +40,7 @@ fn structural_values_and_nested_generator_effects_execute_in_both_profiles()
         "hgl-value-eval",
         "hgl-time-context",
         "hgl-testkit",
-        "hgl-std-native",
+        "hgl-stdlib",
     ] {
         let path = root
             .join("crates")

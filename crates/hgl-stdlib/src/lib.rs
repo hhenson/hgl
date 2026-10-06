@@ -28,7 +28,7 @@ impl Node for BitAndI64 {
     fn eval(&mut self, ctx: &mut Ctx<'_>) -> NodeResult {
         ctx.set(
             self.out,
-            hgl_native::bit_and_i64(ctx.get(self.lhs), ctx.get(self.rhs)),
+            native::bit_and_i64(ctx.get(self.lhs), ctx.get(self.rhs)),
         );
         Ok(())
     }
@@ -124,3 +124,6 @@ impl Buildable for DedupI64 {
         })
     }
 }
+
+pub mod native;
+pub mod std_native;

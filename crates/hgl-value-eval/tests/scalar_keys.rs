@@ -1,7 +1,7 @@
 //! Cold keys materialize once, in written order, and validate before replay.
 use hgl_rust_ir::{DeltaEntry, Kind, Value};
 use hgl_source::{Literal, TemporalLiteral, Ty};
-use hgl_time_values::ZoneId;
+use hgl_types::time_values::ZoneId;
 use hgl_value_eval::{EvalError, Evaluator};
 fn zone(name: &str) -> Value {
     Value::new(

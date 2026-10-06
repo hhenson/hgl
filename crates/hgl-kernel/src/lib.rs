@@ -13,8 +13,10 @@
 //! is not scheduled.
 
 mod ctx;
+pub mod deadlines;
 mod engine;
 mod graph;
+pub mod nested;
 mod schedule;
 
 use std::any::Any;

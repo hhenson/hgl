@@ -17,5 +17,4 @@ hgl-eval-data = { path = "../hgl-eval-data" }
 hgl-source = { path = "../hgl-source" }
 hgl-rust-ir = { path = "../hgl-rust-ir" }
 [dev-dependencies]
-hgl-node-error = { path = "../hgl-node-error" }
-hgl-time-values = { path = "../hgl-time-values" }
+hgl-types = { path = "../hgl-types" }

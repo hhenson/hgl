@@ -7,26 +7,40 @@ publish.workspace = true
 description = "Where time-series live and how a tick travels: every value, last-modified time and binding of a run."
 
 [package.metadata.hgl]
-line-budget = 500
+line-budget = 6860
+
+# Budgets of the modules that were crates of their own (docs/decisions/0004).
+[package.metadata.hgl.modules]
+atomic = { budget = 180, uses = ["bindings", "global_value", "prepared_value", "shapes"] }
+binding_build = { budget = 160, uses = ["endpoints"] }
+bindings = { budget = 1100, uses = ["binding_build", "endpoints"] }
+columns = { budget = 350, uses = ["scalar_copy"] }
+endpoints = { budget = 650, uses = ["member_table"] }
+global = { budget = 200, uses = ["global_value", "list", "optional", "prepared_value", "recursive_value"] }
+global_arena = { budget = 220, uses = ["columns", "value_lists"] }
+global_value = { budget = 200, uses = ["columns", "global_arena"] }
+keys = { budget = 500, uses = ["global_value"] }
+list = { budget = 260, uses = ["global_value", "list_storage"] }
+list_storage = { budget = 300, uses = ["global_value", "prepared_value"] }
+member_table = { budget = 220, uses = [] }
+observation = { budget = 100, uses = ["atomic", "bindings", "columns", "keys", "rolling"] }
+optional = { budget = 160, uses = ["global_value", "list_storage", "prepared_value"] }
+prepared_store = { budget = 280, uses = ["atomic", "bindings", "columns", "global", "keys", "observation", "rolling", "shapes"] }
+prepared_value = { budget = 160, uses = ["columns", "global_value"] }
+recursive_value = { budget = 220, uses = ["global_value", "prepared_value"] }
+rolling = { budget = 350, uses = ["bindings", "global_value", "prepared_value", "shapes"] }
+scalar_copy = { budget = 180, uses = [] }
+shapes = { budget = 350, uses = ["bindings", "global_value", "keys"] }
+store_build = { budget = 100, uses = ["atomic", "bindings", "columns", "rolling"] }
+value_lists = { budget = 120, uses = [] }
 
 [dependencies]
-hgl-rolling = { path = "../hgl-rolling" }
-hgl-prepared-store = { path = "../hgl-prepared-store" }
-hgl-atomic = { path = "../hgl-atomic" }
-hgl-shapes = { path = "../hgl-shapes" }
-hgl-columns = { path = "../hgl-columns" }
-hgl-bindings = { path = "../hgl-bindings" }
 hgl-types = { path = "../hgl-types" }
-hgl-global = { path = "../hgl-global" }
-
-hgl-keys = { path = "../hgl-keys" }
-hgl-store-build = { path = "../hgl-store-build" }
 
 [dev-dependencies]
-hgl-time-context = { path = "../hgl-time-context" }
-hgl-literals = { path = "../hgl-literals" }
 hgl-alloc-count = { path = "../hgl-alloc-count" }
-
+hgl-literals = { path = "../hgl-literals" }
+hgl-time-context = { path = "../hgl-time-context" }
 
 [lints]
 workspace = true

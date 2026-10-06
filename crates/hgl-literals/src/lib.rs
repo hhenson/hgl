@@ -1,6 +1,6 @@
 //! Scalar source values and unresolved execution-context literal recipes.
-use hgl_time_values::{ZoneId, ZonedDateTime, ZonedTime};
 use hgl_type_shape::{EnumType, Ty};
+use hgl_types::time_values::{ZoneId, ZonedDateTime, ZonedTime};
 #[derive(Debug, Clone, PartialEq)]
 /// A fixed scalar value in HGL source.
 pub enum Literal {
@@ -126,11 +126,11 @@ fn temporal(text: &str) -> Result<ParsedLiteral, String> {
         }
         if !value.contains('T') {
             return Ok(ParsedLiteral::Contextual(TemporalLiteral::ZonedTime {
-                time_micros: hgl_calendar::time(value)?.0,
+                time_micros: hgl_types::calendar::time(value)?.0,
                 zone: name.into(),
             }));
         }
-        let (instant, offset_seconds) = hgl_calendar::offset_datetime(value).map_err(|error| format!("zoned_datetime requires an explicit valid offset; use resolve for civil values: {error}"))?;
+        let (instant, offset_seconds) = hgl_types::calendar::offset_datetime(value).map_err(|error| format!("zoned_datetime requires an explicit valid offset; use resolve for civil values: {error}"))?;
         return Ok(ParsedLiteral::Contextual(TemporalLiteral::ZonedDateTime {
             instant_micros: instant.micros(),
             zone: name.into(),
@@ -139,14 +139,14 @@ fn temporal(text: &str) -> Result<ParsedLiteral, String> {
     }
     let value = if let Some((_, clock)) = text.split_once('T') {
         if clock.ends_with('Z') || clock.contains(['+', '-']) {
-            Literal::DateTime(hgl_calendar::offset_datetime(text)?.0.micros())
+            Literal::DateTime(hgl_types::calendar::offset_datetime(text)?.0.micros())
         } else {
-            Literal::CivilDateTime(hgl_calendar::civil_datetime(text)?.micros())
+            Literal::CivilDateTime(hgl_types::calendar::civil_datetime(text)?.micros())
         }
     } else if text.contains(':') {
-        Literal::Time(hgl_calendar::time(text)?.0)
+        Literal::Time(hgl_types::calendar::time(text)?.0)
     } else {
-        Literal::Date(hgl_calendar::date(text)?.0)
+        Literal::Date(hgl_types::calendar::date(text)?.0)
     };
     Ok(ParsedLiteral::Value(value))
 }
@@ -177,7 +177,7 @@ pub fn numeric(text: &str, negative: bool) -> Result<Option<ParsedLiteral>, Stri
     }
     let digits = text.bytes().take_while(u8::is_ascii_digit).count();
     if digits < text.len() {
-        let value = hgl_calendar::duration(text)?.micros();
+        let value = hgl_types::calendar::duration(text)?.micros();
         return Ok(Some(ParsedLiteral::Value(Literal::Duration(if negative {
             -value
         } else {

@@ -7,13 +7,15 @@ publish.workspace = true
 description = "The vocabulary every crate shares: engine time, scalar and time-series types, the node type."
 
 [package.metadata.hgl]
-line-budget = 250
+line-budget = 1200
+
+# Budgets of the modules that were crates of their own (docs/decisions/0004).
+[package.metadata.hgl.modules]
+calendar = { budget = 400, uses = [] }
+growing_range = { budget = 100, uses = [] }
+node_error = { budget = 100, uses = [] }
+time_values = { budget = 250, uses = [] }
+window_types = { budget = 100, uses = [] }
 
 [lints]
 workspace = true
-
-[dependencies]
-hgl-growing-range = { path = "../hgl-growing-range" }
-hgl-time-values = { path = "../hgl-time-values" }
-hgl-window-types = { path = "../hgl-window-types" }
-hgl-node-error = { path = "../hgl-node-error" }

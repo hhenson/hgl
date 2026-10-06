@@ -1,7 +1,7 @@
 //! Cold keys preserve the scalar equality contract without display conversion.
 use hgl_scalar_keys::key;
 use hgl_source::{EnumType, Literal};
-use hgl_time_values::{EngineTime, Time, ZoneId, ZonedDateTime, ZonedTime};
+use hgl_types::time_values::{EngineTime, Time, ZoneId, ZonedDateTime, ZonedTime};
 
 #[test]
 fn scalar_type_and_complete_enum_identity_are_part_of_the_key() {

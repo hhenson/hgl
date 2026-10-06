@@ -5,7 +5,7 @@
 //! that gives up its lowest member; *later* is a min-heap whose top is the
 //! graph's next scheduled time.
 
-use hgl_deadlines::Deadlines;
+use crate::deadlines::Deadlines;
 
 use hgl_store::Wake;
 use hgl_types::{EngineTime, NodeId};

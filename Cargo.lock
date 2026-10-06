@@ -44,42 +44,14 @@ name = "hgl-alloc-count"
 version = "0.0.0"
 
 [[package]]
-name = "hgl-atomic"
-version = "0.0.0"
-dependencies = [
- "hgl-bindings",
- "hgl-global-value",
- "hgl-prepared-value",
- "hgl-shapes",
- "hgl-types",
-]
-
-[[package]]
-name = "hgl-bench-twin"
+name = "hgl-bench"
 version = "0.0.0"
 dependencies = [
  "hgl-alloc-count",
  "hgl-describe",
  "hgl-kernel",
- "hgl-proto-nodes",
  "hgl-store",
- "hgl-types",
-]
-
-[[package]]
-name = "hgl-binding-build"
-version = "0.0.0"
-dependencies = [
- "hgl-endpoints",
- "hgl-types",
-]
-
-[[package]]
-name = "hgl-bindings"
-version = "0.0.0"
-dependencies = [
- "hgl-binding-build",
- "hgl-endpoints",
+ "hgl-testkit",
  "hgl-types",
 ]
 
@@ -90,13 +62,6 @@ dependencies = [
  "hgl-library",
  "hgl-rust-ir",
  "hgl-source",
-]
-
-[[package]]
-name = "hgl-calendar"
-version = "0.0.0"
-dependencies = [
- "hgl-types",
 ]
 
 [[package]]
@@ -122,14 +87,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "hgl-columns"
-version = "0.0.0"
-dependencies = [
- "hgl-scalar-copy",
- "hgl-types",
-]
-
-[[package]]
 name = "hgl-compiler"
 version = "0.0.0"
 dependencies = [
@@ -149,13 +106,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "hgl-deadlines"
-version = "0.0.0"
-dependencies = [
- "hgl-types",
-]
-
-[[package]]
 name = "hgl-delta-check"
 version = "0.0.0"
 dependencies = [
@@ -169,8 +119,6 @@ name = "hgl-describe"
 version = "0.0.0"
 dependencies = [
  "hgl-kernel",
- "hgl-nested",
- "hgl-plan",
  "hgl-store",
  "hgl-types",
 ]
@@ -190,14 +138,6 @@ dependencies = [
  "hgl-rust-ir",
  "hgl-source",
  "hgl-value-bind",
-]
-
-[[package]]
-name = "hgl-endpoints"
-version = "0.0.0"
-dependencies = [
- "hgl-member-table",
- "hgl-types",
 ]
 
 [[package]]
@@ -241,55 +181,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "hgl-fixed-bench"
-version = "0.0.0"
-dependencies = [
- "hgl-kernel",
- "hgl-store",
- "hgl-types",
-]
-
-[[package]]
 name = "hgl-flow-check"
 version = "0.0.0"
 dependencies = [
  "hgl-rust-ir",
  "hgl-source",
 ]
-
-[[package]]
-name = "hgl-global"
-version = "0.0.0"
-dependencies = [
- "hgl-global-value",
- "hgl-list",
- "hgl-optional",
- "hgl-prepared-value",
- "hgl-recursive-value",
- "hgl-types",
-]
-
-[[package]]
-name = "hgl-global-arena"
-version = "0.0.0"
-dependencies = [
- "hgl-columns",
- "hgl-types",
- "hgl-value-lists",
-]
-
-[[package]]
-name = "hgl-global-value"
-version = "0.0.0"
-dependencies = [
- "hgl-columns",
- "hgl-global-arena",
- "hgl-types",
-]
-
-[[package]]
-name = "hgl-growing-range"
-version = "0.0.0"
 
 [[package]]
 name = "hgl-harness"
@@ -299,10 +196,9 @@ dependencies = [
  "hgl-eval-data",
  "hgl-family-values",
  "hgl-harness-ir",
- "hgl-node-error",
  "hgl-rust-ir",
  "hgl-source",
- "hgl-time-values",
+ "hgl-types",
  "hgl-value-eval",
 ]
 
@@ -322,9 +218,9 @@ dependencies = [
 name = "hgl-harness-ir"
 version = "0.0.0"
 dependencies = [
- "hgl-node-error",
  "hgl-rust-ir",
  "hgl-source",
+ "hgl-types",
 ]
 
 [[package]]
@@ -342,17 +238,7 @@ name = "hgl-kernel"
 version = "0.0.0"
 dependencies = [
  "hgl-alloc-count",
- "hgl-deadlines",
  "hgl-store",
- "hgl-types",
-]
-
-[[package]]
-name = "hgl-keys"
-version = "0.0.0"
-dependencies = [
- "hgl-alloc-count",
- "hgl-global-value",
  "hgl-types",
 ]
 
@@ -374,30 +260,11 @@ name = "hgl-library-files"
 version = "0.0.0"
 
 [[package]]
-name = "hgl-list"
-version = "0.0.0"
-dependencies = [
- "hgl-global-value",
- "hgl-list-storage",
- "hgl-types",
-]
-
-[[package]]
-name = "hgl-list-storage"
-version = "0.0.0"
-dependencies = [
- "hgl-global-value",
- "hgl-prepared-value",
- "hgl-types",
-]
-
-[[package]]
 name = "hgl-literals"
 version = "0.0.0"
 dependencies = [
- "hgl-calendar",
- "hgl-time-values",
  "hgl-type-shape",
+ "hgl-types",
 ]
 
 [[package]]
@@ -411,10 +278,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "hgl-member-table"
-version = "0.0.0"
-
-[[package]]
 name = "hgl-name-check"
 version = "0.0.0"
 dependencies = [
@@ -426,87 +289,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "hgl-native"
-version = "0.0.0"
-dependencies = [
- "hgl-alloc-count",
- "hgl-store",
- "hgl-types",
-]
-
-[[package]]
-name = "hgl-nested"
-version = "0.0.0"
-dependencies = [
- "hgl-alloc-count",
- "hgl-deadlines",
- "hgl-kernel",
- "hgl-store",
- "hgl-types",
-]
-
-[[package]]
-name = "hgl-node-error"
-version = "0.0.0"
-
-[[package]]
 name = "hgl-nominal-batch"
 version = "0.0.0"
-
-[[package]]
-name = "hgl-observation"
-version = "0.0.0"
-dependencies = [
- "hgl-atomic",
- "hgl-bindings",
- "hgl-columns",
- "hgl-keys",
- "hgl-rolling",
- "hgl-types",
-]
-
-[[package]]
-name = "hgl-optional"
-version = "0.0.0"
-dependencies = [
- "hgl-alloc-count",
- "hgl-global-value",
- "hgl-list-storage",
- "hgl-prepared-value",
- "hgl-types",
-]
-
-[[package]]
-name = "hgl-plan"
-version = "0.0.0"
-dependencies = [
- "hgl-store",
- "hgl-types",
-]
-
-[[package]]
-name = "hgl-prepared-store"
-version = "0.0.0"
-dependencies = [
- "hgl-atomic",
- "hgl-bindings",
- "hgl-columns",
- "hgl-global",
- "hgl-keys",
- "hgl-observation",
- "hgl-rolling",
- "hgl-shapes",
- "hgl-types",
-]
-
-[[package]]
-name = "hgl-prepared-value"
-version = "0.0.0"
-dependencies = [
- "hgl-columns",
- "hgl-global-value",
- "hgl-types",
-]
 
 [[package]]
 name = "hgl-program"
@@ -544,25 +328,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "hgl-proto-nodes"
-version = "0.0.0"
-dependencies = [
- "hgl-alloc-count",
- "hgl-describe",
- "hgl-kernel",
- "hgl-store",
- "hgl-types",
-]
-
-[[package]]
 name = "hgl-publication-trace"
 version = "0.0.0"
 dependencies = [
  "hgl-composite-keys",
  "hgl-delta-check",
- "hgl-growing-range",
  "hgl-rust-ir",
  "hgl-source",
+ "hgl-types",
 ]
 
 [[package]]
@@ -578,15 +351,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "hgl-recursive-value"
-version = "0.0.0"
-dependencies = [
- "hgl-global-value",
- "hgl-prepared-value",
- "hgl-types",
-]
-
-[[package]]
 name = "hgl-reject"
 version = "0.0.0"
 dependencies = [
@@ -594,17 +358,6 @@ dependencies = [
  "hgl-program",
  "hgl-test-annotations",
  "hgl-test-units",
-]
-
-[[package]]
-name = "hgl-rolling"
-version = "0.0.0"
-dependencies = [
- "hgl-bindings",
- "hgl-global-value",
- "hgl-prepared-value",
- "hgl-shapes",
- "hgl-types",
 ]
 
 [[package]]
@@ -912,18 +665,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "hgl-scalar-copy"
-version = "0.0.0"
-dependencies = [
- "hgl-types",
-]
-
-[[package]]
 name = "hgl-scalar-keys"
 version = "0.0.0"
 dependencies = [
  "hgl-source",
- "hgl-time-values",
+ "hgl-types",
 ]
 
 [[package]]
@@ -937,24 +683,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "hgl-shapes"
-version = "0.0.0"
-dependencies = [
- "hgl-bindings",
- "hgl-global-value",
- "hgl-keys",
- "hgl-types",
-]
-
-[[package]]
 name = "hgl-source"
 version = "0.0.0"
 dependencies = [
- "hgl-calendar",
  "hgl-diagnostics",
  "hgl-lex",
  "hgl-literals",
  "hgl-type-shape",
+ "hgl-types",
 ]
 
 [[package]]
@@ -985,23 +721,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "hgl-std-native"
-version = "0.0.0"
-dependencies = [
- "hgl-calendar",
- "hgl-kernel",
- "hgl-store",
- "hgl-types",
-]
-
-[[package]]
 name = "hgl-stdlib"
 version = "0.0.0"
 dependencies = [
  "hgl-alloc-count",
  "hgl-describe",
  "hgl-kernel",
- "hgl-native",
  "hgl-store",
  "hgl-testkit",
  "hgl-types",
@@ -1012,28 +737,8 @@ name = "hgl-store"
 version = "0.0.0"
 dependencies = [
  "hgl-alloc-count",
- "hgl-atomic",
- "hgl-bindings",
- "hgl-columns",
- "hgl-global",
- "hgl-keys",
  "hgl-literals",
- "hgl-prepared-store",
- "hgl-rolling",
- "hgl-shapes",
- "hgl-store-build",
  "hgl-time-context",
- "hgl-types",
-]
-
-[[package]]
-name = "hgl-store-build"
-version = "0.0.0"
-dependencies = [
- "hgl-atomic",
- "hgl-bindings",
- "hgl-columns",
- "hgl-rolling",
  "hgl-types",
 ]
 
@@ -1099,7 +804,6 @@ dependencies = [
  "hgl-alloc-count",
  "hgl-describe",
  "hgl-kernel",
- "hgl-proto-nodes",
  "hgl-store",
  "hgl-types",
 ]
@@ -1109,14 +813,9 @@ name = "hgl-time-context"
 version = "0.0.0"
 dependencies = [
  "hgl-literals",
- "hgl-time-values",
  "hgl-types",
  "jiff",
 ]
-
-[[package]]
-name = "hgl-time-values"
-version = "0.0.0"
 
 [[package]]
 name = "hgl-type-shape"
@@ -1124,7 +823,7 @@ version = "0.0.0"
 dependencies = [
  "hgl-nominal-batch",
  "hgl-type-syntax",
- "hgl-window-types",
+ "hgl-types",
 ]
 
 [[package]]
@@ -1144,12 +843,6 @@ version = "0.0.0"
 [[package]]
 name = "hgl-types"
 version = "0.0.0"
-dependencies = [
- "hgl-growing-range",
- "hgl-node-error",
- "hgl-time-values",
- "hgl-window-types",
-]
 
 [[package]]
 name = "hgl-value-access"
@@ -1199,15 +892,8 @@ dependencies = [
  "hgl-family-values",
  "hgl-rust-ir",
  "hgl-source",
- "hgl-time-values",
- "hgl-value-operations",
-]
-
-[[package]]
-name = "hgl-value-lists"
-version = "0.0.0"
-dependencies = [
  "hgl-types",
+ "hgl-value-operations",
 ]
 
 [[package]]
@@ -1236,10 +922,6 @@ dependencies = [
  "hgl-value-access",
  "hgl-value-check",
 ]
-
-[[package]]
-name = "hgl-window-types"
-version = "0.0.0"
 
 [[package]]
 name = "hgl-wiring-locals"

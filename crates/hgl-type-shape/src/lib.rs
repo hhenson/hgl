@@ -1,6 +1,6 @@
 //! Canonical checked source shapes and invariant nominal applications.
 pub use hgl_type_syntax::{application, delta_argument};
-pub use hgl_window_types::{Window, WindowKind};
+pub use hgl_types::window_types::{Window, WindowKind};
 use std::fmt;
 /// Fixed declared membership for an abstract atomic family.
 pub type FamilyType = hgl_nominal_batch::Family<Nominal, Ty>;

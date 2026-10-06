@@ -8,7 +8,7 @@ use hgl_types::ScalarValue;
 /// Every node a case can name, and the harness's own two.
 fn registry() -> Result<Registry, BuildError> {
     let mut registry = Registry::new();
-    hgl_proto_nodes::register_all(&mut registry)?;
+    hgl_testkit::proto_nodes::register_all(&mut registry)?;
     registry.register::<Replay>()?;
     registry.register::<Record>()?;
     Ok(registry)
@@ -131,7 +131,7 @@ fn a_node_with_no_output_is_a_failure() {
 #[test]
 fn without_the_harnesss_own_nodes_there_is_no_harness() {
     let mut registry = Registry::new();
-    hgl_proto_nodes::register_all(&mut registry).unwrap();
+    hgl_testkit::proto_nodes::register_all(&mut registry).unwrap();
     let missing = BuildError::UnknownImplementation("testkit.replay".to_owned());
     assert_eq!(run(&add_one(), &registry), Err(Failure::Build(missing)));
 }

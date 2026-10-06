@@ -9,7 +9,7 @@ line-budget = 150
 [lints]
 workspace = true
 [dependencies]
-hgl-growing-range = { path = "../hgl-growing-range" }
+hgl-types = { path = "../hgl-types" }
 hgl-composite-keys = { path = "../hgl-composite-keys" }
 hgl-delta-check = { path = "../hgl-delta-check" }
 hgl-rust-ir = { path = "../hgl-rust-ir" }

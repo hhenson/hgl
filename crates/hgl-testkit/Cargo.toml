@@ -7,17 +7,19 @@ publish.workspace = true
 description = "Test support for the runtime: the case tables and the eval harness that runs them."
 
 [package.metadata.hgl]
-# Includes the case tables, which are data and grow with the slices.
-line-budget = 650
+line-budget = 950
+
+# Budgets of the modules that were crates of their own (docs/decisions/0004).
+[package.metadata.hgl.modules]
+proto_nodes = { budget = 300, uses = [] }
 
 [dependencies]
-hgl-types = { path = "../hgl-types" }
-hgl-store = { path = "../hgl-store" }
-hgl-kernel = { path = "../hgl-kernel" }
 hgl-describe = { path = "../hgl-describe" }
+hgl-kernel = { path = "../hgl-kernel" }
+hgl-store = { path = "../hgl-store" }
+hgl-types = { path = "../hgl-types" }
 
 [dev-dependencies]
-hgl-proto-nodes = { path = "../hgl-proto-nodes" }
 hgl-alloc-count = { path = "../hgl-alloc-count" }
 
 [lints]

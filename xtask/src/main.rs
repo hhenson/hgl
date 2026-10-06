@@ -160,6 +160,9 @@ fn budgets() -> Outcome {
                 );
                 let verdict = if line.within() { "" } else { "  <-- OVER" };
                 println!("{:<18}{:>5} / {budget}{verdict}", line.name, line.lines);
+                for finding in &line.findings {
+                    println!("{:<18}{finding}", "");
+                }
             }
             if lines.iter().all(budget::Line::within) {
                 Outcome::Passed

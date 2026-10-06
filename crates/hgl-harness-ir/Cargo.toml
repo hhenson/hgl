@@ -11,4 +11,4 @@ workspace = true
 [dependencies]
 hgl-source = { path = "../hgl-source" }
 hgl-rust-ir = { path = "../hgl-rust-ir" }
-hgl-node-error = { path = "../hgl-node-error" }
+hgl-types = { path = "../hgl-types" }

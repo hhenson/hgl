@@ -4,14 +4,18 @@ use hgl_types::{EngineTime, NodeId};
 use std::marker::PhantomData;
 impl Store {
     /// Adapt a statically prepared scalar input, without a repeated type test.
-    pub fn prepared_input<T: Scalar + hgl_shapes::Shape>(input: hgl_shapes::Input<T>) -> In<T> {
+    pub fn prepared_input<T: Scalar + crate::shapes::Shape>(
+        input: crate::shapes::Input<T>,
+    ) -> In<T> {
         In {
             id: input.id(),
             value_type: PhantomData,
         }
     }
     /// Adapt a prepared scalar output while preserving its generation.
-    pub fn prepared_output<T: Scalar + hgl_shapes::Shape>(output: hgl_shapes::Output<T>) -> Out<T> {
+    pub fn prepared_output<T: Scalar + crate::shapes::Shape>(
+        output: crate::shapes::Output<T>,
+    ) -> Out<T> {
         Out {
             id: output.id(),
             generation: output.generation(),
@@ -34,7 +38,7 @@ impl Store {
     }
     /// Construct an output and its fixed descendants in the current scope.
     pub fn add_shaped_output(&mut self, owner: NodeId, kind: Kind) -> OutputId {
-        hgl_store_build::output(
+        crate::store_build::output(
             &mut self.bindings,
             &mut self.columns,
             &mut self.atomic,

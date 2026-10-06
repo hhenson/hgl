@@ -4,12 +4,12 @@
 //! Shared data only. Successful primitive access needs no allocation; creating
 //! a node-error message can allocate. No graph execution lives here.
 
-pub use hgl_time_values::{
+pub use time_values::{
     CivilDateTime, Date, EngineDelta, EngineTime, Time, ZoneId, ZonedDateTime, ZonedTime,
 };
-pub use hgl_window_types::{Window, WindowKind};
+pub use window_types::{Window, WindowKind};
 
-pub use hgl_node_error::{NodeError, NodeId, NodeResult, Phase, finish};
+pub use node_error::{NodeError, NodeId, NodeResult, Phase, finish};
 
 /// The type of one scalar value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -317,6 +317,12 @@ impl NodeType {
     }
 }
 
-pub use hgl_growing_range::{
+pub use growing_range::{
     validate as validate_growing, validate_distinct as validate_growing_distinct,
 };
+
+pub mod calendar;
+pub mod growing_range;
+pub mod node_error;
+pub mod time_values;
+pub mod window_types;

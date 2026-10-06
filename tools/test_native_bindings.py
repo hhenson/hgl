@@ -33,7 +33,7 @@ class NativeBindingsTests(unittest.TestCase):
             selected = root / 'upstream-impl.hgl'
             shared.write_text('native const fn audit(value: i64) -> i64\n')
             selected.write_text('native const fn audit(value: i64) -> i64 { inject logger }\n')
-            local = root / 'crates/hgl-native/interfaces'
+            local = root / 'crates/hgl-stdlib/interfaces'
             local.mkdir(parents=True)
             (local / 'scalar.hgl').write_text(shared.read_text())
             (local / 'scalar-impl.hgl').write_text('native const fn audit(value: i64) -> i64 {}\n')
@@ -50,7 +50,7 @@ class NativeBindingsTests(unittest.TestCase):
                 native_bindings.main(['--compiler', 'compiler', '--interface', str(shared), '--implementation', str(selected)])
                 self.assertEqual(compiled, [(shared, selected), (local / 'capabilities.hgl', local / 'capabilities-impl.hgl')])
                 self.assertEqual((local / 'scalar-impl.hgl').read_text(), selected.read_text())
-                self.assertEqual((root / 'crates/hgl-native/src/scalar_interface.rs').read_text(), selected.read_text())
+                self.assertEqual((root / 'crates/hgl-stdlib/src/native/scalar_interface.rs').read_text(), selected.read_text())
                 compiled.clear()
                 native_bindings.main(['--compiler', 'compiler', '--check'])
                 self.assertEqual(compiled[0], (local / 'scalar.hgl', local / 'scalar-impl.hgl'))

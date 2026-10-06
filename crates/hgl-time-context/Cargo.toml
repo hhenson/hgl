@@ -9,7 +9,6 @@ line-budget = 200
 [lints]
 workspace = true
 [dependencies]
-hgl-time-values = { path = "../hgl-time-values" }
-hgl-literals = { path = "../hgl-literals" }
 hgl-types = { path = "../hgl-types" }
+hgl-literals = { path = "../hgl-literals" }
 jiff.workspace = true

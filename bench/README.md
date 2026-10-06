@@ -13,7 +13,7 @@ Every scenario exists twice and the two are kept side by side:
 | Half | Where | What it is |
 |---|---|---|
 | Baseline | `baselines/cpp/` | The scenario written against hgraph's C++ interface, as plain static nodes |
-| Twin | `twin/` | The same graph on this runtime. Native Rust graph execution with checked results |
+| Twin | `crates/hgl-bench/src/twin.rs`, the `hgl_twin` binary | The same graph on this runtime. Native Rust graph execution with checked results |
 
 Both halves print one line of JSON with `"ns_per_cycle"`, a `"checksum"`, and
 `"ok"`. `ok` is true only if the checksum equals a closed form worked out
@@ -71,9 +71,9 @@ figure.
 
 ## Fixed collections
 
-`baselines/cpp/fixed.cpp` and `crates/hgl-fixed-bench` run 200,000 cycles of
+`baselines/cpp/fixed.cpp` and `crates/hgl-bench/src/fixed.rs` run 200,000 cycles of
 TSL[TSB] with four scalar leaves. Modes: `owned`, `assembled`, `reference`
 (alternating whole outputs, offset by 100). Both halves check each run's
 checksum and 200,000 sink evaluations. Build the Rust half with
-`cargo build --release -p hgl-fixed-bench`; the CMake build produces
+`cargo build --release -p hgl-bench --bin hgl_fixed`; the CMake build produces
 `hgl_fixed_baseline`. Measure both with the same `cargo xtask bench` command.

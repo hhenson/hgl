@@ -1,7 +1,7 @@
 //! Composite recipes preserve source order and become independently owned keys.
 use hgl_rust_ir::{DeltaEntry, Kind, Statement, Value};
 use hgl_source::{Literal, TemporalLiteral, Ty};
-use hgl_time_values::ZoneId;
+use hgl_types::time_values::ZoneId;
 use hgl_value_eval::{EvalError, Evaluator};
 fn composite(name: &str) -> Value {
     Value::new(

@@ -12,4 +12,4 @@ workspace = true
 [dependencies]
 hgl-nominal-batch = { path = "../hgl-nominal-batch" }
 hgl-type-syntax = { path = "../hgl-type-syntax" }
-hgl-window-types = { path = "../hgl-window-types" }
+hgl-types = { path = "../hgl-types" }

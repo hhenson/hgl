@@ -12,6 +12,7 @@ exploration numbers and of the decision records in `hgraph`.
 | 0001 | [The new compiler back end, runtime and generated code are Rust](0001-rust-end-to-end.md) | accepted | [0001](../explorations/0001-implementation-language-survey.md) |
 | 0002 | [Performance is judged against the C++ runtime, within 5%](0002-performance-parity-with-cpp.md) | accepted | [0009](../explorations/0009-designing-for-speed.md) |
 | 0003 | [`unsafe` is allowed in the store crate, and nowhere else](0003-unsafe-confined-to-the-store.md) | accepted | [0009](../explorations/0009-designing-for-speed.md) |
+| 0004 | [A crate is a program, a compiler policy, or a wall between layers; everything else is a module](0004-crates-are-programs-policies-or-walls.md) | accepted | [0011](../explorations/0011-crate-boundaries.md) |
 
 ## Template
 

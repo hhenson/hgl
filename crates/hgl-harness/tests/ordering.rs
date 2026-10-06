@@ -24,7 +24,7 @@ fn materialize(
         return Err(hgl_value_eval::EvalError::Operation("invalid zone".into()));
     }
     Ok(Literal::TimeZone(
-        hgl_time_values::ZoneId::from_validated_name(name.clone()),
+        hgl_types::time_values::ZoneId::from_validated_name(name.clone()),
     ))
 }
 fn constant(binding: usize, value: Value) -> Argument {
@@ -75,7 +75,7 @@ fn setup_and_arguments_execute_once_and_expectations_follow_the_graph() {
         assert_eq!(prepared.input_length,if case==0 {2} else {0});
         let slot=if case==0 {2} else {0};
         assert!(matches!(&prepared.arguments[slot].kind,Kind::Literal(Literal::TimeZone(zone)) if zone.as_str()=="setup"));
-        let captured=Value::new(Ty::TimeZone,Kind::Literal(Literal::TimeZone(hgl_time_values::ZoneId::from_validated_name("expected".into()))));
+        let captured=Value::new(Ty::TimeZone,Kind::Literal(Literal::TimeZone(hgl_types::time_values::ZoneId::from_validated_name("expected".into()))));
         Ok(CapturedEval {length:1,ticks:vec![(0,captured)]})
     }).unwrap();
     assert_eq!(count, 2);

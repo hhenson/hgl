@@ -531,7 +531,7 @@ fn image_main<'a>(dir: &Path, names: impl Iterator<Item = &'a str>) -> std::io::
     fs::write(
         dir.join("src/main.rs"),
         format!(
-            "struct Provider;\nmod native {{pub use hgl_std_native::*;}}\n{modules}fn main() {{match std::env::args().nth(1).as_deref() {{{calls}_=>panic!(\"unknown test image\")}}}}"
+            "struct Provider;\nmod native {{pub use hgl_stdlib::std_native::*;}}\n{modules}fn main() {{match std::env::args().nth(1).as_deref() {{{calls}_=>panic!(\"unknown test image\")}}}}"
         ),
     )
 }
@@ -849,7 +849,7 @@ fn manifest(root: &Path, dir: &Path) -> std::io::Result<()> {
         "hgl-value-eval",
         "hgl-time-context",
         "hgl-testkit",
-        "hgl-std-native",
+        "hgl-stdlib",
     ] {
         let path = root
             .join("crates")

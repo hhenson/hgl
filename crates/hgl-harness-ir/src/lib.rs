@@ -82,7 +82,7 @@ pub struct CapturedEval {
 #[derive(Debug)]
 pub enum Failure {
     /// An error propagated by graph execution, including its cleanup context.
-    Execution(Box<hgl_node_error::NodeError>),
+    Execution(Box<hgl_types::node_error::NodeError>),
     /// An unclassified failure, including every test assertion failure.
     Other(String),
 }
@@ -108,7 +108,7 @@ impl Failure {
     /// Cleanup-only errors and errors followed by failed cleanup cannot match.
     pub fn matches(&self, code: &str) -> bool {
         matches!(self, Self::Execution(error) if error.code == Some(code)
-            && error.phase != hgl_node_error::Phase::Stop && error.cleanup.is_empty())
+            && error.phase != hgl_types::node_error::Phase::Stop && error.cleanup.is_empty())
     }
 }
 

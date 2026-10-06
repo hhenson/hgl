@@ -45,7 +45,7 @@ fn map_retains_once_in_order_and_duplicate_precedes_value() {
             };
             order.push(name.clone());
             Ok(Literal::TimeZone(
-                hgl_time_values::ZoneId::from_validated_name(name.clone()),
+                hgl_types::time_values::ZoneId::from_validated_name(name.clone()),
             ))
         });
         assert_eq!(order, expected);

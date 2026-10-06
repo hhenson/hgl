@@ -1,6 +1,6 @@
 //! Construction-only timezone validation against an exact provider catalog.
 use hgl_literals::{Literal, TemporalLiteral};
-use hgl_time_values::{EngineTime, Time, ZoneId, ZonedDateTime, ZonedTime};
+use hgl_types::time_values::{EngineTime, Time, ZoneId, ZonedDateTime, ZonedTime};
 use jiff::{Timestamp, tz::TimeZoneDatabase};
 use std::collections::BTreeSet;
 

@@ -1,8 +1,8 @@
 //! Exact semantic matching cannot turn another kind of failure into a pass.
 use hgl_harness_ir::{CapturedEval, Evaluation, Failure, Step, Test};
-use hgl_node_error::{NodeError, Phase};
 use hgl_rust_ir::{Kind, Statement, Value};
 use hgl_source::{Literal, Ty};
+use hgl_types::node_error::{NodeError, Phase};
 const CODE: &str = "yield.negative_duration";
 fn evaluation(case: usize) -> Step {
     Step::Eval(Evaluation {

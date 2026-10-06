@@ -70,7 +70,7 @@ fn whole_and_descendant_overlap_in_both_orders_but_siblings_are_valid() {
         }
     }
     let d = description(&r, "assembled");
-    assert!(hgl_plan::validate(&d, &r).is_ok());
+    assert!(hgl_describe::plan::validate(&d, &r).is_ok());
     let mut d = description(&r, "owned");
     let edge = d
         .edges

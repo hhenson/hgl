@@ -1,4 +1,4 @@
-use hgl_std_native as native;
+use hgl_stdlib::std_native as native;
 use hgl_describe::{Registry, instantiate_complete};
 use hgl_kernel::{RunConfig, run_simulation};
 use hgl_store::Store;

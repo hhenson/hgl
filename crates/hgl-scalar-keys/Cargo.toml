@@ -11,4 +11,4 @@ workspace = true
 [dependencies]
 hgl-source = { path = "../hgl-source" }
 [dev-dependencies]
-hgl-time-values = { path = "../hgl-time-values" }
+hgl-types = { path = "../hgl-types" }

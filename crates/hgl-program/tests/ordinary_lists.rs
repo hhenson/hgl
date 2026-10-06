@@ -351,7 +351,7 @@ fn manifest(root: &Path, dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
         "hgl-value-eval",
         "hgl-time-context",
         "hgl-testkit",
-        "hgl-std-native",
+        "hgl-stdlib",
     ] {
         let path = root
             .join("crates")
