@@ -34,3 +34,7 @@ for ordinary per-declaration enum resolution and validation.
 concrete_signature selects callable declarations without unresolved generic or
 required constant arguments for ordinary semantic checking. It returns None
 when specialization requires a call; malformed signatures remain typed errors.
+
+Native declarations admit only the existing `throws` suffix and an optional
+outer provider body. Provider contents stay opaque; an invalid signature suffix
+cannot hide in an unused native declaration.

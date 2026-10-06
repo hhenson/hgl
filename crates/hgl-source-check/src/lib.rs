@@ -100,7 +100,10 @@ fn function(library: &Library, declaration: &Decl, signature: &Signature) -> Res
         annotation(&parameter.type_tokens)?;
     }
     annotation(&signature.result_tokens)?;
-    if matches!(declaration.role, Role::Operator | Role::Native) || signature.body.is_empty() {
+    if declaration.role == Role::Native {
+        return native_body(&signature.body);
+    }
+    if declaration.role == Role::Operator || signature.body.is_empty() {
         return Ok(());
     }
     let mut environment = signature
@@ -127,6 +130,15 @@ fn function(library: &Library, declaration: &Decl, signature: &Signature) -> Res
         return Err(Issue::from("unexpected function body suffix").at(cursor.span()));
     }
     Ok(())
+}
+// Provider contents remain opaque; only the HGL signature/body boundary is checked.
+fn native_body(tokens: &[Token]) -> Result<(), Issue> {
+    let mut cursor = Cursor::new(tokens);
+    cursor.lines();
+    if cursor.at("") {
+        return Ok(());
+    }
+    cursor.need("{")
 }
 fn annotation(tokens: &[Token]) -> Result<(), Issue> {
     if tokens.is_empty() {
