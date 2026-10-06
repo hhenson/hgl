@@ -41,13 +41,13 @@ fn compile_tests(sources: &[(String, String)]) -> Result<(), String> {
     let mut node =
         hgl_value_check::prepare_node(&signature, &mut Env::new(), "flow::probe".into(), ty)?;
     let tokens = hgl_source::lex(&sources[2].1)?;
-    checker.hooks(
+    Ok(checker.hooks(
         &declaration,
         &mut Cursor::new(&tokens),
         &env,
         &mut node,
         &mut 0,
-    )
+    )?)
 }
 fn accepts(body: &str) {
     let result = compile_tests(&sources(body, "i64", "[1,_,2]"));

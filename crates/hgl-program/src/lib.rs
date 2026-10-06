@@ -13,10 +13,13 @@ pub struct Program(hgl_rust::Plan);
 /// Resolve an entry against explicitly supplied modules and implementation parts.
 /// Only reachable implementation bodies are admitted by this compiler slice.
 pub fn compile(sources: &[(String, String)], entry: &str) -> Result<Program, String> {
+    hgl_source_check::ensure_sources(sources)?;
     let library = index::load(sources)?;
     hgl_enums::validate(&library)?;
     let module = library.root.clone();
-    resolve::compile(library, &module, entry).map(Program)
+    resolve::compile(library, &module, entry)
+        .map(Program)
+        .map_err(|e| hgl_diagnostics::render_issue(sources, e))
 }
 
 /// Emit node implementations, native interfaces and graph construction.
@@ -26,3 +29,14 @@ pub fn emit_rust(program: &Program) -> String {
 
 mod tests;
 pub use tests::{Suite, compile_tests, emit_tests};
+
+/// Whole-source diagnostics, including deferred bounds and instantiated call failures.
+pub fn diagnostics(sources: &[(String, String)]) -> Vec<hgl_diagnostics::Diagnostic> {
+    hgl_source_check::with_semantics(sources, |library, decl| {
+        resolve::validate_declaration(library.clone(), decl)
+    })
+}
+/// Render the ordinary whole-source diagnostics for command-line checking.
+pub fn check_sources(sources: &[(String, String)]) -> Result<(), String> {
+    hgl_diagnostics::ensure(diagnostics(sources))
+}

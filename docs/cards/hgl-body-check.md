@@ -22,3 +22,5 @@ phase diagnostics, lexical parser tests and literal-only yield text regressions.
 `composition_body(&mut Cursor) -> Result<Vec<Stmt>, String>` parses a block or
 concise return body and rejects trailing syntax. It does not select branches,
 resolve locals or evaluate expressions.
+
+parameter_scope and value_scope establish ordered parameter bindings for graph and ordinary helper bodies, preserving constant values and prepared local identity.

@@ -16,14 +16,16 @@ fn nested_yields_preserve_time_and_payload_positions() {
         &yes[0],
         Stmt::TimedYield(
             Expr::Literal(Literal::Duration(1)),
-            Expr::Literal(Literal::Int(10))
+            Expr::Literal(Literal::Int(10)),
+            _
         )
     ));
     assert!(matches!(
         &no[0],
         Stmt::TimedYield(
             Expr::Literal(Literal::DateTime(_)),
-            Expr::Literal(Literal::Int(20))
+            Expr::Literal(Literal::Int(20)),
+            _
         )
     ));
     assert!(
@@ -39,6 +41,7 @@ fn reserved_words_cannot_be_declared_as_names() {
             Cursor::new(&tokens)
                 .block()
                 .unwrap_err()
+                .message
                 .contains("reserved word")
         );
     }
@@ -51,6 +54,7 @@ fn yield_pair_requires_its_separator() {
         Cursor::new(&tokens)
             .block()
             .unwrap_err()
+            .message
             .contains("expected :")
     );
 }

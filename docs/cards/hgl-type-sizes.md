@@ -21,3 +21,9 @@ expressions(name) collects declaration-owned bound syntax recursively without
 calling providers, validating sizes or manufacturing placeholder values. List
 bounds and rolling Max/Min are scalar expression positions; only their payload
 arguments are traversed as types. Normalization later validates actual literals.
+
+normalize_checked is the structured form of normalize; it returns Issue with
+rolling.size_kind or rolling.size_bounds at the offending size argument range
+relative to the input type spelling. Normal normalize delegates to it, keeping
+ordinary and rejection-check rules identical. Nested ranges are translated to
+the containing annotation; declaration token ranges recover physical locations.

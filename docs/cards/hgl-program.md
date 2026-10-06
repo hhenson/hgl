@@ -354,3 +354,14 @@ Conditional test branches use fresh binding identities and nested lexical
 scope. Named-test reporting fails on any executed nested assertion/eval error.
 
 Named suite emission accepts command-line short or qualified test names. Unknown selections fail. Raises callbacks remain independently owned graph runs.
+
+May use hgl-source-check. compile and compile_tests perform shared declaration-wide
+source admission before choosing reachable graphs; compile-rejection fixtures
+consume the same structured diagnostics without building or running graphs.
+
+May use hgl-diagnostics. diagnostics combines shared source admission with the
+ordinary resolver for concrete signatures, zero-argument functions and named
+tests. Deferred generic checks run when instantiated; unresolved or unsupported
+semantic failures retain no catalogue code and cannot match an expectation.
+Resolver errors retain typed identity and source ownership through overload
+selection and constant-bound evaluation. check_sources renders these results.

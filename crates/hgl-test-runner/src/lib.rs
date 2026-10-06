@@ -6,6 +6,12 @@ use std::{
 };
 /// Check, build and execute selected named source tests. Build failures never pass.
 pub fn run(arguments: &[String], root: &Path) -> Result<(), String> {
+    if arguments.first().is_some_and(|arg| arg == "--reject") {
+        if arguments.len() != 2 {
+            return Err("usage: hglc test --reject FILE".into());
+        }
+        return hgl_reject::reject(Path::new(&arguments[1]));
+    }
     let mut args = arguments.iter();
     let mut files = vec![PathBuf::from(args.next().ok_or("test requires FILE")?)];
     let mut libraries = Vec::new();

@@ -129,6 +129,38 @@ pub fn composition_body(cursor: &mut Cursor<'_>) -> Result<Vec<Stmt>, String> {
     Ok(statements)
 }
 
+/// Bind an already ordered invocation to its declared parameter names.
+pub fn parameter_scope<T>(
+    signature: &Signature,
+    values: impl IntoIterator<Item = T>,
+) -> std::collections::BTreeMap<String, T> {
+    signature
+        .parameters
+        .iter()
+        .map(|p| p.name.clone())
+        .zip(values)
+        .collect()
+}
+/// Establish ordinary helper bindings, preserving constant values outside preparation.
+pub fn value_scope(
+    signature: &Signature,
+    args: &[hgl_rust_ir::Value],
+    positions: &[usize],
+    preparation: bool,
+) -> std::collections::BTreeMap<String, hgl_rust_ir::Value> {
+    parameter_scope(
+        signature,
+        signature.parameters.iter().zip(positions).map(|(p, id)| {
+            let value = &args[*id];
+            if p.constant && !preparation {
+                value.clone()
+            } else {
+                hgl_rust_ir::Value::new(value.ty.clone(), hgl_rust_ir::Kind::Local(*id))
+            }
+        }),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::statement_constructs;

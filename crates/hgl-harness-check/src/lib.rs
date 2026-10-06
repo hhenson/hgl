@@ -2,7 +2,7 @@
 use hgl_eval_data::TestStep;
 use hgl_harness_ir::{Argument, Evaluation, Step};
 use hgl_rust_ir::{Kind, Plan, Statement, Value};
-use hgl_source::{Expr, Stmt, Ty};
+use hgl_source::{Expr, Issue, Stmt, Ty};
 use hgl_static_values::PreparedLexicalScope;
 use std::collections::BTreeSet;
 
@@ -13,22 +13,22 @@ pub trait Check {
         &mut self,
         statement: &Stmt,
         scope: &mut PreparedLexicalScope,
-    ) -> Result<Statement, String>;
+    ) -> Result<Statement, Issue>;
     /// Check an ordinary boolean without executing it.
-    fn boolean(&mut self, expr: &Expr, scope: &PreparedLexicalScope) -> Result<Value, String>;
+    fn boolean(&mut self, expr: &Expr, scope: &PreparedLexicalScope) -> Result<Value, Issue>;
     /// Select one independently instantiated graph and its written argument expressions.
     fn evaluation(
         &mut self,
         call: &hgl_eval_data::Evaluation,
         scope: &PreparedLexicalScope,
-    ) -> Result<(Plan, Vec<Argument>), String>;
+    ) -> Result<(Plan, Vec<Argument>), Issue>;
     /// Check expected publications against the selected graph's exact result type.
     fn expected(
         &mut self,
         ty: &Ty,
         slots: &[Option<Expr>],
         scope: &PreparedLexicalScope,
-    ) -> Result<Vec<Option<Value>>, String>;
+    ) -> Result<Vec<Option<Value>>, Issue>;
 }
 /// Check one lexical block, retaining only its visible bindings and executed-branch facts.
 pub fn block(
@@ -36,7 +36,7 @@ pub fn block(
     scope: &mut PreparedLexicalScope,
     plans: &mut Vec<Plan>,
     checker: &mut impl Check,
-) -> Result<Vec<Step>, String> {
+) -> Result<Vec<Step>, Issue> {
     let mut steps = Vec::new();
     let mut names = BTreeSet::new();
     for step in source {
@@ -52,7 +52,7 @@ pub fn block(
         if let Some(name) = binding
             && !names.insert(name.clone())
         {
-            return Err(format!("duplicate test local {name}"));
+            return Err(format!("duplicate test local {name}").into());
         }
         steps.push(match step {
             TestStep::Raises(code, source) => {
@@ -82,7 +82,7 @@ fn branch(
     scope: &mut PreparedLexicalScope,
     plans: &mut Vec<Plan>,
     checker: &mut impl Check,
-) -> Result<Vec<Step>, String> {
+) -> Result<Vec<Step>, Issue> {
     let mut branch = scope.clone();
     branch.facts = hgl_flow_check::facts(condition, truth, &scope.facts);
     let steps = block(source, &mut branch, plans, checker)?;
@@ -95,7 +95,7 @@ fn evaluation(
     scope: &mut PreparedLexicalScope,
     plans: &mut Vec<Plan>,
     checker: &mut impl Check,
-) -> Result<Step, String> {
+) -> Result<Step, Issue> {
     let (plan, arguments) = checker.evaluation(call, scope)?;
     let expected = call
         .expected
@@ -105,9 +105,10 @@ fn evaluation(
                 .output
                 .as_ref()
                 .ok_or("outputless eval cannot be compared")?;
-            checker
-                .expected(ty, slots, scope)
-                .map_err(|e| format!("expected output: {e}"))
+            checker.expected(ty, slots, scope).map_err(|mut issue| {
+                issue.message = format!("expected output: {}", issue.message);
+                issue
+            })
         })
         .transpose()?;
     let evaluation = Evaluation {

@@ -18,3 +18,5 @@ Validate source K/V ordinary grammar before projecting nominal atomic fields
 into complete ordinary payloads. Exact nominal arguments retain source identity;
 field payloads use ordinary projection, including inside nested containers.
 Explicit composite atomic wrappers in K/V remain outside ordinary grammar.
+
+constructor_checked preserves typed Issue failures through recursive key/value callbacks and returns Issue; constructor adapts existing String callbacks.

@@ -38,3 +38,5 @@ hgl-wiring-locals = { path = "../hgl-wiring-locals" }
 hgl-enums = { path = "../hgl-enums" }
 hgl-static-values = { path = "../hgl-static-values" }
 hgl-harness-check = { path = "../hgl-harness-check" }
+hgl-source-check = { path = "../hgl-source-check" }
+hgl-diagnostics = { path = "../hgl-diagnostics" }

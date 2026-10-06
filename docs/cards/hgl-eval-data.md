@@ -76,3 +76,11 @@ Fresh growing-list state tracks dense child membership. Before applying children
 Publication sequence validation delegates to hgl-publication-trace through the existing validate reexport.
 
 TestStep::Raises(String, Vec<TestStep>) parses the normative literal-code assertion and recursively parses its lexical block.
+
+steps_checked and statement return structured Issue diagnostics. Test parser
+rejects forbidden phase statements at their keyword and rejects computed,
+parenthesized or unknown raises codes at the original argument. Execution
+identity comes from hgl-diagnostics, an allowed dependency. steps retains its
+String compatibility boundary; no matching uses message text.
+
+sequence_checked preserves typed Issue failures through its callback and returns Issue; sequence adapts existing String callbacks.

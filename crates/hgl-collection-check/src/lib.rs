@@ -1,12 +1,21 @@
 //! Exact ordinary collection constructor checking, separate from sparse deltas.
 use hgl_rust_ir::{Kind, Value};
-use hgl_source::{Expr, Ty};
+use hgl_source::{Expr, Issue, Ty};
 /// Check the sole named items argument with exact key and payload expectations.
 pub fn constructor(
     ty: &Ty,
     args: &[(Option<String>, Expr)],
     mut check: impl FnMut(&Expr, &Ty) -> Result<Value, String>,
 ) -> Result<Value, String> {
+    constructor_checked(ty, args, |expr, ty| check(expr, ty).map_err(Issue::from))
+        .map_err(String::from)
+}
+/// Check collection entries without discarding the caller's source error identity.
+pub fn constructor_checked(
+    ty: &Ty,
+    args: &[(Option<String>, Expr)],
+    mut check: impl FnMut(&Expr, &Ty) -> Result<Value, Issue>,
+) -> Result<Value, Issue> {
     if !hgl_value_access::ordinary(ty) {
         return Err("unsupported ordinary collection payload".into());
     }
@@ -22,7 +31,7 @@ pub fn constructor(
     }
     let mut known = std::collections::BTreeSet::new();
     let mut key =
-        |expr: &Expr, ty: &Ty, check: &mut dyn FnMut(&Expr, &Ty) -> Result<Value, String>| {
+        |expr: &Expr, ty: &Ty, check: &mut dyn FnMut(&Expr, &Ty) -> Result<Value, Issue>| {
             let value = check(expr, ty)?;
             if value.ty != *ty {
                 return Err("ordinary collection key type mismatch".into());
@@ -47,7 +56,7 @@ pub fn constructor(
                     &mut check,
                 )
             })
-            .collect::<Result<Vec<_>, String>>()?,
+            .collect::<Result<Vec<_>, Issue>>()?,
         (Ty::Map(k, v), Expr::Sparse(items)) => items
             .iter()
             .map(|(a, b)| {
@@ -61,7 +70,7 @@ pub fn constructor(
                     Kind::Construct(vec![(0, a), (1, b)]),
                 ))
             })
-            .collect::<Result<Vec<_>, String>>()?,
+            .collect::<Result<Vec<_>, Issue>>()?,
         (Ty::Map(..), Expr::Sequence(items)) if items.is_empty() => Vec::new(),
         _ => return Err("ordinary collection items have the wrong entry form".into()),
     };

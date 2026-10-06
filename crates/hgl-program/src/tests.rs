@@ -4,6 +4,7 @@ use hgl_harness_ir::Test;
 pub use hgl_harness_ir::Suite;
 /// Check named tests without executing ordinary setup or supplied eval values.
 pub fn compile_tests(sources: &[(String, String)]) -> Result<Suite, String> {
+    hgl_source_check::ensure_sources(sources)?;
     let library = index::load(sources)?;
     hgl_enums::validate(&library)?;
     let mut suite = Suite {
@@ -28,7 +29,7 @@ pub fn compile_tests(sources: &[(String, String)]) -> Result<Suite, String> {
                 module: decl.module.clone(),
             },
         )
-        .map_err(|e| format!("{name}: {e}"))?;
+        .map_err(|e| hgl_diagnostics::render_issue(sources, e.in_source(&decl.source)))?;
         suite.tests.push(Test { name, steps });
     }
     if suite.tests.is_empty() {

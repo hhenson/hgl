@@ -88,6 +88,7 @@ name = "hgl-body-check"
 version = "0.0.0"
 dependencies = [
  "hgl-library",
+ "hgl-rust-ir",
  "hgl-source",
 ]
 
@@ -134,6 +135,7 @@ version = "0.0.0"
 dependencies = [
  "hgl-documentation",
  "hgl-program",
+ "hgl-source-check",
  "hgl-test-runner",
 ]
 
@@ -174,6 +176,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "hgl-diagnostics"
+version = "0.0.0"
+
+[[package]]
 name = "hgl-documentation"
 version = "0.0.0"
 
@@ -207,6 +213,7 @@ dependencies = [
 name = "hgl-eval-data"
 version = "0.0.0"
 dependencies = [
+ "hgl-diagnostics",
  "hgl-library",
  "hgl-publication-trace",
  "hgl-rust-ir",
@@ -247,6 +254,7 @@ name = "hgl-flow-check"
 version = "0.0.0"
 dependencies = [
  "hgl-rust-ir",
+ "hgl-source",
 ]
 
 [[package]]
@@ -356,6 +364,7 @@ version = "0.0.0"
 name = "hgl-library"
 version = "0.0.0"
 dependencies = [
+ "hgl-diagnostics",
  "hgl-source",
  "hgl-struct-declarations",
 ]
@@ -495,6 +504,7 @@ dependencies = [
  "hgl-body-check",
  "hgl-collection-check",
  "hgl-delta-check",
+ "hgl-diagnostics",
  "hgl-documentation",
  "hgl-endpoint-check",
  "hgl-enums",
@@ -509,6 +519,7 @@ dependencies = [
  "hgl-rust",
  "hgl-rust-preparation",
  "hgl-source",
+ "hgl-source-check",
  "hgl-static-values",
  "hgl-struct-check",
  "hgl-type-sizes",
@@ -561,6 +572,15 @@ dependencies = [
  "hgl-global-value",
  "hgl-prepared-value",
  "hgl-types",
+]
+
+[[package]]
+name = "hgl-reject"
+version = "0.0.0"
+dependencies = [
+ "hgl-diagnostics",
+ "hgl-program",
+ "hgl-source",
 ]
 
 [[package]]
@@ -918,9 +938,24 @@ name = "hgl-source"
 version = "0.0.0"
 dependencies = [
  "hgl-calendar",
+ "hgl-diagnostics",
  "hgl-lex",
  "hgl-literals",
  "hgl-type-shape",
+]
+
+[[package]]
+name = "hgl-source-check"
+version = "0.0.0"
+dependencies = [
+ "hgl-diagnostics",
+ "hgl-enums",
+ "hgl-eval-data",
+ "hgl-library",
+ "hgl-source",
+ "hgl-type-sizes",
+ "hgl-value-check",
+ "hgl-value-types",
 ]
 
 [[package]]
@@ -1023,6 +1058,7 @@ name = "hgl-test-runner"
 version = "0.0.0"
 dependencies = [
  "hgl-program",
+ "hgl-reject",
 ]
 
 [[package]]

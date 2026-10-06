@@ -73,3 +73,6 @@ Delta traversal includes typed Add/Remove keys and both Keyed map operands;
 retained keys obey the same constant/provenance checks as child expressions.
 
 Binary ==/!= accepts exact ordinary set/map types. Their unordered recursive comparison is separate from sparse delta operations.
+
+aggregate_checked preserves typed source Issue failures through contextual
+child-check callbacks. aggregate adapts String callbacks at its existing API.

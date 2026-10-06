@@ -62,6 +62,12 @@ fn standalone(files: &[PathBuf], output: Option<PathBuf>, command: &str) -> Resu
             })
         })
         .collect::<Result<Vec<_>, String>>()?;
+    hgl_source_check::ensure_sources(
+        &sources
+            .iter()
+            .map(|s| (s.name.clone(), s.text.clone()))
+            .collect::<Vec<_>>(),
+    )?;
     let checked = check(&sources).map_err(|errors| {
         errors
             .iter()

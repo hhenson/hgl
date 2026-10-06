@@ -6,3 +6,5 @@ Preserves endpoint-specific validity/modification and contextual presence facts
 through short-circuit conditions and reachable branches. No runtime effects,
 new proof rules, shape-dependent guards or structural payload inspection.
 Acceptance: existing delta accessor and nullable short-circuit regressions.
+
+node_guard applies implicit readiness to the admitted publication inputs before source handler checking.

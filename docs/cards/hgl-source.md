@@ -101,3 +101,12 @@ batch formation belongs to semantic resolution; syntax introduces no new type.
 Reexports FamilyType with the other exact checked nominal carriers.
 
 Typed map constructors accept ordered expression-colon-expression entries only within their argument lists. Existing untyped list and harness grammars remain unchanged; exact items-only admission belongs to hgl-collection-check.
+
+Parser Cursor methods return hgl-diagnostics::Issue with original token ranges.
+need and unexpected EOF emit syntax.expected_token at the required-token
+origin; other parser errors retain uncoded identity. Issue is reexported and
+Cursor::span exposes the current token or original EOF range. Existing String
+callers retain a conversion boundary. May depend on hgl-diagnostics.
+
+Stmt::TimedYield retains its time operand primary Range<usize> as a third field
+so resolved semantic errors keep the original source location after parsing.

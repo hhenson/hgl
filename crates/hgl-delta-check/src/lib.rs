@@ -312,3 +312,25 @@ fn removals<'a>(
         })
         .collect()
 }
+
+/// Check publication access after phase and argument evaluation.
+pub fn delta_value(value: Value, facts: &BTreeSet<(String, usize)>) -> Result<Value, String> {
+    let Kind::Input(id, false) = value.kind else {
+        return Err(
+            "delta_value requires a temporal input endpoint; signal is not admitted".into(),
+        );
+    };
+    if !value.ty.publication() {
+        return Err("delta_value: unsupported publication shape".into());
+    }
+    if !["valid", "modified"]
+        .iter()
+        .all(|q| facts.contains(&(q.to_string(), id)))
+    {
+        return Err("delta_value requires proof that its endpoint is valid and modified".into());
+    }
+    Ok(Value::new(
+        value.ty.clone().delta()?,
+        Kind::Query("delta_value".into(), vec![value]),
+    ))
+}
