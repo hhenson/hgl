@@ -2,6 +2,10 @@
 use hgl_program::{compile, emit_rust};
 use std::{fmt::Write as _, fs, path::Path, process::Command, time::SystemTime};
 
+// Two tests can start within the same clock tick, and on Windows a second test
+// in the same directory then fights the first for its executable.
+static NEXT_DIR: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
 const TYPES: &str = "struct TimedValue<T> { time:datetime\nvalue:T }\nstruct Pair<A,B> { first:A\nsecond:B }\nstruct Same<T> { first:T\nsecond:T }\nstruct Phantom<T> { amount:i64 }\nstruct Wrap<T> { inner:TimedValue<T> }\nstruct Numeric<T> requires T in {i64,f64} { value:T }\nstruct ConstrainedWrapper<T> { inner:Numeric<T> }";
 const FIXTURE: &str = include_str!("fixtures/generic_structs.hgl");
 
@@ -275,11 +279,12 @@ fn generic_struct_values_configurations_and_globals_execute_in_both_profiles()
         .join("../..")
         .canonicalize()?;
     let directory = std::env::temp_dir().join(format!(
-        "hgl-generic-structs-{}-{}",
+        "hgl-generic-structs-{}-{}-{}",
         std::process::id(),
         SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)?
-            .as_nanos()
+            .as_nanos(),
+        NEXT_DIR.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
     fs::create_dir_all(directory.join("src"))?;
     let program = compile(&[("generic_structs.hgl".into(), FIXTURE.into())], "main")?;

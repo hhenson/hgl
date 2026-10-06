@@ -2,16 +2,21 @@
 use hgl_program::{compile, compile_tests, emit_rust, emit_tests};
 use std::{fmt::Write as _, fs, path::Path, process::Command, time::SystemTime};
 
+// Two tests can start within the same clock tick, and on Windows a second test
+// in the same directory then fights the first for its executable.
+static NEXT_DIR: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
 #[test]
 fn generator_sources_execute_spec_and_scalar_payloads() -> Result<(), Box<dyn std::error::Error>> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .canonicalize()?;
     let dir = std::env::temp_dir().join(format!(
-        "hgl-generators-{}",
+        "hgl-generators-{}-{}",
         SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)?
-            .as_nanos()
+            .as_nanos(),
+        NEXT_DIR.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
     fs::create_dir_all(dir.join("src"))?;
     let suite = compile_tests(&[

@@ -108,6 +108,10 @@ use hgl_describe::{Registry,instantiate_complete};
 use hgl_kernel::{RunConfig,run_simulation};
 use hgl_store::Store;
 use hgl_types::{EngineTime,Date,Time,EngineDelta};
+
+// Two tests can start within the same clock tick, and on Windows a second test
+// in the same directory then fights the first for its executable.
+static NEXT_DIR: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 mod graph;
 fn run(seed:i64) {
     let mut registry=Registry::new();
@@ -207,11 +211,12 @@ fn generated_hgl_shares_typed_values_through_all_hooks_and_fresh_runs()
         .join("../..")
         .canonicalize()?;
     let dir = std::env::temp_dir().join(format!(
-        "hgl-global-{}-{}",
+        "hgl-global-{}-{}-{}",
         std::process::id(),
         SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)?
-            .as_nanos()
+            .as_nanos(),
+        NEXT_DIR.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
     fs::create_dir_all(dir.join("src"))?;
     let (scalars, checks) = scalar_sources()?;

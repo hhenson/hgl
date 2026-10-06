@@ -3,6 +3,10 @@ use hgl_rust::generators::Generator;
 use hgl_semantics::ir::{Kind, Plan, Statement, Value};
 use hgl_source::{Literal, Ty};
 use std::{fmt::Write as _, fs, process::Command, time::SystemTime};
+
+// Two tests can start within the same clock tick, and on Windows a second test
+// in the same directory then fights the first for its executable.
+static NEXT_DIR: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 fn at(time: i64, payload: Value) -> Statement {
     Statement::TimedYield(
         Value::new(Ty::DateTime, Kind::Literal(Literal::DateTime(time))),
@@ -75,10 +79,11 @@ fn execute(code: &str) -> Result<(), Box<dyn std::error::Error>> {
         .join("../..")
         .canonicalize()?;
     let dir = std::env::temp_dir().join(format!(
-        "hgl-prepared-generator-{}",
+        "hgl-prepared-generator-{}-{}",
         SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)?
-            .as_nanos()
+            .as_nanos(),
+        NEXT_DIR.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
     fs::create_dir_all(dir.join("src"))?;
     fs::write(dir.join("src/main.rs"), code)?;

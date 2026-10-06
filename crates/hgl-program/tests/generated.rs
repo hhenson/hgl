@@ -4,6 +4,10 @@ use std::fmt::Write as _;
 #[path = "support/helpers.rs"]
 mod support;
 use hgl_program::{compile, emit_rust};
+
+// Two tests can start within the same clock tick, and on Windows a second test
+// in the same directory then fights the first for its executable.
+static NEXT_DIR: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 use std::{
     fs,
     process::Command,
@@ -15,9 +19,10 @@ fn library_graph_runs_sources_sinks_and_fresh_instances() -> Result<(), Box<dyn 
 {
     let root = support::root();
     let dir = std::env::temp_dir().join(format!(
-        "hgl-stdlib-{}-{}",
+        "hgl-stdlib-{}-{}-{}",
         std::process::id(),
-        SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos()
+        SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos(),
+        NEXT_DIR.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
     fs::create_dir_all(dir.join("src"))?;
     let mut runner = include_str!("support/runtime.rs").to_owned();

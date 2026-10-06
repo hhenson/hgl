@@ -2,6 +2,10 @@
 use hgl_program::{compile, compile_tests, emit_rust, emit_tests};
 use std::{fmt::Write as _, fs, path::Path, process::Command, time::SystemTime};
 
+// Two tests can start within the same clock tick, and on Windows a second test
+// in the same directory then fights the first for its executable.
+static NEXT_DIR: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
 #[test]
 fn structural_values_and_nested_generator_effects_execute_in_both_profiles()
 -> Result<(), Box<dyn std::error::Error>> {
@@ -9,10 +13,11 @@ fn structural_values_and_nested_generator_effects_execute_in_both_profiles()
         .join("../..")
         .canonicalize()?;
     let dir = std::env::temp_dir().join(format!(
-        "hgl-structural-{}",
+        "hgl-structural-{}-{}",
         SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)?
-            .as_nanos()
+            .as_nanos(),
+        NEXT_DIR.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
     fs::create_dir_all(dir.join("src"))?;
     direct_images(&dir)?;
