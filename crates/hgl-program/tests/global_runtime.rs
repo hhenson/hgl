@@ -2,6 +2,10 @@
 use hgl_program::{compile, emit_rust};
 use std::{fmt::Write as _, fs, path::Path, process::Command, time::SystemTime};
 
+// Two tests can start within the same clock tick, and on Windows a second test
+// in the same directory then fights the first for its executable.
+static NEXT_DIR: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
 const SOURCE: &str = r#"module shared
 fn ticks()->i64 {
     inject alarm, clock
@@ -109,9 +113,6 @@ use hgl_kernel::{RunConfig,run_simulation};
 use hgl_store::Store;
 use hgl_types::{EngineTime,Date,Time,EngineDelta};
 
-// Two tests can start within the same clock tick, and on Windows a second test
-// in the same directory then fights the first for its executable.
-static NEXT_DIR: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 mod graph;
 fn run(seed:i64) {
     let mut registry=Registry::new();
