@@ -1,5 +1,6 @@
 //! Pure guard proof and branch reachability checking.
 use hgl_rust_ir::{Kind, Statement, Value};
+use hgl_source::Expr;
 use std::collections::BTreeSet;
 /// Whether every reachable branch ends before the following statement.
 pub fn terminates(body: &[Statement]) -> bool {
@@ -89,4 +90,19 @@ pub fn handler_facts(guard: Option<&Value>, inputs: usize) -> BTreeSet<(String, 
         facts.insert(("modified".into(), 0));
     }
     facts
+}
+
+/// Apply implicit input readiness only to fully admitted node publications.
+pub fn node_guard(node: &hgl_rust_ir::Node, expr: Expr) -> Expr {
+    if node.inputs.iter().all(|(_, _, ty)| ty.publication()) {
+        expr.handler_guard(
+            &node
+                .inputs
+                .iter()
+                .map(|(n, _, _)| n.clone())
+                .collect::<Vec<_>>(),
+        )
+    } else {
+        expr
+    }
 }

@@ -160,8 +160,17 @@ pub fn aggregate(
     expr: &hgl_source::Expr,
     expected: Option<&Ty>,
     constant_context: bool,
-    mut check: impl FnMut(&hgl_source::Expr, Option<&Ty>) -> Result<Value, String>,
+    check: impl FnMut(&hgl_source::Expr, Option<&Ty>) -> Result<Value, String>,
 ) -> Result<Value, String> {
+    aggregate_checked(expr, expected, constant_context, check)
+}
+/// Check aggregate elements while preserving source-origin callback failures.
+pub fn aggregate_checked<E: From<&'static str>>(
+    expr: &hgl_source::Expr,
+    expected: Option<&Ty>,
+    constant_context: bool,
+    mut check: impl FnMut(&hgl_source::Expr, Option<&Ty>) -> Result<Value, E>,
+) -> Result<Value, E> {
     use hgl_source::Expr;
     let (Expr::Sequence(cells) | Expr::Tuple(cells)) = expr else {
         return Err("expected an ordinary aggregate literal".into());

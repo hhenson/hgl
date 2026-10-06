@@ -1,5 +1,5 @@
 //! Execute checked ordinary setup before and between independent graph runs.
-use hgl_harness_ir::{Argument, CapturedEval, PreparedEval, Step, Test};
+use hgl_harness_ir::{Argument, CapturedEval, Failure, PreparedEval, Step, Test};
 use hgl_rust_ir::{DeltaEntry, Kind, Statement, Value};
 use hgl_source::{Literal, TemporalLiteral};
 use hgl_value_eval::{EvalError, Evaluator};
@@ -8,7 +8,7 @@ use hgl_value_eval::{EvalError, Evaluator};
 pub fn execute(
     test: &Test,
     mut materialize: impl FnMut(&TemporalLiteral) -> Result<Literal, EvalError>,
-    mut eval: impl FnMut(usize, PreparedEval) -> Result<CapturedEval, String>,
+    mut eval: impl FnMut(usize, PreparedEval) -> Result<CapturedEval, Failure>,
 ) -> Result<usize, String> {
     steps(
         &test.steps,
@@ -16,16 +16,28 @@ pub fn execute(
         &mut materialize,
         &mut eval,
     )
+    .map_err(|error| error.to_string())
 }
 fn steps(
     body: &[Step],
     evaluator: &mut Evaluator,
     materialize: &mut impl FnMut(&TemporalLiteral) -> Result<Literal, EvalError>,
-    eval: &mut impl FnMut(usize, PreparedEval) -> Result<CapturedEval, String>,
-) -> Result<usize, String> {
+    eval: &mut impl FnMut(usize, PreparedEval) -> Result<CapturedEval, Failure>,
+) -> Result<usize, Failure> {
     let mut count = 0;
     for step in body {
         match step {
+            Step::Raises(code, body) => {
+                let outcome =
+                    evaluator.scoped(|evaluator| steps(body, evaluator, materialize, eval));
+                match outcome {
+                    Err(error) if error.matches(code) => count += 1,
+                    Err(error) => return Err(format!("expected {code}: {error}").into()),
+                    Ok(_) => {
+                        return Err(format!("expected {code}, block completed normally").into());
+                    }
+                }
+            }
             Step::Ordinary(statement) => {
                 if evaluator
                     .statement_with(statement, materialize)

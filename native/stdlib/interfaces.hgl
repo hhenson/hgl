@@ -1,0 +1,4 @@
+module hgraph.native part backend_adapters
+
+# Backend scalar contract used by the shared to_datetime operator.
+native const fn midnight(value: date) -> datetime

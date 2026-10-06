@@ -70,3 +70,13 @@ remain explicitly unsupported. Semantic inheritance/closure checking is separate
 Library.type_sizes maps declaration module/expression to the evaluated Literal,
 retaining count versus duration kind. Bound validation remains with normalized
 list/rolling formation; the cold cache never coerces duration into integer size.
+
+load_checked returns Result<Library, Box<Diagnostic>> from the original source.
+Decl::signature_checked returns Issue without rendering away codes or ranges.
+Parameter::type_tokens and Signature::result_tokens retain original annotation
+tokens. Test context indexing reuses original token slices rather than synthetic
+source, preserving diagnostic offsets across nested declarations. May depend on
+hgl-diagnostics. Existing load/signature String APIs remain compatibility wrappers.
+
+locate_type_issue maps normalized type-expression offsets to retained original
+annotation tokens and attaches the declaring source, preserving earlier origins.

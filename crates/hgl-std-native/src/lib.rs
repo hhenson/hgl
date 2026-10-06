@@ -168,6 +168,10 @@ pub fn month_date(value: Date) -> i64 {
 pub fn day_date(value: Date) -> i64 {
     hgl_calendar::components(value).2
 }
+/// UTC midnight at the start of an admitted calendar date.
+pub fn midnight_date(value: Date) -> EngineTime {
+    EngineTime::from_micros(value.0 * hgl_calendar::DAY)
+}
 /// UTC calendar year.
 pub fn year_datetime(value: EngineTime) -> i64 {
     year_date(Date(value.micros().div_euclid(hgl_calendar::DAY)))

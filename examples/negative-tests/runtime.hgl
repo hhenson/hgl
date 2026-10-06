@@ -1,0 +1,47 @@
+module examples.execution_errors
+
+test {
+    fn negative_delay() -> i64 {
+        yield -1us: 1
+    }
+
+    fn duplicate_time() -> i64 {
+        yield 0s: 1
+        yield 0s: 2
+    }
+
+    fn consume(tick: i64) { when { } }
+
+    fn drive_negative(tick: i64) -> i64 {
+        consume(tick)
+        negative_delay()
+    }
+
+    fn drive_duplicate(tick: i64) -> i64 {
+        consume(tick)
+        duplicate_time()
+    }
+
+    fn identity(value: i64) -> i64 => value
+
+    test expected_execution_errors {
+        assert raises("yield.negative_duration") {
+            eval(drive_negative, tick: [1, 1])
+        }
+        assert eval(identity, value: [1, 2]) == [1, 2]
+        assert raises("yield.non_increasing_time") {
+            eval(drive_duplicate, tick: [1, 1])
+        }
+        assert eval(identity, value: [3]) == [3]
+    }
+
+    test nested_execution_errors {
+        assert raises("yield.non_increasing_time") {
+            assert raises("yield.negative_duration") {
+                eval(drive_negative, tick: [1, 1])
+            }
+            eval(drive_duplicate, tick: [1, 1])
+        }
+        assert true
+    }
+}

@@ -17,3 +17,5 @@ List<Nullable<delta<output>>> checker type. Atomic delta reduction retains the
 exact ordinary payload. This is not a general nullable source sequence type.
 Expected values retain their existing after-run execution boundary. No provider
 execution, runtime graph selection or replacement scheduling is introduced.
+
+Raises checks its body in an ordinary lexical scope, without executing it; locals cannot escape.

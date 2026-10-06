@@ -41,5 +41,5 @@ fn nested_delta_annotations_share_constructor_marker_syntax() {
     assert!(Cursor::new(&tokens).block().is_ok());
     let tokens = lex("{let value:delta_of(i64)=1}").unwrap();
     let error = Cursor::new(&tokens).block().unwrap_err();
-    assert!(error.contains("expected =, found ("), "{error}");
+    assert!(error.message.contains("expected =, found ("), "{error}");
 }

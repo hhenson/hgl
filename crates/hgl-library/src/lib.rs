@@ -1,5 +1,6 @@
 //! Module parts, imports, declarations and test-scope indexing for HGL.
-use hgl_source::{Cursor, Expr, Token, lex};
+use hgl_diagnostics::Diagnostic;
+use hgl_source::{Cursor, Expr, Issue, Token, lex};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -47,6 +48,8 @@ pub struct Parameter {
     pub name: String,
     /// Source type expression.
     pub ty: String,
+    /// Original tokens of the annotation, retaining primary diagnostic locations.
+    pub type_tokens: Vec<Token>,
     /// Wiring-time parameter.
     pub constant: bool,
     /// Optional fixed default expression.
@@ -61,6 +64,8 @@ pub struct Signature {
     pub parameters: Vec<Parameter>,
     /// Source result type expression.
     pub result: String,
+    /// Original result annotation tokens.
+    pub result_tokens: Vec<Token>,
     /// Body tokens, empty for an interface.
     pub body: Vec<Token>,
     /// Const function, eligible for temporal lifting.
@@ -108,11 +113,15 @@ fn boundary(s: &str) -> bool {
 
 /// Index sources and validate module-part and test-context boundaries.
 pub fn load(sources: &[(String, String)]) -> Result<Library, String> {
+    load_checked(sources).map_err(|e| e.to_string())
+}
+/// Index declarations while retaining structured source-origin parser failures.
+pub fn load_checked(sources: &[(String, String)]) -> Result<Library, Box<Diagnostic>> {
     let mut library = Library::default();
     let mut parts = BTreeSet::new();
     for (source, text) in sources {
-        load_source(&mut library, &mut parts, source, text, false)
-            .map_err(|e| format!("{source}: {e}"))?;
+        load_source(&mut library, &mut parts, source, text)
+            .map_err(|e| Box::new(Diagnostic::new(source, text, e)))?;
     }
     Ok(library)
 }
@@ -121,14 +130,12 @@ fn load_source(
     parts: &mut BTreeSet<(String, String)>,
     source: &str,
     text: &str,
-    test_context: bool,
-) -> Result<(), String> {
+) -> Result<(), Issue> {
     let tokens = lex(text).map_err(|e| format!("{source}: {e}"))?;
     let mut c = Cursor::new(&tokens);
     c.lines();
-    let mut doc = String::new();
     if c.peek().starts_with("/**") {
-        doc = c.consume()?;
+        c.consume()?;
         c.lines();
     }
     c.need("module")?;
@@ -146,14 +153,24 @@ fn load_source(
         String::new()
     };
     if !parts.insert((module.clone(), part)) {
-        return Err(format!("{source}: duplicate module part"));
+        return Err(format!("{source}: duplicate module part").into());
     }
     if !c.at("\n") && !c.at("") {
-        return Err(format!("{source}: invalid module header"));
+        return Err(format!("{source}: invalid module header").into());
     }
     c.lines();
-    // Module documentation is not a declaration's documentation.
-    doc.clear();
+    load_items(library, &module, source, &tokens[c.pos..], false)
+}
+fn load_items(
+    library: &mut Library,
+    module: &str,
+    source: &str,
+    tokens: &[Token],
+    test_context: bool,
+) -> Result<(), Issue> {
+    let mut c = Cursor::new(tokens);
+    c.lines();
+    let mut doc = String::new();
     while !c.at("") {
         if c.peek().starts_with("/**") {
             doc = c.consume()?;
@@ -171,7 +188,7 @@ fn load_source(
                 depth -= 1;
             }
             if depth < 0 {
-                return Err(format!("{source}: unmatched closing delimiter"));
+                return Err(Issue::from("unmatched closing delimiter").at(c.span()));
             }
             if depth == 0 && t == "\n" {
                 c.lines();
@@ -182,9 +199,6 @@ fn load_source(
                     break;
                 }
             }
-        }
-        if depth != 0 {
-            return Err(format!("{source}: unclosed declaration"));
         }
         let chunk = &tokens[start..c.pos];
         let mut d = Cursor::new(chunk);
@@ -197,24 +211,26 @@ fn load_source(
             );
         }
         if d.take("test") && d.take("{") {
+            if depth != 0 {
+                return Err(Issue::coded(
+                    "parse",
+                    "syntax.expected_token",
+                    c.span(),
+                    "expected } to close test context",
+                ));
+            }
             let end = chunk
                 .iter()
                 .rposition(|t| t.text == "}")
                 .ok_or("unclosed test context")?;
-            let body = &text[chunk[2].span.start..chunk[end].span.start];
-            let nested = format!("module {module} part __test_{}\n{body}", parts.len());
-            let first = library.declarations.len();
-            load_source(library, parts, source, &nested, true)?;
-            for decl in &mut library.declarations[first..] {
-                decl.test_only = true;
-            }
+            load_items(library, module, source, &chunk[2..end], true)?;
             continue;
         }
         d.pos = 0;
         if d.take("use") {
-            imports(library, &module, &mut d)?;
+            imports(library, module, &mut d)?;
         } else if d.take("instantiate") {
-            instantiate(library, &module, &mut d)?;
+            instantiate(library, module, &mut d)?;
         } else {
             d.take("export");
             let role = if d.take("test") {
@@ -246,13 +262,13 @@ fn load_source(
             };
             let name = d.name()?;
             library.declarations.push(Decl {
-                module: module.clone(),
+                module: module.into(),
                 name,
                 role,
                 tokens: chunk.to_vec(),
                 source: source.to_owned(),
                 doc: std::mem::take(&mut doc),
-                test_only: false,
+                test_only: test_context,
             });
         }
         doc.clear();
@@ -284,17 +300,19 @@ impl Decl {
 
     /// Parse this declaration as a callable signature.
     pub fn signature(&self) -> Result<Signature, String> {
-        self.parse_signature().map_err(|e| {
+        self.signature_checked().map_err(|e| {
             format!(
-                "{}:{}: {}::{}: {e}",
+                "{}:{}: {}::{}: {}",
                 self.source,
                 self.tokens.first().map_or(0, |t| t.span.start),
                 self.module,
-                self.name
+                self.name,
+                e.message
             )
         })
     }
-    fn parse_signature(&self) -> Result<Signature, String> {
+    /// Parse a signature without discarding diagnostic code or byte location.
+    pub fn signature_checked(&self) -> Result<Signature, Issue> {
         let mut c = Cursor::new(&self.tokens);
         c.take("export");
         c.take("impl");
@@ -309,43 +327,25 @@ impl Decl {
         let mut generics = Vec::new();
         if c.take("<") {
             loop {
+                let constant = c.take("const");
                 generics.push(c.name()?);
+                if constant {
+                    c.need(":")?;
+                    c.type_name()?;
+                }
                 if !c.take(",") {
                     c.need(">")?;
                     break;
                 }
             }
         }
-        c.need("(")?;
-        c.lines();
-        let mut parameters = Vec::new();
-        while !c.take(")") {
-            let constant = c.take("const");
-            let name = c.name()?;
-            c.need(":")?;
-            let ty = c.type_name()?;
-            if (constant || value_function) && !hgl_source::value_type(&ty) {
-                return Err(
-                    "const parameter annotations require value_type; atomic is a temporal boundary"
-                        .into(),
-                );
-            }
-            let default = if c.take("=") { Some(c.expr()?) } else { None };
-            parameters.push(Parameter {
-                name,
-                ty,
-                constant,
-                default,
-            });
-            c.lines();
-            if !c.take(",") {
-                c.need(")")?;
-                break;
-            }
-            c.lines();
-        }
+        let parameters = parameters(&mut c, value_function)?;
+        let mut result_tokens = Vec::new();
         let result = if c.take("->") {
-            c.type_name()?
+            let start = c.pos;
+            let name = c.type_name()?;
+            result_tokens = c.tokens[start..c.pos].to_vec();
+            name
         } else {
             "void".into()
         };
@@ -370,12 +370,13 @@ impl Decl {
             type_domain,
             parameters,
             result,
+            result_tokens,
             body: c.tokens[c.pos..].to_vec(),
         })
     }
 }
 
-fn imports(library: &mut Library, module: &str, d: &mut Cursor<'_>) -> Result<(), String> {
+fn imports(library: &mut Library, module: &str, d: &mut Cursor<'_>) -> Result<(), Issue> {
     let mut target = d.name()?;
     while d.take(".") {
         target.push('.');
@@ -441,4 +442,64 @@ fn parse_native_requirement(c: &mut Cursor<'_>) -> Result<(String, Vec<String>, 
         .collect::<Result<Vec<_>, _>>()?;
     c.need("->")?;
     Ok((name, args, c.name()?))
+}
+
+fn parameters(c: &mut Cursor<'_>, value_function: bool) -> Result<Vec<Parameter>, Issue> {
+    c.need("(")?;
+    c.lines();
+    let mut parameters = Vec::new();
+    while !c.take(")") {
+        let constant = c.take("const");
+        let name = c.name()?;
+        c.need(":")?;
+        let type_start = c.pos;
+        let pack = c.take(".");
+        if pack {
+            c.need(".")?;
+            c.need(".")?;
+        }
+        let mut ty = c.type_name()?;
+        if pack {
+            ty = format!("...{ty}");
+        }
+        let type_tokens = c.tokens[type_start..c.pos].to_vec();
+        if (constant || value_function) && !hgl_source::value_type(&ty) {
+            return Err(
+                "const parameter annotations require value_type; atomic is a temporal boundary"
+                    .into(),
+            );
+        }
+        let default = if c.take("=") { Some(c.expr()?) } else { None };
+        parameters.push(Parameter {
+            name,
+            ty,
+            type_tokens,
+            constant,
+            default,
+        });
+        c.lines();
+        if !c.take(",") {
+            c.need(")")?;
+            break;
+        }
+        c.lines();
+    }
+    Ok(parameters)
+}
+
+/// Locate a relative normalized annotation error in its original source tokens.
+pub fn locate_type_issue(mut issue: Issue, tokens: &[Token], source: &str) -> Issue {
+    if issue.source.is_some() {
+        return issue;
+    }
+    let mut offset = 0;
+    let primary = tokens.iter().filter(|t| t.text != "\n").find(|token| {
+        let includes = issue.span.start < offset + token.text.len();
+        offset += token.text.len();
+        includes
+    });
+    if let Some(token) = primary.or(tokens.first()) {
+        issue.span = token.span.clone();
+    }
+    issue.in_source(source)
 }

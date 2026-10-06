@@ -1,0 +1,16 @@
+[package]
+name = "hgl-name-check"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+[package.metadata.hgl]
+line-budget = 250
+[lints]
+workspace = true
+[dependencies]
+hgl-source = { path = "../hgl-source" }
+hgl-library = { path = "../hgl-library" }
+hgl-struct-names = { path = "../hgl-struct-names" }
+hgl-type-sizes = { path = "../hgl-type-sizes" }
+hgl-enums = { path = "../hgl-enums" }

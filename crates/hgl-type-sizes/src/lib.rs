@@ -1,51 +1,36 @@
 //! Resolve list sizes through checked constant evaluation before type identity.
 use hgl_rust_ir::{Kind, Value};
-use hgl_source::{Cursor, Expr, Literal, Ty, application, delta_argument, lex};
+use hgl_source::{Cursor, Expr, Issue, Literal, Ty, application, delta_argument, lex};
 /// Normalize each nested explicit list size using its lexical constant context.
 pub fn normalize(
     name: &str,
     evaluate: &mut impl FnMut(&str) -> Result<Literal, String>,
 ) -> Result<String, String> {
+    normalize_checked(name, &mut |expr| evaluate(expr).map_err(Issue::from)).map_err(String::from)
+}
+/// Normalize sizes while retaining their catalogued rule and relative argument range.
+pub fn normalize_checked(
+    name: &str,
+    evaluate: &mut impl FnMut(&str) -> Result<Literal, Issue>,
+) -> Result<String, Issue> {
     if let Some(origin) = delta_argument(name) {
-        return Ok(format!("delta<{}>", normalize(origin, evaluate)?));
+        return Ok(format!(
+            "delta<{}>",
+            normalize_checked(origin, evaluate).map_err(|e| e.shifted(6))?
+        ));
     }
     let Some((base, args)) = application(name) else {
         return Ok(name.into());
     };
     if base == "rolling" {
-        if !(2..=3).contains(&args.len()) {
-            return Err("rolling requires payload, maximum and optional minimum".into());
-        }
-        let max = evaluate(args[1])?;
-        let min = if args.len() == 3 {
-            evaluate(args[2])?
-        } else {
-            max.clone()
-        };
-        let window = match (max, min) {
-            (Literal::Int(max), Literal::Int(min)) => {
-                hgl_source::Window::new(hgl_source::WindowKind::Ticks, max, min)?
-            }
-            (Literal::Duration(max), Literal::Duration(min)) => {
-                hgl_source::Window::new(hgl_source::WindowKind::Duration, max, min)?
-            }
-            _ => {
-                return Err(
-                    "rolling sizes require constants of the same i64 or duration kind".into(),
-                );
-            }
-        };
-        return Ok(format!(
-            "rolling<{},{}>",
-            normalize(args[0], evaluate)?,
-            window.source_name()
-        ));
+        return rolling(base, &args, evaluate);
     }
     if base == "list" {
         if !(1..=2).contains(&args.len()) {
             return Err("list requires an element and optional constant size".into());
         }
-        let element = normalize(args[0], evaluate)?;
+        let element =
+            normalize_checked(args[0], evaluate).map_err(|e| e.shifted(base.len() + 1))?;
         if args.len() == 1 || args[1] == "unbounded" {
             return Ok(format!("list<{element}>"));
         }
@@ -57,9 +42,14 @@ pub fn normalize(
         }
         return Ok(format!("list<{element},{size}>"));
     }
+    let mut offset = base.len() + 1;
     let args = args
         .into_iter()
-        .map(|arg| normalize(arg, evaluate))
+        .map(|arg| {
+            let result = normalize_checked(arg, evaluate).map_err(|e| e.shifted(offset));
+            offset += arg.len() + 1;
+            result
+        })
         .collect::<Result<Vec<_>, _>>()?;
     Ok(format!("{base}<{}>", args.join(",")))
 }
@@ -135,4 +125,55 @@ fn expression_value(expr: &Expr) -> Result<Value, String> {
         | Expr::TemporalLiteral(_)
         | Expr::Null => Err("list size requires a resolved constant expression".into()),
     }
+}
+
+fn rolling(
+    base: &str,
+    args: &[&str],
+    evaluate: &mut impl FnMut(&str) -> Result<Literal, Issue>,
+) -> Result<String, Issue> {
+    if !(2..=3).contains(&args.len()) {
+        return Err("rolling requires payload, maximum and optional minimum".into());
+    }
+    let max = evaluate(args[1])?;
+    let min = if args.len() == 3 {
+        evaluate(args[2])?
+    } else {
+        max.clone()
+    };
+    let argument = if matches!(max, Literal::Int(_) | Literal::Duration(_)) {
+        2.min(args.len() - 1)
+    } else {
+        1
+    };
+    let offset = base.len() + 1 + args[..argument].iter().map(|a| a.len() + 1).sum::<usize>();
+    let span = offset..offset + args[argument].len();
+    let (kind, max, min) = match (max, min) {
+        (Literal::Int(max), Literal::Int(min)) => (hgl_source::WindowKind::Ticks, max, min),
+        (Literal::Duration(max), Literal::Duration(min)) => {
+            (hgl_source::WindowKind::Duration, max, min)
+        }
+        _ => {
+            return Err(Issue::coded(
+                "type",
+                "rolling.size_kind",
+                span,
+                "rolling sizes require constants of the same i64 or duration kind",
+            ));
+        }
+    };
+    let window = hgl_source::Window::new(kind, max, min).map_err(|message| {
+        let span = if max <= 0 {
+            let start = base.len() + 1 + args[0].len() + 1;
+            start..start + args[1].len()
+        } else {
+            span
+        };
+        Issue::coded("type", "rolling.size_bounds", span, message)
+    })?;
+    Ok(format!(
+        "rolling<{},{}>",
+        normalize_checked(args[0], evaluate).map_err(|e| e.shifted(base.len() + 1))?,
+        window.source_name()
+    ))
 }

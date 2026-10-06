@@ -1,4 +1,5 @@
 //! Source tokens, expressions and statements shared by HGL compiler stages.
+pub use hgl_diagnostics::Issue;
 pub use hgl_lex::{Token, lex};
 pub use hgl_literals::{Literal, ParsedLiteral, TemporalLiteral};
 pub use hgl_type_shape::{
@@ -53,7 +54,7 @@ pub enum Stmt {
     /// Assignment to state, cache or out.
     Assign(Expr, Expr),
     /// Ordered timed source publication operands.
-    TimedYield(Expr, Expr),
+    TimedYield(Expr, Expr, std::ops::Range<usize>),
     /// Runtime conditional loop; omitted source condition is true.
     While(Expr, Vec<Self>),
     /// Collection iteration.
@@ -75,6 +76,16 @@ impl<'a> Cursor<'a> {
     pub fn new(tokens: &'a [Token]) -> Self {
         Self { tokens, pos: 0 }
     }
+    /// Primary range of the current token, or the original end position.
+    pub fn span(&self) -> std::ops::Range<usize> {
+        self.tokens.get(self.pos).map_or_else(
+            || {
+                let end = self.tokens.last().map_or(0, |t| t.span.end);
+                end..end
+            },
+            |t| t.span.clone(),
+        )
+    }
     /// Whether the next token has this spelling.
     pub fn at(&self, s: &str) -> bool {
         self.peek() == s
@@ -93,20 +104,30 @@ impl<'a> Cursor<'a> {
         }
     }
     /// Consume one token, diagnosing end of input.
-    pub fn consume(&mut self) -> Result<String, String> {
+    pub fn consume(&mut self) -> Result<String, Issue> {
         if self.at("") {
-            return Err("unexpected end of declaration".into());
+            return Err(Issue::coded(
+                "parse",
+                "syntax.expected_token",
+                self.span(),
+                "unexpected end of declaration",
+            ));
         }
         let s = self.peek().to_owned();
         self.pos += 1;
         Ok(s)
     }
     /// Require and consume the requested token.
-    pub fn need(&mut self, s: &str) -> Result<(), String> {
+    pub fn need(&mut self, s: &str) -> Result<(), Issue> {
         if self.take(s) {
             Ok(())
         } else {
-            Err(format!("expected {s}, found {}", self.peek()))
+            Err(Issue::coded(
+                "parse",
+                "syntax.expected_token",
+                self.span(),
+                format!("expected {s}, found {}", self.peek()),
+            ))
         }
     }
     /// Consume declaration or statement line separators.
@@ -114,22 +135,33 @@ impl<'a> Cursor<'a> {
         while self.take("\n") {}
     }
     /// Require an identifier spelling.
-    pub fn name(&mut self) -> Result<String, String> {
+    pub fn name(&mut self) -> Result<String, Issue> {
+        let span = self.span();
         let name = self.consume()?;
         if matches!(name.as_str(), "while" | "yield") {
-            return Err(format!("{name} is a reserved word"));
+            return Err(Issue::coded(
+                "parse",
+                "syntax.expected_token",
+                span,
+                format!("{name} is a reserved word"),
+            ));
         }
         if !name
             .bytes()
             .enumerate()
             .all(|(i, c)| c.is_ascii_alphabetic() || c == b'_' || (i > 0 && c.is_ascii_digit()))
         {
-            return Err(format!("expected name, found {name}"));
+            return Err(Issue::coded(
+                "parse",
+                "syntax.expected_token",
+                span,
+                format!("expected name, found {name}"),
+            ));
         }
         Ok(name)
     }
     /// The literal scalar type.
-    pub fn type_name(&mut self) -> Result<String, String> {
+    pub fn type_name(&mut self) -> Result<String, Issue> {
         let mut name = self.name()?;
         while self.take("::") {
             name.push_str("::");
@@ -143,7 +175,7 @@ impl<'a> Cursor<'a> {
         }
         Ok(name)
     }
-    fn type_arguments(&mut self, name: &mut String) -> Result<(), String> {
+    fn type_arguments(&mut self, name: &mut String) -> Result<(), Issue> {
         self.need("<")?;
         let mut text = format!("{name}<");
         let mut depth = 1;
@@ -218,10 +250,10 @@ impl<'a> Cursor<'a> {
         false
     }
     /// Parse an expression using operator precedence.
-    pub fn expr(&mut self) -> Result<Expr, String> {
+    pub fn expr(&mut self) -> Result<Expr, Issue> {
         self.binary(0)
     }
-    fn binary(&mut self, min: u8) -> Result<Expr, String> {
+    fn binary(&mut self, min: u8) -> Result<Expr, Issue> {
         let mut left = self.atom()?;
         loop {
             let precedence = match self.peek() {
@@ -242,7 +274,7 @@ impl<'a> Cursor<'a> {
         }
         Ok(left)
     }
-    fn atom(&mut self) -> Result<Expr, String> {
+    fn atom(&mut self) -> Result<Expr, Issue> {
         let mut value = self.primary()?;
         loop {
             if self.take("[") {
@@ -263,7 +295,7 @@ impl<'a> Cursor<'a> {
         }
         Ok(value)
     }
-    fn primary(&mut self) -> Result<Expr, String> {
+    fn primary(&mut self) -> Result<Expr, Issue> {
         if self.take("[") {
             let mut values = Vec::new();
             self.lines();
@@ -329,7 +361,7 @@ impl<'a> Cursor<'a> {
             Expr::Call(name, args)
         })
     }
-    fn parenthesized(&mut self) -> Result<Expr, String> {
+    fn parenthesized(&mut self) -> Result<Expr, Issue> {
         self.lines();
         let first = if self.take("_") {
             None
@@ -358,7 +390,7 @@ impl<'a> Cursor<'a> {
         }
         Ok(Expr::Tuple(values))
     }
-    fn call_arguments(&mut self, delta: bool) -> Result<Vec<(Option<String>, Expr)>, String> {
+    fn call_arguments(&mut self, delta: bool) -> Result<Vec<(Option<String>, Expr)>, Issue> {
         let mut args = Vec::new();
         self.lines();
         while !self.at(")") {
@@ -384,7 +416,7 @@ impl<'a> Cursor<'a> {
         self.need(")")?;
         Ok(args)
     }
-    fn delta_entries(&mut self) -> Result<Expr, String> {
+    fn delta_entries(&mut self) -> Result<Expr, Issue> {
         self.lines();
         if self.take("]") {
             return Ok(Expr::Sequence(Vec::new()));
@@ -420,7 +452,7 @@ impl<'a> Cursor<'a> {
             Expr::Sequence(values)
         })
     }
-    fn else_body(&mut self) -> Result<Vec<Stmt>, String> {
+    fn else_body(&mut self) -> Result<Vec<Stmt>, Issue> {
         if !self.take("if") {
             return self.block();
         }
@@ -435,12 +467,12 @@ impl<'a> Cursor<'a> {
         Ok(vec![Stmt::If(condition, yes, no)])
     }
     /// Parse a brace-delimited statement block.
-    pub fn block(&mut self) -> Result<Vec<Stmt>, String> {
+    pub fn block(&mut self) -> Result<Vec<Stmt>, Issue> {
         self.need("{")?;
         self.block_contents()
     }
     /// Parse a block after its opening brace has already been consumed.
-    pub fn block_contents(&mut self) -> Result<Vec<Stmt>, String> {
+    pub fn block_contents(&mut self) -> Result<Vec<Stmt>, Issue> {
         self.lines();
         let mut out = Vec::new();
         while !self.take("}") {
@@ -463,9 +495,10 @@ impl<'a> Cursor<'a> {
                 self.lines();
                 continue;
             } else if self.take("yield") {
+                let span = self.span();
                 let time = self.expr()?;
                 self.need(":")?;
-                Stmt::TimedYield(time, self.expr()?)
+                Stmt::TimedYield(time, self.expr()?, span)
             } else if self.at("let") || self.at("var") {
                 let mutable = self.consume()? == "var";
                 let name = self.name()?;
@@ -510,7 +543,7 @@ impl<'a> Cursor<'a> {
             };
             out.push(statement);
             if !self.at("}") && !self.at("\n") {
-                return Err(format!("expected statement end, found {}", self.peek()));
+                return Err(format!("expected statement end, found {}", self.peek()).into());
             }
             self.lines();
         }
@@ -518,7 +551,7 @@ impl<'a> Cursor<'a> {
     }
 }
 
-fn string_literal(text: &str) -> Result<Expr, String> {
+fn string_literal(text: &str) -> Result<Expr, Issue> {
     let mut value = String::new();
     let mut chars = text[1..text.len() - 1].chars();
     while let Some(c) = chars.next() {

@@ -352,3 +352,26 @@ frontend adapter. Bound evals require an output; retained captures use ordinary
 index/length checking and existing binding-specific presence refinement.
 Conditional test branches use fresh binding identities and nested lexical
 scope. Named-test reporting fails on any executed nested assertion/eval error.
+
+Named suite emission accepts command-line short or qualified test names. Unknown selections fail. Raises callbacks remain independently owned graph runs.
+
+May use hgl-source-check. compile and compile_tests perform shared declaration-wide
+source admission before choosing reachable graphs; compile-rejection fixtures
+consume the same structured diagnostics without building or running graphs.
+
+May use hgl-diagnostics. diagnostics combines shared source admission with the
+ordinary resolver for concrete signatures, zero-argument functions and named
+tests. Deferred generic checks run when instantiated; unresolved or unsupported
+semantic failures retain no catalogue code and cannot match an expectation.
+Resolver errors retain typed identity and source ownership through overload
+selection and constant-bound evaluation. check_sources renders these results.
+
+compile_suite performs ordinary source checking and permits an empty executable suite for a caller that has independent rejection cases. compile_tests retains the ordinary no-tests error. Reports label executed outcomes and counts.
+
+Callable and nominal names in bodies, defaults and type shapes are admitted
+before specialization. Deferred generic types and configurations use no invented
+values; ordinary overload selection shares candidate visibility with name admission.
+
+compile_module_suite and module_diagnostics restrict test-scoped checking to the
+root module while retaining ordinary production dependencies. Existing embedding
+suite/diagnostic APIs retain checking across every supplied module.

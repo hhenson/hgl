@@ -1,23 +1,28 @@
 use crate::{emit, index, resolve};
 use hgl_harness_ir::Test;
 
-/// Checked lexical tests and independently selected graph plans.
-#[derive(Debug)]
-pub struct Suite {
-    tests: Vec<Test>,
-    plans: Vec<hgl_rust::Plan>,
-}
+pub use hgl_harness_ir::Suite;
 /// Check named tests without executing ordinary setup or supplied eval values.
-pub fn compile_tests(sources: &[(String, String)]) -> Result<Suite, String> {
+pub fn compile_suite(sources: &[(String, String)]) -> Result<Suite, String> {
+    suite(sources, false)
+}
+/// Check only the root module's named tests; imported tests retain separate ownership.
+pub fn compile_module_suite(sources: &[(String, String)]) -> Result<Suite, String> {
+    suite(sources, true)
+}
+fn suite(sources: &[(String, String)], module_only: bool) -> Result<Suite, String> {
+    let errors = hgl_source_check::with_module_semantics(sources, |_, _| Ok(()));
+    if module_only {
+        hgl_diagnostics::ensure(errors)?;
+    } else {
+        hgl_source_check::ensure_sources(sources)?;
+    }
     let library = index::load(sources)?;
     hgl_enums::validate(&library)?;
-    let mut suite = Suite {
-        tests: Vec::new(),
-        plans: Vec::new(),
-    };
+    let mut suite = Suite::default();
     let mut names = std::collections::BTreeSet::new();
     for decl in &library.declarations {
-        if decl.role != index::Role::Test {
+        if decl.role != index::Role::Test || (module_only && decl.module != library.root) {
             continue;
         }
         let name = format!("{}::{}", decl.module, decl.name);
@@ -33,13 +38,14 @@ pub fn compile_tests(sources: &[(String, String)]) -> Result<Suite, String> {
                 module: decl.module.clone(),
             },
         )
-        .map_err(|e| format!("{name}: {e}"))?;
+        .map_err(|e| hgl_diagnostics::render_issue(sources, e.in_source(&decl.source)))?;
         suite.tests.push(Test { name, steps });
     }
-    if suite.tests.is_empty() {
-        return Err("no tests found".into());
-    }
     Ok(suite)
+}
+/// Check named source tests, retaining the ordinary no-tests error.
+pub fn compile_tests(sources: &[(String, String)]) -> Result<Suite, String> {
+    compile_suite(sources)?.require_tests()
 }
 /// Emit ordered test setup, prepared graph factories and owning capture comparison.
 pub fn emit_tests(suite: &Suite) -> String {
@@ -56,10 +62,6 @@ pub fn emit_tests(suite: &Suite) -> String {
             .replace("fn test()", "pub fn test()");
         out.push(format!("mod test{i} {{ use super::*; {code} }}\n"));
     }
-    out.push("fn main() {\nlet mut failed=0;\nlet mut evaluations=0;\n".into());
-    for (i, test) in suite.tests.iter().enumerate() {
-        out.push(format!("match test{i}::test() {{Ok(count)=>{{evaluations+=count; println!(\"{{}} ... ok\",{:?});}},Err(e)=>{{failed+=1;eprintln!(\"{{}}: {{e}}\",{:?});}}}}\n",test.name,test.name));
-    }
-    out.push(format!("println!(\"{} tests, {{evaluations}} evaluations, {{failed}} failures\");\nif failed != 0 {{std::process::exit(1);}}\n}}\n",suite.tests.len()));
+    out.push(hgl_rust_preparation::emit_main(&suite.tests));
     out.concat()
 }

@@ -7,6 +7,7 @@ use hgl_endpoint_check::{
 };
 use hgl_flow_check::{facts, handler_facts, merge_facts, terminates};
 use hgl_rust::{Kind, Native, Node, Plan, Statement, Value};
+use hgl_source::Issue;
 use hgl_static_values::PreparedLexicalScope;
 use hgl_value_bind::{bind, bind_prepared, method_arguments, order_arguments, resolve_type};
 use hgl_value_check::{field, ordinary, writable};
@@ -71,7 +72,7 @@ pub(crate) fn prepared_statement(
     module: &str,
     statement: &Stmt,
     scope: &mut PreparedLexicalScope,
-) -> Result<Statement, String> {
+) -> Result<Statement, Issue> {
     let mut checker = test_checker(library, module, scope);
     let result = checker.statement(
         module,
@@ -88,7 +89,7 @@ pub(crate) fn prepared_assertion(
     module: &str,
     expr: &Expr,
     scope: &PreparedLexicalScope,
-) -> Result<Value, String> {
+) -> Result<Value, Issue> {
     let mut checker = test_checker(library, module, scope);
     let value = checker.expression(module, expr, &scope.bindings, false)?;
     if value.ty != Ty::Bool {
@@ -102,7 +103,7 @@ pub(crate) fn prepared_assertion(
     }
     Ok(value)
 }
-pub(crate) fn compile(library: Library, module: &str, entry: &str) -> Result<Plan, String> {
+pub(crate) fn compile(library: Library, module: &str, entry: &str) -> Result<Plan, Issue> {
     let mut checker = Checker {
         library,
         ..Checker::default()
@@ -117,7 +118,7 @@ impl Checker {
         name: &str,
         args: &[(Option<String>, Value)],
         runtime: bool,
-    ) -> Result<Value, String> {
+    ) -> Result<Value, Issue> {
         let values = self.call_values(args, runtime)?;
         let args = values.as_slice();
         let (module, name) = hgl_value_types::identity(&self.library, module, name);
@@ -142,53 +143,52 @@ impl Checker {
             self.document(id);
         }
         if decl.role == Role::Native {
-            return hgl_value_bind::native(
+            return Ok(hgl_value_bind::native(
                 &self.library,
                 &decl,
                 &signature,
                 (values, result),
                 runtime,
                 &mut self.plan.natives,
-            );
+            )?);
         }
         let runtime_body = runtime_body(&signature)?;
         if signature.value_function && values.iter().all(|v| !matches!(v.kind, Kind::Wire(_))) {
-            return self.direct_call(id, &signature, (values, types, result), runtime, args);
+            return self
+                .direct_call(id, &signature, (values, types, result), runtime, args)
+                .map_err(|e| e.in_source(&decl.source));
         }
         if runtime {
             return Err("temporal calls in runtime handlers are not supported".into());
         }
         if !self.active.insert(id) {
-            return Err(format!("recursive graph construction: {name}"));
+            return Err(format!("recursive graph construction: {name}").into());
         }
         let previous_scope = self.test_scope.clone();
         self.test_scope = decl.test_only.then(|| module.clone());
-        let mut env: Env = signature
-            .parameters
-            .iter()
-            .zip(&values)
-            .map(|(p, v)| (p.name.clone(), v.clone()))
-            .collect();
+        let mut env = hgl_body_check::parameter_scope(&signature, values);
         let previous_types = std::mem::replace(&mut self.types, types);
         let mut cursor = Cursor::new(&signature.body);
         let value = if runtime_body {
             self.runtime_node = !signature.value_function;
             let context = std::mem::replace(&mut self.value_context, ValueContext::Outside);
-            let node = self.node(&decl, &signature, &mut cursor, &mut env, &result)?;
+            let node = self
+                .node(&decl, &signature, &mut cursor, &mut env, &result)
+                .map_err(|e| e.in_source(&decl.source))?;
             self.value_context = context;
             let index = self.plan.nodes.len();
             self.plan.nodes.push(node);
-            Value {
-                ty: result.clone(),
-                kind: if result == Ty::Void {
-                    Kind::Void
-                } else {
-                    Kind::Wire(index)
-                },
-            }
+            let kind = if result == Ty::Void {
+                Kind::Void
+            } else {
+                Kind::Wire(index)
+            };
+            Value::new(result.clone(), kind)
         } else {
             let previous = std::mem::replace(&mut self.preparing_graph, true);
-            let value = self.graph(&module, &mut cursor, &mut env, (&result, &signature))?;
+            let value = self
+                .graph(&module, &mut cursor, &mut env, (&result, &signature))
+                .map_err(|e| e.in_source(&decl.source))?;
             self.preparing_graph = previous;
             value
         };
@@ -202,7 +202,7 @@ impl Checker {
         &mut self,
         args: &[(Option<String>, Value)],
         runtime: bool,
-    ) -> Result<Arguments, String> {
+    ) -> Result<Arguments, Issue> {
         args.iter().map(|(name, value)| {
             let prepared = self.value_context == ValueContext::Preparation;
             let local = matches!(value.kind, Kind::Local(id) | Kind::MutableLocal(id) if id < self.next_wiring_local);
@@ -212,7 +212,7 @@ impl Checker {
             Ok((name.clone(), value))
         }).collect()
     }
-    fn constant_size(&mut self, module: &str, source: &str, env: &Env) -> Result<Literal, String> {
+    fn constant_size(&mut self, module: &str, source: &str, env: &Env) -> Result<Literal, Issue> {
         let tokens = hgl_source::lex(source)?;
         let mut cursor = Cursor::new(&tokens);
         let expr = cursor.expr()?;
@@ -233,19 +233,22 @@ impl Checker {
         };
         Ok(value)
     }
-    fn type_sizes(&mut self, module: &str, name: &str, env: &Env) -> Result<String, String> {
+    fn type_sizes(&mut self, module: &str, name: &str, env: &Env) -> Result<String, Issue> {
         for (owner, expr) in hgl_struct_check::schema_sizes(&self.library, module, name)? {
             let size = self.constant_size(&owner, &expr, &Env::new())?;
             self.library.type_sizes.insert((owner, expr), size);
         }
-        hgl_type_sizes::normalize(name, &mut |source| self.constant_size(module, source, env))
+        hgl_type_sizes::normalize_checked(name, &mut |source| {
+            self.constant_size(module, source, env)
+        })
     }
     fn signature_sizes(
         &mut self,
         module: &str,
         mut signature: Signature,
         args: &[(Option<String>, Value)],
-    ) -> Result<Signature, String> {
+        source: &str,
+    ) -> Result<Signature, Issue> {
         let names = signature
             .parameters
             .iter()
@@ -271,9 +274,13 @@ impl Checker {
             })
             .collect::<Env>();
         for parameter in &mut signature.parameters {
-            parameter.ty = self.type_sizes(module, &parameter.ty, &env)?;
+            parameter.ty = self
+                .type_sizes(module, &parameter.ty, &env)
+                .map_err(|e| hgl_library::locate_type_issue(e, &parameter.type_tokens, source))?;
         }
-        signature.result = self.type_sizes(module, &signature.result, &env)?;
+        signature.result = self
+            .type_sizes(module, &signature.result, &env)
+            .map_err(|e| hgl_library::locate_type_issue(e, &signature.result_tokens, source))?;
         Ok(signature)
     }
     fn direct_call(
@@ -283,28 +290,18 @@ impl Checker {
         (args, types, result): (Vec<Value>, BTreeMap<String, Ty>, Ty),
         runtime: bool,
         supplied: &[(Option<String>, Value)],
-    ) -> Result<Value, String> {
+    ) -> Result<Value, Issue> {
         let decl = self.library.declarations[id].clone();
         let (args, positions) = hgl_value_bind::ordered_call(signature, args, supplied)?;
         if !self.active.insert(id) {
             return Err("recursive ordinary value calls are unsupported".into());
         }
-        let mut env: Env = signature
-            .parameters
-            .iter()
-            .zip(&positions)
-            .map(|(p, id)| {
-                let v = &args[*id];
-                (
-                    p.name.clone(),
-                    if p.constant && self.value_context != ValueContext::Preparation {
-                        v.clone()
-                    } else {
-                        Value::new(v.ty.clone(), Kind::Local(*id))
-                    },
-                )
-            })
-            .collect();
+        let mut env = hgl_body_check::value_scope(
+            signature,
+            &args,
+            &positions,
+            self.value_context == ValueContext::Preparation,
+        );
         let constants = self.static_values.arguments(signature, &args, &positions);
         let previous_constants = std::mem::replace(&mut self.static_values.locals, constants);
         let previous_types = std::mem::replace(&mut self.types, types);
@@ -328,15 +325,15 @@ impl Checker {
             if !runtime || !matches!(service.as_str(), "clock" | "logger") {
                 return Err(format!(
                     "ordinary helper injectable {service} requires a supported runtime service context"
-                ));
+                ).into());
             }
             if env
                 .insert(service.clone(), Value::new(Ty::Void, Kind::Capability))
                 .is_some()
             {
-                return Err(format!(
-                    "{service}: injectable conflicts with an existing binding"
-                ));
+                return Err(
+                    format!("{service}: injectable conflicts with an existing binding").into(),
+                );
             }
         }
         let body = self.statements(&decl.module, &body, &mut env, &result, &mut args.len())?;
@@ -380,30 +377,22 @@ impl Checker {
         name: &str,
         args: &[(Option<String>, Value)],
         runtime: bool,
-    ) -> Result<Selection, String> {
+    ) -> Result<Selection, Issue> {
         let mut candidates = Vec::new();
         let mut errors = Vec::new();
         for (id, decl) in self.library.declarations.clone().iter().enumerate() {
-            if decl.module != module
-                || decl.name != name
-                || matches!(decl.role, Role::Implementation | Role::Test | Role::Struct)
-            {
-                continue;
-            }
-            if decl.test_only && self.test_scope.as_deref() != Some(module) {
-                continue;
-            }
-            if !decl.test_only
-                && self.test_scope.as_deref() == Some(module)
-                && self.library.declarations.iter().any(|d| {
-                    d.test_only && d.module == module && d.name == name && d.role == Role::Function
-                })
-            {
+            if !hgl_name_check::visible(
+                &self.library,
+                decl,
+                module,
+                name,
+                self.test_scope.as_deref(),
+            ) {
                 continue;
             }
             let signature = match decl
-                .signature()
-                .and_then(|s| self.signature_sizes(module, s, args))
+                .signature_checked()
+                .and_then(|s| self.signature_sizes(module, s, args, &decl.source))
             {
                 Ok(s) => s,
                 Err(e) => {
@@ -422,7 +411,7 @@ impl Checker {
             ) {
                 Ok(types) => types,
                 Err(error) => {
-                    errors.push(error);
+                    errors.push(error.into());
                     continue;
                 }
             };
@@ -447,14 +436,16 @@ impl Checker {
                 Ok((values, types, result)) => {
                     candidates.push((id, signature, values, types, result));
                 }
-                Err(e) => errors.push(e),
+                Err(e) => errors.push(e.into()),
             }
         }
         if candidates.len() != 1 {
-            return Err(format!(
-                "{module}::{name}: expected one matching declaration, found {}; {}",
-                candidates.len(),
-                errors.join("; ")
+            return Err(Issue::alternatives(
+                errors,
+                format!(
+                    "{module}::{name}: expected one matching declaration, found {}",
+                    candidates.len()
+                ),
             ));
         }
         Ok(candidates.remove(0))
@@ -466,10 +457,11 @@ impl Checker {
         values: &[Value],
         result: &Ty,
         runtime: bool,
-    ) -> Result<(usize, Signature, BTreeMap<String, Ty>), String> {
+    ) -> Result<(usize, Signature, BTreeMap<String, Ty>), Issue> {
         let module = declaration.module.as_str();
         let name = declaration.name.as_str();
         let mut implementations = Vec::new();
+        let mut errors = Vec::new();
         for (candidate, implementation) in self.library.declarations.clone().iter().enumerate() {
             if implementation.module != module
                 || implementation.name != name
@@ -482,11 +474,15 @@ impl Checker {
                 .cloned()
                 .map(|v| (None, v))
                 .collect::<Vec<_>>();
-            let Ok(sig) = implementation
-                .signature()
-                .and_then(|s| self.signature_sizes(module, s, &positional))
-            else {
-                continue;
+            let sig = match implementation
+                .signature_checked()
+                .and_then(|s| self.signature_sizes(module, s, &positional, &implementation.source))
+            {
+                Ok(sig) => sig,
+                Err(error) => {
+                    errors.push(error.in_source(&implementation.source));
+                    continue;
+                }
             };
             let Ok(declared) =
                 hgl_value_bind::signature_types(&self.library, module, &sig, &positional)
@@ -529,9 +525,12 @@ impl Checker {
             implementations.push((candidate, sig, inferred));
         }
         if implementations.len() != 1 {
-            return Err(format!(
-                "{module}::{name}: expected one instantiated implementation, found {}",
-                implementations.len()
+            return Err(Issue::alternatives(
+                errors,
+                format!(
+                    "{module}::{name}: expected one instantiated implementation, found {}",
+                    implementations.len()
+                ),
             ));
         }
         Ok(implementations.remove(0))
@@ -566,27 +565,27 @@ impl Checker {
         }
         true
     }
-    fn wiring_value(&mut self, value: &Value) -> Result<Value, String> {
+    fn wiring_value(&mut self, value: &Value) -> Result<Value, Issue> {
         match self.wiring.value(value) {
             Ok(value) => Ok(value),
             Err(hgl_value_eval::EvalError::Operation(message)) => {
                 self.plan.construction_error.get_or_insert(message.clone());
                 Ok(Value::new(value.ty.clone(), Kind::WiringFailure(message)))
             }
-            Err(hgl_value_eval::EvalError::Unsupported(message)) => Err(message),
+            Err(hgl_value_eval::EvalError::Unsupported(message)) => Err(message.into()),
             Err(hgl_value_eval::EvalError::ContextRequired) => {
                 Err("contextual value requires run preparation".into())
             }
         }
     }
-    fn wiring_statement(&mut self, statement: &Statement) -> Result<(), String> {
+    fn wiring_statement(&mut self, statement: &Statement) -> Result<(), Issue> {
         match self.wiring.statement(statement) {
             Ok(_) => Ok(()),
             Err(hgl_value_eval::EvalError::Operation(message)) => {
                 self.plan.construction_error.get_or_insert(message);
                 Ok(())
             }
-            Err(hgl_value_eval::EvalError::Unsupported(message)) => Err(message),
+            Err(hgl_value_eval::EvalError::Unsupported(message)) => Err(message.into()),
             Err(hgl_value_eval::EvalError::ContextRequired) => {
                 Err("contextual value requires run preparation".into())
             }
@@ -599,9 +598,9 @@ impl Checker {
         mutable: bool,
         annotated: bool,
         env: &mut Env,
-    ) -> Result<(), String> {
+    ) -> Result<(), Issue> {
         if env.contains_key(name) {
-            return Err(format!("duplicate local {name}"));
+            return Err(format!("duplicate local {name}").into());
         }
         if matches!(value.kind, Kind::Wire(_))
             || (!mutable && matches!(value.kind, Kind::Prepared(_)))
@@ -628,7 +627,7 @@ impl Checker {
         cursor: &mut Cursor<'_>,
         env: &mut Env,
         (result, signature): (&Ty, &Signature),
-    ) -> Result<Value, String> {
+    ) -> Result<Value, Issue> {
         let locals = hgl_local_check::GraphLocals::new(
             signature
                 .parameters
@@ -707,7 +706,7 @@ impl Checker {
         }
         self.graph_locals = previous_locals;
         self.result_hint = previous_hint;
-        hgl_local_check::graph_result(output, result)
+        Ok(hgl_local_check::graph_result(output, result)?)
     }
     fn graph_assignment(
         &mut self,
@@ -716,7 +715,7 @@ impl Checker {
         env: &mut Env,
         mutable_port: bool,
         compound: bool,
-    ) -> Result<(), String> {
+    ) -> Result<(), Issue> {
         self.graph_locals.replacement(name, expr)?;
         let target = env
             .get(name)
@@ -755,7 +754,7 @@ impl Checker {
         c: &mut Cursor<'_>,
         env: &mut Env,
         result: &Ty,
-    ) -> Result<Node, String> {
+    ) -> Result<Node, Issue> {
         let generator = signature.body.iter().any(|token| token.text == "yield");
         if generator
             && signature
@@ -814,13 +813,13 @@ impl Checker {
         c: &mut Cursor<'_>,
         env: &mut Env,
         mut node: Node,
-    ) -> Result<Node, String> {
+    ) -> Result<Node, Issue> {
         if !node.result.publication() {
             return Err("generator requires a declared publication output type".into());
         }
         let (services, body) = hgl_body_check::generator_body(c)?;
         for service in services {
-            inject_capability(&service, &mut node, env)?;
+            hgl_endpoint_check::inject_capability(&service, &mut node, env)?;
         }
         self.generator = true;
         self.phase = Phase::Evaluation;
@@ -840,7 +839,7 @@ impl Checker {
         env: &Env,
         node: &mut Node,
         next_local: &mut usize,
-    ) -> Result<(), String> {
+    ) -> Result<(), Issue> {
         let mut seen = BTreeSet::new();
         while !c.at("}") {
             if c.at("when") {
@@ -854,7 +853,7 @@ impl Checker {
                     _ => return Err("expected start, when or stop hook".into()),
                 };
                 if !seen.insert(hook.clone()) {
-                    return Err(format!("duplicate {hook} hook"));
+                    return Err(format!("duplicate {hook} hook").into());
                 }
                 self.facts.clear();
                 let body = self.statements(
@@ -882,7 +881,7 @@ impl Checker {
         env: &Env,
         node: &mut Node,
         next_local: &mut usize,
-    ) -> Result<(), String> {
+    ) -> Result<(), Issue> {
         while c.take("when") {
             self.facts.clear();
             if c.at("scheduled") {
@@ -894,7 +893,7 @@ impl Checker {
             let guard = if c.at("{") {
                 None
             } else {
-                let expr = node_guard(node, c.expr()?);
+                let expr = hgl_flow_check::node_guard(node, c.expr()?);
                 let condition = self.expression(&decl.module, &expr, env, true)?;
                 if condition.ty != Ty::Bool {
                     return Err("handler guard requires bool".into());
@@ -923,18 +922,18 @@ impl Checker {
         c: &mut Cursor<'_>,
         env: &mut Env,
         node: &mut Node,
-    ) -> Result<(), String> {
+    ) -> Result<(), Issue> {
         let result = &node.result.clone();
         while c.take("inject") {
             loop {
                 match c.name()?.as_str() {
                     name @ ("alarm" | "clock" | "logger" | "global_state") => {
-                        inject_capability(name, node, env)?;
+                        hgl_endpoint_check::inject_capability(name, node, env)?;
                     }
                     "out" => {
                         env.insert("out".into(), Value::new(result.clone(), Kind::Output));
                     }
-                    name => return Err(format!("unsupported injectable {name}")),
+                    name => return Err(format!("unsupported injectable {name}").into()),
                 }
                 if !c.take(",") {
                     break;
@@ -954,7 +953,7 @@ impl Checker {
         c: &mut Cursor<'_>,
         env: &mut Env,
         node: &mut Node,
-    ) -> Result<(), String> {
+    ) -> Result<(), Issue> {
         while c.take("cache") || c.take("state") {
             let name = c.name()?;
             c.need(":")?;
@@ -986,14 +985,14 @@ impl Checker {
         env: &mut Env,
         result: &Ty,
         next_local: &mut usize,
-    ) -> Result<Vec<Statement>, String> {
+    ) -> Result<Vec<Statement>, Issue> {
         let mut bindings = BTreeSet::new();
         let mut checked = Vec::new();
         for statement in statements {
             if let Stmt::Let(name, _, _) | Stmt::Var(name, _, _) = statement
                 && !bindings.insert(name)
             {
-                return Err(format!("duplicate local {name}"));
+                return Err(format!("duplicate local {name}").into());
             }
             checked.push(self.statement(module, statement, env, result, next_local)?);
         }
@@ -1006,7 +1005,7 @@ impl Checker {
         expr: &Expr,
         env: &Env,
         runtime: bool,
-    ) -> Result<Value, String> {
+    ) -> Result<Value, Issue> {
         let mut ty = annotation
             .map(|name| {
                 let name = self.type_sizes(module, name, env)?;
@@ -1035,19 +1034,17 @@ impl Checker {
         if !matches!(value.kind, Kind::Wire(_)) {
             ty = hint;
         }
-        hgl_local_check::initializer(value, ty.as_ref())
+        Ok(hgl_local_check::initializer(value, ty.as_ref())?)
     }
-    fn struct_declaration(&self, module: &str, name: &str) -> Result<Option<&Decl>, String> {
-        hgl_value_types::declaration(&self.library, module, name)
+    fn struct_declaration(&self, module: &str, name: &str) -> Result<Option<&Decl>, Issue> {
+        Ok(hgl_value_types::declaration(&self.library, module, name)?)
     }
-    fn global_operation(&mut self, operation: &str, args: &Arguments) -> Result<Value, String> {
+    fn global_operation(&mut self, operation: &str, args: &Arguments) -> Result<Value, Issue> {
         if operation == "get" {
             return Err("global_state: get requires a concrete scalar expected type or a typed ordinary struct binding".into());
         }
         if operation != "set" {
-            return Err(format!(
-                "global_state: unknown capability operation {operation}"
-            ));
+            return Err(format!("global_state: unknown capability operation {operation}").into());
         }
         let ordered = order_arguments(&["key", "value"], args)?;
         let key = ordered.get(&0).ok_or("global_state: missing key")?;
@@ -1061,7 +1058,7 @@ impl Checker {
             Kind::GlobalSet(index, Box::new(value.clone())),
         ))
     }
-    fn global_entry(&mut self, key: &Value, ty: &Ty) -> Result<usize, String> {
+    fn global_entry(&mut self, key: &Value, ty: &Ty) -> Result<usize, Issue> {
         let resolved = self.static_values.resolve(key).clone();
         let key = &resolved;
         if matches!(key.kind, Kind::WiringFailure(_)) {
@@ -1076,7 +1073,7 @@ impl Checker {
         };
         if let Some(previous) = self.global_types.get(key) {
             if previous != ty {
-                return Err(format!("global_state: type conflict for key {key:?}"));
+                return Err(format!("global_state: type conflict for key {key:?}").into());
             }
         } else {
             self.global_types.insert(key.clone(), ty.clone());
@@ -1098,7 +1095,7 @@ impl Checker {
         module: &str,
         expr: &Expr,
         expected: &Ty,
-    ) -> Result<Value, String> {
+    ) -> Result<Value, Issue> {
         let Expr::Tuple(cells) = expr else {
             return self.expected_expression(
                 module,
@@ -1149,9 +1146,9 @@ impl Checker {
         env: &Env,
         runtime: bool,
         expected: Option<&Ty>,
-    ) -> Result<Value, String> {
+    ) -> Result<Value, Issue> {
         let value = self.expected_inner(module, expr, env, runtime, expected)?;
-        hgl_family_values::coerce(expected, value)
+        Ok(hgl_family_values::coerce(expected, value)?)
     }
     fn expected_inner(
         &mut self,
@@ -1160,7 +1157,7 @@ impl Checker {
         env: &Env,
         runtime: bool,
         expected: Option<&Ty>,
-    ) -> Result<Value, String> {
+    ) -> Result<Value, Issue> {
         if let Expr::Applied(name, args) | Expr::Call(name, args) = expr
             && (matches!(expr, Expr::Applied(..))
                 || self.struct_declaration(module, name)?.is_some())
@@ -1168,7 +1165,7 @@ impl Checker {
             return self.constructor(module, (name, args), env, runtime, expected);
         }
         if matches!(expr, Expr::Sequence(_) | Expr::Tuple(_)) {
-            return hgl_value_check::aggregate(
+            return hgl_value_check::aggregate_checked(
                 expr,
                 expected,
                 matches!(
@@ -1194,7 +1191,7 @@ impl Checker {
                 .map(|(name, expr)| {
                     Ok((name.clone(), self.expression(module, expr, env, runtime)?))
                 })
-                .collect::<Result<Vec<_>, String>>()?;
+                .collect::<Result<Vec<_>, Issue>>()?;
             let values = method_arguments("get(global_state)", &[("key", Ty::Str)], &values)?;
             let index = self.global_entry(&values[0], ty)?;
             return Ok(Value::new(ty.clone(), Kind::GlobalGet(index)));
@@ -1208,7 +1205,7 @@ impl Checker {
         env: &mut Env,
         result: &Ty,
         next_local: &mut usize,
-    ) -> Result<Statement, String> {
+    ) -> Result<Statement, Issue> {
         Ok(match statement {
             Stmt::Let(name, annotation, expr) | Stmt::Var(name, annotation, expr) => {
                 let value =
@@ -1234,8 +1231,8 @@ impl Checker {
                 require_payload(&value)?;
                 Statement::Call(value)
             }
-            Stmt::TimedYield(time, payload) => {
-                self.timed_yield(module, (time, payload), env, result)?
+            Stmt::TimedYield(time, payload, span) => {
+                self.timed_yield(module, (time, payload, span.clone()), env, result)?
             }
             Stmt::While(expr, body) => {
                 self.while_statement(module, (expr, body), env, result, next_local)?
@@ -1270,7 +1267,7 @@ impl Checker {
         expr: &Expr,
         env: &Env,
         result: &Ty,
-    ) -> Result<Statement, String> {
+    ) -> Result<Statement, Issue> {
         if self.generator && self.value_context == ValueContext::Outside {
             return Err("generator return cannot carry a value; use yield".into());
         }
@@ -1294,17 +1291,15 @@ impl Checker {
     fn timed_yield(
         &mut self,
         module: &str,
-        (time, payload): (&Expr, &Expr),
+        (time, payload, span): (&Expr, &Expr, std::ops::Range<usize>),
         env: &Env,
         result: &Ty,
-    ) -> Result<Statement, String> {
+    ) -> Result<Statement, Issue> {
         if !self.generator || self.value_context != ValueContext::Outside {
             return Err("yield requires a generator source".into());
         }
         let time = self.expression(module, time, env, true)?;
-        if !matches!(time.ty, Ty::Duration | Ty::DateTime) {
-            return Err("yield time requires datetime or duration".into());
-        }
+        hgl_source_check::yield_time(&time.ty, span)?;
         let expected = result.clone().delta()?;
         let payload = self.expected_expression(module, payload, env, true, Some(&expected))?;
         require_payload(&payload)?;
@@ -1320,7 +1315,7 @@ impl Checker {
         env: &Env,
         result: &Ty,
         next_local: &mut usize,
-    ) -> Result<Statement, String> {
+    ) -> Result<Statement, Issue> {
         if !self.runtime_node || self.value_context != ValueContext::Outside {
             return Err(
                 "while requires a runtime body, not composition or const evaluation".into(),
@@ -1342,7 +1337,7 @@ impl Checker {
         module: &str,
         target: &Expr,
         env: &Env,
-    ) -> Result<Value, String> {
+    ) -> Result<Value, Issue> {
         if let Expr::Property(parent, _) = target
             && injected_clock(parent, env)
         {
@@ -1359,7 +1354,7 @@ impl Checker {
         target: &Expr,
         expr: &Expr,
         env: &Env,
-    ) -> Result<Statement, String> {
+    ) -> Result<Statement, Issue> {
         let binding = self.assignment_target(module, target, env)?;
         if matches!(binding.kind, Kind::Cache(_)) {
             let value = self.expression(module, expr, env, true)?;
@@ -1384,11 +1379,11 @@ impl Checker {
         target: &Expr,
         expr: &Expr,
         env: &Env,
-    ) -> Result<Statement, String> {
+    ) -> Result<Statement, Issue> {
         let target = self.assignment_target(module, target, env)?;
         let expected = hgl_local_check::assignment_type(&target, self.phase == Phase::Evaluation)?;
         let value = self.expected_expression(module, expr, env, true, Some(&expected))?;
-        hgl_local_check::assignment(target, value)
+        Ok(hgl_local_check::assignment(target, value)?)
     }
     fn conditional(
         &mut self,
@@ -1397,7 +1392,7 @@ impl Checker {
         env: &Env,
         result: &Ty,
         next_local: &mut usize,
-    ) -> Result<Statement, String> {
+    ) -> Result<Statement, Issue> {
         let condition = self.expected_expression(module, expr, env, true, Some(&Ty::Bool))?;
         if condition.ty != Ty::Bool {
             return Err("condition requires bool".into());
@@ -1426,24 +1421,24 @@ impl Checker {
         expr: &Expr,
         env: &Env,
         runtime: bool,
-    ) -> Result<Value, String> {
+    ) -> Result<Value, Issue> {
         match expr {
             Expr::Tuple(_) => self.expected_expression(module, expr, env, runtime, None),
             Expr::Sparse(_) => Err("sparse entries require a delta constructor context".into()),
             Expr::Null => Err("null requires a contextual nullable comparison".into()),
             Expr::Property(receiver, name) => {
                 if injected_clock(receiver, env) {
-                    return clock_property(receiver, name, env, runtime);
+                    return Ok(clock_property(receiver, name, env, runtime)?);
                 }
                 let parent = self.expression(module, receiver, env, runtime)?;
-                field(parent, name)
+                Ok(field(parent, name)?)
             }
             Expr::Index(receiver, index) => {
                 let parent = self.expression(module, receiver, env, runtime)?;
                 let index = self.expression(module, index, env, runtime)?;
-                hgl_value_check::indexed(parent, index)
+                Ok(hgl_value_check::indexed(parent, index)?)
             }
-            Expr::Sequence(elements) => hgl_value_check::list_literal(elements, None),
+            Expr::Sequence(elements) => Ok(hgl_value_check::list_literal(elements, None)?),
             Expr::Literal(l) => Ok(Value::new(l.ty(), Kind::Literal(l.clone()))),
             Expr::TemporalLiteral(l) if self.value_context == ValueContext::Preparation && !self.preparing_graph => Ok(Value::new(l.ty(), Kind::TemporalLiteral(l.clone()))),
             Expr::TemporalLiteral(_) => Err("contextual temporal construction requires run preparation; node-hook construction is unsupported".into()),
@@ -1454,7 +1449,7 @@ impl Checker {
                     .cloned()
                     .ok_or_else(|| format!("unknown value {name}"))?;
                 if matches!(value.kind, Kind::Void | Kind::Capability) {
-                    return Err(format!("{name}: injectable cannot escape as a value"));
+                    return Err(format!("{name}: injectable cannot escape as a value").into());
                 }
                 if self.phase != Phase::Evaluation
                     && matches!(value.kind, Kind::Input(..) | Kind::Output)
@@ -1464,7 +1459,7 @@ impl Checker {
                     } else {
                         "start"
                     };
-                    return Err(format!("{phase} cannot access temporal endpoints"));
+                    return Err(format!("{phase} cannot access temporal endpoints").into());
                 }
                 if let (Ty::Nullable(payload), Kind::Local(id)) = (&value.ty, &value.kind)
                     && self.facts.contains(&("present".into(), *id))
@@ -1498,7 +1493,7 @@ impl Checker {
         args: &[(Option<String>, Expr)],
         env: &Env,
         runtime: bool,
-    ) -> Result<Value, String> {
+    ) -> Result<Value, Issue> {
         hgl_enums::check_call(&self.library, module, name, args)?;
         if let Some((label, Expr::Name(receiver))) = args.first()
             && env
@@ -1508,23 +1503,25 @@ impl Checker {
             if label.is_some() || !runtime {
                 return Err(format!(
                     "{receiver}: capability requires a first positional runtime operand"
-                ));
+                )
+                .into());
             }
-            let values = args[1..]
-                .iter()
-                .map(|(n, e)| {
-                    let value = self.expression(module, e, env, runtime)?;
-                    require_payload(&value)?;
-                    Ok((n.clone(), value))
-                })
-                .collect::<Result<Vec<_>, String>>()?;
+            let values = hgl_endpoint_check::arguments(&args[1..], |expr| {
+                self.expression(module, expr, env, runtime)
+            })?;
             if receiver == "global_state" {
                 return self.global_operation(name, &values);
             }
             if receiver == "logger" && name == "info" {
                 return self.log_info(&values);
             }
-            return capability_function(receiver, name, &values, env, self.phase == Phase::Stop);
+            return Ok(capability_function(
+                receiver,
+                name,
+                &values,
+                env,
+                self.phase == Phase::Stop,
+            )?);
         }
         if name == "delta_value" {
             return self.delta_value(module, args, env, runtime);
@@ -1555,7 +1552,7 @@ impl Checker {
                         Some(element),
                     )?);
                 }
-                return hgl_value_check::list_operation(name, &values);
+                return Ok(hgl_value_check::list_operation(name, &values)?);
             }
         }
         if self.struct_declaration(module, name)?.is_some() {
@@ -1572,7 +1569,7 @@ impl Checker {
                 }
                 Ok((n.clone(), value))
             })
-            .collect::<Result<Vec<_>, String>>()?;
+            .collect::<Result<Vec<_>, Issue>>()?;
         for (_, value) in &args {
             hgl_value_check::helper_argument(value)?;
         }
@@ -1584,7 +1581,7 @@ impl Checker {
         args: &[(Option<String>, Expr)],
         env: &Env,
         runtime: bool,
-    ) -> Result<Value, String> {
+    ) -> Result<Value, Issue> {
         if !runtime
             || !self.runtime_node
             || self.phase != Phase::Evaluation
@@ -1594,27 +1591,9 @@ impl Checker {
             return Err("delta_value requires one runtime input endpoint in evaluation".into());
         }
         let value = self.expression(module, &args[0].1, env, runtime)?;
-        let Kind::Input(id, false) = value.kind else {
-            return Err(
-                "delta_value requires a temporal input endpoint; signal is not admitted".into(),
-            );
-        };
-        if !value.ty.publication() {
-            return Err("delta_value: unsupported publication shape".into());
-        }
-        if !["valid", "modified"]
-            .iter()
-            .all(|q| self.facts.contains(&(q.to_string(), id)))
-        {
-            return Err(
-                "delta_value requires proof that its endpoint is valid and modified".into(),
-            );
-        }
-        Ok(Value::new(
-            value.ty.clone().delta()?,
-            Kind::Query("delta_value".into(), vec![value]),
-        ))
+        Ok(hgl_delta_check::delta_value(value, &self.facts)?)
     }
+
     fn constructor(
         &mut self,
         module: &str,
@@ -1622,7 +1601,7 @@ impl Checker {
         env: &Env,
         runtime: bool,
         expected: Option<&Ty>,
-    ) -> Result<Value, String> {
+    ) -> Result<Value, Issue> {
         let name = self.type_sizes(module, name, env)?;
         if let Some(origin) = name
             .strip_prefix("delta<")
@@ -1632,7 +1611,7 @@ impl Checker {
         }
         if hgl_source::application(&name).is_some_and(|(base, _)| matches!(base, "set" | "map")) {
             let ty = hgl_value_types::concrete(&self.library, module, &name, &self.types)?;
-            return hgl_collection_check::constructor(&ty, args, |expr, ty| {
+            return hgl_collection_check::constructor_checked(&ty, args, |expr, ty| {
                 self.expected_expression(module, expr, env, runtime, Some(ty))
             });
         }
@@ -1668,7 +1647,7 @@ impl Checker {
         env: &Env,
         runtime: bool,
         expected: Option<&Ty>,
-    ) -> Result<Value, String> {
+    ) -> Result<Value, Issue> {
         let origin = hgl_value_types::concrete(&self.library, module, origin, &self.types)?;
         let ty = origin.clone().delta()?;
         if expected.is_some_and(|expected| *expected != ty) {
@@ -1694,7 +1673,7 @@ impl Checker {
         name: &str,
         args: Vec<(Option<String>, Value)>,
         runtime: bool,
-    ) -> Result<Value, String> {
+    ) -> Result<Value, Issue> {
         let (owner, item) = hgl_value_types::identity(&self.library, module, name);
         if matches!(name, "upsert" | "discard")
             || (name == "contains"
@@ -1707,17 +1686,17 @@ impl Checker {
                     .first()
                     .is_some_and(|(_, v)| matches!(v.ty, Ty::Set(_))))
         {
-            return set_call(name, &owner, &item, args);
+            return Ok(set_call(name, &owner, &item, args)?);
         }
         if matches!(
             name,
             "valid" | "modified" | "all_valid" | "last_modified" | "passivate" | "activate"
         ) {
-            return endpoint_call(name, args, runtime);
+            return Ok(endpoint_call(name, args, runtime)?);
         }
         self.call(module, name, &args, runtime)
     }
-    fn log_info(&mut self, args: &Arguments) -> Result<Value, String> {
+    fn log_info(&mut self, args: &Arguments) -> Result<Value, Issue> {
         let values = method_arguments("info(logger)", &[("value", Ty::Str)], args)?;
         let id = self
             .plan
@@ -1743,7 +1722,7 @@ impl Checker {
         operands: (&Expr, &Expr),
         env: &Env,
         runtime: bool,
-    ) -> Result<Value, String> {
+    ) -> Result<Value, Issue> {
         if matches!(operands.0, Expr::Null) || matches!(operands.1, Expr::Null) {
             if !matches!(op, "==" | "!=") {
                 return Err("null only supports nullable presence comparisons".into());
@@ -1788,7 +1767,7 @@ impl Checker {
                 b = self.wiring_value(&b)?;
             }
         }
-        hgl_local_check::binary(op, [a, b], &mut self.plan)
+        Ok(hgl_local_check::binary(op, [a, b], &mut self.plan)?)
     }
 }
 
@@ -1797,7 +1776,7 @@ fn select_eval(
     module: &str,
     name: &str,
     args: &[(Option<String>, Expr)],
-) -> Result<(Checker, EvalInputs, Arguments), String> {
+) -> Result<(Checker, EvalInputs, Arguments), Issue> {
     let (owner, item) = hgl_value_types::identity(&checker.library, module, name);
     let helpers =
         checker.library.declarations.iter().any(|d| {
@@ -1828,16 +1807,25 @@ fn select_eval(
                 ..PreparedLexicalScope::default()
             },
         );
-        match eval_arguments(&mut candidate, module, &decl.module, &signature, args) {
+        match eval_arguments(
+            &mut candidate,
+            module,
+            &decl.module,
+            &signature,
+            args,
+            &decl.source,
+        ) {
             Ok((plan, values)) => candidates.push((candidate, plan, values)),
             Err(error) => errors.push(error),
         }
     }
     if candidates.len() != 1 {
-        return Err(format!(
-            "{owner}::{item}: expected one eval signature, found {}; {}",
-            candidates.len(),
-            errors.join("; ")
+        return Err(Issue::alternatives(
+            errors,
+            format!(
+                "{owner}::{item}: expected one eval signature, found {}",
+                candidates.len()
+            ),
         ));
     }
     Ok(candidates.remove(0))
@@ -1849,7 +1837,7 @@ pub(crate) fn prepare_evaluation(
     name: &str,
     args: &[(Option<String>, Expr)],
     scope: &PreparedLexicalScope,
-) -> Result<(Plan, Vec<hgl_harness_ir::Argument>), String> {
+) -> Result<(Plan, Vec<hgl_harness_ir::Argument>), Issue> {
     let checker = test_checker(library, module, scope);
     let (mut checker, plan, mut values) = select_eval(&checker, module, name, args)?;
     let mut prepared = Vec::new();
@@ -1912,10 +1900,15 @@ pub(crate) fn prepare_evaluation(
     Ok((checker.plan, prepared))
 }
 
-fn replay_type(library: &Library, ty: &Ty) -> Result<Ty, String> {
+fn replay_type(library: &Library, ty: &Ty) -> Result<Ty, Issue> {
     let decl = hgl_value_types::declaration(library, "hgraph.std", "TimedValue")?
         .ok_or("eval requires the ordinary TimedValue declaration")?;
-    hgl_value_types::specialize(library, decl, vec![ty.clone()], &mut BTreeSet::new())
+    Ok(hgl_value_types::specialize(
+        library,
+        decl,
+        vec![ty.clone()],
+        &mut BTreeSet::new(),
+    )?)
 }
 
 type EvalInputs = Vec<Vec<Option<Value>>>;
@@ -1925,7 +1918,7 @@ fn checked_eval(
     module: &str,
     expr: &Expr,
     expected: Option<&Ty>,
-) -> Result<Value, String> {
+) -> Result<Value, Issue> {
     let mut value = if let Some(expected) = expected {
         checker.harness_expression(module, expr, expected)?
     } else {
@@ -1937,7 +1930,7 @@ fn checked_eval(
     if let Some(ty) = expected
         && value.ty != *ty
     {
-        return Err(format!("expected {}, got {}", ty.name(), value.ty.name()));
+        return Err(format!("expected {}, got {}", ty.name(), value.ty.name()).into());
     }
     Ok(value)
 }
@@ -1948,9 +1941,9 @@ pub(crate) fn prepared_expected(
     ty: &Ty,
     slots: &[Option<Expr>],
     scope: &PreparedLexicalScope,
-) -> Result<Vec<Option<Value>>, String> {
+) -> Result<Vec<Option<Value>>, Issue> {
     let mut checker = test_checker(library, module, scope);
-    hgl_eval_data::sequence(slots, Some(ty.clone()), |expr, expected| {
+    hgl_eval_data::sequence_checked(slots, Some(ty.clone()), |expr, expected| {
         checked_eval(&mut checker, module, expr, expected)
     })
     .map(|(_, slots)| slots)
@@ -1962,7 +1955,7 @@ fn eval_configuration(
     owner: &str,
     signature: &Signature,
     args: &[(Option<String>, Expr)],
-) -> Result<Arguments, String> {
+) -> Result<Arguments, Issue> {
     let mut values = Vec::new();
     for (index, (label, expr)) in args.iter().enumerate() {
         let parameter = hgl_eval_data::parameter(signature, index, label.as_deref())?;
@@ -1987,9 +1980,10 @@ fn eval_arguments(
     owner: &str,
     signature: &Signature,
     args: &[(Option<String>, Expr)],
-) -> Result<(EvalInputs, Arguments), String> {
+    source: &str,
+) -> Result<(EvalInputs, Arguments), Issue> {
     let configuration = eval_configuration(checker, module, owner, signature, args)?;
-    let signature = checker.signature_sizes(owner, signature.clone(), &configuration)?;
+    let signature = checker.signature_sizes(owner, signature.clone(), &configuration, source)?;
     let mut plan = Vec::new();
     let mut values = Vec::new();
     for (position, (label, expr)) in args.iter().enumerate() {
@@ -2003,7 +1997,7 @@ fn eval_arguments(
             if parameter.constant {
                 return Err("const parameter requires a fixed value".into());
             }
-            let (ty, slots) = hgl_eval_data::sequence(ticks, hint, |expr, expected| {
+            let (ty, slots) = hgl_eval_data::sequence_checked(ticks, hint, |expr, expected| {
                 checked_eval(checker, module, expr, expected)
             })?;
             let index = plan.len();
@@ -2035,35 +2029,6 @@ fn eval_arguments(
     Ok((plan, values))
 }
 
-fn inject_capability(name: &str, node: &mut Node, env: &mut Env) -> Result<(), String> {
-    let ty = Ty::Void;
-    node.alarm |= name == "alarm";
-    node.global_state |= name == "global_state";
-    if env
-        .insert(name.into(), Value::new(ty, Kind::Capability))
-        .is_some()
-    {
-        return Err(format!(
-            "{name}: injectable conflicts with an existing binding"
-        ));
-    }
-    Ok(())
-}
-
-fn node_guard(node: &Node, expr: Expr) -> Expr {
-    if node.inputs.iter().all(|(_, _, ty)| ty.publication()) {
-        expr.handler_guard(
-            &node
-                .inputs
-                .iter()
-                .map(|(n, _, _)| n.clone())
-                .collect::<Vec<_>>(),
-        )
-    } else {
-        expr
-    }
-}
-
 #[cfg(test)]
 #[path = "../tests/support/nullable.rs"]
 mod nullable_tests;
@@ -2081,17 +2046,17 @@ impl hgl_harness_check::Check for TestChecker {
         &mut self,
         statement: &Stmt,
         scope: &mut PreparedLexicalScope,
-    ) -> Result<Statement, String> {
+    ) -> Result<Statement, Issue> {
         prepared_statement(self.library.clone(), &self.module, statement, scope)
     }
-    fn boolean(&mut self, expr: &Expr, scope: &PreparedLexicalScope) -> Result<Value, String> {
+    fn boolean(&mut self, expr: &Expr, scope: &PreparedLexicalScope) -> Result<Value, Issue> {
         prepared_assertion(self.library.clone(), &self.module, expr, scope)
     }
     fn evaluation(
         &mut self,
         call: &hgl_eval_data::Evaluation,
         scope: &PreparedLexicalScope,
-    ) -> Result<(Plan, Vec<hgl_harness_ir::Argument>), String> {
+    ) -> Result<(Plan, Vec<hgl_harness_ir::Argument>), Issue> {
         prepare_evaluation(
             self.library.clone(),
             &self.module,
@@ -2105,7 +2070,36 @@ impl hgl_harness_check::Check for TestChecker {
         ty: &Ty,
         slots: &[Option<Expr>],
         scope: &PreparedLexicalScope,
-    ) -> Result<Vec<Option<Value>>, String> {
+    ) -> Result<Vec<Option<Value>>, Issue> {
         prepared_expected(self.library.clone(), &self.module, ty, slots, scope)
     }
+}
+
+pub(crate) fn validate_declaration(library: Library, decl: &Decl) -> Result<(), Issue> {
+    if decl.role == Role::Test {
+        return hgl_harness_check::block(
+            hgl_eval_data::steps_checked(&decl.tokens)?,
+            &mut PreparedLexicalScope::default(),
+            &mut Vec::new(),
+            &mut TestChecker {
+                library,
+                module: decl.module.clone(),
+            },
+        )
+        .map(|_| ());
+    }
+    let Some(signature) = hgl_source_check::concrete_signature(decl)? else {
+        return Ok(());
+    };
+    let mut checker = Checker {
+        library,
+        test_scope: decl.test_only.then(|| decl.module.clone()),
+        ..Checker::default()
+    };
+    let signature = checker.signature_sizes(&decl.module, signature, &[], &decl.source)?;
+    if decl.role == Role::Function && signature.parameters.is_empty() && !signature.body.is_empty()
+    {
+        checker.call(&decl.module, &decl.name, &[], false)?;
+    }
+    Ok(())
 }

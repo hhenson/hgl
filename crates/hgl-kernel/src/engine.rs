@@ -56,9 +56,7 @@ pub fn run_simulation(
         cycles += 1;
     }
     let stopped = graph.stop(store, now);
-    if outcome.is_ok() {
-        outcome = stopped;
-    }
+    outcome = hgl_types::finish(outcome, stopped);
     match outcome {
         Ok(()) => Ok(cycles),
         Err(error) => Err(EngineError::Node(error)),

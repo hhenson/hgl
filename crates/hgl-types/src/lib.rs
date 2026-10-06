@@ -9,9 +9,7 @@ pub use hgl_time_values::{
 };
 pub use hgl_window_types::{Window, WindowKind};
 
-/// A node's position in its graph's rank order.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct NodeId(pub u32);
+pub use hgl_node_error::{NodeError, NodeId, NodeResult, Phase, finish};
 
 /// The type of one scalar value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -316,52 +314,6 @@ impl NodeType {
             // Neither follows the oracle: hgraph's `static_node.h`, `node_kind`.
             (true, true) | (false, false) => NodeKind::Compute,
         }
-    }
-}
-
-/// Shared translated errors for hooks and typed capability operations. The
-/// default unit hook result occupies one word because its error is boxed.
-pub type NodeResult<T = ()> = Result<T, Box<NodeError>>;
-
-/// Which hook was running.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Phase {
-    /// The start hook.
-    Start,
-    /// The evaluation hook.
-    Eval,
-    /// The stop hook.
-    Stop,
-}
-
-/// A failure that left a node: which node, in which hook, and why.
-#[derive(Debug, Clone, PartialEq)]
-pub struct NodeError {
-    /// The failing node's rank.
-    pub node: NodeId,
-    /// The failing node's label.
-    pub label: String,
-    /// The hook that failed.
-    pub phase: Phase,
-    /// Why, in the node's words.
-    pub message: String,
-}
-
-impl NodeError {
-    /// A failure with only its message. A node does not know where it sits:
-    /// the graph fills in `node`, `label` and `phase` as the failure leaves
-    /// the hook.
-    #[expect(
-        clippy::unnecessary_box_returns,
-        reason = "a NodeResult carries its error boxed, so a node writes `Err(NodeError::new(..))`"
-    )]
-    pub fn new(message: impl Into<String>) -> Box<Self> {
-        Box::new(Self {
-            node: NodeId(0),
-            label: String::new(),
-            phase: Phase::Eval,
-            message: message.into(),
-        })
     }
 }
 

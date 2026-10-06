@@ -21,3 +21,5 @@ are rejected before emission; new structural publication shapes do not implicitl
 Structural input valid/modified/last_modified observations remain admitted.
 Acceptance includes all fixed-list/map/tuple/nominal shapes for these boundaries,
 plus the existing scalar operation and structural input observation paths.
+
+inject_capability binds declared capabilities to the lexical environment. arguments evaluates capability operands in source order through a typed Issue callback and checks payload access.

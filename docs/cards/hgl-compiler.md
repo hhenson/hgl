@@ -79,3 +79,9 @@ admitted.
 `hglc emit-tests FILE [--part FILE] [--library DIR] --out FILE` checks source
 unit tests through hgl-program and emits their Rust executable. Execution and
 native-provider packaging are currently supplied by `tools/test_hgl.py`.
+
+May use hgl-source-check and hgl-test-runner. The CLI shares declaration-wide
+source admission before the existing standalone checker, retaining its broader
+syntax-only service admission; library compilation continues through hgl-program.
+`hglc test` runs executable tests alongside annotation-owned source rejection
+cases; rejected owners are checked independently and never executed.

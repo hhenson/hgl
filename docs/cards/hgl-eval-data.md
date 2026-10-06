@@ -74,3 +74,13 @@ child trace state, and a later exact-key insertion begins fresh.
 Fresh growing-list state tracks dense child membership. Before applying children, hgl-growing-range validates complete tail removal and contiguous append; removed descendants are discarded before retained child updates. Errors retain the first bad input position.
 
 Publication sequence validation delegates to hgl-publication-trace through the existing validate reexport.
+
+TestStep::Raises(String, Vec<TestStep>) parses the normative literal-code assertion and recursively parses its lexical block.
+
+steps_checked and statement return structured Issue diagnostics. Test parser
+rejects forbidden phase statements at their keyword and rejects computed,
+parenthesized or unknown raises codes at the original argument. Execution
+identity comes from hgl-diagnostics, an allowed dependency. steps retains its
+String compatibility boundary; no matching uses message text.
+
+sequence_checked preserves typed Issue failures through its callback and returns Issue; sequence adapts existing String callbacks.

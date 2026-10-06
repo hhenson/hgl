@@ -15,6 +15,10 @@ pub(crate) fn sources(main: &str) -> Vec<(String, String)> {
             std::fs::read_to_string(root.join("examples/stdlib-const-debug/rust.hgl")).unwrap(),
         ),
     ];
+    out.push((
+        "backend-interfaces.hgl".into(),
+        std::fs::read_to_string(root.join("native/stdlib/interfaces.hgl")).unwrap(),
+    ));
     collect(&root.join("external/hgraph_std/hgl/hgraph"), &mut out);
     out
 }

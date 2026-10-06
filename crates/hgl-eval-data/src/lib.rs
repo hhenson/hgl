@@ -1,7 +1,7 @@
 //! Closed ordinary replay data and pre-start publication admission.
 pub use hgl_publication_trace::validate;
 use hgl_rust_ir::{Kind, Value};
-use hgl_source::{Expr, Literal, Ty};
+use hgl_source::{Expr, Issue, Literal, Ty};
 use std::collections::{BTreeMap, BTreeSet};
 /// Turn present dense slots into owned ordinary timed entries; absence adds no data.
 pub fn timed(entry_type: Ty, slots: &[Option<Value>]) -> Result<Value, String> {
@@ -33,9 +33,18 @@ pub fn timed(entry_type: Ty, slots: &[Option<Value>]) -> Result<Value, String> {
 /// Contextually check dense input cells without turning silence into a value.
 pub fn sequence(
     ticks: &[Option<Expr>],
-    mut ty: Option<Ty>,
+    ty: Option<Ty>,
     mut check: impl FnMut(&Expr, Option<&Ty>) -> Result<Value, String>,
 ) -> Result<(Ty, Vec<Option<Value>>), String> {
+    sequence_checked(ticks, ty, |expr, ty| check(expr, ty).map_err(Issue::from))
+        .map_err(String::from)
+}
+/// Check dense cells while preserving source-origin failures from the checker.
+pub fn sequence_checked(
+    ticks: &[Option<Expr>],
+    mut ty: Option<Ty>,
+    mut check: impl FnMut(&Expr, Option<&Ty>) -> Result<Value, Issue>,
+) -> Result<(Ty, Vec<Option<Value>>), Issue> {
     let mut slots = Vec::new();
     for expr in ticks {
         let value = if let Some(expr) = expr {
@@ -106,7 +115,7 @@ impl Scope {
     }
 }
 /// Parse one ordinary setup statement without consuming subsequent assertions.
-pub fn statement(cursor: &mut hgl_source::Cursor<'_>) -> Result<hgl_source::Stmt, String> {
+pub fn statement(cursor: &mut hgl_source::Cursor<'_>) -> Result<hgl_source::Stmt, Issue> {
     use hgl_source::Stmt;
     if cursor.at("let") || cursor.at("var") {
         let mutable = cursor.consume()? == "var";
@@ -227,6 +236,8 @@ pub fn parameter<'a>(
 /// One parsed lexical test operation, without name or type resolution.
 #[derive(Debug)]
 pub enum TestStep {
+    /// A literal stable execution code and one lexical test block.
+    Raises(String, Vec<Self>),
     /// Ordinary setup statement.
     Ordinary(hgl_source::Stmt),
     /// Ordinary boolean assertion expression.
@@ -240,12 +251,16 @@ pub enum TestStep {
 }
 /// Parse a test declaration's ordered setup, assertions and eval calls.
 pub fn steps(tokens: &[hgl_source::Token]) -> Result<Vec<TestStep>, String> {
+    steps_checked(tokens).map_err(String::from)
+}
+/// Parse test syntax with original locations and catalogued static failures.
+pub fn steps_checked(tokens: &[hgl_source::Token]) -> Result<Vec<TestStep>, Issue> {
     let mut cursor = hgl_source::Cursor::new(tokens);
     cursor.need("test")?;
     cursor.name()?;
     step_block(&mut cursor)
 }
-fn step_block(cursor: &mut hgl_source::Cursor<'_>) -> Result<Vec<TestStep>, String> {
+fn step_block(cursor: &mut hgl_source::Cursor<'_>) -> Result<Vec<TestStep>, Issue> {
     cursor.need("{")?;
     cursor.lines();
     let mut steps = Vec::new();
@@ -255,7 +270,18 @@ fn step_block(cursor: &mut hgl_source::Cursor<'_>) -> Result<Vec<TestStep>, Stri
     }
     Ok(steps)
 }
-fn step(cursor: &mut hgl_source::Cursor<'_>) -> Result<TestStep, String> {
+fn step(cursor: &mut hgl_source::Cursor<'_>) -> Result<TestStep, Issue> {
+    if matches!(
+        cursor.peek(),
+        "state" | "cache" | "inject" | "start" | "when" | "stop" | "yield" | "return"
+    ) {
+        return Err(Issue::coded(
+            "phase",
+            "test.statement_phase",
+            cursor.span(),
+            "statement is unavailable inside a test",
+        ));
+    }
     if cursor.take("if") {
         let condition = cursor.expr()?;
         let yes = step_block(cursor)?;
@@ -288,6 +314,29 @@ fn step(cursor: &mut hgl_source::Cursor<'_>) -> Result<TestStep, String> {
         return Ok(TestStep::Ordinary(ordinary));
     }
     let assertion = cursor.take("assert");
+    if assertion && cursor.take("raises") {
+        cursor.need("(")?;
+        let start = cursor.pos;
+        let span = cursor.span();
+        let expression = cursor.expr()?;
+        let literal_form = cursor.pos == start + 1;
+        cursor.need(")")?;
+        let failure = || {
+            Issue::coded(
+                "type",
+                "test.raises_code",
+                span.clone(),
+                "raises requires one literal catalogued execution code",
+            )
+        };
+        let Expr::Literal(Literal::Str(code)) = expression else {
+            return Err(failure());
+        };
+        if !literal_form || !hgl_diagnostics::EXECUTION_CODES.contains(&code.as_str()) {
+            return Err(failure());
+        }
+        return Ok(TestStep::Raises(code, step_block(cursor)?));
+    }
     let expr = cursor.expr()?;
     let eval = matches!(&expr,Expr::Binary(_,left,_) if matches!(left.as_ref(),Expr::Call(name,_) if name=="eval"));
     if assertion && !eval {

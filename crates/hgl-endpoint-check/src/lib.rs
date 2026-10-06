@@ -189,3 +189,35 @@ pub fn capability_function(
         Kind::Query(format!("{receiver}.{method}"), values),
     ))
 }
+
+/// Bind one declared node capability without allowing a local collision.
+pub fn inject_capability(
+    name: &str,
+    node: &mut hgl_rust_ir::Node,
+    env: &mut Env,
+) -> Result<(), hgl_source::Issue> {
+    let ty = Ty::Void;
+    node.alarm |= name == "alarm";
+    node.global_state |= name == "global_state";
+    if env
+        .insert(name.into(), Value::new(ty, Kind::Capability))
+        .is_some()
+    {
+        return Err(format!("{name}: injectable conflicts with an existing binding").into());
+    }
+    Ok(())
+}
+
+/// Check capability operands once in source order, retaining typed failures.
+pub fn arguments(
+    args: &[(Option<String>, Expr)],
+    mut check: impl FnMut(&Expr) -> Result<Value, hgl_source::Issue>,
+) -> Result<Arguments, hgl_source::Issue> {
+    args.iter()
+        .map(|(name, expr)| {
+            let value = check(expr)?;
+            require_payload(&value)?;
+            Ok((name.clone(), value))
+        })
+        .collect()
+}

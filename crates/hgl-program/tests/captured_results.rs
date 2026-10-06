@@ -61,7 +61,7 @@ assert last==null || positive(last)
 assert first!=null && first==0",
         true,
         1,
-        "1 tests, 8 evaluations, 0 failures",
+        "1 executed tests, 8 evaluations, 0 failures",
     ),
     (
         "scope",
@@ -77,7 +77,7 @@ if false {let invalid=@[Missing/Skipped]; eval(identity,[3]); assert false}
 else if true {assert true} else {assert false}",
         true,
         2,
-        "1 tests, 6 evaluations, 0 failures",
+        "1 executed tests, 6 evaluations, 0 failures",
     ),
     (
         "false_payload",

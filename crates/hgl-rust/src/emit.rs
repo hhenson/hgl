@@ -565,7 +565,7 @@ pub fn emit_prepared_test_body(plan: &Plan) -> String {
     let plan = &normalized;
     let legacy = emit_test_body(plan, None);
     let adapters = legacy.split("pub fn test()").next().unwrap_or_default();
-    let mut out=vec![adapters.into(),"pub fn run(prepared:hgl_harness_ir::PreparedEval)->Result<hgl_harness_ir::CapturedEval,String> {\nlet mut registry=hgl_describe::Registry::new();\n".into()];
+    let mut out=vec![adapters.into(),"pub fn run(prepared:hgl_harness_ir::PreparedEval)->Result<hgl_harness_ir::CapturedEval,hgl_harness_ir::Failure> {\nlet mut registry=hgl_describe::Registry::new();\n".into()];
     if plan.construction_error.is_some() {
         out.push("register(&mut registry).map_err(|e|format!(\"{e:?}\"))?; main(&registry).map_err(|e|format!(\"{e:?}\"))?; Ok(hgl_harness_ir::CapturedEval {length:prepared.input_length,ticks:Vec::new()}) }\n".into());
         return out.concat();
@@ -576,7 +576,7 @@ pub fn emit_prepared_test_body(plan: &Plan) -> String {
     if let Some((key, ty)) = &plan.recording {
         out.push(format!("let recording=store.global_state().bind::<{}>({key:?}).map_err(|e|format!(\"{{e:?}}\"))?;\n",global_type(ty)));
     }
-    out.push("store.prepare_collection_inputs();hgl_kernel::run_simulation(&mut built.graph,&mut store,&hgl_kernel::RunConfig {start_time:hgl_types::EngineTime::MIN_START,end_time:hgl_types::EngineTime::MAX_END}).map_err(|e|format!(\"{e:?}\"))?;\n".into());
+    out.push("store.prepare_collection_inputs();hgl_kernel::run_simulation(&mut built.graph,&mut store,&hgl_kernel::RunConfig {start_time:hgl_types::EngineTime::MIN_START,end_time:hgl_types::EngineTime::MAX_END}).map_err(|e|match e {hgl_kernel::EngineError::Node(e)=>hgl_harness_ir::Failure::Execution(e),hgl_kernel::EngineError::BadTimes=>hgl_harness_ir::Failure::Other(\"invalid run times\".into())})?;\n".into());
     if let Some((_, ty)) = &plan.output {
         let payload = ty
             .clone()

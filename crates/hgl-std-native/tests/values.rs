@@ -48,3 +48,20 @@ fn float_text_keeps_python_exponent_spelling() {
         assert_eq!(hgl_std_native::as_str_f64(value), text);
     }
 }
+
+#[test]
+fn midnight_preserves_utc_date_at_epoch_leap_day_and_calendar_limits() {
+    for day in [
+        "0001-01-01",
+        "1969-12-31",
+        "1970-01-01",
+        "2024-02-29",
+        "9999-12-31",
+    ] {
+        let date = hgl_calendar::date(day).unwrap();
+        let expected = hgl_calendar::offset_datetime(&format!("{day}T00:00:00Z"))
+            .unwrap()
+            .0;
+        assert_eq!(hgl_std_native::midnight_date(date), expected);
+    }
+}

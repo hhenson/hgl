@@ -11,3 +11,4 @@ workspace = true
 [dependencies]
 hgl-source = { path = "../hgl-source" }
 hgl-struct-declarations = { path = "../hgl-struct-declarations" }
+hgl-diagnostics = { path = "../hgl-diagnostics" }
