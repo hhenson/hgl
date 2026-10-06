@@ -1,6 +1,8 @@
 //! Statically specialized sparse delta construction, observation and publication.
 use hgl_rust_ir::{DeltaEntry, Kind, Plan, Statement, Value};
-use hgl_rust_layouts::{delta_storage, delta_type, global_type, owned_type, rust_type};
+use hgl_rust_layouts::{
+    delta_storage, delta_type, global_type, owned_type, rust_type, whole_payload,
+};
 use hgl_source::Ty;
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
@@ -26,21 +28,28 @@ fn identity(ty: &Ty) -> String {
 /// Compile-time marker for one exact prepared temporal shape.
 pub fn shape_marker(ty: &Ty) -> String {
     match ty {
+        Ty::Rolling(..) => hgl_rust_windows::marker(ty),
+        Ty::Enum(_) => format!("hgl_store::shapes::Atomic<{}>", global_type(ty)),
         Ty::Atomic(payload) => format!("hgl_store::shapes::Atomic<{}>", global_type(payload)),
+        Ty::List(child, None) => format!("hgl_store::shapes::Growing<{}>", shape_marker(child)),
         Ty::List(child, Some(n)) => {
             format!("hgl_store::shapes::Fixed<{}, {n}>", shape_marker(child))
         }
-        Ty::Map(_, child) => format!("hgl_store::shapes::Map<{}>", shape_marker(child)),
-        Ty::Set(key) => format!("hgl_store::shapes::Set<{}>", rust_type(key)),
+        Ty::Map(key, child) => format!(
+            "hgl_store::shapes::Map<{},{}>",
+            shape_marker(child),
+            global_type(key)
+        ),
+        Ty::Set(key) => format!("hgl_store::shapes::Set<{}>", global_type(key)),
         Ty::Tuple(_) | Ty::Struct(..) => format!("Shape{}", identity(ty)),
         Ty::Delta(_)
-        | Ty::List(..)
         | Ty::I64
         | Ty::F64
         | Ty::Bool
         | Ty::Str
         | Ty::CivilDateTime
         | Ty::TimeZone
+        | Ty::ZonedTime
         | Ty::ZonedDateTime
         | Ty::Duration
         | Ty::Date
@@ -48,6 +57,8 @@ pub fn shape_marker(ty: &Ty) -> String {
         | Ty::DateTime
         | Ty::Ref(_)
         | Ty::Nullable(_)
+        | Ty::Recursive(_)
+        | Ty::Family(_)
         | Ty::Void => rust_type(ty).into(),
     }
 }
@@ -56,15 +67,26 @@ fn operations(ty: &Ty) -> String {
 }
 /// Emit publication of an already retained owning payload.
 pub fn publish(ty: &Ty, payload: &str) -> String {
+    if matches!(
+        ty,
+        Ty::Enum(_)
+            | Ty::Recursive(_)
+            | Ty::Family(_)
+            | Ty::List(..)
+            | Ty::Set(_)
+            | Ty::Map(..)
+            | Ty::Tuple(_)
+            | Ty::Struct(..)
+    ) {
+        return format!(
+            "_ctx.set_atomic::<{}>(self._output,{payload})?;",
+            global_type(ty)
+        );
+    }
     if let Ty::Delta(origin) = ty {
         format!(
             "{}::apply(self._output,{payload},_ctx)?;",
             operations(origin)
-        )
-    } else if matches!(ty, Ty::List(..) | Ty::Tuple(_) | Ty::Struct(..)) {
-        format!(
-            "_ctx.set_atomic::<{}>(self._output,{payload})?;",
-            global_type(ty)
         )
     } else {
         format!("_ctx.set(self._output,{payload});")
@@ -72,6 +94,9 @@ pub fn publish(ty: &Ty, payload: &str) -> String {
 }
 /// Retain exactly the sparse current observation of a prepared input token.
 pub fn observe(ty: &Ty, input: &str) -> String {
+    if matches!(ty, Ty::Enum(_)) {
+        return read(ty, input);
+    }
     let Ty::Delta(origin) = ty else {
         unreachable!("structural observation")
     };
@@ -86,7 +111,10 @@ pub fn equivalent(ty: &Ty, left: &str, right: &str) -> String {
     }
 }
 fn read(ty: &Ty, input: &str) -> String {
-    if let Ty::Atomic(payload) = ty {
+    if matches!(ty, Ty::Rolling(..)) {
+        return hgl_rust_windows::read(ty, input);
+    }
+    if let Some(payload) = whole_payload(ty) {
         return format!(
             "_ctx.store().atomic_get::<{}>({input})?",
             global_type(payload)
@@ -101,7 +129,10 @@ fn read(ty: &Ty, input: &str) -> String {
     }
 }
 fn apply(ty: &Ty, output: &str, payload: &str) -> String {
-    if let Ty::Atomic(ty) = ty {
+    if matches!(ty, Ty::Rolling(..)) {
+        return hgl_rust_windows::apply(ty, output, payload);
+    }
+    if let Some(ty) = whole_payload(ty) {
         return format!(
             "_ctx.set_atomic::<{}>({output},{payload})?;",
             global_type(ty)
@@ -114,7 +145,13 @@ fn apply(ty: &Ty, output: &str, payload: &str) -> String {
     }
 }
 fn allocation(ty: &Ty) -> String {
-    if let Ty::Atomic(payload) = ty {
+    if matches!(ty, Ty::Rolling(..)) {
+        return format!(
+            "store.add_shaped_output(owner,<{} as hgl_store::shapes::Shape>::shape())",
+            shape_marker(ty)
+        );
+    }
+    if let Some(payload) = whole_payload(ty) {
         return format!("store.add_atomic_output::<{}>(owner)", global_type(payload));
     }
     if structural(ty) {
@@ -124,32 +161,16 @@ fn allocation(ty: &Ty) -> String {
     }
 }
 fn children(ty: &Ty) -> Vec<&Ty> {
-    match ty {
-        Ty::Struct(_, fields) => fields.iter().map(|(_, t)| t).collect(),
-        Ty::Tuple(children) => children.iter().collect(),
-        Ty::Atomic(_)
-        | Ty::Map(..)
-        | Ty::Delta(_)
-        | Ty::List(..)
-        | Ty::I64
-        | Ty::F64
-        | Ty::Bool
-        | Ty::Str
-        | Ty::CivilDateTime
-        | Ty::TimeZone
-        | Ty::ZonedDateTime
-        | Ty::Duration
-        | Ty::Date
-        | Ty::Time
-        | Ty::DateTime
-        | Ty::Ref(_)
-        | Ty::Set(_)
-        | Ty::Nullable(_)
-        | Ty::Void => vec![],
+    if let Ty::Struct(_, fields, _) = ty {
+        return fields.iter().map(|(_, t)| t).collect();
     }
+    if let Ty::Tuple(children) = ty {
+        return children.iter().collect();
+    }
+    Vec::new()
 }
 fn empty(ty: &Ty) -> String {
-    let Ty::Struct(_, fields) = delta_storage(ty) else {
+    let Ty::Struct(_, fields, _) = delta_storage(ty) else {
         unreachable!()
     };
     if fields.is_empty() {
@@ -162,11 +183,7 @@ fn reserve(target: &str) -> String {
     format!("{target}.try_reserve(1).map_err(|e|hgl_types::NodeError::new(e.to_string()))?;")
 }
 /// Preserve written constructor entry order before assembling sparse storage.
-pub fn construct(
-    value: &Value,
-    emit: impl Fn(&Value) -> String,
-    literal: impl Fn(&hgl_source::Literal) -> String,
-) -> String {
+pub fn construct(value: &Value, emit: impl Fn(&Value) -> String) -> String {
     let Ty::Delta(origin) = &value.ty else {
         unreachable!()
     };
@@ -183,16 +200,22 @@ pub fn construct(
             DeltaEntry::Add(key) | DeltaEntry::Remove(key) => {
                 let slot = if matches!(entry, DeltaEntry::Add(_)) {
                     0
-                } else if matches!(origin.as_ref(), Ty::Map(..)) {
+                } else if matches!(origin.as_ref(), Ty::Map(..) | Ty::List(_, None)) {
                     2
                 } else {
                     1
                 };
                 code += &reserve(&format!("delta.{slot}"));
+                append(&mut code, format_args!("delta.{slot}.push({});", emit(key)));
+            }
+            DeltaEntry::Keyed(key, value) => {
                 append(
                     &mut code,
-                    format_args!("delta.{slot}.push({});", literal(key)),
+                    format_args!("let key={};let child={};", emit(key), emit(value)),
                 );
+                code += &reserve("delta.0");
+                code += &reserve("delta.1");
+                code += "delta.0.push(key);delta.1.push(child);";
             }
             DeltaEntry::Child(key, value) => {
                 append(&mut code, format_args!("let child = {};", emit(value)));
@@ -245,46 +268,32 @@ fn origin(ty: &Ty, types: &mut BTreeSet<Ty>) {
         return;
     }
     types.insert(ty.clone());
-    match ty {
-        Ty::List(child, _) | Ty::Set(child) | Ty::Map(_, child) => origin(child, types),
-        Ty::Struct(_, fields) => {
-            for (_, child) in fields {
-                origin(child, types);
-            }
+    if let Ty::List(child, _) | Ty::Map(_, child) = ty {
+        origin(child, types);
+    }
+    if let Ty::Struct(_, fields, _) = ty {
+        for (_, child) in fields {
+            origin(child, types);
         }
-        Ty::Tuple(children) => {
-            for child in children {
-                origin(child, types);
-            }
+    }
+    if let Ty::Tuple(children) = ty {
+        for child in children {
+            origin(child, types);
         }
-        Ty::Atomic(_)
-        | Ty::Delta(_)
-        | Ty::I64
-        | Ty::F64
-        | Ty::Bool
-        | Ty::Str
-        | Ty::CivilDateTime
-        | Ty::TimeZone
-        | Ty::ZonedDateTime
-        | Ty::Duration
-        | Ty::Date
-        | Ty::Time
-        | Ty::DateTime
-        | Ty::Ref(_)
-        | Ty::Nullable(_)
-        | Ty::Void => {}
     }
 }
+
 fn collect(ty: &Ty, types: &mut BTreeSet<Ty>) {
     match ty {
         Ty::Delta(ty) => origin(ty, types),
         Ty::List(child, _) => collect(child, types),
-        Ty::Struct(_, fields) => {
+        Ty::Struct(_, fields, _) => {
             for (_, child) in fields {
                 collect(child, types);
             }
         }
-        Ty::Atomic(_)
+        Ty::Rolling(..)
+        | Ty::Atomic(_)
         | Ty::Map(..)
         | Ty::Tuple(_)
         | Ty::I64
@@ -293,6 +302,8 @@ fn collect(ty: &Ty, types: &mut BTreeSet<Ty>) {
         | Ty::Str
         | Ty::CivilDateTime
         | Ty::TimeZone
+        | Ty::Enum(_)
+        | Ty::ZonedTime
         | Ty::ZonedDateTime
         | Ty::Duration
         | Ty::Date
@@ -301,6 +312,8 @@ fn collect(ty: &Ty, types: &mut BTreeSet<Ty>) {
         | Ty::Ref(_)
         | Ty::Set(_)
         | Ty::Nullable(_)
+        | Ty::Recursive(_)
+        | Ty::Family(_)
         | Ty::Void => {}
     }
 }
@@ -335,7 +348,7 @@ fn values(value: &Value, types: &mut BTreeSet<Ty>) {
     match &value.kind {
         Kind::Delta(entries) => {
             for entry in entries {
-                if let DeltaEntry::Child(_, v) = entry {
+                for v in entry.operands() {
                     values(v, types);
                 }
             }
@@ -381,9 +394,15 @@ fn values(value: &Value, types: &mut BTreeSet<Ty>) {
         | Kind::Output
         | Kind::Capability
         | Kind::TemporalLiteral(_)
+        | Kind::Captured(..)
         | Kind::Prepared(_)
         | Kind::Void => {}
     }
 }
 mod emit;
 use emit::marker;
+
+/// Whether endpoint handles carry an exact prepared shape rather than a scalar column.
+pub fn shaped(ty: &Ty) -> bool {
+    structural(ty) || whole_payload(ty).is_some() || matches!(ty, Ty::Rolling(..))
+}

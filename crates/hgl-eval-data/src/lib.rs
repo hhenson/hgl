@@ -1,87 +1,8 @@
 //! Closed ordinary replay data and pre-start publication admission.
-use hgl_rust_ir::{DeltaEntry, Kind, Value};
+pub use hgl_publication_trace::validate;
+use hgl_rust_ir::{Kind, Value};
 use hgl_source::{Expr, Literal, Ty};
 use std::collections::{BTreeMap, BTreeSet};
-#[derive(Default)]
-struct State {
-    members: BTreeSet<i64>,
-    children: BTreeMap<i64, Self>,
-}
-/// Validate sparse publications from a fresh endpoint, preserving prior membership.
-pub fn validate(shape: &Ty, slots: &[Option<Value>]) -> Result<(), (usize, String)> {
-    let mut state = State::default();
-    for (index, value) in slots.iter().enumerate() {
-        if let Some(value) = value {
-            state.apply(shape, value).map_err(|error| (index, error))?;
-        }
-    }
-    Ok(())
-}
-impl State {
-    fn apply(&mut self, shape: &Ty, value: &Value) -> Result<(), String> {
-        let Kind::Delta(parts) = &value.kind else {
-            return Ok(());
-        };
-        if parts.is_empty() {
-            return Err("empty structural publication".into());
-        }
-        for part in parts {
-            match (shape, part) {
-                (Ty::Set(_), DeltaEntry::Add(member)) => {
-                    if !self.members.insert(key(member)) {
-                        return Err("set addition is already present".into());
-                    }
-                }
-                (Ty::Set(_), DeltaEntry::Remove(member)) => {
-                    if !self.members.remove(&key(member)) {
-                        return Err("set removal is absent".into());
-                    }
-                }
-                (Ty::Map(..), DeltaEntry::Remove(member)) => {
-                    if self.children.remove(&key(member)).is_none() {
-                        return Err("map removal is absent".into());
-                    }
-                }
-                (Ty::Map(_, child) | Ty::List(child, _), DeltaEntry::Child(index, value)) => self
-                    .children
-                    .entry(*index)
-                    .or_default()
-                    .apply(child, value)?,
-                (Ty::Tuple(children), DeltaEntry::Child(index, value)) => {
-                    let index = usize::try_from(*index).map_err(|e| e.to_string())?;
-                    self.children
-                        .entry(i64::try_from(index).map_err(|e| e.to_string())?)
-                        .or_default()
-                        .apply(&children[index], value)?;
-                }
-                (Ty::Struct(_, fields), DeltaEntry::Child(index, value)) => {
-                    let position = usize::try_from(*index).map_err(|e| e.to_string())?;
-                    self.children
-                        .entry(*index)
-                        .or_default()
-                        .apply(&fields[position].1, value)?;
-                }
-                _ => return Err("delta does not match its checked publication shape".into()),
-            }
-        }
-        Ok(())
-    }
-}
-fn key(value: &Literal) -> i64 {
-    match value {
-        Literal::Int(value) => *value,
-        Literal::Bool(value) => i64::from(*value),
-        Literal::Float(_)
-        | Literal::Str(_)
-        | Literal::Date(_)
-        | Literal::Time(_)
-        | Literal::DateTime(_)
-        | Literal::CivilDateTime(_)
-        | Literal::TimeZone(_)
-        | Literal::ZonedDateTime(_)
-        | Literal::Duration(_) => unreachable!("checked set member or map key"),
-    }
-}
 /// Turn present dense slots into owned ordinary timed entries; absence adds no data.
 pub fn timed(entry_type: Ty, slots: &[Option<Value>]) -> Result<Value, String> {
     let mut entries = Vec::new();
@@ -312,29 +233,66 @@ pub enum TestStep {
     Assert(Expr),
     /// Eval call with optional dense expected values.
     Eval(Evaluation),
+    /// Inferred immutable binding of the returned dense logical sequence.
+    BindEval(String, Evaluation),
+    /// Lexical branches containing setup, assertions and graph runs.
+    If(Expr, Vec<Self>, Vec<Self>),
 }
 /// Parse a test declaration's ordered setup, assertions and eval calls.
 pub fn steps(tokens: &[hgl_source::Token]) -> Result<Vec<TestStep>, String> {
     let mut cursor = hgl_source::Cursor::new(tokens);
     cursor.need("test")?;
     cursor.name()?;
+    step_block(&mut cursor)
+}
+fn step_block(cursor: &mut hgl_source::Cursor<'_>) -> Result<Vec<TestStep>, String> {
     cursor.need("{")?;
     cursor.lines();
     let mut steps = Vec::new();
     while !cursor.take("}") {
-        if !cursor.at("assert") && !cursor.at("eval") {
-            steps.push(TestStep::Ordinary(statement(&mut cursor)?));
-        } else {
-            let assertion = cursor.take("assert");
-            let expr = cursor.expr()?;
-            let eval = matches!(&expr,Expr::Binary(_,left,_) if matches!(left.as_ref(),Expr::Call(name,_) if name=="eval"));
-            steps.push(if assertion && !eval {
-                TestStep::Assert(expr)
-            } else {
-                TestStep::Eval(evaluation(expr, assertion)?)
-            });
-        }
+        steps.push(step(cursor)?);
         cursor.lines();
     }
     Ok(steps)
+}
+fn step(cursor: &mut hgl_source::Cursor<'_>) -> Result<TestStep, String> {
+    if cursor.take("if") {
+        let condition = cursor.expr()?;
+        let yes = step_block(cursor)?;
+        cursor.lines();
+        let no = if cursor.take("else") {
+            if cursor.at("if") {
+                vec![step(cursor)?]
+            } else {
+                step_block(cursor)?
+            }
+        } else {
+            Vec::new()
+        };
+        return Ok(TestStep::If(condition, yes, no));
+    }
+    if !cursor.at("assert") && !cursor.at("eval") {
+        let ordinary = statement(cursor)?;
+        if let hgl_source::Stmt::Let(name, annotation, expr)
+        | hgl_source::Stmt::Var(name, annotation, expr) = &ordinary
+            && matches!(expr, Expr::Call(name, _) if name == "eval")
+        {
+            if annotation.is_some() || matches!(ordinary, hgl_source::Stmt::Var(..)) {
+                return Err("eval result requires an inferred immutable let binding".into());
+            }
+            return Ok(TestStep::BindEval(
+                name.clone(),
+                evaluation(expr.clone(), false)?,
+            ));
+        }
+        return Ok(TestStep::Ordinary(ordinary));
+    }
+    let assertion = cursor.take("assert");
+    let expr = cursor.expr()?;
+    let eval = matches!(&expr,Expr::Binary(_,left,_) if matches!(left.as_ref(),Expr::Call(name,_) if name=="eval"));
+    if assertion && !eval {
+        Ok(TestStep::Assert(expr))
+    } else {
+        Ok(TestStep::Eval(evaluation(expr, assertion)?))
+    }
 }

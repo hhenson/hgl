@@ -13,5 +13,7 @@ line-budget = 1100
 hgl-endpoints = { path = "../hgl-endpoints" }
 hgl-types = { path = "../hgl-types" }
 
+hgl-binding-build = { path = "../hgl-binding-build" }
+
 [lints]
 workspace = true

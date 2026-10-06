@@ -55,3 +55,22 @@ Assert(Expr), Eval(Evaluation)} and steps(tokens: &[Token]) ->
 Result<Vec<TestStep>, String> parse a test declaration into ordered source steps
 without resolving names or executing expressions. The frontend then checks each
 step. This owns source harness parsing rather than module candidate selection.
+
+May use hgl-scalar-keys and hgl-delta-check. Pre-start admission tracks exact typed
+scalar collection identities, including normalized f64 signed zero and complete
+enum/zoned identities. Keyed map children remain separate from indexed positions.
+Materialized duplicate/overlap validation precedes stateful canonical membership
+checking; contextual recipes cannot enter this closed-data admission function.
+
+TestStep::BindEval(name,Evaluation) parses inferred immutable eval bindings;
+unsupported annotated/mutable captures remain explicit errors. TestStep::If
+contains recursively parsed test step blocks, including assertions and evals.
+Ordinary statement parsing remains unchanged outside test-block dispatch.
+
+Fresh-trace membership uses hgl-composite-keys complete identities, including
+optional presence and exact nominal type. An independently equal key addresses
+the same child; redundant additions stay invalid. Parent removal resets its
+child trace state, and a later exact-key insertion begins fresh.
+Fresh growing-list state tracks dense child membership. Before applying children, hgl-growing-range validates complete tail removal and contiguous append; removed descendants are discarded before retained child updates. Errors retain the first bad input position.
+
+Publication sequence validation delegates to hgl-publication-trace through the existing validate reexport.

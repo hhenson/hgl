@@ -1,0 +1,17 @@
+[package]
+name = "hgl-optional"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+[package.metadata.hgl]
+line-budget = 160
+[lints]
+workspace = true
+[dependencies]
+hgl-list-storage = { path = "../hgl-list-storage" }
+hgl-prepared-value = { path = "../hgl-prepared-value" }
+hgl-global-value = { path = "../hgl-global-value" }
+hgl-types = { path = "../hgl-types" }
+[dev-dependencies]
+hgl-alloc-count = { path = "../hgl-alloc-count" }

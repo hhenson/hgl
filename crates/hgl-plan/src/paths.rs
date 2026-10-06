@@ -10,13 +10,12 @@ pub fn project<'a>(kind: &'a TsType, path: &[Step], keyed: bool) -> Result<&'a T
             Step::Index(n) => {
                 (matches!(kind, TsType::List(..)) && *n < kind.len()).then(|| kind.child(*n))
             }
-            Step::Key => {
-                if let TsType::Dictionary(child) = kind {
-                    keyed.then_some(child.as_ref())
-                } else {
-                    None
-                }
+            Step::Key
+                if keyed && matches!(kind, TsType::Dictionary(_) | TsType::KeyedDictionary(..)) =>
+            {
+                kind.member()
             }
+            Step::Key => None,
         }
         .ok_or_else(|| BuildError::InvalidPath(format!("{step:?}")))
     })
@@ -24,21 +23,21 @@ pub fn project<'a>(kind: &'a TsType, path: &[Step], keyed: bool) -> Result<&'a T
 
 /// Reject ambiguous field names anywhere in a recursive shape.
 pub fn check_shape(kind: &TsType) -> Result<(), BuildError> {
-    match kind {
-        TsType::Ts(_) | TsType::Atomic(_) | TsType::Set(_) => Ok(()),
-        TsType::Dictionary(child) | TsType::Reference(child) | TsType::List(child, _) => {
-            check_shape(child)
-        }
-        TsType::Bundle(fields) => {
-            for (n, (name, child)) in fields.iter().enumerate() {
-                if fields[..n].iter().any(|(previous, _)| previous == name) {
-                    return Err(BuildError::InvalidPath(format!("duplicate field {name}")));
-                }
-                check_shape(child)?;
+    if let Some(child) = kind.member() {
+        return check_shape(child);
+    }
+    if let TsType::Reference(child) | TsType::List(child, _) = kind {
+        return check_shape(child);
+    }
+    if let TsType::Bundle(fields) = kind {
+        for (n, (name, child)) in fields.iter().enumerate() {
+            if fields[..n].iter().any(|(previous, _)| previous == name) {
+                return Err(BuildError::InvalidPath(format!("duplicate field {name}")));
             }
-            Ok(())
+            check_shape(child)?;
         }
     }
+    Ok(())
 }
 
 /// GRF-6/7: a compatible edge whose target overlaps no previous target.
@@ -65,9 +64,8 @@ pub fn check_edge(
         })?;
     let out = project(out, &edge.source.path, false)?;
     let input = project(input, &edge.target.path, false)?;
-    let follows = matches!(out, TsType::Reference(child) if child.as_ref() == input);
-    let captures = matches!(input,TsType::Reference(child) if child.as_ref()==out);
-    if input != out && !follows && !captures {
+    let follows = |a: &TsType, b| matches!(a,TsType::Reference(child) if child.as_ref()==b);
+    if input != out && !follows(out, input) && !follows(input, out) {
         return Err(BuildError::wrong_type(&nodes[target].label, name));
     }
     for previous in bound.iter() {

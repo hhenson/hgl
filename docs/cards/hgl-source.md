@@ -94,3 +94,10 @@ provider-dependent construction. Expr::fixed never treats it as a closed value.
 The lexer retains a complete bracketed zone annotation in one temporal token.
 
 Re-export ParsedLiteral with Literal and TemporalLiteral for schema defaults.
+
+Reexports RecursiveType and NominalDefinition alongside Ty and Nominal. Recursive
+batch formation belongs to semantic resolution; syntax introduces no new type.
+
+Reexports FamilyType with the other exact checked nominal carriers.
+
+Typed map constructors accept ordered expression-colon-expression entries only within their argument lists. Existing untyped list and harness grammars remain unchanged; exact items-only admission belongs to hgl-collection-check.

@@ -14,6 +14,7 @@ pub struct Program(hgl_rust::Plan);
 /// Only reachable implementation bodies are admitted by this compiler slice.
 pub fn compile(sources: &[(String, String)], entry: &str) -> Result<Program, String> {
     let library = index::load(sources)?;
+    hgl_enums::validate(&library)?;
     let module = library.root.clone();
     resolve::compile(library, &module, entry).map(Program)
 }

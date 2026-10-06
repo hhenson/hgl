@@ -3,11 +3,23 @@ use hgl_rust_ir::{Kind, Value};
 use hgl_source::Ty;
 /// Whether the checked type admits ordinary owning retention.
 pub fn ordinary(ty: &Ty) -> bool {
-    if let Ty::Struct(_, fields) = ty {
+    if matches!(ty, Ty::Recursive(_) | Ty::Family(_)) {
+        return true;
+    }
+    if let Ty::Struct(_, fields, _) = ty {
         return fields.iter().all(|(_, ty)| ordinary(&project(ty)));
     }
     if let Ty::Tuple(children) = ty {
         return children.iter().all(ordinary);
+    }
+    if let Ty::Set(key) = ty {
+        return ordinary(key) && project(key).collection_key();
+    }
+    if let Ty::Map(key, value) = ty {
+        return ordinary(key)
+            && project(key).collection_key()
+            && ordinary(value)
+            && project(value).atomic_payload();
     }
     if let Ty::List(element, _) = ty {
         return ordinary(element);
@@ -23,9 +35,10 @@ pub fn ordinary(ty: &Ty) -> bool {
             | Ty::DateTime
             | Ty::CivilDateTime
             | Ty::TimeZone
+            | Ty::Enum(_)
+            | Ty::ZonedTime
             | Ty::ZonedDateTime
             | Ty::Duration
-            | Ty::Struct(..)
             | Ty::Delta(_)
     )
 }
@@ -41,9 +54,9 @@ pub fn writable(value: &Value) -> bool {
 }
 /// Resolve a declared ordinary field without changing its parent's authority.
 pub fn field(parent: Value, name: &str) -> Result<Value, String> {
-    let Ty::Struct(_, fields) = &parent.ty else {
-        return Err("field access requires an ordinary struct or direct injected clock".into());
-    };
+    let (_, fields, optional) = parent.ty.structure().map_err(|error| {
+        format!("field access requires an ordinary struct or direct injected clock: {error}")
+    })?;
     if matches!(parent.kind, Kind::Input(..) | Kind::Wire(_) | Kind::Output) {
         return Err(
             "temporal child projection is outside the admitted publication-delta profile".into(),
@@ -54,14 +67,14 @@ pub fn field(parent: Value, name: &str) -> Result<Value, String> {
         .enumerate()
         .find(|(_, (field, _))| field == name)
         .ok_or_else(|| format!("unknown struct field {name}"))?;
+    if optional.contains(&index) {
+        return Err("optional field access is outside the admitted value profile".into());
+    }
     Ok(Value::new(ty.clone(), Kind::Field(Box::new(parent), index)))
 }
 /// Return the entry and access mode carried by an aggregate view.
 pub fn provenance(value: &Value) -> Option<(usize, bool)> {
-    if !matches!(
-        value.ty,
-        Ty::Tuple(_) | Ty::Struct(..) | Ty::List(..) | Ty::Delta(_)
-    ) {
+    if !aggregate(&value.ty) {
         return None;
     }
     if let Kind::BorrowedLocal(_, entry, writable) = value.kind {
@@ -80,10 +93,7 @@ pub fn binding(id: usize, value: &Value, mutable: bool, annotated: bool) -> Resu
         }
         Kind::ObservedLocal(id)
     } else if let Kind::GlobalGet(entry) = value.kind
-        && matches!(
-            value.ty,
-            Ty::Tuple(_) | Ty::Struct(..) | Ty::List(..) | Ty::Delta(_)
-        )
+        && aggregate(&value.ty)
     {
         if !annotated {
             return Err("aggregate get requires a typed let or var binding".into());
@@ -120,10 +130,7 @@ pub fn helper_argument(value: &Value) -> Result<(), String> {
 }
 /// Whether a structural delta is an evaluation-local input observation.
 pub fn observed(value: &Value) -> bool {
-    if !matches!(
-        value.ty,
-        Ty::Delta(_) | Ty::Struct(..) | Ty::List(..) | Ty::Tuple(_)
-    ) {
+    if !aggregate(&value.ty) {
         return false;
     }
     if let Kind::Field(parent, _) | Kind::Index(parent, _) = &value.kind {
@@ -138,13 +145,14 @@ pub fn project(ty: &Ty) -> Ty {
     if let Ty::Atomic(payload) = ty {
         return project(payload);
     }
-    if let Ty::Struct(identity, fields) = ty {
+    if let Ty::Struct(identity, fields, optional) = ty {
         return Ty::Struct(
             identity.clone(),
             fields
                 .iter()
                 .map(|(name, ty)| (name.clone(), project(ty)))
                 .collect(),
+            optional.clone(),
         );
     }
     if let Ty::List(child, size) = ty {
@@ -162,47 +170,18 @@ pub fn project(ty: &Ty) -> Ty {
     ty.clone()
 }
 
-/// Compiler-only provenance for values known before graph topology selection.
-#[derive(Debug, Default)]
-pub struct StaticValues {
-    /// Original checked expressions behind cold eval argument bindings.
-    pub prepared: Vec<Value>,
-    /// Current node's readonly ordinary configurations.
-    pub configuration: Vec<Value>,
-    /// Static ordinary constant parameter metadata in the current lexical scope.
-    pub locals: std::collections::BTreeMap<usize, Value>,
-}
-impl StaticValues {
-    /// Follow known static origins without evaluating their expressions.
-    pub fn resolve<'a>(&'a self, value: &'a Value) -> &'a Value {
-        if let Kind::Prepared(id) = value.kind {
-            return self.resolve(&self.prepared[id]);
-        }
-        if let Kind::Configuration(id) = value.kind {
-            return self.resolve(&self.configuration[id]);
-        }
-        if let Kind::Local(id) = value.kind {
-            return self.locals.get(&id).map_or(value, |v| self.resolve(v));
-        }
-        value
-    }
-    /// Map checked constant parameter origins into the source-order local slots.
-    pub fn arguments(
-        &self,
-        signature: &hgl_library::Signature,
-        args: &[Value],
-        positions: &[usize],
-    ) -> std::collections::BTreeMap<usize, Value> {
-        signature
-            .parameters
-            .iter()
-            .zip(positions)
-            .filter(|(p, _)| p.constant)
-            .filter_map(|(_, id)| {
-                let value = self.resolve(&args[*id]);
-                (!matches!(value.kind, Kind::Local(_) | Kind::MutableLocal(_)))
-                    .then(|| (*id, value.clone()))
-            })
-            .collect()
-    }
+pub use hgl_static_values::StaticValues;
+
+fn aggregate(ty: &Ty) -> bool {
+    matches!(
+        ty,
+        Ty::Family(_)
+            | Ty::Set(_)
+            | Ty::Map(..)
+            | Ty::Recursive(_)
+            | Ty::Struct(..)
+            | Ty::List(..)
+            | Ty::Tuple(_)
+            | Ty::Delta(_)
+    )
 }

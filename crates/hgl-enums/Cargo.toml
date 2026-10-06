@@ -1,0 +1,17 @@
+[package]
+name = "hgl-enums"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[package.metadata.hgl]
+line-budget = 250
+
+[lints]
+workspace = true
+
+[dependencies]
+hgl-source = { path = "../hgl-source" }
+hgl-library = { path = "../hgl-library" }
+hgl-struct-names = { path = "../hgl-struct-names" }

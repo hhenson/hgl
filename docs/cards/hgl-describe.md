@@ -82,3 +82,6 @@ register<T: Buildable> delegates without changing behavior. Registry cloning may
 share immutable factories with Arc only on the construction path. No refcount,
 name lookup or factory dispatch enters graph ticks. Test independent graph
 construction from owning configurations and release after registry teardown.
+
+`Ports::keys()` exposes mutable finite key-domain storage only during node
+construction, so generated literal keys are retained before any hook runs.

@@ -22,12 +22,18 @@ retention, typed alias and helper-escape checking tests.
 
 ## Static preparation provenance
 
-Compiler-only `StaticValues` derives Default and exposes `prepared: Vec<Value>`,
-`configuration: Vec<Value>`, and `locals: BTreeMap<usize, Value>`.
-`resolve<'a>(&'a self, value: &'a Value) -> &'a Value` follows known cold binding
-provenance. `arguments(&self, signature: &hgl_library::Signature, args: &[Value],
-positions: &[usize]) -> BTreeMap<usize, Value>` retains static constant-parameter
-metadata under the source-order lexical argument mapping. May use hgl-library.
-Neither method evaluates an expression, fabricates data, or invokes a provider.
-Unresolved local values remain unresolved. Existing runtime access authority is
-unchanged; this data is never installed in the runtime store.
+Re-export hgl-static-values::StaticValues for existing callers. Provenance and
+closed-key validation belong to that crate; ordinary runtime access authority
+remains here. May depend on hgl-static-values.
+
+Ordinary projection preserves struct optional-position metadata. Access to an
+optional field is explicitly rejected in this publication slice; required
+fields and whole-value owning bindings keep existing behavior. No optional
+clearing or mutation surface follows from admitting complete snapshots.
+
+Ordinary sets/maps are owning aggregates at existing retention and borrow boundaries. This adds no element projection or mutation syntax.
+
+Ordinary collection grammar checks K/V recursively before payload projection.
+Nominal fields may carry declared atomic boundaries, while explicit composite
+atomic container arguments remain temporal shapes. Key/profile admission uses
+the resulting ordinary projection; nominal source identities stay exact.

@@ -56,3 +56,41 @@ Floating modulo evaluates operands once in written order, errors on zero divisor
 and adjusts the direct remainder to the divisor's sign, including signed zero.
 It shares constant/wiring semantics without computing a potentially overflowing
 or underflowing quotient.
+
+Declared enum source types retain nominal identity through generated i64-backed
+GlobalValue markers. Enum publication uses one prepared whole-value slot without
+structural children. Checked harness capture retains the original declaration
+and assigned member number; it never substitutes an ordinary integer.
+
+Re-export hgl-rust-layouts::whole_payload alongside existing layout helpers.
+
+Finite eval recording uses independently prepared destination slots. Direct
+publication observations copy through typed temporal tokens; record append fills
+an unpublished vacant slot before committing its length. Native field expressions
+are evaluated in source order before borrowing record storage. Unrelated ordinary
+global mutations retain their existing checked owning API. Direct finite eval
+pass-through publishes between typed prepared endpoints without an owning temporary.
+
+Struct construction emits supplied payloads in written order, then assembles
+all declaration positions, inserting Some/None only at optional fields.
+Struct retention delegates to its generated GlobalValue marker so field
+presence survives owning boundaries. This introduces no optional read syntax.
+
+Internal family widening preserves tuple-valued expression parentheses and exact
+discriminators. Returning immutable configuration payloads uses typed prepared
+slot publication, avoiding an owning clone in the evaluation hook.
+
+Complete ordinary set/map construction delegates key-first validation to hgl-rust-collections; retention uses the exact GlobalValue marker and comparison is recursively unordered.
+Prepared eval transport is selected as one complete path by
+`hgl-rust-execution-proof::prepared(plan)`. Unproved plans retain existing ordinary
+publication and recording behavior; no per-insertion fallback or hook replay is
+introduced. Prepared allocation evidence applies only to the selected finite path.
+
+Supported returned sparse constructors use hgl-rust-direct-deltas to evaluate
+scalar operands once, retain constant key aliases cold, and publish directly
+into prepared child endpoints. No intermediate delta vectors are constructed.
+statements additionally receives Option<&Ty> for the declared temporal result,
+propagated through nested blocks. Rolling returns publish ordinary arrival V into
+the typed window; ordinary helper bodies pass None. Window-specific delta_value
+and all_valid queries delegate to hgl-rust-windows; metadata queries retain the
+existing statically selected endpoint path.

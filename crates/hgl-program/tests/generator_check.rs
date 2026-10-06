@@ -106,7 +106,7 @@ fn generator_context_rejects_each_forbidden_construct() {
     );
     for declaration in [
         "fn produce(){yield 0us:1}",
-        "fn produce()->list<i64>{yield 0us:[]}",
+        "fn produce()->list<ref<i64>>{yield 0us:[]}",
     ] {
         let error = checked(declaration, "produce()").unwrap_err();
         assert!(

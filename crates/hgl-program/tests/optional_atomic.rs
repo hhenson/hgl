@@ -1,0 +1,147 @@
+//! Optional atomic contract; shared fixture preserved verbatim from std821d9b7.
+use hgl_program::compile_tests;
+fn sources(source: &str) -> Vec<(String, String)> {
+    vec![
+        ("optional.hgl".into(), source.into()),
+        (
+            "pass.hgl".into(),
+            "module hgraph.std\nfn pass_through<T>(value:T)->T {when {return delta_value(value)}}"
+                .into(),
+        ),
+        (
+            "replay.hgl".into(),
+            include_str!("../../../external/hgraph_std/hgl/hgraph/replay_record.hgl").into(),
+        ),
+        (
+            "replay_impl.hgl".into(),
+            include_str!("../../../external/hgraph_std/hgl/hgraph/impl/replay_record.hgl").into(),
+        ),
+    ]
+}
+#[test]
+fn all_shared_optional_cases_typecheck() {
+    let result = compile_tests(&sources(include_str!(
+        "../../../external/hgraph_std/hgl/hgraph/tests/optional_atomic_values.hgl"
+    )));
+    assert!(result.is_ok(), "{result:?}");
+}
+#[test]
+fn null_required_fields_wrong_payloads_and_optional_access_are_rejected() {
+    for body in [
+        "let v=S()",
+        "let v=S(required:null)",
+        "let v=S(required:1, optional:false)",
+        "let v=S(required:1)\nlet read=v.optional",
+        "var v=S(required:1)\nv.optional=1",
+    ] {
+        let source = format!(
+            "module hgraph.std part optional_bad\nstruct S {{required:i64\noptional:i64=null}}\ntest bad {{{body}}}"
+        );
+        assert!(compile_tests(&sources(&source)).is_err(), "{body}");
+    }
+}
+#[test]
+fn shared_optional_cases_execute_in_debug_and_release() -> Result<(), Box<dyn std::error::Error>> {
+    run_shared(false)
+}
+#[test]
+fn optional_generated_cycles_allocate_nothing() -> Result<(), Box<dyn std::error::Error>> {
+    run_shared(true)
+}
+fn run_shared(measure: bool) -> Result<(), Box<dyn std::error::Error>> {
+    use std::{fmt::Write as _, fs, process::Command, time::SystemTime};
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()?;
+    let dir = std::env::temp_dir().join(format!(
+        "hgl-optional-{}",
+        SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)?
+            .as_nanos()
+    ));
+    fs::create_dir_all(dir.join("src"))?;
+    let suite = compile_tests(&sources(include_str!(
+        "../../../external/hgraph_std/hgl/hgraph/tests/optional_atomic_values.hgl"
+    )))?;
+    let mut code = hgl_program::emit_tests(&suite);
+    if measure {
+        code = code.replace("hgl_kernel::run_simulation(", "crate::measured_simulation(");
+        code.push_str(r#"
+#[global_allocator] static ALLOCATOR:hgl_alloc_count::CountingAllocator=hgl_alloc_count::CountingAllocator;
+fn measured_simulation(graph:&mut hgl_kernel::Graph, store:&mut hgl_store::Store, config:&hgl_kernel::RunConfig)->Result<u64,hgl_kernel::EngineError> {
+    graph.start(store,config.start_time).map_err(hgl_kernel::EngineError::Node)?;
+    let mut cycles=0; let mut total=0; let mut now=config.start_time;
+    while !graph.stop_requested() {
+        let next=graph.next_scheduled_time(); if next>=config.end_time {break;} now=next;
+        let (result,count)=hgl_alloc_count::count_in(||graph.evaluate(store,now));
+        result.map_err(hgl_kernel::EngineError::Node)?; total+=count; cycles+=1;
+    }
+    graph.stop(store,now).map_err(hgl_kernel::EngineError::Node)?;
+    eprintln!("optional measured cycles={cycles} tick_allocations={total}");
+    assert_eq!(total,0,"optional first/repeated publication and recording must allocate nothing");
+    Ok(cycles)
+}
+"#);
+    }
+    code.push_str("struct Provider;\n");
+    fs::write(dir.join("src/main.rs"), code)?;
+    let mut manifest = String::from(
+        "[package]\nname=\"optional-test\"\nversion=\"0.0.0\"\nedition=\"2024\"\n[workspace]\n[dependencies]\n",
+    );
+    for name in [
+        "hgl-alloc-count",
+        "hgl-types",
+        "hgl-store",
+        "hgl-kernel",
+        "hgl-describe",
+        "hgl-harness",
+        "hgl-harness-ir",
+        "hgl-rust-ir",
+        "hgl-source",
+        "hgl-value-eval",
+        "hgl-time-context",
+        "hgl-testkit",
+        "hgl-std-native",
+    ] {
+        let path = root
+            .join("crates")
+            .join(name)
+            .to_string_lossy()
+            .replace('\\', "\\\\")
+            .replace('"', "\\\"");
+        writeln!(manifest, "{name}={{path=\"{path}\"}}")?;
+    }
+    fs::write(dir.join("Cargo.toml"), manifest)?;
+    for profile in [vec![], vec!["--release"]] {
+        let output = Command::new(env!("CARGO"))
+            .args(["run", "--offline", "--quiet"])
+            .args(profile)
+            .current_dir(&dir)
+            .output()?;
+        assert!(
+            output.status.success(),
+            "{}\n{}\n{}",
+            dir.display(),
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    fs::remove_dir_all(dir)?;
+    Ok(())
+}
+#[test]
+fn optional_defaults_and_generic_context_preserve_exact_present_types() {
+    let source = "module hgraph.std part optional_generic\nstruct Box<T> {value:T=null}\nstruct Defaults {required:i64=4\noptional:str=null}\ntest values {let empty:Box<i64> =Box()\nlet explicit:Box<i64> =Box(value:null)\nlet present:Box<i64> =Box(value:0)\nlet defaults=Defaults()\nlet replaced=Defaults(required:9,optional:\"\")}";
+    let result = compile_tests(&sources(source));
+    assert!(result.is_ok(), "{result:?}");
+    for body in [
+        "let value=Box()",
+        "let value:Box<i64> =Box(value:false)",
+        "let value=Defaults(required:null)",
+    ] {
+        let source = format!(
+            "module hgraph.std part optional_generic_bad\nstruct Box<T> {{value:T=null}}\nstruct Defaults {{required:i64=4\noptional:str=null}}\ntest bad {{{body}}}"
+        );
+        assert!(compile_tests(&sources(&source)).is_err(), "{body}");
+    }
+}

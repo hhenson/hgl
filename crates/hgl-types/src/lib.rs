@@ -5,8 +5,9 @@
 //! a node-error message can allocate. No graph execution lives here.
 
 pub use hgl_time_values::{
-    CivilDateTime, Date, EngineDelta, EngineTime, Time, ZoneId, ZonedDateTime,
+    CivilDateTime, Date, EngineDelta, EngineTime, Time, ZoneId, ZonedDateTime, ZonedTime,
 };
+pub use hgl_window_types::{Window, WindowKind};
 
 /// A node's position in its graph's rank order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -35,6 +36,8 @@ pub enum ScalarType {
     CivilDateTime,
     /// An exact named timezone.
     TimeZone,
+    /// A wall-clock time with its exact timezone.
+    ZonedTime,
     /// An instant with its exact timezone and offset.
     ZonedDateTime,
 }
@@ -63,6 +66,8 @@ pub enum ScalarValue {
     CivilDateTime(CivilDateTime),
     /// An exact named timezone.
     TimeZone(ZoneId),
+    /// A wall-clock time with its exact timezone.
+    ZonedTime(ZonedTime),
     /// An instant with its exact timezone and offset.
     ZonedDateTime(ZonedDateTime),
 }
@@ -81,6 +86,7 @@ impl ScalarValue {
             Self::Duration(_) => ScalarType::Duration,
             Self::CivilDateTime(_) => ScalarType::CivilDateTime,
             Self::TimeZone(_) => ScalarType::TimeZone,
+            Self::ZonedTime(_) => ScalarType::ZonedTime,
             Self::ZonedDateTime(_) => ScalarType::ZonedDateTime,
         }
     }
@@ -89,12 +95,20 @@ impl ScalarValue {
 /// Recursive shape, independent of endpoint bindings.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TsType {
+    /// One arrival window with exact ordinary payload and resolved bounds.
+    Rolling(OrdinaryType, Window),
+    /// Dense dynamic temporal children with canonical tail truncation.
+    Growing(Box<TsType>),
     /// A scalar column.
     Ts(ScalarType),
     /// One complete ordinary payload.
     Atomic(OrdinaryType),
     /// An i64 keyed dictionary.
     Dictionary(Box<TsType>),
+    /// A prepared dictionary with exact scalar key identity.
+    KeyedDictionary(OrdinaryType, Box<TsType>),
+    /// A prepared set with exact nominal enum member identity.
+    KeyedSet(OrdinaryType),
     /// A set of scalar values; bool and i64 membership is currently implemented.
     Set(ScalarType),
     /// A designation to this shape.
@@ -117,10 +131,13 @@ impl TsType {
     /// Stored member shape: dictionary values or set occupancy markers.
     pub fn member(&self) -> Option<&Self> {
         match self {
-            Self::Dictionary(child) => Some(child),
-            Self::Set(_) => Some(&Self::Ts(ScalarType::Bool)),
+            Self::Growing(child) | Self::Dictionary(child) | Self::KeyedDictionary(_, child) => {
+                Some(child)
+            }
+            Self::Set(_) | Self::KeyedSet(_) => Some(&Self::Ts(ScalarType::Bool)),
             Self::Ts(_)
             | Self::Atomic(_)
+            | Self::Rolling(..)
             | Self::Reference(_)
             | Self::List(..)
             | Self::Bundle(_) => None,
@@ -133,6 +150,10 @@ impl TsType {
             Self::Bundle(fields) => fields.len(),
             Self::Ts(_)
             | Self::Atomic(_)
+            | Self::Rolling(..)
+            | Self::KeyedDictionary(..)
+            | Self::KeyedSet(_)
+            | Self::Growing(_)
             | Self::Dictionary(_)
             | Self::Set(_)
             | Self::Reference(_) => 0,
@@ -149,6 +170,10 @@ impl TsType {
             Self::Bundle(fields) => &fields[position].1,
             Self::Ts(_)
             | Self::Atomic(_)
+            | Self::Rolling(..)
+            | Self::KeyedDictionary(..)
+            | Self::KeyedSet(_)
+            | Self::Growing(_)
             | Self::Dictionary(_)
             | Self::Set(_)
             | Self::Reference(_)
@@ -174,6 +199,12 @@ impl TsType {
 /// An exact ordinary entry type, including nominal identity and required fields.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum OrdinaryType {
+    /// Internal field presence and its ordinary payload; not a source type.
+    OptionalField(Box<OrdinaryType>),
+    /// Exact nominal target inside a finite optional recursive field.
+    RecursiveReference(&'static str),
+    /// Exact module-qualified enum identity, backed by a declared i64 member.
+    Enum(&'static str),
     /// One of the eight owning primitive values.
     Scalar(ScalarType),
     /// Positional ordinary fields in declaration order.
@@ -182,6 +213,10 @@ pub enum OrdinaryType {
     Struct(&'static str, Vec<(&'static str, OrdinaryType)>),
     /// Homogeneous ordinary elements and an optional exact fixed length.
     List(Box<OrdinaryType>, Option<usize>),
+    /// Unordered complete ordinary scalar members.
+    Set(Box<OrdinaryType>),
+    /// Unordered complete ordinary key/value entries.
+    Map(Box<OrdinaryType>, Box<OrdinaryType>),
 }
 impl From<ScalarType> for OrdinaryType {
     fn from(value: ScalarType) -> Self {
@@ -329,3 +364,7 @@ impl NodeError {
         })
     }
 }
+
+pub use hgl_growing_range::{
+    validate as validate_growing, validate_distinct as validate_growing_distinct,
+};

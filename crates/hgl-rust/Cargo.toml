@@ -12,9 +12,15 @@ line-budget = 700
 workspace = true
 
 [dependencies]
+hgl-rust-direct-deltas = { path = "../hgl-rust-direct-deltas" }
+hgl-rust-finite-domains = { path = "../hgl-rust-finite-domains" }
+hgl-rust-keyed = { path = "../hgl-rust-keyed" }
 hgl-rust-deltas = { path = "../hgl-rust-deltas" }
 hgl-source = { path = "../hgl-source" }
 hgl-rust-ir = { path = "../hgl-rust-ir" }
 hgl-rust-values = { path = "../hgl-rust-values" }
 hgl-rust-generators = { path = "../hgl-rust-generators" }
 hgl-rust-preparation = { path = "../hgl-rust-preparation" }
+hgl-rust-capacity = { path = "../hgl-rust-capacity" }
+hgl-rust-source-slots = { path = "../hgl-rust-source-slots" }
+hgl-rust-families = { path = "../hgl-rust-families" }

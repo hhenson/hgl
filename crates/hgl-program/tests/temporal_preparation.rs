@@ -7,7 +7,7 @@ fn source(body: &str) -> Vec<(String, String)> {
         (
             "preparation.hgl".into(),
             format!(
-                r"module preparation
+                r#"module preparation
 native const fn start_marker(value:i64)->i64 throws
 native const fn start_marker(value:i64)->i64 throws {{}}
 fn target(value:timezone,const ignored:timezone)->timezone {{
@@ -30,8 +30,45 @@ const fn choose(flag:bool)->timezone {{
     if flag {{return @[UTC]}}
     return @[Missing/SkippedHelper]
 }}
+fn clock_target(value:zoned_time,const ignored:zoned_time = @09:30[UTC])->zoned_time {{
+    start {{ start_marker(1) }}
+    when {{ return delta_value(value) }}
+}}
+fn clock_default(value:zoned_time,const ignored:zoned_time = @09:30[Missing/Default])->zoned_time {{
+    start {{ start_marker(1) }}
+    when {{ return delta_value(value) }}
+}}
+fn hook_key(value:i64)->map<str,i64> {{
+    start {{ start_marker(1) }}
+    when {{let key="retained"
+    let alias=key
+    return delta<map<str,i64>>(upsert:[alias:value])}}
+}}
+fn configured_key(value:i64,const key:str)->map<str,i64> {{
+    start {{ start_marker(1) }}
+    when {{let alias=key
+    return delta<map<str,i64>>(upsert:[alias:value])}}
+}}
+fn nested_hook_key(value:i64)->map<str,map<str,i64>> {{
+    start {{ start_marker(1) }}
+    when {{let outer="outer"
+    let inner="inner"
+    return delta<map<str,map<str,i64>>>(upsert:[outer:delta<map<str,i64>>(upsert:[inner:value])])}}
+}}
+fn key_target(value:map<timezone,i64>)->map<timezone,i64> {{
+    start {{ start_marker(1) }}
+    when {{ return delta_value(value) }}
+}}
+fn set_target(value:set<zoned_time>)->set<zoned_time> {{
+    start {{ start_marker(1) }}
+    when {{ return delta_value(value) }}
+}}
+fn nested_key_target(value:map<timezone,set<zoned_time>>)->map<timezone,set<zoned_time>> {{
+    start {{ start_marker(1) }}
+    when {{ return delta_value(value) }}
+}}
 test ordered {{ {body} }}
-"
+"#
             ),
         ),
         (
@@ -44,7 +81,157 @@ test ordered {{ {body} }}
         ),
     ]
 }
-const CASES: [(&str, &str, bool, &str, usize); 10] = [
+const CASES: [(&str, &str, bool, &str, usize); 30] = [
+    (
+        "hook_key",
+        r#"assert eval(hook_key,value:[1,2]) == [delta<map<str,i64>>(upsert:["retained":1]),delta<map<str,i64>>(upsert:["retained":2])]"#,
+        true,
+        "0 failures",
+        1,
+    ),
+    (
+        "configured_key",
+        r#"assert eval(configured_key,value:[1,2],key:"configured") == [delta<map<str,i64>>(upsert:["configured":1]),delta<map<str,i64>>(upsert:["configured":2])]"#,
+        true,
+        "0 failures",
+        1,
+    ),
+    (
+        "nested_hook_key",
+        r#"assert eval(nested_hook_key,value:[1,2]) == [delta<map<str,map<str,i64>>>(upsert:["outer":delta<map<str,i64>>(upsert:["inner":1])]),delta<map<str,map<str,i64>>>(upsert:["outer":delta<map<str,i64>>(upsert:["inner":2])])]"#,
+        true,
+        "0 failures",
+        1,
+    ),
+    (
+        "fresh_key_recipes",
+        r"eval(key_target,value:[delta<map<timezone,i64>>(upsert:[@[UTC]:1])])
+       eval(key_target,value:[delta<map<timezone,i64>>(upsert:[@[UTC]:2])])",
+        true,
+        "0 failures",
+        2,
+    ),
+    (
+        "retained_alias",
+        r"let key=@[UTC]
+       let alias=key
+       assert eval(key_target,value:[delta<map<timezone,i64>>(upsert:[alias:1])]) == [delta<map<timezone,i64>>(upsert:[key:1])]
+       assert eval(key_target,value:[delta<map<timezone,i64>>(upsert:[key:2])]) == [delta<map<timezone,i64>>(upsert:[alias:2])]",
+        true,
+        "0 failures",
+        2,
+    ),
+    (
+        "alias_duplicate",
+        r"let key=@[UTC]
+       let alias=key
+       eval(key_target,value:[delta<map<timezone,i64>>(upsert:[key:1,alias:2])])",
+        false,
+        "duplicate",
+        0,
+    ),
+    (
+        "alias_overlap",
+        r"let key=@[UTC]
+       eval(key_target,value:[delta<map<timezone,i64>>(upsert:[key:1],remove:[key])])",
+        false,
+        "overlap",
+        0,
+    ),
+    (
+        "unused_alias",
+        r"let key=@[Missing/Unused]
+       let alias=key
+       eval(key_target,value:[delta<map<timezone,i64>>(upsert:[alias:1])])",
+        false,
+        "Missing/Unused",
+        0,
+    ),
+    (
+        "nested_key_domains",
+        r"assert eval(nested_key_target,value:[delta<map<timezone,set<zoned_time>>>(upsert:[@[UTC]:delta<set<zoned_time>>(added:[@09:30[US/Eastern]])]),delta<map<timezone,set<zoned_time>>>(remove:[@[UTC]]),delta<map<timezone,set<zoned_time>>>(upsert:[@[UTC]:delta<set<zoned_time>>(added:[@09:30[America/New_York]])])]) == [delta<map<timezone,set<zoned_time>>>(upsert:[@[UTC]:delta<set<zoned_time>>(added:[@09:30[US/Eastern]])]),delta<map<timezone,set<zoned_time>>>(remove:[@[UTC]]),delta<map<timezone,set<zoned_time>>>(upsert:[@[UTC]:delta<set<zoned_time>>(added:[@09:30[America/New_York]])])]",
+        true,
+        "",
+        1,
+    ),
+    (
+        "key_missing",
+        r"eval(key_target,value:[delta<map<timezone,i64>>(upsert:[@[Missing/Key]:1])])",
+        false,
+        "Missing/Key",
+        0,
+    ),
+    (
+        "key_case",
+        r"eval(key_target,value:[delta<map<timezone,i64>>(upsert:[@[america/new_york]:1])])",
+        false,
+        "america/new_york",
+        0,
+    ),
+    (
+        "key_duplicate",
+        r"eval(key_target,value:[delta<map<timezone,i64>>(upsert:[@[UTC]:1,@[UTC]:2])])",
+        false,
+        "duplicate",
+        0,
+    ),
+    (
+        "key_overlap",
+        r"eval(key_target,value:[delta<map<timezone,i64>>(upsert:[@[UTC]:1],remove:[@[UTC]])])",
+        false,
+        "overlap",
+        0,
+    ),
+    (
+        "set_duplicate",
+        r"eval(set_target,value:[delta<set<zoned_time>>(added:[@09:30[UTC],@09:30[UTC]])])",
+        false,
+        "duplicate",
+        0,
+    ),
+    (
+        "key_aliases",
+        r"eval(key_target,value:[delta<map<timezone,i64>>(upsert:[@[US/Eastern]:1,@[America/New_York]:2])])",
+        true,
+        "",
+        1,
+    ),
+    (
+        "clock_dense",
+        r"eval(clock_target,value:[@09:30[america/new_york]])",
+        false,
+        "america/new_york",
+        0,
+    ),
+    (
+        "clock_const",
+        r"eval(clock_target,value:[@09:30[UTC]],ignored:@09:30[Missing/Const])",
+        false,
+        "Missing/Const",
+        0,
+    ),
+    (
+        "clock_default",
+        r"eval(clock_default,value:[@09:30[UTC]])",
+        false,
+        "Missing/Default",
+        0,
+    ),
+    (
+        "clock_expected",
+        r"assert eval(clock_target,value:[@09:30[UTC]]) == [@09:30[Missing/Expected]]",
+        false,
+        "Missing/Expected",
+        1,
+    ),
+    (
+        "clock_valid",
+        r"let clock=@09:30:00.123456[US/Eastern]
+        assert eval(clock_target,value:[clock,clock,_,@09:30:00.123457[America/New_York]]) == [clock,clock,_,@09:30:00.123457[America/New_York]]",
+        true,
+        "0 failures",
+        1,
+    ),
     (
         "unused_default",
         r"eval(invalid_default,value:[@[UTC]])",
@@ -142,7 +329,12 @@ fn generated_tests_validate_before_start_and_expectations_after_run()
         let suite = compile_tests(&source(body))?;
         fs::write(
             dir.join(format!("src/{name}.rs")),
-            emit_tests(&suite).replace("fn main()", "pub fn main()"),
+            emit_tests(&suite)
+                .replace("fn main()", "pub fn main()")
+                .replace(
+                    "context.materialize(recipe)",
+                    "{println!(\"MATERIALIZED\");context.materialize(recipe)}",
+                ),
         )?;
         writeln!(modules, "mod {name};")?;
         writeln!(calls, "Some({name:?})=>{name}::main(),")?;
@@ -184,6 +376,7 @@ fn generated_tests_validate_before_start_and_expectations_after_run()
             );
             assert_eq!(output.status.success(), success, "{name}: {text}");
             assert!(text.contains(diagnostic), "{name}: {text}");
+            materializations(name, &text);
             assert_eq!(
                 text.matches("TARGET_STARTED").count(),
                 starts,
@@ -244,5 +437,23 @@ fn contextual_composition_construction_requires_run_preparation() {
         .unwrap();
         let error = compile_tests(&sources).unwrap_err();
         assert!(error.contains(diagnostic), "{error}");
+    }
+}
+
+fn materializations(name: &str, text: &str) {
+    if [
+        "retained_alias",
+        "alias_duplicate",
+        "alias_overlap",
+        "unused_alias",
+        "fresh_key_recipes",
+    ]
+    .contains(&name)
+    {
+        assert_eq!(
+            text.matches("MATERIALIZED").count(),
+            if name == "fresh_key_recipes" { 2 } else { 1 },
+            "{name}: {text}"
+        );
     }
 }

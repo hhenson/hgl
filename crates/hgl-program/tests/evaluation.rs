@@ -1,5 +1,5 @@
 //! Run the unmodified shared suite and probe the harness independently of it.
-use hgl_program::{compile_tests, compile_tests_files, emit_tests};
+use hgl_program::{compile_tests, emit_tests};
 use std::{
     fmt::Write,
     fs,
@@ -268,14 +268,16 @@ fn actual_stdlib_and_harness_regressions_run_on_rust() -> Result<(), Box<dyn std
         )));
     }
     parts.push(root.join("crates/hgl-program/tests/fixtures/contextual_locals.hgl"));
-    let suite = compile_tests_files(&parts, &[library])?;
+    let sources = hgl_library_files::sources(&parts, &[library])?;
+    let summary = expected_summary(&sources)?;
     let dir = std::env::temp_dir().join(format!(
         "hgl-eval-{}-{}",
         std::process::id(),
         SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos()
     ));
     fs::create_dir_all(dir.join("src"))?;
-    module(&dir, "standard", &emit_tests(&suite))?;
+    manifest(&root, &dir)?;
+    standard_batches(&dir, &sources, &summary)?;
     module(
         &dir,
         "regression",
@@ -288,37 +290,174 @@ fn actual_stdlib_and_harness_regressions_run_on_rust() -> Result<(), Box<dyn std
     nullable_images(&dir)?;
     recording_key_image(&dir)?;
     global_images(&dir)?;
-    manifest(&root, &dir)?;
-    fs::write(
-        dir.join("src/main.rs"),
-        r#"
-struct Provider;
-mod native { pub use hgl_std_native::*; }
-mod integer_zero; mod float_zero; mod late_output; mod modulo_zero;
-mod bounds; mod past_end; mod repeated_begin; mod append_unbegun; mod duplicate_time; mod wrong_time;
-mod source_operators; mod start_failure; mod nullable; mod replay_order_failure;
-mod globals; mod globals_missing; mod recording_keys;
-mod standard; mod regression; mod wrong; mod long; mod short; mod throwing;
-fn main() { match std::env::args().nth(1).as_deref() {
-Some("bounds") => bounds::main(), Some("past_end") => past_end::main(), Some("repeated_begin") => repeated_begin::main(), Some("append_unbegun") => append_unbegun::main(), Some("duplicate_time") => duplicate_time::main(), Some("wrong_time") => wrong_time::main(),
-Some("nullable") => nullable::main(), Some("source_operators") => source_operators::main(), Some("start_failure") => start_failure::main(),
-Some("recording_keys") => recording_keys::main(),
-Some("replay_order_failure") => replay_order_failure::main(),
-Some("globals") => globals::main(), Some("globals_missing") => globals_missing::main(),
-Some("modulo_zero") => modulo_zero::main(), Some("integer_zero") => integer_zero::main(), Some("float_zero") => float_zero::main(), Some("late_output") => late_output::main(),
-Some("throwing") => throwing::main(), Some("standard") => standard::main(), Some("regression") => regression::main(),
-Some("wrong") => wrong::main(), Some("long") => long::main(), Some("short") => short::main(),
-_ => panic!("unknown test image") } }
-"#,
-    )?;
-    let binary = build_binary(&dir)?;
-    check_images(&binary)?;
+    check_images(&dir)?;
     fs::remove_dir_all(dir)?;
     Ok(())
 }
-fn check_images(binary: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    for (name, success, message) in [
-        ("standard", true, "170 tests, 346 evaluations, 0 failures"),
+fn standard_batches(
+    dir: &Path,
+    sources: &[(String, String)],
+    expected: &ExpectedSummary,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let library = hgl_library::load(sources)?;
+    let tests = library
+        .declarations
+        .iter()
+        .filter(|decl| decl.role == hgl_library::Role::Test)
+        .collect::<Vec<_>>();
+    let mut observed = Vec::new();
+    let mut evaluations = 0;
+    for batch in tests.chunks(8) {
+        let selected = batch
+            .iter()
+            .map(|decl| (decl.source.as_str(), decl.name.as_str()))
+            .collect::<std::collections::BTreeSet<_>>();
+        let inputs = sources
+            .iter()
+            .map(|(name, text)| Ok((name.clone(), selected_tests(text, &selected, name)?)))
+            .collect::<Result<Vec<_>, String>>()?;
+        let summary = expected_summary(&inputs)?;
+        module(dir, "standard", &emit_tests(&compile_tests(&inputs)?))?;
+        image_main(dir, std::iter::once("standard"))?;
+        let output = Command::new(build_binary(dir)?).arg("standard").output()?;
+        let text = format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(output.status.success(), "standard batch: {text}");
+        evaluations += check_summary(&text, &summary)?;
+        observed.extend(
+            text.lines()
+                .filter_map(|line| line.strip_suffix(" ... ok"))
+                .map(str::to_owned),
+        );
+    }
+    observed.sort();
+    assert_eq!(
+        observed, expected.names,
+        "batched execution must preserve the full named inventory"
+    );
+    assert!((expected.minimum..=expected.maximum).contains(&evaluations));
+    Ok(())
+}
+fn selected_tests(
+    text: &str,
+    selected: &std::collections::BTreeSet<(&str, &str)>,
+    source: &str,
+) -> Result<String, String> {
+    let tokens = hgl_source::lex(text)?;
+    let mut omitted = Vec::new();
+    let mut index = 0;
+    while index + 2 < tokens.len() {
+        if tokens[index].text != "test" || tokens[index + 1].text == "{" {
+            index += 1;
+            continue;
+        }
+        let name = tokens[index + 1].text.as_str();
+        let start = tokens[index].span.start;
+        index += 2;
+        while tokens.get(index).is_some_and(|token| token.text == "\n") {
+            index += 1;
+        }
+        if tokens.get(index).is_none_or(|token| token.text != "{") {
+            return Err("named test body missing".into());
+        }
+        let mut depth = 1;
+        index += 1;
+        while depth > 0 {
+            let token = tokens.get(index).ok_or("unclosed named test")?;
+            match token.text.as_str() {
+                "{" => depth += 1,
+                "}" => depth -= 1,
+                _ => {}
+            }
+            index += 1;
+        }
+        if !selected.contains(&(source, name)) {
+            omitted.push(start..tokens[index - 1].span.end);
+        }
+    }
+    let mut filtered = text.to_owned();
+    for range in omitted.into_iter().rev() {
+        let whitespace = filtered[range.clone()]
+            .chars()
+            .map(|c| if c == '\n' { '\n' } else { ' ' })
+            .collect::<String>();
+        filtered.replace_range(range, &whitespace);
+    }
+    Ok(filtered)
+}
+struct ExpectedSummary {
+    names: Vec<String>,
+    minimum: usize,
+    maximum: usize,
+}
+fn step_bounds(steps: &[hgl_eval_data::TestStep]) -> (usize, usize) {
+    use hgl_eval_data::TestStep;
+    steps.iter().fold((0, 0), |(minimum, maximum), step| {
+        let (low, high) = match step {
+            TestStep::Ordinary(_) => (0, 0),
+            TestStep::Eval(_) | TestStep::BindEval(..) | TestStep::Assert(_) => (1, 1),
+            TestStep::If(_, yes, no) => {
+                let (a, b) = step_bounds(yes);
+                let (c, d) = step_bounds(no);
+                (a.min(c), b.max(d))
+            }
+        };
+        (minimum + low, maximum + high)
+    })
+}
+fn expected_summary(sources: &[(String, String)]) -> Result<ExpectedSummary, String> {
+    let library = hgl_library::load(sources)?;
+    let mut summary = ExpectedSummary {
+        names: Vec::new(),
+        minimum: 0,
+        maximum: 0,
+    };
+    for declaration in library.declarations {
+        if declaration.role == hgl_library::Role::Test {
+            summary
+                .names
+                .push(format!("{}::{}", declaration.module, declaration.name));
+            let (low, high) = step_bounds(&hgl_eval_data::steps(&declaration.tokens)?);
+            summary.minimum += low;
+            summary.maximum += high;
+        }
+    }
+    summary.names.sort();
+    Ok(summary)
+}
+fn check_summary(text: &str, summary: &ExpectedSummary) -> Result<usize, String> {
+    let mut reported = text
+        .lines()
+        .filter_map(|line| line.strip_suffix(" ... ok"))
+        .collect::<Vec<_>>();
+    reported.sort_unstable();
+    assert_eq!(
+        reported, summary.names,
+        "every named test must execute exactly once"
+    );
+    let prefix = format!("{} tests, ", summary.names.len());
+    let evaluations = text
+        .lines()
+        .find_map(|line| {
+            line.strip_prefix(&prefix)?
+                .strip_suffix(" evaluations, 0 failures")?
+                .parse::<usize>()
+                .ok()
+        })
+        .ok_or("complete test summary missing")?;
+    assert!(
+        (summary.minimum..=summary.maximum).contains(&evaluations),
+        "executed steps {evaluations} outside {}..={}",
+        summary.minimum,
+        summary.maximum
+    );
+    Ok(evaluations)
+}
+fn check_images(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let images = [
         ("source_operators", true, "0 failures"),
         (
             "replay_order_failure",
@@ -353,17 +492,40 @@ fn check_images(binary: &Path) -> Result<(), Box<dyn std::error::Error>> {
             false,
             "cycle 2: expected length 2, observed length 86400000001",
         ),
-    ] {
-        let output = Command::new(binary).arg(name).output()?;
-        let text = format!(
-            "{}{}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        );
-        assert_eq!(output.status.success(), success, "{name}: {text}");
-        assert!(text.contains(message), "{name}: {text}");
+    ];
+    for batch in images.chunks(4) {
+        image_main(dir, batch.iter().map(|(name, _, _)| *name))?;
+        let binary = build_binary(dir)?;
+        for (name, success, message) in batch {
+            let output = Command::new(&binary).arg(name).output()?;
+            let text = format!(
+                "{}{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            assert_eq!(output.status.success(), *success, "{name}: {text}");
+            assert!(
+                text.contains(message),
+                "{name}: expected {message:?}: {text}"
+            );
+        }
     }
     Ok(())
+}
+fn image_main<'a>(dir: &Path, names: impl Iterator<Item = &'a str>) -> std::io::Result<()> {
+    let mut modules = String::new();
+    let mut calls = String::new();
+    for name in names {
+        writeln!(modules, "mod {name};").unwrap_or_else(|_| unreachable!("String formatting"));
+        writeln!(calls, "Some({name:?})=>{name}::main(),")
+            .unwrap_or_else(|_| unreachable!("String formatting"));
+    }
+    fs::write(
+        dir.join("src/main.rs"),
+        format!(
+            "struct Provider;\nmod native {{pub use hgl_std_native::*;}}\n{modules}fn main() {{match std::env::args().nth(1).as_deref() {{{calls}_=>panic!(\"unknown test image\")}}}}"
+        ),
+    )
 }
 
 fn nullable_images(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
@@ -420,7 +582,7 @@ fn source_operator_image(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let generated = emit_tests(&compile_tests(&operators)?);
     assert!(generated.contains("hgraph.std::replay"));
     assert!(generated.contains("generator_pending"));
-    assert!(generated.contains("list_push"));
+    assert!(generated.contains("append_slot") && generated.contains("commit_append"));
     assert!(!generated.contains("self.replay_input") && !generated.contains("self.capture"));
     assert!(!generated.contains("match self.next"));
     module(dir, "source_operators", &generated)?;

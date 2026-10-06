@@ -12,3 +12,4 @@ workspace = true
 hgl-source = { path = "../hgl-source" }
 hgl-rust-ir = { path = "../hgl-rust-ir" }
 hgl-library = { path = "../hgl-library" }
+hgl-static-values = { path = "../hgl-static-values" }

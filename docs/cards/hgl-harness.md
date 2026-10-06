@@ -23,3 +23,11 @@ constant/temporal arguments, mutation between evals and no callback after failur
 
 Compare captures by logical length and sparse tick positions. Work is bounded
 by supplied expected cells and captured publications, never by a silent horizon.
+
+Execute Step::BindEval once and retain its owned sparse result after teardown.
+Step::If evaluates one ordinary condition and executes exactly one lexical
+branch, preserving outer writes and releasing branch locals even on failure.
+The returned count includes only executed assertions and evaluations (including
+bound evaluations); skipped branches never contribute successful counts.
+
+Complete set/map comparison delegates to hgl-collection-values, preserving exact key/value identities while ignoring entry order.

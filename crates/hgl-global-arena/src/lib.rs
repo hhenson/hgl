@@ -3,10 +3,10 @@ use hgl_columns::Scalar;
 use hgl_types::{Date, EngineDelta, EngineTime, NodeError, NodeResult, ScalarType, Time};
 
 /// An element's positions are interpreted only by its compile-time value marker.
-pub type ListData = Vec<Vec<usize>>;
+pub use hgl_value_lists::ListData;
 /// Upper bounds on slots required before an infallible installation.
 #[derive(Debug, Default)]
-pub struct Capacity([usize; 12]);
+pub struct Capacity([usize; 13]);
 impl Capacity {
     /// Count one statically typed primitive slot.
     pub fn scalar<T: Scalar>(&mut self) {
@@ -19,18 +19,24 @@ impl Capacity {
     }
     /// Count a known number of list descriptors, saturating into reservation failure.
     pub fn lists(&mut self, count: usize) {
-        self.0[11] = self.0[11].saturating_add(count);
+        self.0[12] = self.0[12].saturating_add(count);
     }
 }
 /// Private payloads remain in type-specific columns; all handles are stable indices.
 #[derive(Debug, Default)]
 pub struct Columns {
     values: hgl_columns::Columns,
-    free: [Vec<usize>; 11],
-    lists: Vec<ListData>,
-    free_lists: Vec<usize>,
+    free: [Vec<usize>; 12],
+    lists: hgl_value_lists::Lists,
 }
 impl Columns {
+    /// Construct a fresh scalar position before graph execution.
+    pub fn append_scalar<T: Scalar>(&mut self, value: T) -> usize {
+        let values = T::column_mut(&mut self.values);
+        let slot = values.len();
+        values.push(value);
+        slot
+    }
     /// Obtain every capacity needed by installation and subsequent reclamation.
     pub fn reserve(&mut self, capacity: &Capacity) -> NodeResult {
         self.reserve_scalar::<bool>(capacity)?;
@@ -44,19 +50,10 @@ impl Columns {
         self.reserve_scalar::<hgl_types::CivilDateTime>(capacity)?;
         self.reserve_scalar::<hgl_types::ZoneId>(capacity)?;
         self.reserve_scalar::<hgl_types::ZonedDateTime>(capacity)?;
-        let extra = capacity.0[11].saturating_sub(self.free_lists.len());
-        self.lists
-            .try_reserve(extra)
-            .map_err(|error| NodeError::new(error.to_string()))?;
-        self.free_lists
-            .try_reserve(
-                self.lists
-                    .len()
-                    .saturating_add(extra)
-                    .saturating_sub(self.free_lists.len()),
-            )
-            .map_err(|error| NodeError::new(error.to_string()))
+        self.reserve_scalar::<hgl_types::ZonedTime>(capacity)?;
+        self.lists.reserve(capacity.0[12])
     }
+
     fn reserve_scalar<T: Scalar>(&mut self, capacity: &Capacity) -> NodeResult {
         let free = &mut self.free[kind::<T>()];
         let values = T::column_mut(&mut self.values);
@@ -99,31 +96,46 @@ impl Columns {
     }
     /// Install a prepared list after reservation.
     pub fn insert_list(&mut self, value: ListData) -> usize {
-        if let Some(slot) = self.free_lists.pop() {
-            self.lists[slot] = value;
-            slot
-        } else {
-            let slot = self.lists.len();
-            self.lists.push(value);
-            slot
-        }
+        self.lists.insert(value)
     }
-    /// Inspect an already prepared list descriptor.
-    pub fn list(&self, slot: usize) -> &ListData {
-        &self.lists[slot]
+    /// Inspect only logically active elements.
+    pub fn list(&self, slot: usize) -> &[Vec<usize>] {
+        self.lists.get(slot)
     }
-    /// Mutate an already prepared list descriptor.
+    /// Mutate a dynamic descriptor outside the finite prepared profile.
     pub fn list_mut(&mut self, slot: usize) -> &mut ListData {
-        &mut self.lists[slot]
+        self.lists.get_mut(slot)
     }
-    /// Swap a stable root descriptor, returning its old elements for typed reclamation.
+    /// Return all descendants for typed reclamation.
     pub fn replace_list(&mut self, slot: usize, value: ListData) -> ListData {
-        std::mem::replace(&mut self.lists[slot], value)
+        self.lists.replace(slot, value)
     }
-    /// Reclaim an empty descriptor after its descendants have been released.
+    /// Recycle a reclaimed descriptor.
     pub fn release_list(&mut self, slot: usize) {
-        self.lists[slot].clear();
-        self.free_lists.push(slot);
+        self.lists.release(slot);
+    }
+    /// All retained descendant positions, including vacant elements.
+    pub fn prepared_list(&self, slot: usize) -> &[Vec<usize>] {
+        self.lists.prepared(slot)
+    }
+    /// Publish a preflighted logical list length.
+    pub fn set_list_len(&mut self, slot: usize, length: usize) {
+        self.lists.set_len(slot, length);
+    }
+    /// Borrow an existing typed destination without replacing its capacity.
+    pub fn scalar_mut<T: Scalar>(&mut self, slot: usize) -> &mut T {
+        &mut T::column_mut(&mut self.values)[slot]
+    }
+    /// Copy between disjoint positions after capacity preflight.
+    pub fn copy_scalar<T: Scalar>(&mut self, from: usize, to: usize) {
+        let values = T::column_mut(&mut self.values);
+        if from < to {
+            let (left, right) = values.split_at_mut(to);
+            right[0].copy_from(&left[from]);
+        } else if from > to {
+            let (left, right) = values.split_at_mut(from);
+            left[to].copy_from(&right[0]);
+        }
     }
     /// Allocated positions, including reusable ones, for bounded-storage validation.
     pub fn slot_counts(&self) -> (usize, usize) {
@@ -138,7 +150,8 @@ impl Columns {
                 + count::<EngineDelta>(&self.values)
                 + count::<hgl_types::CivilDateTime>(&self.values)
                 + count::<hgl_types::ZoneId>(&self.values)
-                + count::<hgl_types::ZonedDateTime>(&self.values),
+                + count::<hgl_types::ZonedDateTime>(&self.values)
+                + count::<hgl_types::ZonedTime>(&self.values),
             self.lists.len(),
         )
     }
@@ -156,6 +169,7 @@ fn kind<T: Scalar>() -> usize {
         ScalarType::Duration => 7,
         ScalarType::CivilDateTime => 8,
         ScalarType::TimeZone => 9,
+        ScalarType::ZonedTime => 11,
         ScalarType::ZonedDateTime => 10,
     }
 }

@@ -5,13 +5,12 @@ hgl-source, hgl-library, hgl-value-check, hgl-value-access and hgl-struct-names;
 budget 350 source lines. Identity and declaration lookup are re-exported from
 hgl-struct-names; export closure validation delegates to the same owner.
 
-Public surface: identity, declaration, resolve, specialize, substitute, unify. Nominal required-field structs
+Public surface: identity, declaration, resolve, resolve_ordinary, specialize, substitute, unify. Nominal required-field structs
 preserve qualified identity; ordinary lists preserve recursive element type and
 exact fixedness. Visibility and recursive-schema checks remain source checks.
 Type-generic required-field schemas retain the complete invariant specialization
 identity. Non-null fixed scalar field defaults are checked after substitution and do not
-change nominal identity or sparse publication shape. Optional, recursive and
-const-generic schemas are not admitted.
+change nominal identity or sparse publication shape. Unsupported schemas fail before publication formation.
 
 Acceptance: existing imported/nominal struct checks and ordinary nested
 struct/list construction and global configuration fixtures in hgl-program.
@@ -40,3 +39,35 @@ Generic occurrence validation delegates to hgl-shape-obligations (an allowed
 dependency), preserving the same checked argument identities. Scalar atomic
 spelling normalizes before ordinary-value requirements; composite atomic
 arguments remain shapes and only pass occurrences that admit them.
+
+Resolve declared enum types before ordinary structs through hgl-enums; no generic
+arguments or implicit integer conversion apply. Resolve each retained scalar
+default in its declaration module before checking its exact field type.
+May use hgl-enums.
+
+resolve_ordinary resolves a complete source type with a fresh recursion scope,
+then projects its ordinary payload for argument hints.
+
+Delegates finite recursive declaration batches to hgl-recursive-types before
+ordinary acyclic expansion. Exact canonical edge/root identities unify without
+schema expansion. Generic arguments preserve source boundaries and all invariant
+arguments. Ordinary projection and constructor inference retain complete batches.
+Optional fields and the finite recursive atomic profile are admitted; structural
+recursive roots and const-generic declarations remain outside this profile.
+
+Abstract declarations resolve to a complete immutable FamilyType. All compatible
+declared concrete descendants are collected at wiring, independently of replay
+inputs. Single inheritance uses hgl-inheritance scoped patterns; field_type
+resolves those patterns with the existing exact ordinary type resolver. Family
+formation uses hgl-family-types and rejects recursive family expansion. Explicit
+ancestor identities preserve subfamily-to-ancestor nominal membership.
+
+concrete(&Library,&str,&str,&BTreeMap<String,Ty>)->Result<Ty,String> resolves a specialization with a fresh recursive resolution scope.
+Rolling bounds normalize before substitution and generic unification. A pattern
+rolling<V,Max,Min> matches only a rolling actual with the exact normalized bounds,
+then unifies V. Neither an ordinary arrival nor its delta invents window identity.
+
+`source_argument(&Library,&Ty) -> Result<Ty,String>` recovers declaration-owned
+nominal argument identity from projected ordinary payloads through the scoped
+family inference helper. Constructor inference and direct unification share
+this recovery, preserving nested atomic source boundaries in exact arguments.

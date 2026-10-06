@@ -12,3 +12,19 @@ lookup, native value conversion or graph wiring.
 hgl-rust-preparation delegates checked data emission here and retains native
 conversion and runner emission. Test nested source types, escaped names/literals
 and ordered checked forms through compiled generated executables.
+
+Declared enum source types retain nominal identity through generated i64-backed
+GlobalValue markers. Enum publication uses one prepared whole-value slot without
+structural children. Checked harness capture retains the original declaration
+and assigned member number; it never substitutes an ordinary integer.
+
+value(&Value) -> String exposes exact checked expression serialization for the
+cold finite collection key seeding owner.
+
+Serialize complete recursive root batches and nominal internal edges explicitly.
+Definitions remain canonical and immutable when reconstructed. May use
+hgl-rust-enums::metadata for exact enum metadata shared by type/literal emission.
+
+Delegate exact checked type metadata to hgl-rust-type-data and re-export ty.
+Serialize BindEval and recursive If steps, presence tests/extractions and closed
+sparse Captured data without evaluating any branch or expression.

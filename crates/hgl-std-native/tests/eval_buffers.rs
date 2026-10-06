@@ -54,6 +54,10 @@ fn eight_scalar_types_keep_present_equal_ticks() -> Result<()> {
 
 #[test]
 fn owned_temporal_scalars_keep_exact_identity_and_equal_ticks() -> Result<()> {
+    scalar_round_trip(hgl_types::ZonedTime::from_validated_parts(
+        Time(34_200_123_456),
+        hgl_types::ZoneId::from_validated_name("US/Eastern".into()),
+    ))?;
     scalar_round_trip(hgl_types::CivilDateTime::from_micros(123_456))?;
     scalar_round_trip(hgl_types::ZoneId::from_validated_name("US/Eastern".into()))?;
     scalar_round_trip(hgl_types::ZonedDateTime::from_validated_parts(

@@ -35,3 +35,29 @@ Omitted schema defaults may contain ParsedLiteral::Contextual. Emit the typed
 TemporalLiteral recipe after supplied fields, in declaration order, for ordered
 construction. Existing fixed literal defaults and sparse-delta omission rules
 remain unchanged. Contexts without provider construction reject recipe use.
+
+Resolve retained enum member defaults with their declaration module through
+hgl-enums before constructing an omitted ordinary field. May use hgl-enums.
+
+Optional field positions come from declaration metadata. Reject explicit null
+for required fields before evaluating any constructor argument. Omitted or
+explicitly null optional fields contribute no payload to Kind::Construct;
+present fields retain their normal exact type and written evaluation order.
+An empty Construct for an all-optional schema is a present complete value.
+
+Abstract constructors are rejected. Inherited fields retain ancestor-first order,
+source declaration scopes, introducing optionality/defaults and exact generic
+substitutions. Expected family membership can supply an exact concrete member's
+generic arguments before field checking. Widening itself belongs to family-values.
+
+Unresolved inherited/direct generic field inference first recovers the canonical
+source argument schema. Ordinary field payloads remain projected; inferred and
+explicit nominal specializations retain identical nested atomic boundaries.
+schema_sizes traverses declared ancestors as well as own fields, retaining each
+ancestor module for checked constant-size expressions. Imported inherited list
+bounds therefore use the introducing declaration's helper scope.
+
+Schema bound discovery uses hgl-type-sizes::expressions without fake zero values.
+Rolling bounds stay scalar expressions; payloads alone are traversed as type
+arguments. The compiler evaluates collected expressions in declaration scope and
+retains their exact Literal kind before canonical type validation.

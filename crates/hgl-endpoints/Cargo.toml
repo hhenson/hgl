@@ -12,5 +12,7 @@ line-budget = 650
 [dependencies]
 hgl-types = { path = "../hgl-types" }
 
+hgl-member-table = { path = "../hgl-member-table" }
+
 [lints]
 workspace = true

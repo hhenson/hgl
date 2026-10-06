@@ -7,34 +7,40 @@ pub fn delta_storage(origin: &Ty) -> Ty {
             ("added".into(), list((**key).clone())),
             ("removed".into(), list((**key).clone())),
         ],
-        Ty::List(child, Some(_)) | Ty::Map(_, child) => {
-            let mut fields = vec![
-                ("keys".into(), list(Ty::I64)),
-                ("values".into(), list(delta_type(child))),
-            ];
-            if matches!(origin, Ty::Map(..)) {
-                fields.push(("removed".into(), list(Ty::I64)));
-            }
-            fields
-        }
+        Ty::List(child, Some(_)) => vec![
+            ("keys".into(), list(Ty::I64)),
+            ("values".into(), list(delta_type(child))),
+        ],
+        Ty::List(child, None) => vec![
+            ("keys".into(), list(Ty::I64)),
+            ("values".into(), list(delta_type(child))),
+            ("removed".into(), list(Ty::I64)),
+        ],
+        Ty::Map(key, child) => vec![
+            ("keys".into(), list((**key).clone())),
+            ("values".into(), list(delta_type(child))),
+            ("removed".into(), list((**key).clone())),
+        ],
         Ty::Tuple(children) => children
             .iter()
             .enumerate()
             .map(|(i, child)| (i.to_string(), list(delta_type(child))))
             .collect(),
-        Ty::Struct(_, fields) => fields
+        Ty::Struct(_, fields, _) => fields
             .iter()
             .map(|(name, child)| (name.clone(), list(delta_type(child))))
             .collect(),
-        Ty::Atomic(_)
+        Ty::Rolling(..)
+        | Ty::Atomic(_)
         | Ty::Delta(_)
-        | Ty::List(..)
         | Ty::I64
         | Ty::F64
         | Ty::Bool
         | Ty::Str
         | Ty::CivilDateTime
         | Ty::TimeZone
+        | Ty::Enum(_)
+        | Ty::ZonedTime
         | Ty::ZonedDateTime
         | Ty::Duration
         | Ty::Date
@@ -42,10 +48,16 @@ pub fn delta_storage(origin: &Ty) -> Ty {
         | Ty::DateTime
         | Ty::Ref(_)
         | Ty::Nullable(_)
+        | Ty::Recursive(_)
+        | Ty::Family(_)
         | Ty::Void => unreachable!("checked structural delta origin"),
     };
     // A NUL cannot occur in an HGL declaration name; synthetic identities cannot alias user structs.
-    Ty::Struct(format!("\0delta<{}>", origin.source_name()).into(), fields)
+    Ty::Struct(
+        format!("\0delta<{}>", origin.source_name()).into(),
+        fields,
+        Vec::new(),
+    )
 }
 
 /// Ordinary publication payload of an admitted temporal shape.

@@ -12,6 +12,35 @@ pub fn normalize(
     let Some((base, args)) = application(name) else {
         return Ok(name.into());
     };
+    if base == "rolling" {
+        if !(2..=3).contains(&args.len()) {
+            return Err("rolling requires payload, maximum and optional minimum".into());
+        }
+        let max = evaluate(args[1])?;
+        let min = if args.len() == 3 {
+            evaluate(args[2])?
+        } else {
+            max.clone()
+        };
+        let window = match (max, min) {
+            (Literal::Int(max), Literal::Int(min)) => {
+                hgl_source::Window::new(hgl_source::WindowKind::Ticks, max, min)?
+            }
+            (Literal::Duration(max), Literal::Duration(min)) => {
+                hgl_source::Window::new(hgl_source::WindowKind::Duration, max, min)?
+            }
+            _ => {
+                return Err(
+                    "rolling sizes require constants of the same i64 or duration kind".into(),
+                );
+            }
+        };
+        return Ok(format!(
+            "rolling<{},{}>",
+            normalize(args[0], evaluate)?,
+            window.source_name()
+        ));
+    }
     if base == "list" {
         if !(1..=2).contains(&args.len()) {
             return Err("list requires an element and optional constant size".into());
@@ -33,6 +62,25 @@ pub fn normalize(
         .map(|arg| normalize(arg, evaluate))
         .collect::<Result<Vec<_>, _>>()?;
     Ok(format!("{base}<{}>", args.join(",")))
+}
+/// Collect explicit bound expressions without evaluating or fabricating size values.
+pub fn expressions(name: &str) -> Vec<&str> {
+    if let Some(origin) = delta_argument(name) {
+        return expressions(origin);
+    }
+    let Some((base, args)) = application(name) else {
+        return Vec::new();
+    };
+    let bounded = matches!(base, "list" | "rolling");
+    let mut bounds = args
+        .iter()
+        .take(if bounded { 1 } else { args.len() })
+        .flat_map(|arg| expressions(arg))
+        .collect::<Vec<_>>();
+    if bounded {
+        bounds.extend(args.into_iter().skip(1).filter(|arg| *arg != "unbounded"));
+    }
+    bounds
 }
 /// Evaluate a closed scalar size expression with ordinary checked semantics.
 pub fn literal(source: &str) -> Result<Literal, String> {

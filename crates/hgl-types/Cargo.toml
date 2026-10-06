@@ -13,4 +13,6 @@ line-budget = 250
 workspace = true
 
 [dependencies]
+hgl-growing-range = { path = "../hgl-growing-range" }
 hgl-time-values = { path = "../hgl-time-values" }
+hgl-window-types = { path = "../hgl-window-types" }

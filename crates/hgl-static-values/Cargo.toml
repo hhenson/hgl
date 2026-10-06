@@ -1,0 +1,17 @@
+[package]
+name = "hgl-static-values"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+[package.metadata.hgl]
+line-budget = 150
+[lints]
+workspace = true
+[dependencies]
+hgl-rust-ir = { path = "../hgl-rust-ir" }
+hgl-library = { path = "../hgl-library" }
+hgl-source = { path = "../hgl-source" }
+hgl-value-eval = { path = "../hgl-value-eval" }
+hgl-value-constant = { path = "../hgl-value-constant" }
+hgl-composite-keys = { path = "../hgl-composite-keys" }

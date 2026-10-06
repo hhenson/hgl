@@ -52,3 +52,8 @@ metadata after nested composition calls. This does not claim complete signal
 provenance through forwarded calls.
 `graph_result(Value, &Ty) -> Result<Value, String>` retains the existing
 composition result category/type boundary, including REF compatibility and void.
+
+Ordinary collection equality does not read structural temporal endpoints. Binary
+checking rejects set/map endpoint operands before scalar lowering; complete
+ordinary constructors, configuration and explicit atomic observations retain
+their existing value category.

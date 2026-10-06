@@ -60,6 +60,28 @@ Ordinary tuple preparation uses `OrdinaryType::Tuple` and positional child
 layouts. Generated tuple GlobalValue implementations retain, prepare, commit
 and reclaim recursively under the same ownership contract as nominal structs.
 
-CivilDateTime, ZoneId and ZonedDateTime are concrete typed scalar implementations.
+CivilDateTime, ZoneId, ZonedDateTime and ZonedTime are concrete typed scalar implementations.
 Zone-bearing values retain exact owned names fallibly at retention boundaries;
 prepared borrowed projections neither allocate nor consult a provider.
+
+GlobalValue::PREPARED_SCALAR defaults to false. Generated enum markers set it
+true and use Value=i64, Slots=usize, WIDTH=1 and OrdinaryType::Enum(identity).
+They delegate typed slot operations to i64 while preserving the nominal schema.
+Only such enum roots are initialized physically during endpoint construction;
+no default enum member is published. Ordinary allocation recognizes Enum as one
+i64 physical leaf. Retention and complete nested payload rules remain unchanged.
+
+ValueSlot::from_fields(T::Slots)->Self reconstructs a typed projection from
+compile-time-selected immediate field positions. It does not inspect payloads or
+create ownership; the marker and arena identity remain caller contracts.
+
+Construction-time allocation recognizes OptionalField as one initially empty
+presence descriptor. Optional payload representation and typed operations are
+owned by hgl-optional; unset fields allocate no descendant payload.
+
+Schema-driven allocate rejects a bare RecursiveReference with an unresolved-edge
+error. Admitted recursive fields place the reference beneath OptionalField;
+actual descendants are installed by statically typed Recursive markers, never by
+looking up a name during evaluation.
+
+Schema-driven Set/Map root allocation creates one ordinary descriptor, using the same typed descendant ownership protocol as lists.

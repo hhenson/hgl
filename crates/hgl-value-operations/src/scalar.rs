@@ -16,7 +16,8 @@ fn value(literal: Literal) -> Value {
 fn overflow() -> EvalError {
     unsupported("integer overflow policy is not specified")
 }
-pub(super) fn unary(op: &str, operand: &Value) -> Result<Value, EvalError> {
+/// Evaluate a checked ordinary scalar unary operation.
+pub fn unary(op: &str, operand: &Value) -> Result<Value, EvalError> {
     let result = match (op, scalar(operand)?) {
         ("!", Literal::Bool(v)) => Literal::Bool(!v),
         ("-", Literal::Int(v)) => Literal::Int(v.checked_neg().ok_or_else(overflow)?),
@@ -37,15 +38,19 @@ pub(super) fn unary(op: &str, operand: &Value) -> Result<Value, EvalError> {
 fn as_float(value: i64) -> f64 {
     value as f64
 }
-pub(super) fn binary(op: &str, a: &Value, b: &Value) -> Result<Value, EvalError> {
-    let (a, b) = (scalar(a)?, scalar(b)?);
-    if a.ty() == b.ty()
-        && matches!(
-            a,
-            Literal::CivilDateTime(_) | Literal::TimeZone(_) | Literal::ZonedDateTime(_)
-        )
-        && matches!(op, "==" | "!=")
+/// Evaluate a checked ordinary scalar or family equality operation.
+pub fn binary(op: &str, a: &Value, b: &Value) -> Result<Value, EvalError> {
+    if matches!(
+        a.ty,
+        hgl_source::Ty::Set(_) | hgl_source::Ty::Map(..) | hgl_source::Ty::Family(_)
+    ) && matches!(op, "==" | "!=")
     {
+        return Ok(value(Literal::Bool(
+            hgl_collection_values::equal(a, b) == (op == "=="),
+        )));
+    }
+    let (a, b) = (scalar(a)?, scalar(b)?);
+    if a.ty() == b.ty() && matches!(op, "==" | "!=") && !matches!(a, Literal::Float(_)) {
         return Ok(value(Literal::Bool((a == b) == (op == "=="))));
     }
     let result = match (a, b) {

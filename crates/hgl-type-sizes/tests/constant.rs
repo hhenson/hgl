@@ -21,3 +21,19 @@ fn canonical_sizes_and_errors() {
         assert!(error.contains(fragment), "{source}: {error}");
     }
 }
+
+#[test]
+fn schema_bound_collection_does_not_fabricate_or_evaluate_values() {
+    assert_eq!(
+        hgl_type_sizes::expressions("tuple<rolling<str,width(),0us>,list<i64,size(1)>>"),
+        vec!["width()", "0us", "size(1)"]
+    );
+    assert_eq!(
+        hgl_type_sizes::expressions("list<rolling<i64,2>,unbounded>"),
+        vec!["2"]
+    );
+    assert_eq!(
+        hgl_type_sizes::expressions("rolling<i64,-1us>"),
+        vec!["-1us"]
+    );
+}

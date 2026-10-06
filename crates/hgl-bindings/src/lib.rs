@@ -68,18 +68,7 @@ impl Bindings {
     }
     /// Allocate an input and every fixed child in its graph scope.
     pub fn add_input(&mut self, owner: NodeId, kind: Kind, active: bool) -> InputId {
-        let id = self.endpoints.add_input(owner, kind, active, self.scope());
-        self.scopes.reserve(self.scope(), owner);
-        self.endpoints.inputs[id.0 as usize].scope_position = self.scopes.record_input(id);
-        for position in 0..self.input(id).kind.len() {
-            let child = self.add_input(owner, self.input(id).kind.child(position).clone(), active);
-            self.endpoints.inputs[child.0 as usize].parent = Some((
-                id,
-                i64::try_from(position).unwrap_or_else(|_| unreachable!()),
-            ));
-            self.endpoints.inputs[id.0 as usize].fixed.push(child);
-        }
-        id
+        hgl_binding_build::input(&mut self.endpoints, &mut self.scopes, owner, kind, active)
     }
     fn check_reference(&self, input: InputId, output: OutputId) -> Result<(), BindError> {
         self.check(input, output)?;
@@ -194,28 +183,15 @@ impl Bindings {
         }
     }
     fn clear_projection(&mut self, input: InputId) {
-        while let Some((_, child)) = self.endpoints.inputs[input.0 as usize]
-            .members
+        let members = std::mem::take(&mut self.endpoints.inputs[input.0 as usize].members);
+        for child in members
             .live
-            .pop_first()
+            .into_values()
+            .chain(members.removed.into_values())
+            .chain(members.prepared.into_iter().map(|(_, child)| child))
         {
             self.release_input(child);
         }
-        while let Some((_, child)) = self.endpoints.inputs[input.0 as usize]
-            .members
-            .removed
-            .pop_first()
-        {
-            self.release_input(child);
-        }
-        self.endpoints.inputs[input.0 as usize]
-            .members
-            .initial
-            .clear();
-        self.endpoints.inputs[input.0 as usize]
-            .members
-            .changed
-            .clear();
     }
     fn detach(&mut self, input: InputId) {
         if let Some(o) = self.endpoints.inputs[input.0 as usize].source.take() {
@@ -234,7 +210,12 @@ impl Bindings {
             self.set_active(self.input(input).fixed[n], active);
         }
         let members = std::mem::take(&mut self.endpoints.inputs[input.0 as usize].members);
-        for &child in members.live.values().chain(members.removed.values()) {
+        for &child in members
+            .live
+            .values()
+            .chain(members.removed.values())
+            .chain(members.prepared.iter().map(|(_, child)| child))
+        {
             self.set_active(child, active);
         }
         self.endpoints.inputs[input.0 as usize].members = members;
@@ -388,7 +369,11 @@ impl Bindings {
             return;
         }
         match &self.output(output).kind {
-            Kind::Dictionary(_) | Kind::Set(_) => {
+            Kind::Growing(_)
+            | Kind::Dictionary(_)
+            | Kind::Set(_)
+            | Kind::KeyedDictionary(..)
+            | Kind::KeyedSet(_) => {
                 let children =
                     std::mem::take(&mut self.endpoints.outputs[output.0 as usize].members.live);
                 for &child in children.values() {
@@ -410,7 +395,7 @@ impl Bindings {
                     self.invalidate(self.output(output).fixed[n], now, wake);
                 }
             }
-            Kind::Ts(_) | Kind::Atomic(_) => {}
+            Kind::Ts(_) | Kind::Atomic(_) | Kind::Rolling(..) => {}
         }
         self.endpoints.outputs[output.0 as usize].modified_at = EngineTime::NEVER;
         self.notify_output(output, now, wake);
@@ -491,6 +476,7 @@ impl Bindings {
             .live
             .into_values()
             .chain(children.removed.into_values())
+            .chain(children.prepared.into_iter().map(|(_, child)| child))
         {
             self.expire(child);
         }
@@ -548,7 +534,14 @@ impl Bindings {
                 n += 1;
                 continue;
             }
-            self.expire(id);
+            if self.output(id).parent.is_some_and(|(parent, key)| {
+                self.output(parent).members.prepared_child(key) == Some(id)
+            }) && self.scopes.alive(self.output(id).scope)
+            {
+                self.endpoints.reset_prepared(id);
+            } else {
+                self.expire(id);
+            }
             self.retired.swap_remove(n);
         }
         self.scopes.reclaim(now, fresh_run, &mut self.items);

@@ -1,0 +1,15 @@
+[package]
+name = "hgl-rust-direct-deltas"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+[package.metadata.hgl]
+line-budget = 400
+[lints]
+workspace = true
+[dependencies]
+hgl-source = { path = "../hgl-source" }
+hgl-rust-ir = { path = "../hgl-rust-ir" }
+hgl-rust-layouts = { path = "../hgl-rust-layouts" }
+hgl-rust-observed = { path = "../hgl-rust-observed" }

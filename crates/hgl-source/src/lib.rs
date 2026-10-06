@@ -1,7 +1,10 @@
 //! Source tokens, expressions and statements shared by HGL compiler stages.
 pub use hgl_lex::{Token, lex};
 pub use hgl_literals::{Literal, ParsedLiteral, TemporalLiteral};
-pub use hgl_type_shape::{Nominal, Ty, application, delta_argument};
+pub use hgl_type_shape::{
+    EnumType, FamilyType, Nominal, NominalDefinition, RecursiveType, Ty, Window, WindowKind,
+    application, delta_argument,
+};
 #[derive(Debug, Clone)]
 /// An expression before name and type resolution.
 pub enum Expr {
@@ -318,7 +321,8 @@ impl<'a> Cursor<'a> {
         if !self.take("(") {
             return Ok(Expr::Name(name));
         }
-        let args = self.call_arguments(applied && name.starts_with("delta<"))?;
+        let args = self
+            .call_arguments(applied && (name.starts_with("delta<") || name.starts_with("map<")))?;
         Ok(if applied {
             Expr::Applied(name, args)
         } else {

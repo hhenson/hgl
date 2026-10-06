@@ -35,3 +35,9 @@ self-source push; writable nested projections; failed retention/capacity atomici
 no copies/allocations at borrow,len,index; bounded arena high-water under repeated
 replacement and errors. Fixed growth is rejected by source checking and the typed
 runtime push API. Positive fixed construction requires exactly N existing values.
+
+The List marker and its owning/finite-prepared storage implementations now live
+in hgl-list-storage and are reexported unchanged. hgl-list keeps ordinary list
+operations and additionally reexports ListBounds, append_slot and commit_append.
+Finite prepared copying retains vacant descendants; dynamic operations remain
+explicitly outside that protocol.

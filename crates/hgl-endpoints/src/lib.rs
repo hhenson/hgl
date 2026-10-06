@@ -1,6 +1,6 @@
 //! Endpoint storage without binding or notification policy.
+use hgl_member_table::Table;
 use hgl_types::{EngineTime, NodeId};
-use std::collections::BTreeMap;
 /// One output slot in a run.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct OutputId(pub u32);
@@ -36,12 +36,14 @@ pub struct ScopeId {
 /// Keyed membership and current-cycle changes.
 #[derive(Debug)]
 pub struct Members<I> {
+    /// Permanently allocated children for a finite domain.
+    pub prepared: Vec<(i64, I)>,
     /// Binding-owned storage bookkeeping.
-    pub live: BTreeMap<i64, I>,
+    pub live: Table<I>,
     /// Binding-owned storage bookkeeping.
-    pub removed: BTreeMap<i64, I>,
+    pub removed: Table<I>,
     /// Binding-owned storage bookkeeping.
-    pub initial: BTreeMap<i64, bool>,
+    pub initial: Table<bool>,
     /// Binding-owned storage bookkeeping.
     pub changed: Vec<i64>,
     /// Binding-owned storage bookkeeping.
@@ -50,12 +52,63 @@ pub struct Members<I> {
 impl<I> Default for Members<I> {
     fn default() -> Self {
         Self {
-            live: BTreeMap::new(),
-            removed: BTreeMap::new(),
-            initial: BTreeMap::new(),
+            prepared: Vec::new(),
+            live: Table::default(),
+            removed: Table::default(),
+            initial: Table::default(),
             changed: Vec::new(),
             epoch: EngineTime::NEVER,
         }
+    }
+}
+impl<I: Copy> Members<I> {
+    /// Establish reusable absent slots for all prepared children.
+    pub fn prepare(&mut self, mut children: Vec<(i64, I)>) {
+        children.sort_unstable_by_key(|&(key, _)| key);
+        let keys = children.iter().map(|&(key, _)| key).collect::<Vec<_>>();
+        self.live.prepare(&keys);
+        self.removed.prepare(&keys);
+        self.initial.prepare(&keys);
+        self.changed = Vec::with_capacity(keys.len());
+        self.prepared = children;
+    }
+    /// One permanently allocated child, including an absent member.
+    pub fn prepared_child(&self, key: i64) -> Option<I> {
+        self.live
+            .domain_index(key)
+            .map(|index| self.prepared[index].1)
+    }
+    /// Retain children while allowing their primitive keys to arrive during execution.
+    pub fn pool(&mut self) {
+        self.live.pool();
+        self.removed.pool();
+        self.initial.pool();
+    }
+    /// Bind a new runtime key to the corresponding retained child and bookkeeping slots.
+    pub fn claim(&mut self, key: i64) -> I {
+        let index = self.live.register(key);
+        self.removed.register(key);
+        self.initial.register(key);
+        self.prepared[index].0 = key;
+        self.prepared[index].1
+    }
+
+    /// Retain first membership and move the child into the live set.
+    pub fn insert(&mut self, key: i64, child: I) {
+        self.initial
+            .insert_initial(key, self.removed.contains_key(key));
+        self.removed.remove(key);
+        self.live.insert(key, child);
+        if !self.live.prepared() {
+            self.changed.reserve(self.live.len() + self.removed.len());
+        }
+    }
+    /// Record a removal while retaining its current-cycle child.
+    pub fn remove(&mut self, key: i64) -> Option<I> {
+        let child = self.live.remove(key)?;
+        self.initial.insert_initial(key, true);
+        self.removed.insert(key, child);
+        Some(child)
     }
 }
 /// Read-only output metadata, owned by Bindings.
@@ -179,7 +232,7 @@ impl Endpoints {
         }
         while let Some((parent, key)) = self.input(input).parent {
             if !self.input(parent).kind.fixed()
-                && self.input(parent).members.live.get(&key) != Some(&input)
+                && self.input(parent).members.live.get(key) != Some(&input)
             {
                 return false;
             }
@@ -188,6 +241,56 @@ impl Endpoints {
         true
     }
 
+    /// Reset a retained finite member after its removal observation cycle.
+    pub fn reset_prepared(&mut self, id: OutputId) {
+        for n in 0..self.output(id).fixed.len() {
+            self.reset_prepared(self.output(id).fixed[n]);
+        }
+        while let Some((_, child)) = self.outputs[id.0 as usize].members.live.pop_first() {
+            self.reset_prepared(child);
+        }
+        while let Some((_, child)) = self.outputs[id.0 as usize].members.removed.pop_first() {
+            self.reset_prepared(child);
+        }
+        for n in 0..self.output(id).watchers.len() {
+            self.reset_input(self.output(id).watchers[n]);
+        }
+        let output = &mut self.outputs[id.0 as usize];
+        output.generation = output
+            .generation
+            .checked_add(1)
+            .unwrap_or_else(|| unreachable!("prepared output generation exhausted"));
+        output.modified_at = EngineTime::NEVER;
+        output.notified_at = EngineTime::NEVER;
+        output.parent_at = EngineTime::NEVER;
+        output.valid_children = 0;
+        output.parent_valid = false;
+        output.notified_valid = false;
+        output.retired_at = EngineTime::NEVER;
+        output.retirement_queued = false;
+        output.members.initial.clear();
+        output.members.changed.clear();
+    }
+    fn reset_input(&mut self, id: InputId) {
+        for n in 0..self.input(id).fixed.len() {
+            self.reset_input(self.input(id).fixed[n]);
+        }
+        while let Some((_, child)) = self.inputs[id.0 as usize].members.live.pop_first() {
+            self.reset_input(child);
+        }
+        while let Some((_, child)) = self.inputs[id.0 as usize].members.removed.pop_first() {
+            self.reset_input(child);
+        }
+        let input = &mut self.inputs[id.0 as usize];
+        input.valid = false;
+        input.valid_children = 0;
+        input.sampled_at = EngineTime::NEVER;
+        input.observed_at = EngineTime::NEVER;
+        input.notified_at = EngineTime::NEVER;
+        input.parent_at = EngineTime::NEVER;
+        input.members.initial.clear();
+        input.members.changed.clear();
+    }
     /// Output metadata. An unknown id is a caller error.
     pub fn output(&self, id: OutputId) -> &Output {
         &self.outputs[id.0 as usize]
@@ -316,3 +419,29 @@ pub use scopes::{Phase, Scope, Scopes};
 
 mod assemblies;
 pub use assemblies::Assemblies;
+
+impl Endpoints {
+    /// Resolve or assign a permanently retained child and its prebound projections.
+    /// # Panics
+    /// Fixed domains must contain the key; bounded pools must have capacity.
+    pub fn prepared_child(&mut self, root: OutputId, key: i64) -> Option<OutputId> {
+        if let Some(child) = self.output(root).members.prepared_child(key) {
+            return Some(child);
+        }
+        if !self.output(root).members.live.pooled() {
+            assert!(
+                !self.output(root).members.live.prepared(),
+                "key outside prepared collection domain"
+            );
+            return None;
+        }
+        let child = self.outputs[root.0 as usize].members.claim(key);
+        self.outputs[child.0 as usize].parent = Some((root, key));
+        for position in 0..self.output(root).watchers.len() {
+            let input = self.output(root).watchers[position];
+            let view = self.inputs[input.0 as usize].members.claim(key);
+            self.inputs[view.0 as usize].parent = Some((input, key));
+        }
+        Some(child)
+    }
+}

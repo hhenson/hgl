@@ -28,6 +28,14 @@ its Shape is `TsType::Atomic(T::schema())`. This card also permits the
 hgl-global-value dependency. Atomic inputs/outputs use the same prepared
 Input/Output tokens and generation checks, without structural field projection.
 
-CivilDateTime, ZoneId and ZonedDateTime are concrete typed scalar implementations.
+CivilDateTime, ZoneId, ZonedDateTime and ZonedTime are concrete typed scalar implementations.
 Zone-bearing values retain exact owned names fallibly at retention boundaries;
 prepared borrowed projections neither allocate nor consult a provider.
+
+Map<S,K=i64> and Set<K> require the statically selected hgl-keys Key contract.
+Map keeps the i64 compatibility schema; other keys use KeyedDictionary with
+exact ordinary identity. Set uses scalar or nominal KeyedSet metadata. Typed
+projections continue to use prepared internal membership IDs.
+
+The exhaustive ordinary-schema carrier includes Set/Map variants; source key admission remains the frontend contract.
+Growing<S> is the statically typed dense growing-list marker. Its member projections reuse construction-validated typed child tokens; Shape metadata remains distinct from Dictionary and Fixed.

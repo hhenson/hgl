@@ -312,3 +312,52 @@ owning reads. `set_atomic<T, W: Wake>(Output<Atomic<T>>, T::Value, EngineTime,
 and wakes the existing binding. Validity and modification remain in Bindings.
 
 `globals() -> &GlobalState` provides immutable access to the same run-owned store.
+
+## Finite collection preparation
+
+May additionally use hgl-keys and hgl-store-build. `Key` and `Keys` are
+re-exported; `Store::keys: Keys` retains exact typed ordinary key values before
+instantiation. Runtime endpoints use opaque stable i64 domain tokens, without
+coercing the ordinary key identity.
+
+`prepare_collection(root, &[i64], FnMut(&mut Store,NodeId)->OutputId)` cold
+allocates every possible child through the statically selected factory. Factories
+may recursively prepare nested collections. `prepare_collection_inputs()` runs
+once after complete wiring and before target startup, preparing all projections
+and cycle work capacities. Both follow the existing infallible construction
+contract; invalid domain/shape assumptions fail explicitly.
+
+Prepared children are absent and invalid until insertion. First insertion,
+removal, subsequent reinsertion and projection synchronization reuse storage.
+The removal cycle retains values; its next boundary resets descendant validity,
+nested membership and generations, so old references/writers cannot revive
+stale fields. Active membership traversal ignores never-used domain slots.
+Generation exhaustion fails explicitly rather than wrapping a designation.
+
+The finite prepared evaluation profile has whole-cycle zero-allocation tests,
+including nested maps, partial bundle fields, held references and owning String,
+provider ZoneId and ZonedTime keys. Existing unprepared dynamic construction
+and runtime rebinding remain outside this finite-domain allocation guarantee.
+
+prepared()->PreparedStorage returns disjoint runtime borrows for cold setup and
+finite prepared copying. PreparedStorage, PreparedTick, Observation, PreparedValue,
+ListBounds, append_slot and commit_append are reexported. Existing dynamic APIs
+remain available; finite generated evaluation uses independently reserved storage
+and never replaces that capacity with source-owned aliases.
+
+Out::generation()->u32 exposes the original writing-token generation for the
+prepared publication facade; it never substitutes the current endpoint generation.
+
+Re-exports `Optional` through hgl-global for generated concrete struct field
+markers. The six shared optional cases pass debug/release capture semantics and
+zero allocations measured across every actual graph.evaluate call, including
+first publication, pass-through and recording.
+
+Reexports Recursive and RecursiveTarget through hgl-global. Complete recursive
+publication uses the existing prepared atomic facade; boxes are materialized and
+captured only at cold owning boundaries, while per-tick copies reuse descendants.
+
+Store owns and exposes an independent hgl-rolling Arena. Rolling and WindowShape
+are reexported for statically typed output/input handles. Shaped allocation creates
+invalid rolling roots; PreparedStorage owns the disjoint cold/hot access. The
+payload is ordinary V and root membership/readiness is private rolling state.

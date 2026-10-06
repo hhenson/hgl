@@ -3,22 +3,26 @@ use hgl_source::Ty;
 /// Emit the checked rust type form.
 pub fn rust_type(ty: &Ty) -> &'static str {
     match ty {
-        Ty::I64 => "i64",
+        Ty::Enum(_) | Ty::I64 => "i64",
         Ty::Duration => "hgl_types::EngineDelta",
         Ty::Date => "hgl_types::Date",
         Ty::Time => "hgl_types::Time",
         Ty::DateTime => "hgl_types::EngineTime",
         Ty::CivilDateTime => "hgl_types::CivilDateTime",
         Ty::TimeZone => "hgl_types::ZoneId",
+        Ty::ZonedTime => "hgl_types::ZonedTime",
         Ty::ZonedDateTime => "hgl_types::ZonedDateTime",
         Ty::Bool => "bool",
         Ty::F64 => "f64",
         Ty::Str => "String",
         Ty::Void => "()",
         Ty::Atomic(_)
+        | Ty::Rolling(..)
         | Ty::Map(..)
         | Ty::Tuple(_)
         | Ty::Delta(_)
+        | Ty::Recursive(_)
+        | Ty::Family(_)
         | Ty::Struct(..)
         | Ty::List(..)
         | Ty::Nullable(_) => {
@@ -31,6 +35,7 @@ pub fn rust_type(ty: &Ty) -> &'static str {
 /// Emit the checked scalar type form.
 pub fn scalar_type(ty: &Ty) -> &'static str {
     match ty {
+        Ty::Enum(_) => unreachable!("enum metadata retains nominal identity"),
         Ty::Bool => "Bool",
         Ty::F64 => "F64",
         Ty::I64 => "I64",
@@ -41,14 +46,18 @@ pub fn scalar_type(ty: &Ty) -> &'static str {
         Ty::DateTime => "DateTime",
         Ty::CivilDateTime => "CivilDateTime",
         Ty::TimeZone => "TimeZone",
+        Ty::ZonedTime => "ZonedTime",
         Ty::ZonedDateTime => "ZonedDateTime",
         Ty::Atomic(_)
+        | Ty::Rolling(..)
         | Ty::Map(..)
         | Ty::Tuple(_)
         | Ty::Delta(_)
         | Ty::Ref(_)
         | Ty::Set(_)
         | Ty::Nullable(_)
+        | Ty::Recursive(_)
+        | Ty::Family(_)
         | Ty::Struct(..)
         | Ty::List(..)
         | Ty::Void => {

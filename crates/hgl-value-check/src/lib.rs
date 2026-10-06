@@ -81,7 +81,12 @@ fn expression(value: &Value, live: &BTreeMap<usize, bool>) -> Result<(), String>
             conflict(*entry, false, live)?;
             if matches!(
                 value.ty,
-                Ty::Tuple(_) | Ty::Struct(..) | Ty::List(..) | Ty::Delta(_)
+                Ty::Tuple(_)
+                    | Ty::Recursive(_)
+                    | Ty::Family(_)
+                    | Ty::Struct(..)
+                    | Ty::List(..)
+                    | Ty::Delta(_)
             ) {
                 return Err("aggregate get requires a typed let or var binding".into());
             }
@@ -91,10 +96,8 @@ fn expression(value: &Value, live: &BTreeMap<usize, bool>) -> Result<(), String>
             conflict(*entry, true, live)?;
         }
         Kind::Delta(parts) => {
-            for part in parts {
-                if let hgl_rust_ir::DeltaEntry::Child(_, value) = part {
-                    expression(value, live)?;
-                }
+            for value in parts.iter().flat_map(hgl_rust_ir::DeltaEntry::operands) {
+                expression(value, live)?;
             }
         }
         Kind::List(values) => {
@@ -109,7 +112,7 @@ fn expression(value: &Value, live: &BTreeMap<usize, bool>) -> Result<(), String>
             }
             block(body, &mut live.clone())?;
         }
-        Kind::Index(parent, index) | Kind::Push(parent, index) => {
+        Kind::Index(parent, index) | Kind::Push(parent, index) | Kind::Binary(_, parent, index) => {
             expression(parent, live)?;
             expression(index, live)?;
         }
@@ -124,16 +127,13 @@ fn expression(value: &Value, live: &BTreeMap<usize, bool>) -> Result<(), String>
                 expression(value, live)?;
             }
         }
-        Kind::Binary(_, a, b) => {
-            expression(a, live)?;
-            expression(b, live)?;
-        }
         Kind::Length(value)
         | Kind::Field(value, _)
         | Kind::IsPresent(value)
         | Kind::Present(value)
         | Kind::Unary(_, value) => expression(value, live)?,
         Kind::TemporalLiteral(_)
+        | Kind::Captured(..)
         | Kind::Prepared(_)
         | Kind::WiringFailure(_)
         | Kind::BorrowedLocal(..)
@@ -320,7 +320,12 @@ pub fn prepare_node(
             if matches!(value.kind, Kind::Prepared(_))
                 || matches!(
                     value.ty,
-                    Ty::Tuple(_) | Ty::List(..) | Ty::Struct(..) | Ty::Delta(_)
+                    Ty::Tuple(_)
+                        | Ty::List(..)
+                        | Ty::Recursive(_)
+                        | Ty::Family(_)
+                        | Ty::Struct(..)
+                        | Ty::Delta(_)
                 )
             {
                 let id = node.configuration.len();
@@ -375,11 +380,14 @@ pub fn binary_type(op: &str, a: &Ty, b: &Ty) -> Result<Ty, String> {
         {
             Ty::Bool
         }
+        "==" | "!=" if matches!(a, Ty::Family(_) | Ty::Set(_) | Ty::Map(..)) => Ty::Bool,
         "==" | "!="
             if !matches!(
                 *a,
                 Ty::Void
                     | Ty::Set(_)
+                    | Ty::Recursive(_)
+                    | Ty::Family(_)
                     | Ty::Struct(..)
                     | Ty::List(..)
                     | Ty::Delta(_)

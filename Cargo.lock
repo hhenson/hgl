@@ -49,6 +49,7 @@ version = "0.0.0"
 dependencies = [
  "hgl-bindings",
  "hgl-global-value",
+ "hgl-prepared-value",
  "hgl-shapes",
  "hgl-types",
 ]
@@ -66,9 +67,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "hgl-binding-build"
+version = "0.0.0"
+dependencies = [
+ "hgl-endpoints",
+ "hgl-types",
+]
+
+[[package]]
 name = "hgl-bindings"
 version = "0.0.0"
 dependencies = [
+ "hgl-binding-build",
  "hgl-endpoints",
  "hgl-types",
 ]
@@ -89,9 +99,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "hgl-collection-check"
+version = "0.0.0"
+dependencies = [
+ "hgl-collection-values",
+ "hgl-rust-ir",
+ "hgl-source",
+ "hgl-value-access",
+ "hgl-value-constant",
+ "hgl-value-eval",
+]
+
+[[package]]
+name = "hgl-collection-values"
+version = "0.0.0"
+dependencies = [
+ "hgl-composite-keys",
+ "hgl-family-values",
+ "hgl-rust-ir",
+ "hgl-source",
+]
+
+[[package]]
 name = "hgl-columns"
 version = "0.0.0"
 dependencies = [
+ "hgl-scalar-copy",
  "hgl-types",
 ]
 
@@ -101,6 +134,15 @@ version = "0.0.0"
 dependencies = [
  "hgl-documentation",
  "hgl-program",
+]
+
+[[package]]
+name = "hgl-composite-keys"
+version = "0.0.0"
+dependencies = [
+ "hgl-rust-ir",
+ "hgl-scalar-keys",
+ "hgl-source",
 ]
 
 [[package]]
@@ -114,6 +156,8 @@ dependencies = [
 name = "hgl-delta-check"
 version = "0.0.0"
 dependencies = [
+ "hgl-composite-keys",
+ "hgl-rust-ir",
  "hgl-source",
 ]
 
@@ -145,7 +189,17 @@ dependencies = [
 name = "hgl-endpoints"
 version = "0.0.0"
 dependencies = [
+ "hgl-member-table",
  "hgl-types",
+]
+
+[[package]]
+name = "hgl-enums"
+version = "0.0.0"
+dependencies = [
+ "hgl-library",
+ "hgl-source",
+ "hgl-struct-names",
 ]
 
 [[package]]
@@ -153,9 +207,29 @@ name = "hgl-eval-data"
 version = "0.0.0"
 dependencies = [
  "hgl-library",
+ "hgl-publication-trace",
  "hgl-rust-ir",
  "hgl-source",
  "hgl-value-eval",
+]
+
+[[package]]
+name = "hgl-family-types"
+version = "0.0.0"
+dependencies = [
+ "hgl-inheritance",
+ "hgl-library",
+ "hgl-source",
+ "hgl-struct-names",
+ "hgl-value-access",
+]
+
+[[package]]
+name = "hgl-family-values"
+version = "0.0.0"
+dependencies = [
+ "hgl-rust-ir",
+ "hgl-source",
 ]
 
 [[package]]
@@ -180,6 +254,9 @@ version = "0.0.0"
 dependencies = [
  "hgl-global-value",
  "hgl-list",
+ "hgl-optional",
+ "hgl-prepared-value",
+ "hgl-recursive-value",
  "hgl-types",
 ]
 
@@ -189,6 +266,7 @@ version = "0.0.0"
 dependencies = [
  "hgl-columns",
  "hgl-types",
+ "hgl-value-lists",
 ]
 
 [[package]]
@@ -201,10 +279,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "hgl-growing-range"
+version = "0.0.0"
+
+[[package]]
 name = "hgl-harness"
 version = "0.0.0"
 dependencies = [
+ "hgl-collection-values",
  "hgl-eval-data",
+ "hgl-family-values",
  "hgl-harness-ir",
  "hgl-rust-ir",
  "hgl-source",
@@ -213,11 +297,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "hgl-harness-check"
+version = "0.0.0"
+dependencies = [
+ "hgl-eval-data",
+ "hgl-flow-check",
+ "hgl-harness-ir",
+ "hgl-rust-ir",
+ "hgl-source",
+ "hgl-static-values",
+]
+
+[[package]]
 name = "hgl-harness-ir"
 version = "0.0.0"
 dependencies = [
  "hgl-rust-ir",
  "hgl-source",
+]
+
+[[package]]
+name = "hgl-inheritance"
+version = "0.0.0"
+dependencies = [
+ "hgl-enums",
+ "hgl-library",
+ "hgl-source",
+ "hgl-struct-names",
 ]
 
 [[package]]
@@ -231,6 +337,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "hgl-keys"
+version = "0.0.0"
+dependencies = [
+ "hgl-alloc-count",
+ "hgl-global-value",
+ "hgl-types",
+]
+
+[[package]]
 name = "hgl-lex"
 version = "0.0.0"
 
@@ -239,6 +354,7 @@ name = "hgl-library"
 version = "0.0.0"
 dependencies = [
  "hgl-source",
+ "hgl-struct-declarations",
 ]
 
 [[package]]
@@ -250,6 +366,16 @@ name = "hgl-list"
 version = "0.0.0"
 dependencies = [
  "hgl-global-value",
+ "hgl-list-storage",
+ "hgl-types",
+]
+
+[[package]]
+name = "hgl-list-storage"
+version = "0.0.0"
+dependencies = [
+ "hgl-global-value",
+ "hgl-prepared-value",
  "hgl-types",
 ]
 
@@ -273,6 +399,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "hgl-member-table"
+version = "0.0.0"
+
+[[package]]
 name = "hgl-native"
 version = "0.0.0"
 dependencies = [
@@ -293,6 +423,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "hgl-nominal-batch"
+version = "0.0.0"
+
+[[package]]
+name = "hgl-observation"
+version = "0.0.0"
+dependencies = [
+ "hgl-atomic",
+ "hgl-bindings",
+ "hgl-columns",
+ "hgl-keys",
+ "hgl-rolling",
+ "hgl-types",
+]
+
+[[package]]
+name = "hgl-optional"
+version = "0.0.0"
+dependencies = [
+ "hgl-alloc-count",
+ "hgl-global-value",
+ "hgl-list-storage",
+ "hgl-prepared-value",
+ "hgl-types",
+]
+
+[[package]]
 name = "hgl-plan"
 version = "0.0.0"
 dependencies = [
@@ -301,15 +458,43 @@ dependencies = [
 ]
 
 [[package]]
+name = "hgl-prepared-store"
+version = "0.0.0"
+dependencies = [
+ "hgl-atomic",
+ "hgl-bindings",
+ "hgl-columns",
+ "hgl-global",
+ "hgl-keys",
+ "hgl-observation",
+ "hgl-rolling",
+ "hgl-shapes",
+ "hgl-types",
+]
+
+[[package]]
+name = "hgl-prepared-value"
+version = "0.0.0"
+dependencies = [
+ "hgl-columns",
+ "hgl-global-value",
+ "hgl-types",
+]
+
+[[package]]
 name = "hgl-program"
 version = "0.0.0"
 dependencies = [
  "hgl-body-check",
+ "hgl-collection-check",
  "hgl-delta-check",
  "hgl-documentation",
  "hgl-endpoint-check",
+ "hgl-enums",
  "hgl-eval-data",
+ "hgl-family-values",
  "hgl-flow-check",
+ "hgl-harness-check",
  "hgl-harness-ir",
  "hgl-library",
  "hgl-library-files",
@@ -317,6 +502,7 @@ dependencies = [
  "hgl-rust",
  "hgl-rust-preparation",
  "hgl-source",
+ "hgl-static-values",
  "hgl-struct-check",
  "hgl-type-sizes",
  "hgl-value-access",
@@ -339,14 +525,78 @@ dependencies = [
 ]
 
 [[package]]
+name = "hgl-publication-trace"
+version = "0.0.0"
+dependencies = [
+ "hgl-composite-keys",
+ "hgl-delta-check",
+ "hgl-growing-range",
+ "hgl-rust-ir",
+ "hgl-source",
+]
+
+[[package]]
+name = "hgl-recursive-types"
+version = "0.0.0"
+dependencies = [
+ "hgl-enums",
+ "hgl-library",
+ "hgl-shape-obligations",
+ "hgl-source",
+ "hgl-struct-names",
+ "hgl-value-access",
+]
+
+[[package]]
+name = "hgl-recursive-value"
+version = "0.0.0"
+dependencies = [
+ "hgl-global-value",
+ "hgl-prepared-value",
+ "hgl-types",
+]
+
+[[package]]
+name = "hgl-rolling"
+version = "0.0.0"
+dependencies = [
+ "hgl-bindings",
+ "hgl-global-value",
+ "hgl-prepared-value",
+ "hgl-shapes",
+ "hgl-types",
+]
+
+[[package]]
 name = "hgl-rust"
 version = "0.0.0"
 dependencies = [
+ "hgl-rust-capacity",
  "hgl-rust-deltas",
+ "hgl-rust-direct-deltas",
+ "hgl-rust-families",
+ "hgl-rust-finite-domains",
  "hgl-rust-generators",
  "hgl-rust-ir",
+ "hgl-rust-keyed",
  "hgl-rust-preparation",
+ "hgl-rust-source-slots",
  "hgl-rust-values",
+ "hgl-source",
+]
+
+[[package]]
+name = "hgl-rust-capacity"
+version = "0.0.0"
+dependencies = [
+ "hgl-rust-collections",
+ "hgl-rust-deltas",
+ "hgl-rust-finite-domains",
+ "hgl-rust-ir",
+ "hgl-rust-keyed",
+ "hgl-rust-layouts",
+ "hgl-rust-pure-bounds",
+ "hgl-rust-windows",
  "hgl-source",
 ]
 
@@ -355,7 +605,26 @@ name = "hgl-rust-checked-data"
 version = "0.0.0"
 dependencies = [
  "hgl-harness-ir",
+ "hgl-rust-enums",
  "hgl-rust-ir",
+ "hgl-rust-type-data",
+ "hgl-source",
+]
+
+[[package]]
+name = "hgl-rust-collections"
+version = "0.0.0"
+dependencies = [
+ "hgl-rust-families",
+ "hgl-rust-ir",
+ "hgl-rust-prepared-values",
+ "hgl-source",
+]
+
+[[package]]
+name = "hgl-rust-composite-keys"
+version = "0.0.0"
+dependencies = [
  "hgl-source",
 ]
 
@@ -364,7 +633,58 @@ name = "hgl-rust-deltas"
 version = "0.0.0"
 dependencies = [
  "hgl-rust-ir",
+ "hgl-rust-keyed",
  "hgl-rust-layouts",
+ "hgl-rust-observed",
+ "hgl-rust-windows",
+ "hgl-source",
+]
+
+[[package]]
+name = "hgl-rust-direct-deltas"
+version = "0.0.0"
+dependencies = [
+ "hgl-rust-ir",
+ "hgl-rust-layouts",
+ "hgl-rust-observed",
+ "hgl-source",
+]
+
+[[package]]
+name = "hgl-rust-enums"
+version = "0.0.0"
+dependencies = [
+ "hgl-rust-prepared-values",
+ "hgl-source",
+]
+
+[[package]]
+name = "hgl-rust-execution-proof"
+version = "0.0.0"
+dependencies = [
+ "hgl-rust-direct-deltas",
+ "hgl-rust-ir",
+ "hgl-rust-mutation-bounds",
+ "hgl-source",
+]
+
+[[package]]
+name = "hgl-rust-families"
+version = "0.0.0"
+dependencies = [
+ "hgl-rust-ir",
+ "hgl-rust-type-data",
+ "hgl-source",
+]
+
+[[package]]
+name = "hgl-rust-finite-domains"
+version = "0.0.0"
+dependencies = [
+ "hgl-rust-execution-proof",
+ "hgl-rust-ir",
+ "hgl-rust-layouts",
+ "hgl-rust-mutation-bounds",
  "hgl-source",
 ]
 
@@ -373,8 +693,11 @@ name = "hgl-rust-generators"
 version = "0.0.0"
 dependencies = [
  "hgl-rust-deltas",
+ "hgl-rust-finite-domains",
  "hgl-rust-ir",
+ "hgl-rust-source-slots",
  "hgl-rust-values",
+ "hgl-rust-windows",
  "hgl-source",
 ]
 
@@ -386,11 +709,57 @@ dependencies = [
 ]
 
 [[package]]
-name = "hgl-rust-layouts"
+name = "hgl-rust-key-origins"
 version = "0.0.0"
 dependencies = [
  "hgl-rust-ir",
+ "hgl-static-values",
+]
+
+[[package]]
+name = "hgl-rust-keyed"
+version = "0.0.0"
+dependencies = [
+ "hgl-rust-checked-data",
+ "hgl-rust-ir",
+ "hgl-rust-key-origins",
+ "hgl-rust-layouts",
+ "hgl-rust-value-convert",
+ "hgl-source",
+ "hgl-static-values",
+]
+
+[[package]]
+name = "hgl-rust-layouts"
+version = "0.0.0"
+dependencies = [
+ "hgl-rust-collections",
+ "hgl-rust-composite-keys",
+ "hgl-rust-enums",
+ "hgl-rust-families",
+ "hgl-rust-ir",
+ "hgl-rust-prepared-values",
  "hgl-rust-scalars",
+ "hgl-rust-structs",
+ "hgl-source",
+]
+
+[[package]]
+name = "hgl-rust-mutation-bounds"
+version = "0.0.0"
+dependencies = [
+ "hgl-rust-ir",
+ "hgl-source",
+]
+
+[[package]]
+name = "hgl-rust-observed"
+version = "0.0.0"
+dependencies = [
+ "hgl-rust-composite-keys",
+ "hgl-rust-ir",
+ "hgl-rust-layouts",
+ "hgl-rust-windows",
  "hgl-source",
 ]
 
@@ -400,9 +769,38 @@ version = "0.0.0"
 dependencies = [
  "hgl-harness-ir",
  "hgl-rust-checked-data",
+ "hgl-rust-collections",
+ "hgl-rust-families",
  "hgl-rust-ir",
  "hgl-rust-layouts",
+ "hgl-rust-recursive-convert",
+ "hgl-rust-value-convert",
  "hgl-rust-values",
+ "hgl-source",
+]
+
+[[package]]
+name = "hgl-rust-prepared-values"
+version = "0.0.0"
+dependencies = [
+ "hgl-source",
+]
+
+[[package]]
+name = "hgl-rust-pure-bounds"
+version = "0.0.0"
+dependencies = [
+ "hgl-rust-ir",
+ "hgl-source",
+]
+
+[[package]]
+name = "hgl-rust-recursive-convert"
+version = "0.0.0"
+dependencies = [
+ "hgl-rust-checked-data",
+ "hgl-rust-ir",
+ "hgl-rust-layouts",
  "hgl-source",
 ]
 
@@ -415,13 +813,77 @@ dependencies = [
 ]
 
 [[package]]
+name = "hgl-rust-source-slots"
+version = "0.0.0"
+dependencies = [
+ "hgl-rust-ir",
+ "hgl-rust-layouts",
+]
+
+[[package]]
+name = "hgl-rust-structs"
+version = "0.0.0"
+dependencies = [
+ "hgl-rust-collections",
+ "hgl-rust-prepared-values",
+ "hgl-source",
+]
+
+[[package]]
+name = "hgl-rust-type-data"
+version = "0.0.0"
+dependencies = [
+ "hgl-rust-enums",
+ "hgl-source",
+]
+
+[[package]]
+name = "hgl-rust-value-convert"
+version = "0.0.0"
+dependencies = [
+ "hgl-rust-checked-data",
+ "hgl-rust-collections",
+ "hgl-rust-families",
+ "hgl-rust-layouts",
+ "hgl-source",
+]
+
+[[package]]
 name = "hgl-rust-values"
 version = "0.0.0"
 dependencies = [
+ "hgl-rust-collections",
  "hgl-rust-deltas",
+ "hgl-rust-direct-deltas",
+ "hgl-rust-finite-domains",
  "hgl-rust-ir",
  "hgl-rust-layouts",
+ "hgl-rust-observed",
+ "hgl-rust-windows",
  "hgl-source",
+]
+
+[[package]]
+name = "hgl-rust-windows"
+version = "0.0.0"
+dependencies = [
+ "hgl-rust-layouts",
+ "hgl-source",
+]
+
+[[package]]
+name = "hgl-scalar-copy"
+version = "0.0.0"
+dependencies = [
+ "hgl-types",
+]
+
+[[package]]
+name = "hgl-scalar-keys"
+version = "0.0.0"
+dependencies = [
+ "hgl-source",
+ "hgl-time-values",
 ]
 
 [[package]]
@@ -440,6 +902,7 @@ version = "0.0.0"
 dependencies = [
  "hgl-bindings",
  "hgl-global-value",
+ "hgl-keys",
  "hgl-types",
 ]
 
@@ -451,6 +914,18 @@ dependencies = [
  "hgl-lex",
  "hgl-literals",
  "hgl-type-shape",
+]
+
+[[package]]
+name = "hgl-static-values"
+version = "0.0.0"
+dependencies = [
+ "hgl-composite-keys",
+ "hgl-library",
+ "hgl-rust-ir",
+ "hgl-source",
+ "hgl-value-constant",
+ "hgl-value-eval",
 ]
 
 [[package]]
@@ -485,7 +960,24 @@ dependencies = [
  "hgl-bindings",
  "hgl-columns",
  "hgl-global",
+ "hgl-keys",
+ "hgl-literals",
+ "hgl-prepared-store",
+ "hgl-rolling",
  "hgl-shapes",
+ "hgl-store-build",
+ "hgl-time-context",
+ "hgl-types",
+]
+
+[[package]]
+name = "hgl-store-build"
+version = "0.0.0"
+dependencies = [
+ "hgl-atomic",
+ "hgl-bindings",
+ "hgl-columns",
+ "hgl-rolling",
  "hgl-types",
 ]
 
@@ -493,12 +985,22 @@ dependencies = [
 name = "hgl-struct-check"
 version = "0.0.0"
 dependencies = [
+ "hgl-enums",
+ "hgl-family-types",
+ "hgl-inheritance",
  "hgl-library",
  "hgl-rust-ir",
  "hgl-source",
  "hgl-type-sizes",
  "hgl-value-access",
  "hgl-value-types",
+]
+
+[[package]]
+name = "hgl-struct-declarations"
+version = "0.0.0"
+dependencies = [
+ "hgl-source",
 ]
 
 [[package]]
@@ -539,7 +1041,9 @@ version = "0.0.0"
 name = "hgl-type-shape"
 version = "0.0.0"
 dependencies = [
+ "hgl-nominal-batch",
  "hgl-type-syntax",
+ "hgl-window-types",
 ]
 
 [[package]]
@@ -560,7 +1064,9 @@ version = "0.0.0"
 name = "hgl-types"
 version = "0.0.0"
 dependencies = [
+ "hgl-growing-range",
  "hgl-time-values",
+ "hgl-window-types",
 ]
 
 [[package]]
@@ -570,6 +1076,7 @@ dependencies = [
  "hgl-library",
  "hgl-rust-ir",
  "hgl-source",
+ "hgl-static-values",
 ]
 
 [[package]]
@@ -605,6 +1112,28 @@ dependencies = [
 name = "hgl-value-eval"
 version = "0.0.0"
 dependencies = [
+ "hgl-collection-values",
+ "hgl-delta-check",
+ "hgl-family-values",
+ "hgl-rust-ir",
+ "hgl-source",
+ "hgl-time-values",
+ "hgl-value-operations",
+]
+
+[[package]]
+name = "hgl-value-lists"
+version = "0.0.0"
+dependencies = [
+ "hgl-types",
+]
+
+[[package]]
+name = "hgl-value-operations"
+version = "0.0.0"
+dependencies = [
+ "hgl-collection-values",
+ "hgl-family-values",
  "hgl-rust-ir",
  "hgl-source",
 ]
@@ -613,7 +1142,11 @@ dependencies = [
 name = "hgl-value-types"
 version = "0.0.0"
 dependencies = [
+ "hgl-enums",
+ "hgl-family-types",
+ "hgl-inheritance",
  "hgl-library",
+ "hgl-recursive-types",
  "hgl-shape-obligations",
  "hgl-source",
  "hgl-struct-names",
@@ -621,6 +1154,10 @@ dependencies = [
  "hgl-value-access",
  "hgl-value-check",
 ]
+
+[[package]]
+name = "hgl-window-types"
+version = "0.0.0"
 
 [[package]]
 name = "hgl-wiring-locals"

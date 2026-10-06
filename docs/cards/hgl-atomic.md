@@ -32,3 +32,26 @@ snapshots; empty/equal publications; failed preparation leaves old state;
 repeated replacement reuses storage; graph-scope reuse preserves generation.
 Mutants: alias a retained list; skip reclaim; publish before prepare succeeds;
 treat an empty list as invalid; accept a mismatched root shape.
+
+An OrdinaryType::Enum root reserves its one i64 physical slot during construction
+and starts with no publication. Generated enum markers set PREPARED_SCALAR, so
+write skips generic payload preparation/reservation and commits to that typed
+slot directly. The compile-time marker selects this path; there is no per-value
+schema test, name lookup, allocation or invented published default member.
+
+prepare_output<T:PreparedValue>(&Bindings,OutputId,&T::Bounds)->NodeResult
+installs all finite descendants after endpoint construction and before start,
+without a publication. destination<T>(&Bindings,Output<Atomic<T>>)->NodeResult<ValueSlot<T>>
+validates token generation and requires installed storage without requiring a
+previous value tick. values_mut() permits complete-preflight independent copies;
+publication remains a separate final Bindings operation in hgl-prepared-store.
+
+OptionalField contributes one descriptor position to the root layout. Complete
+snapshot replacement delegates presence retention and reclamation to the
+optional field marker; an all-unset struct remains a valid published root.
+
+RecursiveReference is one descriptor position when calculating finite root
+widths. Concrete recursive payload operations remain compiler-selected typed
+GlobalValue/PreparedValue implementations with exact nominal schemas.
+
+Complete Set/Map schemas have one descriptor root; typed owning/prepared marker operations retain all descendants before whole publication.

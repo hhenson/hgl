@@ -6,6 +6,8 @@ use std::{fmt::Debug, marker::PhantomData};
 
 /// A compiler-selected value representation; implementations preserve their schema.
 pub trait GlobalValue {
+    /// Nominal scalar storage already exists before the first publication.
+    const PREPARED_SCALAR: bool = false;
     /// Independently owned representation, without borrow capabilities.
     type Value;
     /// Prepared typed field positions, copied without copying payloads.
@@ -62,6 +64,14 @@ impl<T: GlobalValue> Debug for ValueSlot<T> {
     }
 }
 impl<T: GlobalValue> ValueSlot<T> {
+    /// Reconstruct a typed projection from compile-time selected field positions.
+    pub fn from_fields(fields: T::Slots) -> Self {
+        Self {
+            fields,
+            value: PhantomData,
+        }
+    }
+
     /// Bind the generated type's layout before any hooks execute.
     pub fn bind(layout: &mut &[usize]) -> Self {
         Self {
@@ -140,6 +150,9 @@ pub fn allocate(
     slots: &mut Vec<usize>,
 ) -> hgl_types::NodeResult {
     match ty {
+        OrdinaryType::RecursiveReference(_) => {
+            return Err(NodeError::new("unresolved recursive schema edge"));
+        }
         OrdinaryType::Tuple(fields) => {
             for field in fields {
                 allocate(field, columns, slots)?;
@@ -150,12 +163,16 @@ pub fn allocate(
                 allocate(field, columns, slots)?;
             }
         }
-        OrdinaryType::List(_, _) => {
+        OrdinaryType::List(_, _)
+        | OrdinaryType::Set(_)
+        | OrdinaryType::Map(..)
+        | OrdinaryType::OptionalField(_) => {
             let mut capacity = Capacity::default();
             capacity.list();
             columns.reserve(&capacity)?;
             slots.push(columns.insert_list(Vec::new()));
         }
+        OrdinaryType::Enum(_) => slots.push(leaf::<i64>(columns)?),
         OrdinaryType::Scalar(scalar) => slots.push(match scalar {
             ScalarType::Bool => leaf::<bool>(columns)?,
             ScalarType::I64 => leaf::<i64>(columns)?,
@@ -167,6 +184,7 @@ pub fn allocate(
             ScalarType::Duration => leaf::<EngineDelta>(columns)?,
             ScalarType::CivilDateTime => leaf::<hgl_types::CivilDateTime>(columns)?,
             ScalarType::TimeZone => leaf::<hgl_types::ZoneId>(columns)?,
+            ScalarType::ZonedTime => leaf::<hgl_types::ZonedTime>(columns)?,
             ScalarType::ZonedDateTime => leaf::<hgl_types::ZonedDateTime>(columns)?,
         }),
     }

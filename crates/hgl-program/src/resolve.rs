@@ -7,6 +7,7 @@ use hgl_endpoint_check::{
 };
 use hgl_flow_check::{facts, handler_facts, merge_facts, terminates};
 use hgl_rust::{Kind, Native, Node, Plan, Statement, Value};
+use hgl_static_values::PreparedLexicalScope;
 use hgl_value_bind::{bind, bind_prepared, method_arguments, order_arguments, resolve_type};
 use hgl_value_check::{field, ordinary, writable};
 use std::collections::{BTreeMap, BTreeSet};
@@ -54,11 +55,13 @@ type Selection = (usize, Signature, Vec<Value>, BTreeMap<String, Ty>, Ty);
 type Env = BTreeMap<String, Value>;
 type Arguments = Vec<(Option<String>, Value)>;
 
-fn test_checker(library: Library, module: &str, values: Env) -> Checker {
+fn test_checker(library: Library, module: &str, scope: &PreparedLexicalScope) -> Checker {
     Checker {
         library,
         test_scope: Some(module.into()),
-        harness_values: values,
+        harness_values: scope.bindings.clone(),
+        static_values: scope.origins.clone(),
+        facts: scope.facts.clone(),
         value_context: ValueContext::Preparation,
         ..Checker::default()
     }
@@ -67,20 +70,27 @@ pub(crate) fn prepared_statement(
     library: Library,
     module: &str,
     statement: &Stmt,
-    env: &mut Env,
-    next: &mut usize,
+    scope: &mut PreparedLexicalScope,
 ) -> Result<Statement, String> {
-    let mut checker = test_checker(library, module, Env::new());
-    checker.statement(module, statement, env, &Ty::Void, next)
+    let mut checker = test_checker(library, module, scope);
+    let result = checker.statement(
+        module,
+        statement,
+        &mut scope.bindings,
+        &Ty::Void,
+        &mut scope.next,
+    );
+    scope.origins = checker.static_values;
+    result
 }
 pub(crate) fn prepared_assertion(
     library: Library,
     module: &str,
     expr: &Expr,
-    env: &Env,
+    scope: &PreparedLexicalScope,
 ) -> Result<Value, String> {
-    let mut checker = test_checker(library, module, Env::new());
-    let value = checker.expression(module, expr, env, false)?;
+    let mut checker = test_checker(library, module, scope);
+    let value = checker.expression(module, expr, &scope.bindings, false)?;
     if value.ty != Ty::Bool {
         return Err("ordinary assertion requires bool".into());
     }
@@ -225,12 +235,7 @@ impl Checker {
     }
     fn type_sizes(&mut self, module: &str, name: &str, env: &Env) -> Result<String, String> {
         for (owner, expr) in hgl_struct_check::schema_sizes(&self.library, module, name)? {
-            let Literal::Int(size) = self.constant_size(&owner, &expr, &Env::new())? else {
-                return Err("list size requires a constant i64".into());
-            };
-            if size < 0 {
-                return Err("list size must be nonnegative or unbounded".into());
-            }
+            let size = self.constant_size(&owner, &expr, &Env::new())?;
             self.library.type_sizes.insert((owner, expr), size);
         }
         hgl_type_sizes::normalize(name, &mut |source| self.constant_size(module, source, env))
@@ -367,8 +372,7 @@ impl Checker {
         } else {
             signature.parameters.get(index)?
         };
-        self.ordinary_type(&owner, &parameter.ty, &mut BTreeSet::new())
-            .ok()
+        hgl_value_types::resolve_ordinary(&self.library, &owner, &parameter.ty).ok()
     }
     fn select(
         &mut self,
@@ -1036,15 +1040,6 @@ impl Checker {
     fn struct_declaration(&self, module: &str, name: &str) -> Result<Option<&Decl>, String> {
         hgl_value_types::declaration(&self.library, module, name)
     }
-    fn ordinary_type(
-        &self,
-        module: &str,
-        name: &str,
-        active: &mut BTreeSet<String>,
-    ) -> Result<Ty, String> {
-        hgl_value_types::resolve(&self.library, module, name, active)
-            .map(|ty| hgl_value_access::project(&ty))
-    }
     fn global_operation(&mut self, operation: &str, args: &Arguments) -> Result<Value, String> {
         if operation == "get" {
             return Err("global_state: get requires a concrete scalar expected type or a typed ordinary struct binding".into());
@@ -1155,11 +1150,20 @@ impl Checker {
         runtime: bool,
         expected: Option<&Ty>,
     ) -> Result<Value, String> {
-        if let Expr::Applied(name, args) = expr {
-            return self.constructor(module, (name, args), env, runtime, expected);
-        }
-        if let Expr::Call(name, args) = expr
-            && self.struct_declaration(module, name)?.is_some()
+        let value = self.expected_inner(module, expr, env, runtime, expected)?;
+        hgl_family_values::coerce(expected, value)
+    }
+    fn expected_inner(
+        &mut self,
+        module: &str,
+        expr: &Expr,
+        env: &Env,
+        runtime: bool,
+        expected: Option<&Ty>,
+    ) -> Result<Value, String> {
+        if let Expr::Applied(name, args) | Expr::Call(name, args) = expr
+            && (matches!(expr, Expr::Applied(..))
+                || self.struct_declaration(module, name)?.is_some())
         {
             return self.constructor(module, (name, args), env, runtime, expected);
         }
@@ -1212,6 +1216,7 @@ impl Checker {
                 let mutable = matches!(statement, Stmt::Var(..));
                 let id = *next_local;
                 *next_local += 1;
+                self.static_values.bind(id, &value, mutable);
                 let (binding, statement) =
                     hgl_local_check::statement(id, value, mutable, annotation.is_some())?;
                 env.insert(name.clone(), binding);
@@ -1443,6 +1448,7 @@ impl Checker {
             Expr::TemporalLiteral(l) if self.value_context == ValueContext::Preparation && !self.preparing_graph => Ok(Value::new(l.ty(), Kind::TemporalLiteral(l.clone()))),
             Expr::TemporalLiteral(_) => Err("contextual temporal construction requires run preparation; node-hook construction is unsupported".into()),
             Expr::Name(name) => {
+                if !env.contains_key(name) && let Some(value) = hgl_enums::member(&self.library, module, name)? { return Ok(Value::new(value.ty(), Kind::Literal(value))); }
                 let value = env
                     .get(name)
                     .cloned()
@@ -1493,6 +1499,7 @@ impl Checker {
         env: &Env,
         runtime: bool,
     ) -> Result<Value, String> {
+        hgl_enums::check_call(&self.library, module, name, args)?;
         if let Some((label, Expr::Name(receiver))) = args.first()
             && env
                 .get(receiver)
@@ -1623,6 +1630,12 @@ impl Checker {
         {
             return self.delta_constructor(module, (origin, args), env, runtime, expected);
         }
+        if hgl_source::application(&name).is_some_and(|(base, _)| matches!(base, "set" | "map")) {
+            let ty = hgl_value_types::concrete(&self.library, module, &name, &self.types)?;
+            return hgl_collection_check::constructor(&ty, args, |expr, ty| {
+                self.expected_expression(module, expr, env, runtime, Some(ty))
+            });
+        }
         let mut check = hgl_struct_check::Constructor::new(
             &self.library,
             module,
@@ -1656,43 +1669,23 @@ impl Checker {
         runtime: bool,
         expected: Option<&Ty>,
     ) -> Result<Value, String> {
-        let origin = hgl_value_types::substitute(
-            &self.library,
-            module,
-            origin,
-            &self.types,
-            &mut BTreeSet::new(),
-        )?;
+        let origin = hgl_value_types::concrete(&self.library, module, origin, &self.types)?;
         let ty = origin.clone().delta()?;
         if expected.is_some_and(|expected| *expected != ty) {
             return Err("delta originating shape mismatch".into());
         }
-        let parts = hgl_delta_check::constructor(&origin, args, |expr| {
-            let value = self.expression(module, expr, env, false)?;
-            let value = self
-                .wiring
-                .value(&value)
-                .map_err(|e| format!("delta position requires a constant: {e}"))?;
-            let Kind::Literal(value) = value.kind else {
-                return Err("delta position requires a constant scalar".into());
-            };
+        let parts = hgl_delta_check::constructor(&origin, args, |expr, ty| {
+            let value = self.expected_expression(module, expr, env, false, Some(ty))?;
+            self.static_values.key(value)
+        })?;
+        let entries = hgl_delta_check::values(parts, |ty, expr| {
+            let value = self.expected_expression(module, expr, env, runtime, Some(ty))?;
+            require_payload(&value)?;
+            if value.ty != *ty {
+                return Err("delta child type mismatch".into());
+            }
             Ok(value)
         })?;
-        let mut entries = Vec::new();
-        for part in parts {
-            entries.push(match part {
-                hgl_delta_check::Part::Added(value) => hgl_rust::DeltaEntry::Add(value),
-                hgl_delta_check::Part::Removed(value) => hgl_rust::DeltaEntry::Remove(value),
-                hgl_delta_check::Part::Child(key, ty, expr) => {
-                    let value = self.expected_expression(module, expr, env, runtime, Some(&ty))?;
-                    require_payload(&value)?;
-                    if value.ty != ty {
-                        return Err("delta child type mismatch".into());
-                    }
-                    hgl_rust::DeltaEntry::Child(key, value)
-                }
-            });
-        }
         Ok(Value::new(ty, Kind::Delta(entries)))
     }
     fn value_call(
@@ -1718,7 +1711,7 @@ impl Checker {
         }
         if matches!(
             name,
-            "valid" | "modified" | "last_modified" | "passivate" | "activate"
+            "valid" | "modified" | "all_valid" | "last_modified" | "passivate" | "activate"
         ) {
             return endpoint_call(name, args, runtime);
         }
@@ -1817,7 +1810,7 @@ fn select_eval(
             || decl.name != item
             || matches!(
                 decl.role,
-                Role::Implementation | Role::Test | Role::Native | Role::Struct
+                Role::Implementation | Role::Test | Role::Native | Role::Struct | Role::Enum
             )
             || (decl.test_only && owner != module)
             || (helpers && owner == module && !decl.test_only)
@@ -1828,7 +1821,12 @@ fn select_eval(
         let mut candidate = test_checker(
             checker.library.clone(),
             module,
-            checker.harness_values.clone(),
+            &PreparedLexicalScope {
+                bindings: checker.harness_values.clone(),
+                origins: checker.static_values.clone(),
+                facts: checker.facts.clone(),
+                ..PreparedLexicalScope::default()
+            },
         );
         match eval_arguments(&mut candidate, module, &decl.module, &signature, args) {
             Ok((plan, values)) => candidates.push((candidate, plan, values)),
@@ -1850,9 +1848,9 @@ pub(crate) fn prepare_evaluation(
     module: &str,
     name: &str,
     args: &[(Option<String>, Expr)],
-    values: &Env,
+    scope: &PreparedLexicalScope,
 ) -> Result<(Plan, Vec<hgl_harness_ir::Argument>), String> {
-    let checker = test_checker(library, module, values.clone());
+    let checker = test_checker(library, module, scope);
     let (mut checker, plan, mut values) = select_eval(&checker, module, name, args)?;
     let mut prepared = Vec::new();
     checker.static_values.prepared = values.iter().map(|(_, value)| value.clone()).collect();
@@ -1949,9 +1947,9 @@ pub(crate) fn prepared_expected(
     module: &str,
     ty: &Ty,
     slots: &[Option<Expr>],
-    values: &Env,
+    scope: &PreparedLexicalScope,
 ) -> Result<Vec<Option<Value>>, String> {
-    let mut checker = test_checker(library, module, values.clone());
+    let mut checker = test_checker(library, module, scope);
     hgl_eval_data::sequence(slots, Some(ty.clone()), |expr, expected| {
         checked_eval(&mut checker, module, expr, expected)
     })
@@ -2073,3 +2071,41 @@ mod nullable_tests;
 #[cfg(test)]
 #[path = "../tests/support/eval_composition.rs"]
 mod eval_composition_tests;
+
+pub(crate) struct TestChecker {
+    pub library: Library,
+    pub module: String,
+}
+impl hgl_harness_check::Check for TestChecker {
+    fn statement(
+        &mut self,
+        statement: &Stmt,
+        scope: &mut PreparedLexicalScope,
+    ) -> Result<Statement, String> {
+        prepared_statement(self.library.clone(), &self.module, statement, scope)
+    }
+    fn boolean(&mut self, expr: &Expr, scope: &PreparedLexicalScope) -> Result<Value, String> {
+        prepared_assertion(self.library.clone(), &self.module, expr, scope)
+    }
+    fn evaluation(
+        &mut self,
+        call: &hgl_eval_data::Evaluation,
+        scope: &PreparedLexicalScope,
+    ) -> Result<(Plan, Vec<hgl_harness_ir::Argument>), String> {
+        prepare_evaluation(
+            self.library.clone(),
+            &self.module,
+            &call.function,
+            &call.arguments,
+            scope,
+        )
+    }
+    fn expected(
+        &mut self,
+        ty: &Ty,
+        slots: &[Option<Expr>],
+        scope: &PreparedLexicalScope,
+    ) -> Result<Vec<Option<Value>>, String> {
+        prepared_expected(self.library.clone(), &self.module, ty, slots, scope)
+    }
+}

@@ -81,22 +81,7 @@ pub fn bind(
 
 /// Check supported type at the typed call boundary.
 pub fn supported_type(ty: &Ty) -> Result<(), String> {
-    if let Ty::Set(child) = ty
-        && !matches!(**child, Ty::Bool | Ty::I64)
-    {
-        return Err("Rust set elements currently require bool or i64".into());
-    }
-    if matches!(
-        ty,
-        Ty::Atomic(_)
-            | Ty::Struct(..)
-            | Ty::List(..)
-            | Ty::Map(..)
-            | Ty::Tuple(_)
-            | Ty::Delta(_)
-            | Ty::Set(_)
-    ) && !ty.publication()
-    {
+    if !ty.publication() && !matches!(ty, Ty::Void | Ty::Ref(_) | Ty::Nullable(_)) {
         return Err("unsupported temporal publication shape".into());
     }
     if let Ty::Ref(child) = ty {
@@ -153,13 +138,21 @@ fn bind_type(
             return Err("inconsistent generic inference".into());
         }
     } else if p.ty != "signal"
-        && resolve_type(formal, types).map(|ty| {
-            if p.constant || signature.value_function {
-                hgl_value_access::project(&ty)
-            } else {
-                ty
-            }
-        }) != Some(actual.clone())
+        && resolve_type(formal, types)
+            .or_else(|| {
+                let (Ty::Ref(child) | Ty::Set(child)) = resolve_type(&p.ty, types)? else {
+                    return None;
+                };
+                Some(*child)
+            })
+            .map(|ty| {
+                if p.constant || signature.value_function {
+                    hgl_value_access::project(&ty)
+                } else {
+                    ty
+                }
+            })
+            != Some(actual.clone())
     {
         return Err(format!("type mismatch for {}", p.name));
     }
@@ -251,10 +244,7 @@ pub fn order_arguments(
 /// Whether a checked value is closed ordinary configuration data.
 pub fn constant(value: &Value) -> bool {
     if let Kind::Delta(parts) = &value.kind {
-        return parts.iter().all(|part| match part {
-            hgl_rust_ir::DeltaEntry::Child(_, value) => constant(value),
-            hgl_rust_ir::DeltaEntry::Add(_) | hgl_rust_ir::DeltaEntry::Remove(_) => true,
-        });
+        return parts.iter().all(|part| part.operands().all(constant));
     }
     if let Kind::Construct(fields) = &value.kind {
         return fields.iter().all(|(_, v)| constant(v));
@@ -285,15 +275,16 @@ pub fn signature_types(
             .or_else(|| parameter.ty.strip_prefix("set<"))
             .and_then(|s| s.strip_suffix('>'))
             .unwrap_or(&parameter.ty);
-        if (parameter.constant || signature.value_function)
-            && hgl_value_types::substitute(
-                library,
-                module,
-                &parameter.ty,
-                &types,
-                &mut BTreeSet::new(),
-            )
-            .is_ok_and(|ty| hgl_value_access::project(&ty) == value.ty)
+        if parameter.ty == "signal"
+            || ((parameter.constant || signature.value_function)
+                && hgl_value_types::substitute(
+                    library,
+                    module,
+                    &parameter.ty,
+                    &types,
+                    &mut BTreeSet::new(),
+                )
+                .is_ok_and(|ty| hgl_value_access::project(&ty) == value.ty))
         {
             continue;
         }
@@ -304,10 +295,16 @@ pub fn signature_types(
         } else if signature.generics.iter().any(|name| name == formal)
             || matches!(
                 value.ty,
-                Ty::Struct(..) | Ty::List(..) | Ty::Delta(_) | Ty::Map(..) | Ty::Tuple(_)
+                Ty::Recursive(_)
+                    | Ty::Family(_)
+                    | Ty::Struct(..)
+                    | Ty::List(..)
+                    | Ty::Delta(_)
+                    | Ty::Map(..)
+                    | Ty::Tuple(_)
             )
             || hgl_source::application(&parameter.ty)
-                .is_some_and(|(base, _)| matches!(base, "delta" | "atomic"))
+                .is_some_and(|(base, _)| matches!(base, "delta" | "atomic" | "rolling"))
         {
             hgl_value_types::unify(
                 library,

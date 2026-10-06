@@ -46,6 +46,7 @@ fn setup_and_arguments_execute_once_and_expectations_follow_the_graph() {
             ("time".into(), Ty::DateTime),
             ("value".into(), Ty::TimeZone),
         ],
+        vec![],
     );
     let test = Test {
         name: "order".into(),

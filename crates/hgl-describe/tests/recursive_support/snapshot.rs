@@ -44,7 +44,10 @@ pub(crate) fn snapshot(
     let mut fields = BTreeMap::new();
     let mut delta_fields = BTreeMap::new();
     let kind = &b.input(input).kind;
-    let dictionary = matches!(kind, Kind::Dictionary(_));
+    let dictionary = matches!(
+        kind,
+        Kind::Growing(_) | Kind::Dictionary(_) | Kind::KeyedDictionary(..)
+    );
     let children: Vec<_> = if dictionary {
         b.keys(input)
             .map(|k| {
@@ -127,9 +130,14 @@ pub(crate) fn snapshot(
                 "[{}]",
                 fields.values().cloned().collect::<Vec<_>>().join(",")
             ),
-            Kind::Bundle(_) | Kind::Dictionary(_) => object(&fields),
+            Kind::Bundle(_)
+            | Kind::Growing(_)
+            | Kind::Dictionary(_)
+            | Kind::KeyedDictionary(..) => object(&fields),
             Kind::Atomic(_)
+            | Kind::Rolling(..)
             | Kind::Reference(_)
+            | Kind::KeyedSet(_)
             | Kind::Set(_)
             | Kind::Ts(
                 ScalarType::Text
@@ -139,6 +147,7 @@ pub(crate) fn snapshot(
                 | ScalarType::Duration
                 | ScalarType::CivilDateTime
                 | ScalarType::TimeZone
+                | ScalarType::ZonedTime
                 | ScalarType::ZonedDateTime,
             ) => unreachable!("observed separately"),
         }
@@ -224,6 +233,7 @@ pub(crate) fn output(store: &Store, id: OutputId, t: i64, path: &str, rows: &mut
             ScalarValue::Duration(v) => v.micros().to_string(),
             ScalarValue::CivilDateTime(v) => v.micros().to_string(),
             ScalarValue::TimeZone(v) => v.as_str().into(),
+            ScalarValue::ZonedTime(v) => format!("{}@{}", v.time().0, v.zone().as_str()),
             ScalarValue::ZonedDateTime(v) => format!(
                 "{}@{}:{}",
                 v.instant().micros(),

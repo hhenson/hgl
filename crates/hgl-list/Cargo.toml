@@ -7,6 +7,7 @@ publish.workspace = true
 [package.metadata.hgl]
 line-budget = 260
 [dependencies]
+hgl-list-storage = { path = "../hgl-list-storage" }
 hgl-types = { path = "../hgl-types" }
 hgl-global-value = { path = "../hgl-global-value" }
 [lints]

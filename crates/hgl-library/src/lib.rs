@@ -1,10 +1,12 @@
 //! Module parts, imports, declarations and test-scope indexing for HGL.
-use hgl_source::{Cursor, Expr, ParsedLiteral, Token, lex};
+use hgl_source::{Cursor, Expr, Token, lex};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 /// The declaration role before overload selection.
 pub enum Role {
+    /// Nominal enum declaration.
+    Enum,
     /// Ordinary nominal struct declaration.
     Struct,
     /// Ordinary or const function.
@@ -70,23 +72,12 @@ pub struct Signature {
     /// Native scalar requirement: name, arguments and result.
     pub requirement: Option<(String, Vec<String>, String)>,
 }
-#[derive(Debug, Clone)]
-/// Required-field struct contract before specialization.
-pub struct RequiredStruct {
-    /// Ordered distinct type parameters.
-    pub generics: Vec<String>,
-    /// Declaration-ordered source field types.
-    pub fields: Vec<(String, String)>,
-    /// Declaration-indexed non-null fixed scalar defaults.
-    pub defaults: Vec<(usize, ParsedLiteral)>,
-    /// Supported finite type-domain constraint.
-    pub type_domain: Option<(String, Vec<String>)>,
-}
+pub use hgl_struct_declarations::RequiredStruct;
 #[derive(Debug, Default, Clone)]
 /// Indexed source declarations, imports and explicit instances.
 pub struct Library {
-    /// Declaration-owned list sizes checked before concrete type formation.
-    pub type_sizes: BTreeMap<(String, String), i64>,
+    /// Declaration-owned bound literals, retaining exact count or duration kind.
+    pub type_sizes: BTreeMap<(String, String), hgl_source::Literal>,
     /// All indexed declarations.
     pub declarations: Vec<Decl>,
     /// First source's module.
@@ -108,6 +99,7 @@ fn boundary(s: &str) -> bool {
             | "native"
             | "fn"
             | "struct"
+            | "enum"
             | "abstract"
             | "instantiate"
             | "test"
@@ -239,6 +231,11 @@ fn load_source(
             } else if d.take("const") {
                 d.need("fn")?;
                 Role::Function
+            } else if d.take("enum") {
+                Role::Enum
+            } else if d.take("abstract") {
+                d.need("struct")?;
+                Role::Struct
             } else if d.take("struct") {
                 Role::Struct
             } else if d.take("fn") {
@@ -280,84 +277,9 @@ fn add_import(
     Ok(())
 }
 impl Decl {
-    /// Parse finite type-generic fields and non-null fixed scalar defaults.
+    /// Parse declaration-owned fields, defaults and single inheritance.
     pub fn required_struct(&self) -> Result<RequiredStruct, String> {
-        let mut c = Cursor::new(&self.tokens);
-        c.take("export");
-        c.need("struct")?;
-        c.name()?;
-        let mut generics = Vec::new();
-        if c.take("<") {
-            c.lines();
-            loop {
-                if c.at("const") {
-                    return Err("const-generic structs are not supported".into());
-                }
-                let parameter = c.name()?;
-                if parameter == "_" || generics.contains(&parameter) {
-                    return Err("struct type parameters must be distinct names".into());
-                }
-                generics.push(parameter);
-                c.lines();
-                if c.at("=") {
-                    return Err("generic parameter defaults are not supported".into());
-                }
-                if !c.take(",") {
-                    c.need(">")?;
-                    break;
-                }
-                c.lines();
-            }
-        }
-        c.lines();
-        let type_domain = if c.take("requires") {
-            if c.tokens.get(c.pos + 1).is_none_or(|t| t.text != "in") {
-                return Err("unsupported struct constraint".into());
-            }
-            Some(parse_domain(&mut c, &generics)?)
-        } else {
-            None
-        };
-        c.lines();
-        if !c.take("{") {
-            return Err(
-                "ordinary structs currently require required fields without inheritance".into(),
-            );
-        }
-        let mut fields = Vec::new();
-        let mut defaults = Vec::new();
-        c.lines();
-        while !c.take("}") {
-            let name = c.name()?;
-            c.need(":")?;
-            let ty = c.type_name()?;
-            if fields.iter().any(|(field, _)| *field == name) {
-                return Err(format!("duplicate struct field {name}"));
-            }
-            if c.take("=") {
-                let expr = c.expr()?;
-                if matches!(expr, Expr::Null) {
-                    return Err("struct field optionality is not supported".into());
-                }
-                let value = scalar_default(expr)?;
-                defaults.push((fields.len(), value));
-            }
-            if !c.at("}") && !c.at("\n") {
-                return Err("expected struct field end".into());
-            }
-            fields.push((name, ty));
-            c.lines();
-        }
-        c.lines();
-        if !c.at("") {
-            return Err("unsupported struct declaration suffix".into());
-        }
-        Ok(RequiredStruct {
-            generics,
-            fields,
-            defaults,
-            type_domain,
-        })
+        hgl_struct_declarations::parse(&self.tokens)
     }
 
     /// Parse this declaration as a callable signature.
@@ -432,7 +354,7 @@ impl Decl {
         let mut type_domain = None;
         let requires = c.take("requires");
         let requirement = if requires && c.tokens.get(c.pos + 1).is_some_and(|t| t.text == "in") {
-            type_domain = Some(parse_domain(&mut c, &generics)?);
+            type_domain = Some(hgl_struct_declarations::parse_domain(&mut c, &generics)?);
             None
         } else if requires {
             Some(parse_native_requirement(&mut c)?)
@@ -503,30 +425,6 @@ fn instantiate(library: &mut Library, module: &str, d: &mut Cursor<'_>) -> Resul
     Ok(())
 }
 
-fn parse_domain(c: &mut Cursor<'_>, generics: &[String]) -> Result<(String, Vec<String>), String> {
-    let parameter = c.name()?;
-    if !generics.contains(&parameter) {
-        return Err("type domain requires a generic parameter".into());
-    }
-    c.need("in")?;
-    c.need("{")?;
-    let mut types = Vec::new();
-    loop {
-        c.lines();
-        let ty = c.type_name()?;
-        if hgl_source::Ty::parse(&ty).is_none() || types.contains(&ty) {
-            return Err("type domain requires distinct supported types".into());
-        }
-        types.push(ty);
-        c.lines();
-        if !c.take(",") {
-            c.need("}")?;
-            break;
-        }
-    }
-    Ok((parameter, types))
-}
-
 fn parse_native_requirement(c: &mut Cursor<'_>) -> Result<(String, Vec<String>, String), String> {
     let Expr::Call(name, args) = c.expr()? else {
         return Err("expected native requirement".into());
@@ -543,13 +441,4 @@ fn parse_native_requirement(c: &mut Cursor<'_>) -> Result<(String, Vec<String>, 
         .collect::<Result<Vec<_>, _>>()?;
     c.need("->")?;
     Ok((name, args, c.name()?))
-}
-
-fn scalar_default(expr: Expr) -> Result<ParsedLiteral, String> {
-    if let Expr::TemporalLiteral(value) = expr {
-        return Ok(ParsedLiteral::Contextual(value));
-    }
-    expr.fixed()
-        .map(ParsedLiteral::Value)
-        .ok_or_else(|| "struct defaults require supported non-null fixed scalar expressions".into())
 }

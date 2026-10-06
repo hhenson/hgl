@@ -12,6 +12,12 @@ line-budget = 400
 workspace = true
 
 [dependencies]
+hgl-rust-collections = { path = "../hgl-rust-collections" }
+hgl-rust-structs = { path = "../hgl-rust-structs" }
 hgl-source = { path = "../hgl-source" }
 hgl-rust-ir = { path = "../hgl-rust-ir" }
 hgl-rust-scalars = { path = "../hgl-rust-scalars" }
+hgl-rust-enums = { path = "../hgl-rust-enums" }
+hgl-rust-prepared-values = { path = "../hgl-rust-prepared-values" }
+hgl-rust-families = { path = "../hgl-rust-families" }
+hgl-rust-composite-keys = { path = "../hgl-rust-composite-keys" }

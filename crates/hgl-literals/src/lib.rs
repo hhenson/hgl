@@ -1,9 +1,11 @@
 //! Scalar source values and unresolved execution-context literal recipes.
-use hgl_time_values::{ZoneId, ZonedDateTime};
-use hgl_type_shape::Ty;
+use hgl_time_values::{ZoneId, ZonedDateTime, ZonedTime};
+use hgl_type_shape::{EnumType, Ty};
 #[derive(Debug, Clone, PartialEq)]
 /// A fixed scalar value in HGL source.
 pub enum Literal {
+    /// Declared enum identity and assigned member number.
+    Enum(EnumType, i64),
     /// Signed integer value.
     Int(i64),
     /// Floating value.
@@ -24,6 +26,8 @@ pub enum Literal {
     CivilDateTime(i64),
     /// Constructed exact-name zone value.
     TimeZone(ZoneId),
+    /// Constructed wall-clock time and exact zone.
+    ZonedTime(ZonedTime),
     /// Constructed instant, exact zone and resolved offset.
     ZonedDateTime(ZonedDateTime),
 }
@@ -31,6 +35,7 @@ impl Literal {
     /// The literal scalar type.
     pub fn ty(&self) -> Ty {
         match self {
+            Self::Enum(ty, _) => Ty::Enum(ty.clone()),
             Self::Int(_) => Ty::I64,
             Self::Float(_) => Ty::F64,
             Self::Bool(_) => Ty::Bool,
@@ -41,6 +46,7 @@ impl Literal {
             Self::DateTime(_) => Ty::DateTime,
             Self::CivilDateTime(_) => Ty::CivilDateTime,
             Self::TimeZone(_) => Ty::TimeZone,
+            Self::ZonedTime(_) => Ty::ZonedTime,
             Self::ZonedDateTime(_) => Ty::ZonedDateTime,
         }
     }
@@ -51,6 +57,13 @@ impl Literal {
 pub enum TemporalLiteral {
     /// Exact zone spelling, syntactically checked only.
     TimeZone(String),
+    /// Wall-clock time requiring exact provider catalog membership.
+    ZonedTime {
+        /// Microseconds after midnight, without a date or offset.
+        time_micros: i64,
+        /// Exact written name, never canonicalized.
+        zone: String,
+    },
     /// Explicit-offset proposal requiring strict provider agreement.
     ZonedDateTime {
         /// The instant determined by the written offset.
@@ -66,6 +79,7 @@ impl TemporalLiteral {
     pub fn ty(&self) -> Ty {
         match self {
             Self::TimeZone(_) => Ty::TimeZone,
+            Self::ZonedTime { .. } => Ty::ZonedTime,
             Self::ZonedDateTime { .. } => Ty::ZonedDateTime,
         }
     }
@@ -111,7 +125,10 @@ fn temporal(text: &str) -> Result<ParsedLiteral, String> {
             )));
         }
         if !value.contains('T') {
-            return Err("zoned_time is outside the admitted publication profile".into());
+            return Ok(ParsedLiteral::Contextual(TemporalLiteral::ZonedTime {
+                time_micros: hgl_calendar::time(value)?.0,
+                zone: name.into(),
+            }));
         }
         let (instant, offset_seconds) = hgl_calendar::offset_datetime(value).map_err(|error| format!("zoned_datetime requires an explicit valid offset; use resolve for civil values: {error}"))?;
         return Ok(ParsedLiteral::Contextual(TemporalLiteral::ZonedDateTime {

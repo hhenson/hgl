@@ -115,3 +115,32 @@ binds exact native prepared configurations before graph construction and encodes
 independent captures after teardown. May use hgl-rust-preparation for cold typed
 conversion; existing emit_test_body remains available. Prepared values never
 reach node hooks or control graph topology.
+
+`shared_layouts(&[Plan])` emits each exact nominal layout once across a test
+suite. `emit_shared(&Plan)` emits nodes against those enclosing markers; standalone
+`emit` retains self-contained output. Graph instances and payload stores remain
+independent. Sharing generated type definitions bounds compiler memory growth
+without changing execution or reducing test cases.
+
+Finite evaluation emits graph-local cold capacity maxima from already materialized
+configuration values and proved direct generator arrival counts. Before binding globals it allocates record slots, then after
+instantiation prepares scalar, atomic, and every finite keyed descendant output.
+Configuration source arenas own independent typed slots. Captures are extracted as
+owning values after simulation; generated hook recording copies into reserved slots.
+
+Emission normalizes literal-only family publications through hgl-rust-families
+before node construction, prepared adapters and execution-body generation. Native
+provider/call expressions are never moved by this narrow preparation pass.
+Prepared eval transport is selected as one complete path by
+`hgl-rust-execution-proof::prepared(plan)`. Unproved plans retain existing ordinary
+publication and recording behavior; no per-insertion fallback or hook replay is
+introduced. Prepared allocation evidence applies only to the selected finite path.
+
+Entry points normalize immutable owning scalar aliases and literal delta operands
+with hgl-rust-direct-deltas before selecting the whole prepared adapter. The
+normalization is idempotent and never executes user code or provider recipes.
+
+The standalone emit entry point marks ordinary_instantiation on its backend clone.
+Its public register/graph-description API leaves instantiation to the caller and
+does not install finite evaluation capacity. Shared eval adapters retain their
+explicit preparation phase and allocation-free proved transport.

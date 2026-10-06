@@ -64,7 +64,7 @@ fn catalog_membership_is_deferred_and_exact_names_are_retained() -> Result<(), S
     Ok(())
 }
 #[test]
-fn invalid_widths_ranges_and_inadmissible_zoned_time_are_rejected() {
+fn invalid_widths_ranges_and_offset_bearing_zoned_time_are_rejected() {
     for text in [
         "@2024-2-29",
         "@0000-01-01",
@@ -86,7 +86,7 @@ fn invalid_widths_ranges_and_inadmissible_zoned_time_are_rejected() {
 }
 #[test]
 fn new_leaves_normalize_atomic_and_delta_without_erasing_composite_identity() {
-    for name in ["civil_datetime", "timezone", "zoned_datetime"] {
+    for name in ["civil_datetime", "timezone", "zoned_datetime", "zoned_time"] {
         let scalar = Ty::parse(name).unwrap();
         assert_eq!(Ty::parse(&format!("atomic<{name}>")), Some(scalar.clone()));
         assert_eq!(scalar.clone().delta().unwrap(), scalar);
@@ -97,5 +97,44 @@ fn new_leaves_normalize_atomic_and_delta_without_erasing_composite_identity() {
                 .publication()
         );
     }
-    assert!(Ty::parse("zoned_time").is_none());
+    assert_eq!(Ty::parse("zoned_time"), Some(Ty::ZonedTime));
+}
+
+#[test]
+fn zoned_times_preserve_wall_microseconds_and_defer_catalog_membership() -> Result<(), String> {
+    for (clock, micros) in [
+        ("00:00", 0),
+        ("09:30:00.123456", 34_200_123_456),
+        ("23:59:59.999999", 86_399_999_999),
+    ] {
+        for zone in [
+            "UTC",
+            "US/Eastern",
+            "America/New_York",
+            "Missing/Zone",
+            "utc",
+        ] {
+            assert_eq!(
+                parse(&format!("@{clock}[{zone}]"))?,
+                ParsedLiteral::Contextual(TemporalLiteral::ZonedTime {
+                    time_micros: micros,
+                    zone: zone.into()
+                })
+            );
+        }
+    }
+    for clock in [
+        "24:00",
+        "23:59:60",
+        "1:30",
+        "12:30.1",
+        "12:30:00.1234567",
+        "12:30Z",
+        "12:30+01",
+        "2026-01-15",
+    ] {
+        assert!(parse(&format!("@{clock}[UTC]")).is_err(), "{clock}");
+    }
+    assert!(numeric("@09:30[UTC]", true).is_err());
+    Ok(())
 }

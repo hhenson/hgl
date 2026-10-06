@@ -205,13 +205,30 @@ fn aliases_preserve_origin_and_different_origins_remain_nominal() {
 }
 
 #[test]
+fn optional_generic_fields_preserve_their_concrete_specialization() {
+    let types = "struct Box<T> { value:T =null }";
+    for body in [
+        "let item:Box<i64> =Box<i64>(value:1)",
+        "let item:Box<i64> =Box<i64>()",
+        "let item:Box<i64> =Box(value:null)",
+    ] {
+        let result = compile(&[("optional.hgl".into(), source(types, body))], "main");
+        assert!(result.is_ok(), "{body}: {result:?}");
+    }
+    let error = compile(
+        &[(
+            "optional.hgl".into(),
+            source(types, "let item:Box<i64> =Box(value:true)"),
+        )],
+        "main",
+    )
+    .expect_err("presence does not erase the field type");
+    assert!(error.contains("conflicting struct inference"), "{error}");
+}
+
+#[test]
 fn unsupported_generic_field_forms_are_explicitly_rejected() {
     for (types, body, expected) in [
-        (
-            "struct Box<T> { value:T =null }",
-            "let item=Box<i64>(value:1)",
-            "optionality",
-        ),
         (
             "struct Base<T> { value:T }\nstruct Child<T>:Base<T> { extra:i64 }",
             "let item=Child<i64>(value:1,extra:2)",
@@ -379,4 +396,18 @@ fn multiline_explicit_nested_types_remain_distinct_from_comparisons() {
         "let item=Pair<\nTimedValue<\ni64\n>,\nlist<\nstr\n>\n>(first:TimedValue<\ni64\n>(time:@2026-10-03T00:00:00Z,value:1),second:[])\nlet smaller=input < 2\nlet larger=input > 0\nlet bounded=(input < 2) && (input > 0)\nlet exact:Pair<TimedValue<i64>,list<str>> =item",
     );
     assert!(result.is_ok(), "{result:?}");
+}
+
+#[test]
+fn rolling_delta_fields_preserve_exact_window_specialization() {
+    let types = "struct Arrival<T>{value:delta<T>}";
+    let check = |body| compile(&[("rolling.hgl".into(), source(types, body))], "main");
+    let result = check(
+        "let item:Arrival<rolling<i64,2>> = get(global_state,\"window\")\nlet arrival:i64 = item.value",
+    );
+    assert!(result.is_ok(), "{result:?}");
+    let result = check(
+        "let a:Arrival<rolling<i64,2>> = get(global_state,\"window\")\nlet b:Arrival<rolling<i64,3>> = get(global_state,\"window\")",
+    );
+    assert!(result.is_err(), "distinct rolling identities merged");
 }

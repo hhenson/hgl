@@ -53,6 +53,7 @@ pub fn scalar(ty: &Ty) -> bool {
         ty,
         Ty::Void
             | Ty::Atomic(_)
+            | Ty::Rolling(..)
             | Ty::Ref(_)
             | Ty::Set(_)
             | Ty::Nullable(_)

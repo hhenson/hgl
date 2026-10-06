@@ -10,3 +10,6 @@ The evaluator retains short-circuit and branch execution semantics.
 
 Acceptance: constant bounds diagnostics, deferred mixed contextual expressions,
 external setup locals, and skipped invalid branches in hgl-program regressions.
+
+Delta traversal includes typed Add/Remove keys and both Keyed map operands;
+retained keys obey the same constant/provenance checks as child expressions.

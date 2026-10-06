@@ -72,8 +72,8 @@ fn unsupported_struct_schemas_are_diagnosed() {
         ),
         (
             "struct Box { amount:i64=null }",
-            "let box=Box(amount:1)",
-            "optionality",
+            "let box=Box(amount:1)\nlet amount=box.amount",
+            "optional field access",
         ),
         (
             "struct Box { child:Box }",

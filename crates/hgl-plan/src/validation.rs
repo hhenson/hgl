@@ -70,7 +70,7 @@ fn validate_child(
             expected
         };
         let expected = if child.keyed {
-            let TsType::Dictionary(target) = expected else {
+            let (TsType::Dictionary(target) | TsType::KeyedDictionary(_, target)) = expected else {
                 return Err(BuildError::InvalidChildren("keyed output".into()));
             };
             target.as_ref()

@@ -177,6 +177,26 @@ normalize before runtime lowering and continue to use `TsType::Ts`.
 ## Temporal scalar preparation
 
 Temporal scalar data now lives in hgl-time-values and is re-exported here.
-ScalarType and ScalarValue add CivilDateTime, TimeZone and ZonedDateTime with
+ScalarType and ScalarValue add CivilDateTime, TimeZone, ZonedDateTime and ZonedTime with
 the corresponding concrete data types. May use hgl-time-values; the existing
 250-line budget is unchanged. See hgl-time-values.md for ownership and identity.
+
+OrdinaryType::Enum(&'static str) describes a declared enum by its canonical
+module-qualified identity. Its physical value is a checked assigned i64; enum
+identity is never interchangeable with an ordinary integer or another enum.
+
+KeyedDictionary(OrdinaryType, Box<TsType>) and KeyedSet(OrdinaryType) retain
+exact scalar/enum key identity for prepared finite collections. Dictionary
+remains the i64 compatibility shape; Set remains built-in scalar membership.
+
+`OrdinaryType::OptionalField(Box<OrdinaryType>)` is an internal field-presence
+descriptor, distinct from its present payload and required fields. It is never
+an HGL annotation or a whole temporal-null publication type.
+
+OrdinaryType::RecursiveReference(&'static str) is internal schema metadata for an
+exact fully applied nominal edge. Concrete root schemas retain their existing
+Struct identity and finite field descriptions; recursive targets never expand
+while forming schema metadata. It adds no source reference or nullable type.
+
+OrdinaryType::Set(Box<OrdinaryType>) and Map(Box<OrdinaryType>,Box<OrdinaryType>) retain complete ordinary schema identity separately from temporal keyed shapes.
+TsType::Growing(Box<TsType>) has exact growing-list identity and a repeated member shape, without fixed children. Re-export validate_growing and validate_growing_distinct from hgl-growing-range.

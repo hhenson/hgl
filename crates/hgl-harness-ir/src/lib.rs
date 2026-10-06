@@ -19,6 +19,10 @@ pub enum Step {
     Assert(Value),
     /// One independently prepared graph run.
     Eval(Evaluation),
+    /// Retain a graph result as an immutable, contextual nullable sequence.
+    BindEval(usize, Ty, Evaluation),
+    /// Checked condition and lexical alternatives, evaluated once.
+    If(Value, Vec<Self>, Vec<Self>),
 }
 /// One selected graph and its source-order inputs and expectations.
 #[derive(Debug)]

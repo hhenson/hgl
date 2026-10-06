@@ -1,52 +1,28 @@
 //! Cold typed conversion and checked lexical test emission.
 use hgl_harness_ir::{Argument, Step, Test};
+use hgl_rust_enums::metadata as enum_data;
 use hgl_rust_ir::{DeltaEntry, Kind, Statement, Value};
-use hgl_source::{Literal, TemporalLiteral, Ty};
+use hgl_source::{Literal, TemporalLiteral};
 fn list<T>(items: &[T], f: impl Fn(&T) -> String) -> String {
     format!(
         "vec![{}]",
         items.iter().map(f).collect::<Vec<_>>().join(",")
     )
 }
-/// Emit exact checked source type metadata.
-pub fn ty(t: &Ty) -> String {
-    let inner = match t {
-        Ty::Atomic(t) => format!("Atomic(Box::new({}))", ty(t)),
-        Ty::Ref(t) => format!("Ref(Box::new({}))", ty(t)),
-        Ty::Nullable(t) => format!("Nullable(Box::new({}))", ty(t)),
-        Ty::Set(t) => format!("Set(Box::new({}))", ty(t)),
-        Ty::Delta(t) => format!("Delta(Box::new({}))", ty(t)),
-        Ty::Map(k, v) => format!("Map(Box::new({}),Box::new({}))", ty(k), ty(v)),
-        Ty::List(t, n) => format!("List(Box::new({}),{n:?})", ty(t)),
-        Ty::Tuple(ts) => format!("Tuple({})", list(ts, ty)),
-        Ty::Struct(n, fields) => format!(
-            "Struct(hgl_source::Nominal {{origin:{:?}.into(),arguments:{}}},{})",
-            n.origin,
-            list(&n.arguments, ty),
-            list(fields, |(name, t)| format!("({name:?}.into(),{})", ty(t)))
-        ),
-        Ty::I64
-        | Ty::F64
-        | Ty::Bool
-        | Ty::Str
-        | Ty::Date
-        | Ty::Time
-        | Ty::DateTime
-        | Ty::Duration
-        | Ty::CivilDateTime
-        | Ty::TimeZone
-        | Ty::ZonedDateTime
-        | Ty::Void => format!("{t:?}"),
-    };
-    format!("hgl_source::Ty::{inner}")
-}
+pub use hgl_rust_type_data::ty;
 fn literal(l: &Literal) -> String {
     let inner = match l {
+        Literal::Enum(e, number) => format!("Enum({}, {number})", enum_data(e)),
         Literal::Str(s) => format!("Str({s:?}.into())"),
         Literal::Float(v) => format!("Float(f64::from_bits({}))", v.to_bits()),
         Literal::TimeZone(zone) => format!(
             "TimeZone(hgl_types::ZoneId::from_validated_name({:?}.into()))",
             zone.as_str()
+        ),
+        Literal::ZonedTime(zoned) => format!(
+            "ZonedTime(hgl_types::ZonedTime::from_validated_parts(hgl_types::Time({}), hgl_types::ZoneId::from_validated_name({:?}.into())))",
+            zoned.time().0,
+            zoned.zone().as_str()
         ),
         Literal::ZonedDateTime(zoned) => format!(
             "ZonedDateTime(hgl_types::ZonedDateTime::from_validated_parts(hgl_types::EngineTime::from_micros({}),hgl_types::ZoneId::from_validated_name({:?}.into()),{}))",
@@ -69,6 +45,9 @@ fn recipe(r: &TemporalLiteral) -> String {
         TemporalLiteral::TimeZone(s) => {
             format!("hgl_source::TemporalLiteral::TimeZone({s:?}.into())")
         }
+        TemporalLiteral::ZonedTime { time_micros, zone } => format!(
+            "hgl_source::TemporalLiteral::ZonedTime {{time_micros:{time_micros},zone:{zone:?}.into()}}"
+        ),
         TemporalLiteral::ZonedDateTime {
             instant_micros,
             zone,
@@ -80,14 +59,22 @@ fn recipe(r: &TemporalLiteral) -> String {
 }
 fn part(p: &DeltaEntry) -> String {
     let p = match p {
-        DeltaEntry::Add(l) => format!("Add({})", literal(l)),
-        DeltaEntry::Remove(l) => format!("Remove({})", literal(l)),
+        DeltaEntry::Add(l) => format!("Add({})", value(l)),
+        DeltaEntry::Remove(l) => format!("Remove({})", value(l)),
+        DeltaEntry::Keyed(k, v) => format!("Keyed({},{})", value(k), value(v)),
         DeltaEntry::Child(i, v) => format!("Child({i},{})", value(v)),
     };
     format!("hgl_rust_ir::DeltaEntry::{p}")
 }
-fn value(v: &Value) -> String {
+/// Emit one exact checked expression for cold preparation.
+pub fn value(v: &Value) -> String {
     let kind = match &v.kind {
+        Kind::Captured(n, vs) => format!(
+            "Captured({n},{})",
+            list(vs, |(i, v)| format!("({i},{})", value(v)))
+        ),
+        Kind::IsPresent(v) => format!("IsPresent(Box::new({}))", value(v)),
+        Kind::Present(v) => format!("Present(Box::new({}))", value(v)),
         Kind::Literal(l) => format!("Literal({})", literal(l)),
         Kind::TemporalLiteral(r) => format!("TemporalLiteral({})", recipe(r)),
         Kind::Delta(ps) => format!("Delta({})", list(ps, part)),
@@ -119,8 +106,6 @@ fn value(v: &Value) -> String {
         | Kind::GlobalGet(_)
         | Kind::BorrowedLocal(..)
         | Kind::GlobalSet(..)
-        | Kind::IsPresent(_)
-        | Kind::Present(_)
         | Kind::GeneratorLocal(_)
         | Kind::Wire(_)
         | Kind::Input(..)
@@ -183,25 +168,31 @@ fn argument(a: &Argument) -> String {
     };
     format!("hgl_harness_ir::Argument::{a}")
 }
+fn evaluation(e: &hgl_harness_ir::Evaluation) -> String {
+    format!(
+        "hgl_harness_ir::Evaluation {{case:{},arguments:{},expected:{}}}",
+        e.case,
+        list(&e.arguments, argument),
+        e.expected
+            .as_ref()
+            .map_or_else(|| "None".into(), |vs| format!("Some({})", slots(vs)))
+    )
+}
+fn step(s: &Step) -> String {
+    let s = match s {
+        Step::Ordinary(s) => format!("Ordinary({})", statement(s)),
+        Step::Assert(v) => format!("Assert({})", value(v)),
+        Step::Eval(e) => format!("Eval({})", evaluation(e)),
+        Step::BindEval(id, t, e) => format!("BindEval({id},{},{})", ty(t), evaluation(e)),
+        Step::If(v, a, b) => format!("If({},{},{})", value(v), list(a, step), list(b, step)),
+    };
+    format!("hgl_harness_ir::Step::{s}")
+}
 /// Emit checked lexical test data without evaluating any expression.
 pub fn test(test: &Test) -> String {
-    let steps = list(&test.steps, |s| {
-        let s = match s {
-            Step::Ordinary(s) => format!("Ordinary({})", statement(s)),
-            Step::Assert(v) => format!("Assert({})", value(v)),
-            Step::Eval(e) => format!(
-                "Eval(hgl_harness_ir::Evaluation {{case:{},arguments:{},expected:{}}})",
-                e.case,
-                list(&e.arguments, argument),
-                e.expected
-                    .as_ref()
-                    .map_or_else(|| "None".into(), |vs| format!("Some({})", slots(vs)))
-            ),
-        };
-        format!("hgl_harness_ir::Step::{s}")
-    });
     format!(
-        "hgl_harness_ir::Test {{name:{:?}.into(),steps:{steps}}}",
-        test.name
+        "hgl_harness_ir::Test {{name:{:?}.into(),steps:{}}}",
+        test.name,
+        list(&test.steps, step)
     )
 }

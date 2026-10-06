@@ -79,6 +79,15 @@ pub fn lex(text: &str) -> Result<Vec<Token>, String> {
                     && (text.as_bytes()[pos].is_ascii_alphanumeric()
                         || matches!(text.as_bytes()[pos], b'-' | b':' | b'.' | b'+'))
                 {
+                    if text.as_bytes()[pos] == b':'
+                        && (text
+                            .as_bytes()
+                            .get(pos + 1)
+                            .is_none_or(|next| !next.is_ascii_digit())
+                            || (pos - start == 11 && text.as_bytes()[start + 5] == b'-'))
+                    {
+                        break;
+                    }
                     pos += 1;
                     if text.as_bytes()[pos - 1] == b'Z' {
                         break;

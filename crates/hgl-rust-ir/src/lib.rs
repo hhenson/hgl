@@ -18,6 +18,8 @@ impl Value {
 /// Checked expressions and frontend-only binding markers.
 #[derive(Debug, Clone)]
 pub enum Kind {
+    /// Closed harness sequence with dense horizon and only present owned slots.
+    Captured(usize, Vec<(usize, Value)>),
     /// Ordered sparse constructor parts with exact originating type in Value.ty.
     Delta(Vec<DeltaEntry>),
     /// Evaluation-local readonly publication observation, without ownership.
@@ -87,11 +89,41 @@ pub enum Kind {
 #[derive(Debug, Clone)]
 pub enum DeltaEntry {
     /// Constant set member addition.
-    Add(Literal),
+    Add(Value),
     /// Constant set member or map key removal.
-    Remove(Literal),
-    /// Constant field/position/key and its exact child publication payload.
+    Remove(Value),
+    /// Exact constant map key and its child publication payload.
+    Keyed(Value, Value),
+    /// Constant field/position and its exact child publication payload.
     Child(i64, Value),
+}
+impl DeltaEntry {
+    /// Retained expressions in written key-before-payload order.
+    pub fn operands(&self) -> impl Iterator<Item = &Value> {
+        let (first, second) = match self {
+            Self::Add(value) | Self::Remove(value) | Self::Child(_, value) => (value, None),
+            Self::Keyed(key, value) => (key, Some(value)),
+        };
+        [Some(first), second].into_iter().flatten()
+    }
+
+    /// Writable retained expressions in key-before-payload order.
+    pub fn operands_mut(&mut self) -> impl Iterator<Item = &mut Value> {
+        let (first, second) = match self {
+            Self::Add(value) | Self::Remove(value) | Self::Child(_, value) => (value, None),
+            Self::Keyed(key, value) => (key, Some(value)),
+        };
+        [Some(first), second].into_iter().flatten()
+    }
+    /// Visit retained expressions in key-before-payload source order.
+    pub fn try_map<E>(&self, mut check: impl FnMut(&Value) -> Result<Value, E>) -> Result<Self, E> {
+        Ok(match self {
+            Self::Add(value) => Self::Add(check(value)?),
+            Self::Remove(value) => Self::Remove(check(value)?),
+            Self::Child(index, value) => Self::Child(*index, check(value)?),
+            Self::Keyed(key, value) => Self::Keyed(check(key)?, check(value)?),
+        })
+    }
 }
 /// Checked statements in a node lifecycle hook or handler.
 #[derive(Debug, Clone)]
@@ -122,7 +154,7 @@ pub enum Statement {
     If(Value, Vec<Self>, Vec<Self>),
 }
 /// One resolved runtime node and its source-defined behavior.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Node {
     /// Qualified source name, combined with its plan index for registration.
     pub name: String,
@@ -150,7 +182,7 @@ pub struct Node {
     pub handlers: Vec<(Option<Value>, Vec<Statement>)>,
 }
 /// One selected native signature used by the plan.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Native {
     /// Qualified HGL declaration name for emitted documentation.
     pub name: String,
@@ -164,8 +196,10 @@ pub struct Native {
     pub result: Ty,
 }
 /// A closed graph with all source checks and eval wiring complete.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Plan {
+    /// Standalone registration has no finite evaluation preparation phase.
+    pub ordinary_instantiation: bool,
     /// Deterministic wiring operation failure reported during construction.
     pub construction_error: Option<String>,
     /// Nodes in construction order, addressed by index.
@@ -186,13 +220,12 @@ impl Value {
     /// Whether an expression is already a closed ordinary constant.
     pub fn closed(&self) -> bool {
         match &self.kind {
-            Kind::Delta(parts) => parts.iter().all(|part| match part {
-                DeltaEntry::Child(_, value) => value.closed(),
-                DeltaEntry::Add(_) | DeltaEntry::Remove(_) => true,
-            }),
+            Kind::Delta(parts) => parts.iter().all(|part| part.operands().all(Value::closed)),
             Kind::Literal(_) | Kind::Void => true,
             Kind::List(items) => items.iter().all(Value::closed),
-            Kind::Construct(fields) => fields.iter().all(|(_, value)| value.closed()),
+            Kind::Captured(_, fields) | Kind::Construct(fields) => {
+                fields.iter().all(|(_, value)| value.closed())
+            }
             Kind::TemporalLiteral(_)
             | Kind::Prepared(_)
             | Kind::WiringFailure(_)

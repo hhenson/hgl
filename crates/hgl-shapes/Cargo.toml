@@ -7,6 +7,7 @@ publish.workspace = true
 [package.metadata.hgl]
 line-budget = 350
 [dependencies]
+hgl-keys = { path = "../hgl-keys" }
 hgl-global-value = { path = "../hgl-global-value" }
 hgl-types = { path = "../hgl-types" }
 hgl-bindings = { path = "../hgl-bindings" }

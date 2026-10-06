@@ -45,3 +45,9 @@ constructing graphs.
 `Builder` and `NodeRef` live here and are re-exported by hgl-describe. The
 builder accepts a `Catalog` and performs the same checks as loaded descriptions.
 `Catalog` supports diagnostic `Debug` formatting.
+
+Shape validation and keyed child paths preserve KeyedDictionary's exact ordinary
+key type, and accept KeyedSet as a scalar-membership shape. Edge compatibility
+still requires the complete exact schema, including nominal key identity.
+
+Growing shapes recurse through their member type during shape validation, while exact wiring identity remains distinct from fixed lists and dictionaries.

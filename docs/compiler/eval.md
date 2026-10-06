@@ -47,30 +47,41 @@ fn pass_through<T>(value: T) -> T {
 
 `delta_value(value)` extracts the current delta when its endpoint is proven
 valid and modified. `delta<T>(...)` is a distinct constructor form;
-`delta(value)` is not an accessor alias. The finite publication profile admits
-the eight scalar leaves, bool/i64 sets, fixed lists, positional tuples, concrete
-nonrecursive nominal structs and i64-keyed maps recursively. Shared tests cover
-sparse child omissions, equal repeated ticks, removals, silence and fresh runs.
-Atomic lists, tuples and concrete structs publish complete ordinary values; an
-empty list is a present snapshot. Defaults are reconstructed for each snapshot,
-and retained recordings do not alias later source or sibling mutations.
-For each supported non-composite type S, `atomic<S>` is the same type as S;
-composite boundaries remain significant in matching and generic arguments.
+`delta(value)` is not an accessor alias. The current publication matrix covers:
 
-Non-null fixed scalar struct field defaults are admitted, including in concrete
-generic specializations. Complete ordinary constructors fill omitted defaults
-after retaining supplied fields; sparse delta constructors never apply defaults.
-General constant-helper defaults, optional fields and inheritance remain
-unsupported by this increment. These are compiler limits, not changes to HGL.
+| Publication | Admitted profile |
+| --- | --- |
+| Scalars | `bool`, `i64`, `f64`, `str`, `date`, `time`, `datetime`, `duration`, `civil_datetime`, `timezone`, `zoned_time`, `zoned_datetime`, and nominal enums. |
+| Structural values | Sparse `set<K>`, `map<K,S>`, fixed lists, growing lists, positional tuples, and concrete required-field structs with admitted children. Growing lists append contiguous positions and remove only a contiguous tail. |
+| Complete atomic values | Ordinary lists, tuples, concrete structs, sets and maps; optional fields; finite recursive structs; and nonrecursive abstract families retaining the exact concrete member tag. |
+| Rolling windows | `rolling<V, Max, Min>` with an admitted ordinary payload and exact tick-count or duration bounds. Its delta is the arriving `V`; readiness is separate from validity. |
+| Collection keys | Scalar and enum keys, plus finite tuples and concrete structs, including optional-field presence. Recursive, family, collection, reference and native opaque key components are excluded. NaN keys are rejected; signed zeros compare equal. |
 
-The [compiler card](../cards/hgl-program.md) lists supported forms and remaining
-limits. Direct eval assertions, deterministic ordinary assertions and ordinary
-test bindings work; timed input syntax remains unsupported. References, growing temporal
-lists, windows, atomic sets/maps and recursive or optional atomic payloads remain
-outside the finite eval profile. The compiler currently supports eight scalar
-leaves; other temporal scalars and enums remain unimplemented.
+These are the profiles in the pinned specification, not arbitrary combinations
+of recursive or container types. Recursive edges must be optional direct atomic
+fields with null defaults, finite specialization graphs and finite value trees.
+Complete construction applies declared defaults to omitted fields; optional
+fields with null defaults remain unset, and explicit null is allowed only for
+optional fields. This adds no optional-field read or sparse clearing operation.
+Sparse deltas never fill defaults.
+For each admitted scalar S, `atomic<S>` is the same type as S; composite boundaries,
+nominal arguments, field presence and window bounds retain their exact identity.
+Empty atomic containers and all-unset structs are present snapshots. Recordings
+own their values independently of later source or sibling mutations.
 
-Shared expectations and Python/C++ comparison evidence belong to the
-[delta-evaluation audit](https://github.com/hhenson/hgraph_spec_audit/tree/main/runtime/validation/delta_eval).
-The specification defines HGL concepts and rules; implementation observations
-and differences are recorded separately in that audit.
+Preparation fixes types before graph start and materializes provider-dependent
+values in source order. A separate finite execution proof selects prepared storage
+for bounded schedules, membership changes and owning payload sizes. The prepared
+fixtures check allocation-free `graph.evaluate` calls and retained capture semantics.
+This is not an allocation guarantee for every graph accepted by the compiler:
+unproved plans use the existing generic adapter and its allocation behavior.
+Neither native arbitrary key types nor unbounded owning growth is implied.
+
+Direct eval assertions, outputless evals, ordinary test bindings, bound eval
+captures and guarded assertions are supported. Captures retain a logical horizon
+with sparse present entries; indexed payload use requires a presence proof.
+Explicit timed input syntax remains unsupported. References are explicitly
+excluded from this publication test matrix; existing compiler reference support
+is separate. Signal coverage is observation-only, without payload recording.
+The [compiler card](../cards/hgl-program.md) records additional limits, including
+uninitialized locals and unsupported contextual construction paths.

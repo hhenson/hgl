@@ -1,5 +1,12 @@
 //! Sparse ordinary formation validates the whole schema and preserves payload order.
 use hgl_delta_check::{Part, constructor};
+use hgl_rust_ir::{Kind, Value};
+fn fixed(value: Literal) -> (Value, Option<Value>) {
+    (
+        Value::new(value.ty(), Kind::Literal(value.clone())),
+        Some(Value::new(value.ty(), Kind::Literal(value))),
+    )
+}
 use hgl_source::{Cursor, Expr, Literal, Ty, lex};
 type Parsed = (Ty, Vec<(Option<String>, Expr)>);
 fn parsed(source: &str) -> Result<Parsed, String> {
@@ -24,14 +31,24 @@ fn all_collection_forms_and_written_payload_order() {
         "delta<list<i64,0>>(items:[])",
     ] {
         let (ty, args) = parsed(source).unwrap();
-        let parts = constructor(&ty, &args, |expr| {
-            expr.fixed().ok_or("constant required".into())
+        let parts = constructor(&ty, &args, |expr, _| {
+            expr.fixed().map(fixed).ok_or("constant required".into())
         })
         .unwrap();
         if source.contains("one()") {
-            assert!(matches!(&parts[0], Part::Removed(Literal::Int(9))));
-            assert!(matches!(&parts[1],Part::Child(7,Ty::I64,Expr::Call(name,_)) if name=="one"));
-            assert!(matches!(&parts[2],Part::Child(8,Ty::I64,Expr::Call(name,_)) if name=="two"));
+            assert!(matches!(
+                &parts[0],
+                Part::Removed(Value {
+                    kind: Kind::Literal(Literal::Int(9)),
+                    ..
+                })
+            ));
+            assert!(
+                matches!(&parts[1],Part::Keyed(Value {kind: Kind::Literal(Literal::Int(7)), ..},Ty::I64,Expr::Call(name,_)) if name=="one")
+            );
+            assert!(
+                matches!(&parts[2],Part::Keyed(Value {kind: Kind::Literal(Literal::Int(8)), ..},Ty::I64,Expr::Call(name,_)) if name=="two")
+            );
         }
     }
 }
@@ -63,10 +80,73 @@ fn rejects_malformed_data_before_any_payload_is_evaluated() {
         ("delta<i64>()", "structural"),
     ] {
         let (ty, args) = parsed(source).unwrap();
-        let actual = constructor(&ty, &args, |expr| {
-            expr.fixed().ok_or("constant required".into())
+        let actual = constructor(&ty, &args, |expr, _| {
+            expr.fixed().map(fixed).ok_or("constant required".into())
         })
         .unwrap_err();
         assert!(actual.contains(error), "{source}: {actual}");
     }
+}
+
+#[test]
+fn scalar_keys_are_exact_and_signed_zero_collisions_fail_during_checking() {
+    for source in [
+        "delta<set<str>>(added:[\"first\"],removed:[\"second\"])",
+        "delta<map<bool,i64>>(upsert:[false:1,true:2])",
+        "delta<map<f64,i64>>(upsert:[-1.5:1,0.0:2])",
+        "delta<map<date,i64>>(upsert:[@2026-01-01: 1])",
+    ] {
+        let (ty, args) = parsed(source).unwrap();
+        assert!(
+            constructor(&ty, &args, |expr, _| expr
+                .fixed()
+                .map(fixed)
+                .ok_or("constant required".into()))
+            .is_ok(),
+            "{source}"
+        );
+    }
+    for (source, diagnostic) in [
+        ("delta<set<f64>>(added:[0.0,-0.0])", "duplicate"),
+        ("delta<set<f64>>(added:[0.0],removed:[-0.0])", "overlap"),
+        ("delta<map<f64,i64>>(upsert:[0.0:1,-0.0:2])", "duplicate"),
+        (
+            "delta<map<f64,i64>>(upsert:[-0.0:1],remove:[0.0])",
+            "overlap",
+        ),
+        ("delta<map<f64,i64>>(upsert:[1:1])", "type mismatch"),
+        ("delta<map<i64,i64>>(upsert:[1.0:1])", "type mismatch"),
+        ("delta<list<i64,2>>(items:[0.0:1])", "constant i64"),
+    ] {
+        let (ty, args) = parsed(source).unwrap();
+        let error = constructor(&ty, &args, |expr, _| {
+            expr.fixed().map(fixed).ok_or("constant required".into())
+        })
+        .unwrap_err();
+        assert!(error.contains(diagnostic), "{source}: {error}");
+    }
+}
+
+#[test]
+fn provider_dependent_identities_are_retained_without_guessing_duplicate_names() {
+    let (ty, args) =
+        parsed("delta<set<timezone>>(added:[@[UTC],@[UTC]],removed:[@[UTC]])").unwrap();
+    let parts = constructor(&ty, &args, |expr, _| {
+        let Expr::TemporalLiteral(recipe) = expr else {
+            return Err("expected contextual recipe".into());
+        };
+        Ok((
+            Value::new(recipe.ty(), Kind::TemporalLiteral(recipe.clone())),
+            None,
+        ))
+    })
+    .unwrap();
+    assert_eq!(parts.len(), 3);
+    assert!(matches!(
+        &parts[0],
+        Part::Added(Value {
+            kind: Kind::TemporalLiteral(_),
+            ..
+        })
+    ));
 }

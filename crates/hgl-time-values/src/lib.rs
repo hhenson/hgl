@@ -89,6 +89,20 @@ impl CivilDateTime {
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub struct ZoneId(String);
 impl ZoneId {
+    /// Capacity of the exact owned zone name.
+    pub fn name_capacity(&self) -> usize {
+        self.0.capacity()
+    }
+    /// Reserve owned name capacity during cold preparation.
+    pub fn reserve_name(&mut self, size: usize) -> Result<(), std::collections::TryReserveError> {
+        self.0.try_reserve(size.saturating_sub(self.0.len()))
+    }
+    /// Copy validated fields after checking the destination name capacity.
+    pub fn copy_prepared(&mut self, source: &Self) {
+        self.0.clear();
+        self.0.push_str(&source.0);
+    }
+
     /// Move an exact name whose provider membership the caller validated.
     pub fn from_validated_name(name: String) -> Self {
         Self(name)
@@ -113,6 +127,21 @@ pub struct ZonedDateTime {
     offset: i32,
 }
 impl ZonedDateTime {
+    /// Capacity of the exact owned zone name.
+    pub fn name_capacity(&self) -> usize {
+        self.zone.name_capacity()
+    }
+    /// Reserve owned name capacity during cold preparation.
+    pub fn reserve_name(&mut self, size: usize) -> Result<(), std::collections::TryReserveError> {
+        self.zone.reserve_name(size)
+    }
+    /// Copy validated fields after checking the destination name capacity.
+    pub fn copy_prepared(&mut self, source: &Self) {
+        self.zone.copy_prepared(&source.zone);
+        self.instant = source.instant;
+        self.offset = source.offset;
+    }
+
     /// Move independently owned parts after provider and offset validation.
     pub fn from_validated_parts(instant: EngineTime, zone: ZoneId, offset_seconds: i32) -> Self {
         Self {
@@ -139,6 +168,48 @@ impl ZonedDateTime {
             self.instant,
             self.zone.try_clone()?,
             self.offset,
+        ))
+    }
+}
+
+/// A wall-clock time and exact zone identity, without a date or offset.
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
+pub struct ZonedTime {
+    time: Time,
+    zone: ZoneId,
+}
+impl ZonedTime {
+    /// Capacity of the exact owned zone name.
+    pub fn name_capacity(&self) -> usize {
+        self.zone.name_capacity()
+    }
+    /// Reserve owned name capacity during cold preparation.
+    pub fn reserve_name(&mut self, size: usize) -> Result<(), std::collections::TryReserveError> {
+        self.zone.reserve_name(size)
+    }
+    /// Copy validated fields after checking the destination name capacity.
+    pub fn copy_prepared(&mut self, source: &Self) {
+        self.zone.copy_prepared(&source.zone);
+        self.time = source.time;
+    }
+
+    /// Move independently owned parts after time and provider validation.
+    pub fn from_validated_parts(time: Time, zone: ZoneId) -> Self {
+        Self { time, zone }
+    }
+    /// The exact wall-clock time, including microseconds.
+    pub const fn time(&self) -> Time {
+        self.time
+    }
+    /// The exact supplied zone identity.
+    pub fn zone(&self) -> &ZoneId {
+        &self.zone
+    }
+    /// Retain both identity fields independently with fallible allocation.
+    pub fn try_clone(&self) -> Result<Self, std::collections::TryReserveError> {
+        Ok(Self::from_validated_parts(
+            self.time,
+            self.zone.try_clone()?,
         ))
     }
 }

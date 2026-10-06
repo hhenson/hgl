@@ -11,6 +11,7 @@ pub struct Constructor {
     module: String,
     declaration: Decl,
     schema: RequiredStruct,
+    patterns: Vec<hgl_inheritance::Pattern>,
     bindings: BTreeMap<String, Ty>,
     fields: Vec<usize>,
     values: Vec<Option<Value>>,
@@ -28,7 +29,10 @@ impl Constructor {
         let (base, explicit) =
             application(name).map_or((name, None), |(base, args)| (base, Some(args)));
         let declaration = declaration(library, module, base)?.ok_or("explicit generic arguments require a struct constructor; generic function calls are not admitted")?.clone();
-        let schema = declaration.required_struct()?;
+        let (schema, patterns) = hgl_inheritance::schema(library, &declaration)?;
+        if schema.abstract_type {
+            return Err("abstract structs are not constructible".into());
+        }
         let mut bindings = BTreeMap::new();
         if let Some(explicit) = explicit {
             if explicit.len() != schema.generics.len() {
@@ -47,7 +51,7 @@ impl Constructor {
                 );
             }
         }
-        if let Some(Ty::Struct(identity, _)) = expected
+        if let Some(identity) = expected.and_then(|ty| expected_identity(ty, &declaration))
             && !schema.generics.is_empty()
         {
             if identity.origin != format!("{}::{}", declaration.module, declaration.name) {
@@ -63,7 +67,7 @@ impl Constructor {
             }
         }
         let mut fields = Vec::new();
-        for (name, _) in args {
+        for (name, expr) in args {
             let name = name
                 .as_ref()
                 .ok_or("struct construction requires named fields")?;
@@ -74,6 +78,9 @@ impl Constructor {
                 .ok_or_else(|| format!("unknown argument {name}"))?;
             if fields.contains(&index) {
                 return Err(format!("duplicate struct field {name}"));
+            }
+            if matches!(expr, Expr::Null) && !schema.optional.contains(&index) {
+                return Err("null supplied to required struct field".into());
             }
             fields.push(index);
         }
@@ -86,6 +93,7 @@ impl Constructor {
             module: module.into(),
             declaration,
             schema,
+            patterns,
             bindings,
             fields,
             values: vec![None; args.len()],
@@ -107,6 +115,9 @@ impl Constructor {
             specialize(library, &self.declaration, arguments, &mut BTreeSet::new())?;
         }
         for (index, (_, expr)) in args.iter().enumerate() {
+            if matches!(expr, Expr::Null) {
+                continue;
+            }
             if self.values[index].is_none() {
                 self.literal_evidence(
                     library,
@@ -115,12 +126,12 @@ impl Constructor {
                 )?;
             }
         }
-        for index in 0..self.fields.len() {
+        for (index, (_, expr)) in args.iter().enumerate() {
             if self.values[index].is_none()
-                && let Ok(ty) = substitute(
+                && !matches!(expr, Expr::Null)
+                && let Ok(ty) = hgl_value_types::field_type(
                     library,
-                    &self.declaration.module,
-                    &self.schema.fields[self.fields[index]].1,
+                    &self.patterns[self.fields[index]],
                     &self.bindings,
                     &mut BTreeSet::new(),
                 )
@@ -132,7 +143,7 @@ impl Constructor {
             .values
             .iter()
             .enumerate()
-            .filter(|(_, value)| value.is_none())
+            .filter(|(index, value)| value.is_none() && !matches!(args[*index].1, Expr::Null))
             .map(|(index, _)| index)
             .collect::<Vec<_>>();
         if let Some(index) = pending
@@ -172,12 +183,9 @@ impl Constructor {
     }
     /// Unify and retain the checked field once, without executing its expression.
     pub fn checked(&mut self, library: &Library, index: usize, value: Value) -> Result<(), String> {
-        let pattern = &self.schema.fields[self.fields[index]].1;
-        let projected = ordinary_pattern(pattern);
-        let resolved = substitute(
+        let resolved = hgl_value_types::field_type(
             library,
-            &self.declaration.module,
-            pattern,
+            &self.patterns[self.fields[index]],
             &self.bindings,
             &mut BTreeSet::new(),
         );
@@ -188,13 +196,13 @@ impl Constructor {
             self.values[index] = Some(value);
             return Ok(());
         }
-        unify(
-            library,
-            &self.declaration.module,
-            &projected,
-            &value.ty,
-            &self.schema.generics,
+        hgl_family_types::infer_field(
+            &self.patterns[self.fields[index]],
+            &hgl_value_types::source_argument(library, &value.ty)?,
             &mut self.bindings,
+            |module, name, actual, parameters, bindings| {
+                unify(library, module, name, actual, parameters, bindings)
+            },
         )
         .map_err(|error| format!("struct construction: missing or wrong-type argument: {error}"))?;
         self.values[index] = Some(value);
@@ -218,6 +226,7 @@ impl Constructor {
             .fields
             .into_iter()
             .zip(self.values)
+            .filter(|(index, value)| value.is_some() || !self.schema.optional.contains(index))
             .map(|(index, value)| {
                 value
                     .map(|value| (index, value))
@@ -225,7 +234,11 @@ impl Constructor {
             })
             .collect::<Result<Vec<_>, String>>()?;
         for (index, default) in self.schema.defaults {
+            if matches!(default, Expr::Null) {
+                continue;
+            }
             if !fields.iter().any(|(field, _)| *field == index) {
+                let default = hgl_enums::default(library, &self.declaration.module, &default)?;
                 let ty = default.ty();
                 let kind = match default {
                     hgl_source::ParsedLiteral::Value(v) => Kind::Literal(v),
@@ -307,10 +320,11 @@ fn schema_names(
         return schema_names(library, module, origin, seen, sizes);
     }
     let (base, args) = application(name).unwrap_or((name, Vec::new()));
-    for argument in args
-        .iter()
-        .take(if base == "list" { 1 } else { args.len() })
-    {
+    for argument in args.iter().take(if matches!(base, "list" | "rolling") {
+        1
+    } else {
+        args.len()
+    }) {
         schema_names(library, module, argument, seen, sizes)?;
     }
     if Ty::parse(name).is_some()
@@ -325,16 +339,19 @@ fn schema_names(
         if !seen.insert(format!("{}::{}", decl.module, decl.name)) {
             return Ok(());
         }
-        for (_, field) in decl.required_struct()?.fields {
-            let _normalized = hgl_type_sizes::normalize(&field, &mut |expr| {
+        let schema = decl.required_struct()?;
+        if let Some(parent) = schema.parent {
+            schema_names(library, &decl.module, &parent, seen, sizes)?;
+        }
+        for (_, field) in schema.fields {
+            for expr in hgl_type_sizes::expressions(&field) {
                 if !library
                     .type_sizes
                     .contains_key(&(decl.module.clone(), expr.into()))
                 {
                     sizes.push((decl.module.clone(), expr.into()));
                 }
-                Ok(hgl_source::Literal::Int(0))
-            })?;
+            }
             schema_names(library, &decl.module, &field, seen, sizes)?;
         }
     }
@@ -357,4 +374,16 @@ fn ordinary_pattern(pattern: &str) -> String {
         }
     }
     pattern.into()
+}
+
+fn expected_identity<'a>(ty: &'a Ty, decl: &Decl) -> Option<&'a hgl_source::Nominal> {
+    if let Ty::Family(family) = ty {
+        family
+            .members()
+            .iter()
+            .find(|(id, _)| id.origin == format!("{}::{}", decl.module, decl.name))
+            .map(|(id, _)| id)
+    } else {
+        ty.structure().ok().map(|(identity, _, _)| identity)
+    }
 }

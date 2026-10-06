@@ -16,20 +16,21 @@
 //! entry. Only [`Store::bind`] reports an unknown id, because the builder
 //! calls it with ids read from a description.
 
+pub use hgl_rolling::{Rolling, WindowShape};
 use std::marker::PhantomData;
 
 pub use hgl_global::{
-    Capacity, Global, GlobalState, GlobalValue, Layouts, List, ValueColumns, ValueSlot, list_index,
+    Capacity, Global, GlobalState, GlobalValue, Layouts, List, ListBounds, Optional, PreparedValue,
+    Recursive, RecursiveTarget, ValueColumns, ValueSlot, append_slot, commit_append, list_index,
     list_index_mut, list_len, list_push,
 };
-use hgl_types::NodeResult;
-use hgl_types::{EngineTime, NodeId, ScalarType, ScalarValue};
+use hgl_types::{EngineTime, NodeId, NodeResult, ScalarType, ScalarValue};
 
 use hgl_bindings::Bindings;
-pub use hgl_bindings::Kind;
-pub use hgl_bindings::{BindError, InputId, OutputId, Reference, ScopeId, Wake};
-pub use hgl_columns::Columns;
-pub use hgl_columns::Scalar;
+pub use hgl_bindings::{BindError, InputId, Kind, OutputId, Reference, ScopeId, Wake};
+pub use hgl_columns::{Columns, Scalar};
+pub use hgl_keys::{Key, Keys};
+pub use hgl_prepared_store::{Observation, PreparedStorage, PreparedTick};
 mod atomic;
 mod fixed;
 pub use hgl_shapes as shapes;
@@ -54,6 +55,11 @@ pub struct In<T: Scalar> {
 }
 
 impl<T: Scalar> Out<T> {
+    /// The original endpoint generation for prepared publication validation.
+    pub fn generation(self) -> u32 {
+        self.generation
+    }
+
     /// The id to bind inputs to.
     #[inline]
     pub fn id(self) -> OutputId {
@@ -72,10 +78,14 @@ impl<T: Scalar> In<T> {
 /// Every value and binding of a run, shared by its graph scopes.
 #[derive(Debug, Default)]
 pub struct Store {
+    /// Exact cold key domains retained for this run.
+    pub keys: Keys,
     columns: Columns,
     bindings: Bindings,
     globals: GlobalState,
     atomic: hgl_atomic::Arena,
+    /// Independently prepared ordinary arrival windows.
+    pub rolling: hgl_rolling::Arena,
 }
 
 /// A dictionary with i64 keys and scalar children.
@@ -104,6 +114,17 @@ impl<T: Scalar> DictIn<T> {
 }
 
 impl Store {
+    /// Borrow disjoint prepared runtime storage for cold setup or typed hook copying.
+    pub fn prepared(&mut self) -> PreparedStorage<'_> {
+        PreparedStorage {
+            columns: &mut self.columns,
+            bindings: &mut self.bindings,
+            globals: &mut self.globals,
+            atomic: &mut self.atomic,
+            rolling: &mut self.rolling,
+            keys: &self.keys,
+        }
+    }
     /// Access the run-owned ordinary capability, independently of temporal storage.
     pub fn global_state(&mut self) -> &mut GlobalState {
         &mut self.globals
@@ -114,27 +135,15 @@ impl Store {
     }
     /// Allocate a scalar output in the current graph scope.
     pub fn add_output<T: Scalar>(&mut self, owner: NodeId) -> Out<T> {
-        let (id, fresh) = self.bindings.add_output(
-            owner,
-            Kind::Ts(T::TYPE),
-            u32::try_from(T::column(&self.columns).len())
-                .unwrap_or_else(|_| unreachable!("column capacity exceeded")),
-        );
-        if fresh {
-            T::column_mut(&mut self.columns).push(T::default());
-        }
-        Out {
-            id,
-            generation: self.bindings.output(id).generation,
-            value_type: PhantomData,
-        }
+        let id = hgl_store_build::scalar::<T>(&mut self.bindings, &mut self.columns, owner);
+        self.scalar_output(id)
+            .unwrap_or_else(|_| unreachable!("new scalar output"))
     }
     /// Allocate an unbound scalar input.
     pub fn add_input<T: Scalar>(&mut self, owner: NodeId, active: bool) -> In<T> {
-        In {
-            id: self.bindings.add_input(owner, Kind::Ts(T::TYPE), active),
-            value_type: PhantomData,
-        }
+        let id = self.bindings.add_input(owner, Kind::Ts(T::TYPE), active);
+        self.scalar_input(id)
+            .unwrap_or_else(|_| unreachable!("new scalar input"))
     }
     /// Plain, silent wiring-time binding.
     pub fn bind(&mut self, input: InputId, output: OutputId) -> Result<(), BindError> {
@@ -206,16 +215,12 @@ impl Store {
     ) {
         let o = self.bindings.output(output.id);
         debug_assert_eq!(o.kind, Kind::Ts(T::TYPE), "foreign handle");
-        debug_assert_eq!(o.owner, writer, "TS-21: not the owner");
-        debug_assert_eq!(o.scope, self.bindings.scope(), "TS-21: foreign graph");
-        debug_assert!(now != EngineTime::NEVER, "NEVER is not an evaluation time");
-        debug_assert!(
-            now >= o.modified_at,
-            "TS-3: last modified time never decreases"
-        );
-        assert!(
-            o.alive && o.generation == output.generation,
-            "TS-23: expired output handle"
+        hgl_prepared_store::validate_write(
+            &self.bindings,
+            output.id,
+            output.generation,
+            now,
+            writer,
         );
         T::column_mut(&mut self.columns)[o.slot as usize] = value;
         self.bindings.publish(output.id, now, wake);

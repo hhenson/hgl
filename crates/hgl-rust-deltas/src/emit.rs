@@ -9,7 +9,7 @@ pub(super) fn marker(ty: &Ty) -> String {
     let mut code = String::new();
     let fields = children(ty);
     if matches!(ty, Ty::Struct(..) | Ty::Tuple(_)) {
-        let names = if let Ty::Struct(_, fields) = ty {
+        let names = if let Ty::Struct(_, fields, _) = ty {
             fields.iter().map(|(n, _)| n.clone()).collect::<Vec<_>>()
         } else {
             (0..fields.len()).map(|i| i.to_string()).collect()
@@ -79,9 +79,19 @@ pub(super) fn marker(ty: &Ty) -> String {
             application(ty)
         ),
     );
-    code
+    code + &hgl_rust_observed::methods(ty, shape_marker)
 }
 fn allocate(ty: &Ty) -> String {
+    if let Ty::Set(key) = ty {
+        return hgl_rust_keyed::allocation(
+            key,
+            &shape_marker(ty),
+            "store.add_output::<bool>(owner).id()",
+        );
+    }
+    if let Ty::Map(key, child) = ty {
+        return hgl_rust_keyed::allocation(key, &shape_marker(ty), &allocation(child));
+    }
     let mut code = "let mut children=Vec::new();".to_string();
     if let Ty::List(child, Some(n)) = ty {
         append(
@@ -121,7 +131,7 @@ fn validate(ty: &Ty) -> String {
     match ty {
         Ty::Set(_) => nonempty("delta.0.is_empty() && delta.1.is_empty()"),
         Ty::List(child, _) | Ty::Map(_, child) => {
-            let cond = if matches!(ty, Ty::Map(..)) {
+            let cond = if matches!(ty, Ty::Map(..) | Ty::List(_, None)) {
                 "delta.0.is_empty() && delta.2.is_empty()"
             } else {
                 "delta.0.is_empty()"
@@ -155,6 +165,7 @@ fn validate(ty: &Ty) -> String {
             code
         }
         Ty::Atomic(_)
+        | Ty::Rolling(..)
         | Ty::Delta(_)
         | Ty::I64
         | Ty::F64
@@ -162,6 +173,8 @@ fn validate(ty: &Ty) -> String {
         | Ty::Str
         | Ty::CivilDateTime
         | Ty::TimeZone
+        | Ty::Enum(_)
+        | Ty::ZonedTime
         | Ty::ZonedDateTime
         | Ty::Duration
         | Ty::Date
@@ -169,6 +182,8 @@ fn validate(ty: &Ty) -> String {
         | Ty::DateTime
         | Ty::Ref(_)
         | Ty::Nullable(_)
+        | Ty::Recursive(_)
+        | Ty::Family(_)
         | Ty::Void => unreachable!("structural origin"),
     }
 }
@@ -177,21 +192,9 @@ fn push(target: &str, value: &str) -> String {
 }
 fn observation(ty: &Ty) -> String {
     match ty {
-        Ty::Set(key) => {
-            let conversion = if **key == Ty::Bool { "key!=0" } else { "key" };
-            format!(
-                "for key in _ctx.store().bindings().added_keys(input.id()) {{{}}} for key in _ctx.store().bindings().removed_keys(input.id()) {{{}}}",
-                push("delta.0", conversion),
-                push("delta.1", conversion)
-            )
-        }
-        Ty::Map(_, child) => format!(
-            "for &key in _ctx.store().bindings().changed_keys(input.id()) {{ if let Some(child)=input.member(_ctx.store().bindings(),key) {{if !_ctx.store().input_valid(child.id()) {{return Err(hgl_types::NodeError::new(\"invalid structural child delta\"));}} let value={}; {} {} }} }} for key in _ctx.store().bindings().removed_keys(input.id()) {{{}}}",
-            read(child, "child"),
-            push("delta.0", "key"),
-            push("delta.1", "value"),
-            push("delta.2", "key")
-        ),
+        Ty::Set(key) => hgl_rust_keyed::observation(key, None),
+        Ty::List(child, None) => hgl_rust_keyed::observation(&Ty::I64, Some(&read(child, "child"))),
+        Ty::Map(key, child) => hgl_rust_keyed::observation(key, Some(&read(child, "child"))),
         Ty::List(child, Some(n)) => format!(
             "for n in 0..{n} {{let child=input.index(_ctx.store().bindings(),n); {} }}",
             observe_child(
@@ -213,6 +216,7 @@ fn observation(ty: &Ty) -> String {
             .collect::<Vec<_>>()
             .concat(),
         Ty::Atomic(_)
+        | Ty::Rolling(..)
         | Ty::Delta(_)
         | Ty::I64
         | Ty::F64
@@ -220,6 +224,8 @@ fn observation(ty: &Ty) -> String {
         | Ty::Str
         | Ty::CivilDateTime
         | Ty::TimeZone
+        | Ty::Enum(_)
+        | Ty::ZonedTime
         | Ty::ZonedDateTime
         | Ty::Duration
         | Ty::Date
@@ -228,7 +234,8 @@ fn observation(ty: &Ty) -> String {
         | Ty::Ref(_)
         | Ty::Nullable(_)
         | Ty::Void
-        | Ty::List(_, None) => unreachable!("structural origin"),
+        | Ty::Recursive(_)
+        | Ty::Family(_) => unreachable!("structural origin"),
     }
 }
 fn observe_child(child: &Ty, index: &str, target: &str, keys: bool) -> String {
@@ -245,14 +252,12 @@ fn observe_child(child: &Ty, index: &str, target: &str, keys: bool) -> String {
 }
 fn application(ty: &Ty) -> String {
     match ty {
-        Ty::Set(key)=>{
-            let conversion=if **key==Ty::Bool{"i64::from(key)"}else{"key"};
-            format!("for &key in &delta.0 {{ if output.member(_ctx.store().bindings(),{conversion}).is_some() {{return Err(hgl_types::NodeError::new(\"noncanonical set addition\"));}} }} for &key in &delta.1 {{if output.member(_ctx.store().bindings(),{conversion}).is_none() {{return Err(hgl_types::NodeError::new(\"noncanonical set removal\"));}}}} for key in delta.1 {{_ctx.remove_shaped(output.id(),{conversion});}} for key in delta.0 {{let key={conversion}; _ctx.get_or_create_with(output.id(),key,|store,owner|store.add_output::<bool>(owner).id()); let child=output.member(_ctx.store().bindings(),key).ok_or_else(||hgl_types::NodeError::new(\"missing created set member\"))?; {} }}",apply(&Ty::Bool,"child","true"))
-        }
-        Ty::Map(_,child)=>format!("for &key in &delta.2 {{if output.member(_ctx.store().bindings(),key).is_none() {{return Err(hgl_types::NodeError::new(\"noncanonical map removal\"));}}}} for key in delta.2 {{_ctx.remove_shaped(output.id(),key);}} for (key,value) in delta.0.into_iter().zip(delta.1) {{_ctx.get_or_create_with(output.id(),key,|store,owner|{}); let child=output.member(_ctx.store().bindings(),key).ok_or_else(||hgl_types::NodeError::new(\"missing created map member\"))?; {} }}",allocation(child),apply(child,"child","value")),
+        Ty::Set(key)=>hgl_rust_keyed::application(key,None),
+        Ty::List(child,None)=>format!("hgl_types::validate_growing(_ctx.store().bindings().output(output.id()).members.live.len(),delta.0.iter().copied(),delta.2.iter().copied()).map_err(hgl_types::NodeError::new)?;{}",hgl_rust_keyed::application(&Ty::I64,Some((&allocation(child),&apply(child,"child","value"))))),
+        Ty::Map(key,child)=>hgl_rust_keyed::application(key,Some((&allocation(child),&apply(child,"child","value")))),
         Ty::List(child,Some(n))=>format!("for (key,value) in delta.0.into_iter().zip(delta.1) {{let n=usize::try_from(key).ok().filter(|&n|n<{n}).ok_or_else(||hgl_types::NodeError::new(\"sparse list index out of bounds\"))?; let child=output.index(_ctx.store().bindings(),n); {} }}",apply(child,"child","value")),
         Ty::Struct(..)|Ty::Tuple(_)=>children(ty).iter().enumerate().map(|(i,child)|format!("for value in delta.{i} {{let child=output.field::<{i}>(_ctx.store().bindings()); {}}}",apply(child,"child","value"))).collect::<Vec<_>>().concat(),
-        Ty::Atomic(_) | Ty::Delta(_) | Ty::I64 | Ty::F64 | Ty::Bool | Ty::Str | Ty::CivilDateTime | Ty::TimeZone | Ty::ZonedDateTime | Ty::Duration | Ty::Date | Ty::Time | Ty::DateTime | Ty::Ref(_) | Ty::Nullable(_) | Ty::Void | Ty::List(_,None)=>unreachable!("structural origin"),
+        Ty::Atomic(_) | Ty::Rolling(..) | Ty::Delta(_) | Ty::I64 | Ty::F64 | Ty::Bool | Ty::Str | Ty::CivilDateTime | Ty::TimeZone | Ty::Enum(_) | Ty::ZonedTime | Ty::ZonedDateTime | Ty::Duration | Ty::Date | Ty::Time | Ty::DateTime | Ty::Ref(_) | Ty::Nullable(_) | Ty::Void | Ty::Recursive(_) | Ty::Family(_)=>unreachable!("structural origin"),
     }
 }
 
@@ -267,7 +272,7 @@ fn equality(ty: &Ty) -> String {
     }
     if let Ty::List(child, _) | Ty::Map(_, child) = ty {
         let child = super::equivalent(&delta_type(child), "value", "&b.1[index]");
-        let removed = if matches!(ty, Ty::Map(..)) {
+        let removed = if matches!(ty, Ty::Map(..) | Ty::List(_, None)) {
             format!(" && {}", members(2))
         } else {
             String::new()

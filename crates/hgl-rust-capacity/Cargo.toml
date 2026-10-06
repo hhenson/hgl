@@ -1,0 +1,20 @@
+[package]
+name = "hgl-rust-capacity"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+[package.metadata.hgl]
+line-budget = 400
+[lints]
+workspace = true
+[dependencies]
+hgl-rust-collections = { path = "../hgl-rust-collections" }
+hgl-rust-pure-bounds = { path = "../hgl-rust-pure-bounds" }
+hgl-rust-windows = { path = "../hgl-rust-windows" }
+hgl-source = { path = "../hgl-source" }
+hgl-rust-ir = { path = "../hgl-rust-ir" }
+hgl-rust-layouts = { path = "../hgl-rust-layouts" }
+hgl-rust-deltas = { path = "../hgl-rust-deltas" }
+hgl-rust-finite-domains = { path = "../hgl-rust-finite-domains" }
+hgl-rust-keyed = { path = "../hgl-rust-keyed" }

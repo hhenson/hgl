@@ -31,7 +31,7 @@ impl<T: hgl_global_value::GlobalValue> Shape for Atomic<T> {
 pub struct Fixed<S, const N: usize>(PhantomData<S>);
 /// Integer-keyed temporal map marker.
 #[derive(Debug)]
-pub struct Map<S>(PhantomData<S>);
+pub struct Map<S, K = i64>(PhantomData<(S, K)>);
 /// Canonical bool/i64 set marker.
 #[derive(Debug)]
 pub struct Set<K>(PhantomData<K>);
@@ -43,28 +43,34 @@ impl<S: Shape, const N: usize> Shape for Fixed<S, N> {
 impl<S: Shape, const N: usize> Elements for Fixed<S, N> {
     type Child = S;
 }
-impl<S: Shape> Shape for Map<S> {
+impl<S: Shape, K: hgl_keys::Key> Shape for Map<S, K> {
     fn shape() -> TsType {
-        TsType::Dictionary(Box::new(S::shape()))
+        if K::schema() == hgl_types::OrdinaryType::Scalar(ScalarType::I64) {
+            TsType::Dictionary(Box::new(S::shape()))
+        } else {
+            TsType::KeyedDictionary(K::schema(), Box::new(S::shape()))
+        }
     }
 }
-impl<S: Shape> Elements for Map<S> {
+impl<S: Shape, K: hgl_keys::Key> Elements for Map<S, K> {
     type Child = S;
 }
-impl Shape for Set<bool> {
+impl<K: hgl_keys::Key> Shape for Set<K> {
     fn shape() -> TsType {
-        TsType::Set(ScalarType::Bool)
+        match K::schema() {
+            hgl_types::OrdinaryType::Scalar(t) => TsType::Set(t),
+            identity @ (hgl_types::OrdinaryType::RecursiveReference(_)
+            | hgl_types::OrdinaryType::OptionalField(_)
+            | hgl_types::OrdinaryType::Enum(_)
+            | hgl_types::OrdinaryType::List(..)
+            | hgl_types::OrdinaryType::Set(_)
+            | hgl_types::OrdinaryType::Map(..)
+            | hgl_types::OrdinaryType::Tuple(_)
+            | hgl_types::OrdinaryType::Struct(..)) => TsType::KeyedSet(identity),
+        }
     }
 }
-impl Shape for Set<i64> {
-    fn shape() -> TsType {
-        TsType::Set(ScalarType::I64)
-    }
-}
-impl Elements for Set<bool> {
-    type Child = bool;
-}
-impl Elements for Set<i64> {
+impl<K: hgl_keys::Key> Elements for Set<K> {
     type Child = bool;
 }
 impl Shape for bool {
@@ -259,4 +265,22 @@ impl Shape for hgl_types::ZonedDateTime {
     fn shape() -> TsType {
         TsType::Ts(ScalarType::ZonedDateTime)
     }
+}
+
+impl Shape for hgl_types::ZonedTime {
+    fn shape() -> TsType {
+        TsType::Ts(ScalarType::ZonedTime)
+    }
+}
+
+/// Dense growing temporal list with independently retained child endpoints.
+#[derive(Debug)]
+pub struct Growing<S>(PhantomData<S>);
+impl<S: Shape> Shape for Growing<S> {
+    fn shape() -> TsType {
+        TsType::Growing(Box::new(S::shape()))
+    }
+}
+impl<S: Shape> Elements for Growing<S> {
+    type Child = S;
 }

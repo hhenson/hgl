@@ -12,6 +12,7 @@ line-budget = 350
 workspace = true
 
 [dependencies]
+hgl-recursive-types = { path = "../hgl-recursive-types" }
 hgl-shape-obligations = { path = "../hgl-shape-obligations" }
 hgl-source = { path = "../hgl-source" }
 hgl-library = { path = "../hgl-library" }
@@ -19,3 +20,6 @@ hgl-value-check = { path = "../hgl-value-check" }
 hgl-type-sizes = { path = "../hgl-type-sizes" }
 hgl-value-access = { path = "../hgl-value-access" }
 hgl-struct-names = { path = "../hgl-struct-names" }
+hgl-enums = { path = "../hgl-enums" }
+hgl-inheritance = { path = "../hgl-inheritance" }
+hgl-family-types = { path = "../hgl-family-types" }

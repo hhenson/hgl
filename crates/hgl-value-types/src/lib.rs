@@ -4,6 +4,8 @@ use hgl_source::{Nominal, Ty, application, delta_argument};
 pub use hgl_struct_names::{declaration, identity};
 use hgl_value_check::ordinary;
 use std::collections::{BTreeMap, BTreeSet};
+mod family;
+pub use family::field_type;
 /// Resolve a finite ordinary type, retaining nominal identity.
 pub fn resolve(
     library: &Library,
@@ -12,6 +14,19 @@ pub fn resolve(
     active: &mut BTreeSet<String>,
 ) -> Result<Ty, String> {
     substitute(library, module, name, &BTreeMap::new(), active)
+}
+/// Resolve a source type into its ordinary payload representation.
+pub fn resolve_ordinary(library: &Library, module: &str, name: &str) -> Result<Ty, String> {
+    resolve(library, module, name, &mut BTreeSet::new()).map(|ty| hgl_value_access::project(&ty))
+}
+/// Resolve a concrete specialization from a fresh recursive resolution scope.
+pub fn concrete(
+    library: &Library,
+    module: &str,
+    name: &str,
+    bindings: &BTreeMap<String, Ty>,
+) -> Result<Ty, String> {
+    substitute(library, module, name, bindings, &mut BTreeSet::new())
 }
 /// Substitute declared type parameters through finite ordinary source shapes.
 pub fn substitute(
@@ -51,20 +66,27 @@ pub fn substitute(
             _ => Err(format!("invalid structural type arguments {name}")),
         };
     }
-    if base == "atomic" && arguments.len() == 1 {
-        return Ok(hgl_value_access::project(&substitute(
-            library,
-            module,
-            arguments[0],
-            bindings,
-            active,
-        )?)
-        .atomic());
+    if (base == "atomic" && arguments.len() == 1) || base == "rolling" {
+        let payload = substitute(library, module, arguments[0], bindings, active)?;
+        let payload = hgl_value_access::project(&payload);
+        return if base == "atomic" {
+            Ok(payload.atomic())
+        } else {
+            let window = hgl_source::Window::parse(arguments[1], arguments.get(2).copied())
+                .ok_or("invalid rolling bounds")?;
+            Ok(Ty::Rolling(Box::new(payload), window))
+        };
     }
-    if matches!(base, "rolling" | "ref") {
+    if base == "ref" {
         return Err(format!(
             "unsupported ordinary struct argument or field {name}"
         ));
+    }
+    if let Some(ty) = hgl_enums::resolve(library, module, base)? {
+        if !arguments.is_empty() {
+            return Err("enum type arguments are unsupported".into());
+        }
+        return Ok(Ty::Enum(ty));
     }
     let decl = declaration(library, module, base)?
         .ok_or_else(|| format!("unresolved ordinary type {name}"))?;
@@ -81,13 +103,30 @@ pub fn specialize(
     arguments: Vec<Ty>,
     active: &mut BTreeSet<String>,
 ) -> Result<Ty, String> {
-    let schema = decl.required_struct()?;
+    let (schema, patterns) = hgl_inheritance::schema(library, decl)?;
     if schema.generics.len() != arguments.len() {
         return Err(format!(
             "{}: struct application requires {} complete type arguments",
             decl.name,
             schema.generics.len()
         ));
+    }
+    if schema.abstract_type {
+        return hgl_family_types::resolve(
+            library,
+            decl,
+            &arguments,
+            active,
+            |decl, args, active| specialize(library, decl, args, active),
+            |module, name, bindings| concrete(library, module, name, bindings),
+        );
+    }
+    if let Some(ty) =
+        hgl_recursive_types::resolve(library, decl, &arguments, |owner, pattern, bindings| {
+            concrete(library, &owner.module, pattern, bindings)
+        })?
+    {
+        return Ok(ty);
     }
     hgl_shape_obligations::validate(library, decl, &arguments)?;
     hgl_struct_names::exported_fields(library, decl)?;
@@ -110,22 +149,27 @@ pub fn specialize(
         return Err("recursive ordinary structs are not supported".into());
     }
     let mut fields = Vec::new();
-    for (index, (name, ty)) in schema.fields.into_iter().enumerate() {
-        let ty = substitute(library, &decl.module, &ty, &bindings, active)?;
+    for (index, (name, _)) in schema.fields.into_iter().enumerate() {
+        let ty = field_type(library, &patterns[index], &bindings, active)?;
         if !ordinary(&ty) && !ty.publication() {
             return Err("ordinary struct fields require ordinary value types".into());
         }
-        if schema
-            .defaults
-            .iter()
-            .any(|(field, value)| *field == index && value.ty() != ty)
-        {
-            return Err(format!("struct field {name}: default type mismatch"));
+        for (_, value) in schema.defaults.iter().filter(|(field, _)| *field == index) {
+            if !matches!(value, hgl_source::Expr::Null)
+                && hgl_enums::default(library, &decl.module, value)?.ty()
+                    != hgl_value_access::project(&ty)
+            {
+                return Err(format!("struct field {name}: default type mismatch"));
+            }
         }
         fields.push((name, ty));
     }
     active.remove(&origin);
-    Ok(Ty::Struct(Nominal { origin, arguments }, fields))
+    Ok(Ty::Struct(
+        Nominal { origin, arguments },
+        fields,
+        schema.optional,
+    ))
 }
 /// Unify one declaration-owned type pattern against a checked source type.
 pub fn unify(
@@ -165,13 +209,13 @@ pub fn unify(
     }
     if let Some((base, arguments)) = application(pattern) {
         if base == "atomic" && arguments.len() == 1 {
-            let payload = if let Ty::Atomic(payload) = actual {
-                payload.as_ref()
-            } else if actual.clone().atomic() == *actual {
-                actual
-            } else {
-                return Err("atomic boundary mismatch".into());
-            };
+            let payload = atomic_payload(actual)?;
+            return unify(library, module, arguments[0], payload, generics, bindings);
+        }
+        if let ("rolling", Ty::Rolling(payload, window)) = (base, actual) {
+            if hgl_source::Window::parse(arguments[1], arguments.get(2).copied()) != Some(*window) {
+                return Err("rolling bounds mismatch".into());
+            }
             return unify(library, module, arguments[0], payload, generics, bindings);
         }
         let children = match (base, actual) {
@@ -189,10 +233,17 @@ pub fn unify(
             }
             return Ok(());
         }
+        if hgl_enums::resolve(library, module, base)?.is_some() {
+            return Err("enum type arguments are unsupported".into());
+        }
         let decl = declaration(library, module, base)?
             .ok_or_else(|| format!("unresolved ordinary type {base}"))?;
-        let Ty::Struct(identity, _) = actual else {
-            return Err("struct field type mismatch".into());
+        let identity = if let Ty::Recursive(batch) = actual {
+            batch.identity()
+        } else if let Ty::Family(family) = actual {
+            family.identity()
+        } else {
+            actual.structure()?.0
         };
         if identity.origin != format!("{}::{}", decl.module, decl.name)
             || identity.arguments.len() != arguments.len()
@@ -211,14 +262,20 @@ pub fn unify(
     Ok(())
 }
 
+fn atomic_payload(actual: &Ty) -> Result<&Ty, String> {
+    if let Ty::Atomic(payload) = actual {
+        return Ok(payload);
+    }
+    (actual.clone().atomic() == *actual)
+        .then_some(actual)
+        .ok_or_else(|| "atomic boundary mismatch".into())
+}
+
 fn size(library: &Library, module: &str, expr: &str) -> Result<hgl_source::Literal, String> {
     library
         .type_sizes
         .get(&(module.into(), expr.into()))
-        .map_or_else(
-            || hgl_type_sizes::literal(expr),
-            |size| Ok(hgl_source::Literal::Int(*size)),
-        )
+        .map_or_else(|| hgl_type_sizes::literal(expr), |size| Ok(size.clone()))
 }
 
 fn unify_delta(
@@ -229,9 +286,7 @@ fn unify_delta(
     generics: &[String],
     bindings: &mut BTreeMap<String, Ty>,
 ) -> Result<(), String> {
-    if let Ok(expected) =
-        substitute(library, module, origin, bindings, &mut BTreeSet::new()).and_then(Ty::delta)
-    {
+    if let Ok(expected) = concrete(library, module, origin, bindings).and_then(Ty::delta) {
         return if expected == *actual {
             Ok(())
         } else {
@@ -258,33 +313,9 @@ fn unify_delta(
     unify(library, module, origin, actual_origin, generics, bindings)
 }
 
-fn source_argument(library: &Library, ty: &Ty) -> Result<Ty, String> {
-    if let Ty::Struct(identity, _) = ty {
-        let decl = library
-            .declarations
-            .iter()
-            .find(|decl| {
-                decl.role == hgl_library::Role::Struct
-                    && format!("{}::{}", decl.module, decl.name) == identity.origin
-            })
-            .ok_or("unresolved nominal source argument")?;
-        return specialize(
-            library,
-            decl,
-            identity.arguments.clone(),
-            &mut BTreeSet::new(),
-        );
-    }
-    if let Ty::List(child, size) = ty {
-        return Ok(Ty::List(Box::new(source_argument(library, child)?), *size));
-    }
-    if let Ty::Tuple(children) = ty {
-        return Ok(Ty::Tuple(
-            children
-                .iter()
-                .map(|child| source_argument(library, child))
-                .collect::<Result<_, _>>()?,
-        ));
-    }
-    Ok(ty.clone())
+/// Recover canonical declaration-owned arguments from ordinary projected payloads.
+pub fn source_argument(library: &Library, ty: &Ty) -> Result<Ty, String> {
+    hgl_family_types::source_argument(library, ty, &mut |decl, args| {
+        specialize(library, decl, args, &mut BTreeSet::new())
+    })
 }
