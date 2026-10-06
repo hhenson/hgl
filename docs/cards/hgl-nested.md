@@ -1,6 +1,6 @@
 # Card: hgl-nested
 
-Status: implemented for the admitted dynamic slice; see [coverage](../runtime-implementation.md).
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `nested` module of `hgl-kernel` (`crates/hgl-kernel/src/nested.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
 
 Own a keyed set of child Graph instances. May use `hgl-kernel`, `hgl-store`
 `hgl-types` and `hgl-deadlines`. Budget: 350 source lines. No third-party dependencies.

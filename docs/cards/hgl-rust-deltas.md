@@ -1,5 +1,7 @@
 # Card: hgl-rust-deltas
 
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `deltas` module of `hgl-rust` (`crates/hgl-rust/src/deltas.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+
 Emit statically specialized ordinary structural delta layouts and endpoint
 application/extraction from checked IR. Uses hgl-source, hgl-rust-ir and
 hgl-rust-layouts. Budget 700 source lines. No runtime type dispatch.

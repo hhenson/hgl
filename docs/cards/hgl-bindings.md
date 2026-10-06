@@ -1,6 +1,6 @@
 # Card: hgl-bindings
 
-Status: implemented for the dynamic and fixed collection slices; see [coverage](../runtime-implementation.md).
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `bindings` module of `hgl-store` (`crates/hgl-store/src/bindings.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
 
 Own endpoint metadata, lifetime and binding independently of scalar storage.
 May use `hgl-types` and `hgl-endpoints`; `hgl-store` owns the typed columns and delegates metadata

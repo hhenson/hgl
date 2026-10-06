@@ -1,5 +1,7 @@
 # Card: hgl-rust-layouts
 
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `layouts` module of `hgl-rust` (`crates/hgl-rust/src/layouts.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+
 Emit checked Rust type spellings and nominal ordinary storage layouts. Uses
 `hgl-source` and `hgl-rust-ir`; budget 400 source lines. No runtime execution or
 third-party dependencies. Expression and statement emission stays in

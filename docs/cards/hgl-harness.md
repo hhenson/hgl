@@ -1,6 +1,6 @@
 # Card: hgl-harness
 
-Status: accepted
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `harness` module of `hgl-semantics` (`crates/hgl-semantics/src/harness.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
 
 Execute ordered checked test setup before and between fresh graph runs. Uses
 hgl-harness-ir, hgl-value-eval, hgl-eval-data, hgl-rust-ir and hgl-source; budget 250 source

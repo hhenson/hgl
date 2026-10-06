@@ -1,5 +1,7 @@
 # Card: hgl-recursive-types
 
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `recursive_types` module of `hgl-semantics` (`crates/hgl-semantics/src/recursive_types.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+
 Finite recursive declaration and specialization batches from ADR0012 and finite
 recursive atomic publications. Uses source, library, struct-names, shape-obligations, value-access and enums; budget350.
 `resolve(library, declaration, arguments, resolve_field)` returns no batch for an

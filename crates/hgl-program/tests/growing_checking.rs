@@ -27,13 +27,15 @@ fn trace_validation_reports_first_bad_publication() {
         delta(&[1], &[1]),
         delta(&[], &[]),
     ] {
-        let (index, _) =
-            hgl_eval_data::validate(&shape, &[Some(delta(&[0, 1], &[])), None, Some(bad)])
-                .unwrap_err();
+        let (index, _) = hgl_semantics::eval_data::validate(
+            &shape,
+            &[Some(delta(&[0, 1], &[])), None, Some(bad)],
+        )
+        .unwrap_err();
         assert_eq!(index, 2);
     }
     assert!(
-        hgl_eval_data::validate(
+        hgl_semantics::eval_data::validate(
             &shape,
             &[
                 Some(delta(&[0, 1], &[])),

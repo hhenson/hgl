@@ -1,5 +1,7 @@
 # hgl-publication-trace
 
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `publication_trace` module of `hgl-semantics` (`crates/hgl-semantics/src/publication_trace.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+
 Cold validation of a closed publication sequence before graph start.
 
 `validate(&Ty, &[Option<Value>]) -> Result<(), (usize, String)>` starts with empty

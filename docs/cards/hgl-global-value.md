@@ -1,5 +1,7 @@
 # Card: hgl-global-value
 
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `global_value` module of `hgl-store` (`crates/hgl-store/src/global_value.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+
 Typed representations of ordinary primitives, required-field nominal structs,
 and homogeneous lists. Uses `hgl-types`, `hgl-columns` and `hgl-global-arena`;
 budget 200 lines. No third-party dependencies or unsafe code.

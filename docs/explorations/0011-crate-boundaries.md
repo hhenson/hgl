@@ -9,8 +9,9 @@ lines of code (blank and comment lines excluded). The median crate was
 under 200 lines; 51 crates were under 150 lines and 51 had at most one
 consumer in the workspace. The smallest were `hgl-observation` (19 lines),
 `hgl-rust-preparation` (36), `hgl-library-files` (37), `hgl-scalar-keys`
-(39) and `hgl-rust-source-slots` (39). No crate had a third-party
-dependency, and no crate but the test allocator used `unsafe`.
+(39) and `hgl-rust-source-slots` (39). One crate had a third-party dependency
+(`hgl-time-context`, on `jiff`), and no crate but the test allocator used
+`unsafe`.
 
 The split was not architecture. It followed from two rules together: a
 crate's `line-budget` is never raised to pass a build, and a card is written

@@ -7,12 +7,12 @@ pub fn compile_files(
     libraries: &[PathBuf],
     entry: &str,
 ) -> Result<crate::Program, String> {
-    crate::compile(&hgl_library_files::sources(files, libraries)?, entry)
+    crate::compile(&crate::library_files::sources(files, libraries)?, entry)
 }
 /// Load and check all named tests from explicit files and their source library.
 pub fn compile_tests_files(
     files: &[PathBuf],
     libraries: &[PathBuf],
 ) -> Result<crate::Suite, String> {
-    crate::compile_tests(&hgl_library_files::sources(files, libraries)?)
+    crate::compile_tests(&crate::library_files::sources(files, libraries)?)
 }

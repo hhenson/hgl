@@ -1,5 +1,7 @@
 # Card: hgl-value-types
 
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `value_types` module of `hgl-semantics` (`crates/hgl-semantics/src/value_types.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+
 Resolve finite ordinary schemas against source declarations and imports. Uses
 hgl-source, hgl-library, hgl-value-check, hgl-value-access and hgl-struct-names;
 budget 350 source lines. Identity and declaration lookup are re-exported from

@@ -4,8 +4,8 @@ fn append(out: &mut String, args: std::fmt::Arguments<'_>) {
     out.write_fmt(args)
         .unwrap_or_else(|_| unreachable!("String formatting"));
 }
-use hgl_rust_generators::Generator;
-use hgl_rust_values::{
+use crate::generators::Generator;
+use crate::values::{
     condition_code, global_markers, global_schema, global_type, literal, owned_type, query,
     rust_type, scalar_type, statements,
 };
@@ -32,10 +32,10 @@ fn node(plan: &Plan, n: &Node, index: usize, out: &mut Vec<String>) {
         ));
     }
     for (i, (_, _, ty)) in n.inputs.iter().enumerate() {
-        out.push(if hgl_rust_deltas::shaped(ty) {
+        out.push(if crate::deltas::shaped(ty) {
             format!(
                 "input{i}: hgl_store::shapes::Input<{}>,\n",
-                hgl_rust_deltas::shape_marker(ty)
+                crate::deltas::shape_marker(ty)
             )
         } else if matches!(ty, Ty::Ref(_)) {
             format!("input{i}: hgl_store::InputId,\n")
@@ -47,10 +47,10 @@ fn node(plan: &Plan, n: &Node, index: usize, out: &mut Vec<String>) {
         out.push(format!("cache{i}: {},\n", rust_type(&cache.ty())));
     }
     if n.result != Ty::Void {
-        out.push(if hgl_rust_deltas::shaped(&n.result) {
+        out.push(if crate::deltas::shaped(&n.result) {
             format!(
                 "_output: hgl_store::shapes::Output<{}>,\n",
-                hgl_rust_deltas::shape_marker(&n.result)
+                crate::deltas::shape_marker(&n.result)
             )
         } else if matches!(n.result, Ty::Ref(_)) {
             "_output: hgl_store::OutputId,\n".into()
@@ -103,10 +103,10 @@ fn node_build(
 ) {
     node_type(n, index, out);
     build_entry(plan, n, index, out);
-    out.push(hgl_rust_keyed::node_preparation(n, |v| {
+    out.push(crate::keyed::node_preparation(n, |v| {
         condition_code(plan, v)
     }));
-    out.push(hgl_rust_source_slots::initialize(
+    out.push(crate::source_slots::initialize(
         &n.configuration,
         true,
         &n.name,
@@ -126,8 +126,8 @@ fn node_build(
         out.push(format!("configuration{id},configuration_slot{id},\n"));
     }
     for (i, (name, _, ty)) in n.inputs.iter().enumerate() {
-        if hgl_rust_deltas::shaped(ty) {
-            out.push(format!("input{i}: {{let id=ports.shaped_input({name:?})?; hgl_store::shapes::Input::<{}>::bind(ports.store().bindings(),id).map_err(hgl_describe::BuildError::Bind)?}},\n",hgl_rust_deltas::shape_marker(ty)));
+        if crate::deltas::shaped(ty) {
+            out.push(format!("input{i}: {{let id=ports.shaped_input({name:?})?; hgl_store::shapes::Input::<{}>::bind(ports.store().bindings(),id).map_err(hgl_describe::BuildError::Bind)?}},\n",crate::deltas::shape_marker(ty)));
             continue;
         }
         out.push(format!(
@@ -142,8 +142,8 @@ fn node_build(
     for (i, cache) in n.caches.iter().enumerate() {
         out.push(format!("cache{i}: {},\n", literal(cache)));
     }
-    if hgl_rust_deltas::shaped(&n.result) {
-        out.push(format!("_output: {{let id=ports.shaped_output()?; hgl_store::shapes::Output::<{}>::bind(ports.store().bindings(),id).map_err(hgl_describe::BuildError::Bind)?}},\n",hgl_rust_deltas::shape_marker(&n.result)));
+    if crate::deltas::shaped(&n.result) {
+        out.push(format!("_output: {{let id=ports.shaped_output()?; hgl_store::shapes::Output::<{}>::bind(ports.store().bindings(),id).map_err(hgl_describe::BuildError::Bind)?}},\n",crate::deltas::shape_marker(&n.result)));
     } else if n.result != Ty::Void {
         out.push(format!(
             "_output: ports.{}()?,\n",
@@ -241,12 +241,12 @@ pub fn shared_layouts(plans: &[Plan]) -> String {
         ..Plan::default()
     };
     global_markers(&types)
-        + &hgl_rust_preparation::recursive_markers(&types)
-        + &hgl_rust_deltas::markers(&types)
+        + &crate::preparation::recursive_markers(&types)
+        + &crate::deltas::markers(&types)
 }
 fn emit_inner(plan: &Plan, layouts: bool) -> String {
-    let prepared = hgl_rust_families::prepare(plan);
-    let normalized = hgl_rust_direct_deltas::prepare(&prepared);
+    let prepared = crate::families::prepare(plan);
+    let normalized = crate::direct_deltas::prepare(&prepared);
     let plan = &normalized;
     let mut out = vec![String::from("// Generated from checked HGL source.\n")];
     for doc in &plan.docs {
@@ -281,8 +281,8 @@ fn emit_inner(plan: &Plan, layouts: bool) -> String {
     }
     if layouts {
         out.push(global_markers(plan));
-        out.push(hgl_rust_preparation::recursive_markers(plan));
-        out.push(hgl_rust_deltas::markers(plan));
+        out.push(crate::preparation::recursive_markers(plan));
+        out.push(crate::deltas::markers(plan));
     }
     for (i, n) in plan.nodes.iter().enumerate() {
         node(plan, n, i, &mut out);
@@ -310,10 +310,10 @@ fn emit_inner(plan: &Plan, layouts: bool) -> String {
 
 /// Emit execution and observation of one checked eval plan.
 pub fn emit_test_body(plan: &Plan, expected: Option<&[Option<Value>]>) -> String {
-    let prepared = hgl_rust_families::prepare(plan);
-    let normalized = hgl_rust_direct_deltas::prepare(&prepared);
+    let prepared = crate::families::prepare(plan);
+    let normalized = crate::direct_deltas::prepare(&prepared);
     let plan = &normalized;
-    let mut out = vec![hgl_rust_keyed::preparation(plan), capacities(plan)];
+    let mut out = vec![crate::keyed::preparation(plan), capacities(plan)];
     register_prepared(plan, &mut out);
     if !plan.natives.is_empty() {
         out.push("impl Native for crate::Provider {\n".into());
@@ -378,7 +378,7 @@ pub fn emit_test_body(plan: &Plan, expected: Option<&[Option<Value>]>) -> String
             let comparison = if matches!(payload, Ty::Delta(_)) {
                 format!(
                     "hgl_testkit::evaluation::compare_by(&expected,&_observed,|a,b|{})?;",
-                    hgl_rust_deltas::equivalent(&payload, "a", "b")
+                    crate::deltas::equivalent(&payload, "a", "b")
                 )
             } else {
                 "hgl_testkit::evaluation::compare(&expected,&_observed)?;".into()
@@ -402,10 +402,10 @@ fn native_result(native: &crate::ir::Native) -> String {
 }
 
 fn shape(ty: &Ty) -> String {
-    if hgl_rust_deltas::shaped(ty) {
+    if crate::deltas::shaped(ty) {
         return format!(
             "<{} as hgl_store::shapes::Shape>::shape()",
-            hgl_rust_deltas::shape_marker(ty)
+            crate::deltas::shape_marker(ty)
         );
     }
     if let Ty::Ref(t) = ty {
@@ -518,7 +518,7 @@ fn register_prepared(plan: &Plan, out: &mut Vec<String>) {
         })
         .collect::<Vec<_>>()
         .concat();
-    out.push(format!("struct Configurations {{{fields}}}fn prepare_configurations(values:&[hgl_rust_ir::Value])->Result<Configurations,String>{{"));
+    out.push(format!("struct Configurations {{{fields}}}fn prepare_configurations(values:&[hgl_semantics::ir::Value])->Result<Configurations,String>{{"));
     let mut bindings = std::collections::BTreeMap::new();
     for node in &plan.nodes {
         for value in &node.configuration {
@@ -528,7 +528,7 @@ fn register_prepared(plan: &Plan, out: &mut Vec<String>) {
     for (id, ty) in bindings {
         out.push(format!(
             "let prepared{id}={};",
-            hgl_rust_preparation::decode(
+            crate::preparation::decode(
                 &ty,
                 &format!("values.get({id}).ok_or(\"missing prepared value\")?")
             )
@@ -560,14 +560,14 @@ fn register_prepared(plan: &Plan, out: &mut Vec<String>) {
 
 /// Emit fresh graph execution from already constructed owning arguments.
 pub fn emit_prepared_test_body(plan: &Plan) -> String {
-    let prepared = hgl_rust_families::prepare(plan);
-    let normalized = hgl_rust_direct_deltas::prepare(&prepared);
+    let prepared = crate::families::prepare(plan);
+    let normalized = crate::direct_deltas::prepare(&prepared);
     let plan = &normalized;
     let legacy = emit_test_body(plan, None);
     let adapters = legacy.split("pub fn test()").next().unwrap_or_default();
-    let mut out=vec![adapters.into(),"pub fn run(prepared:hgl_harness_ir::PreparedEval)->Result<hgl_harness_ir::CapturedEval,hgl_harness_ir::Failure> {\nlet mut registry=hgl_describe::Registry::new();\n".into()];
+    let mut out=vec![adapters.into(),"pub fn run(prepared:hgl_semantics::harness_ir::PreparedEval)->Result<hgl_semantics::harness_ir::CapturedEval,hgl_semantics::harness_ir::Failure> {\nlet mut registry=hgl_describe::Registry::new();\n".into()];
     if plan.construction_error.is_some() {
-        out.push("register(&mut registry).map_err(|e|format!(\"{e:?}\"))?; main(&registry).map_err(|e|format!(\"{e:?}\"))?; Ok(hgl_harness_ir::CapturedEval {length:prepared.input_length,ticks:Vec::new()}) }\n".into());
+        out.push("register(&mut registry).map_err(|e|format!(\"{e:?}\"))?; main(&registry).map_err(|e|format!(\"{e:?}\"))?; Ok(hgl_semantics::harness_ir::CapturedEval {length:prepared.input_length,ticks:Vec::new()}) }\n".into());
         return out.concat();
     }
     out.push("let configurations=prepare_configurations(&prepared.arguments)?;register_prepared(&mut registry,&configurations)?;".into());
@@ -576,16 +576,16 @@ pub fn emit_prepared_test_body(plan: &Plan) -> String {
     if let Some((key, ty)) = &plan.recording {
         out.push(format!("let recording=store.global_state().bind::<{}>({key:?}).map_err(|e|format!(\"{{e:?}}\"))?;\n",global_type(ty)));
     }
-    out.push("store.prepare_collection_inputs();hgl_kernel::run_simulation(&mut built.graph,&mut store,&hgl_kernel::RunConfig {start_time:hgl_types::EngineTime::MIN_START,end_time:hgl_types::EngineTime::MAX_END}).map_err(|e|match e {hgl_kernel::EngineError::Node(e)=>hgl_harness_ir::Failure::Execution(e),hgl_kernel::EngineError::BadTimes=>hgl_harness_ir::Failure::Other(\"invalid run times\".into())})?;\n".into());
+    out.push("store.prepare_collection_inputs();hgl_kernel::run_simulation(&mut built.graph,&mut store,&hgl_kernel::RunConfig {start_time:hgl_types::EngineTime::MIN_START,end_time:hgl_types::EngineTime::MAX_END}).map_err(|e|match e {hgl_kernel::EngineError::Node(e)=>hgl_semantics::harness_ir::Failure::Execution(e),hgl_kernel::EngineError::BadTimes=>hgl_semantics::harness_ir::Failure::Other(\"invalid run times\".into())})?;\n".into());
     if let Some((_, ty)) = &plan.output {
         let payload = ty
             .clone()
             .delta()
             .unwrap_or_else(|_| unreachable!("checked output delta"));
-        out.push(format!("let ticks=store.global_state().get(recording).map_err(|e|e.message)?.into_iter().collect();drop(built);\nlet observed=hgl_testkit::evaluation::observe(ticks,prepared.input_length)?;\nlet (length,ticks)=observed.into_parts(); Ok(hgl_harness_ir::CapturedEval {{length,ticks:ticks.iter().map(|(i,v)|(*i,{})).collect()}})\n",hgl_rust_preparation::encode(&payload,"v")));
+        out.push(format!("let ticks=store.global_state().get(recording).map_err(|e|e.message)?.into_iter().collect();drop(built);\nlet observed=hgl_testkit::evaluation::observe(ticks,prepared.input_length)?;\nlet (length,ticks)=observed.into_parts(); Ok(hgl_semantics::harness_ir::CapturedEval {{length,ticks:ticks.iter().map(|(i,v)|(*i,{})).collect()}})\n",crate::preparation::encode(&payload,"v")));
     } else {
         out.push(
-            "Ok(hgl_harness_ir::CapturedEval {length:prepared.input_length,ticks:Vec::new()})\n"
+            "Ok(hgl_semantics::harness_ir::CapturedEval {length:prepared.input_length,ticks:Vec::new()})\n"
                 .into(),
         );
     }
@@ -593,13 +593,13 @@ pub fn emit_prepared_test_body(plan: &Plan) -> String {
     out.concat()
 }
 fn capacities(plan: &Plan) -> String {
-    if !hgl_rust_finite_domains::prepared(plan) {
+    if !crate::finite_domains::prepared(plan) {
         return String::new();
     }
-    let Some(arrivals) = hgl_rust_finite_domains::direct_arrivals(plan) else {
+    let Some(arrivals) = crate::finite_domains::direct_arrivals(plan) else {
         return String::new();
     };
-    let capacity = hgl_rust_capacity::Capacity::new(plan);
+    let capacity = crate::capacity::Capacity::new(plan);
     let mut code = capacity.declaration();
     code += "fn prepare_capacity(configurations:&Configurations,store:&mut hgl_store::Store,horizon:usize)->Result<FiniteCapacity,String>{let mut capacity=FiniteCapacity::default();let mut cycles=horizon;";
     append(
@@ -663,7 +663,7 @@ fn capacities(plan: &Plan) -> String {
 }
 
 fn instantiate(plan: &Plan, horizon: &str) -> String {
-    let finite = hgl_rust_finite_domains::prepared(plan);
+    let finite = crate::finite_domains::prepared(plan);
     let mut code = if finite {
         format!("let capacity=prepare_capacity(&configurations,&mut store,{horizon})?;")
     } else {

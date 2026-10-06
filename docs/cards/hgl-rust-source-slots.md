@@ -1,5 +1,7 @@
 # Card: hgl-rust-source-slots
 
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `source_slots` module of `hgl-rust` (`crates/hgl-rust/src/source_slots.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+
 Typed immutable configuration projections for emitted source nodes. Uses
 hgl-rust-ir and hgl-rust-layouts; budget 100 source lines. No runtime execution,
 third-party dependencies or source admission rules.

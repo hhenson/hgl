@@ -1,6 +1,6 @@
 # Card: hgl-plan
 
-Status: accepted infrastructure target; GRF-1–10 and the validated description traces.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `plan` module of `hgl-describe` (`crates/hgl-describe/src/plan.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
 
 Owns plain graph descriptions and their structural checks. Uses `hgl-types`
 and `hgl-store::BindError`; holds no runtime object. Budget: 500 lines.

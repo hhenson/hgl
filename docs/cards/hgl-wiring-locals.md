@@ -1,5 +1,7 @@
 # Card: hgl-wiring-locals
 
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `wiring_locals` module of `hgl-semantics` (`crates/hgl-semantics/src/wiring_locals.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+
 Check and select ordinary wiring-time conditional blocks that rebind existing
 connections. Uses hgl-source, hgl-rust-ir, hgl-value-eval, hgl-value-access,
 hgl-value-check and hgl-local-check. Budget: 300 source lines. No runtime or

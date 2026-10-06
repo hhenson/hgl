@@ -1,6 +1,6 @@
 # Card: hgl-optional
 
-Status: implemented; focused generated debug/release allocation checks pass.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `optional` module of `hgl-store` (`crates/hgl-store/src/optional.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
 
 Internal ordinary field-presence storage. May use hgl-global-value, hgl-prepared-value, hgl-list-storage and hgl-types;
 budget 160 source lines. No source nullable type, optional read, clearing or

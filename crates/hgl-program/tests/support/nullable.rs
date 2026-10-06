@@ -38,8 +38,12 @@ fn compile_tests(sources: &[(String, String)]) -> Result<(), String> {
     for name in ["alarm", "clock"] {
         env.insert(name.into(), Value::new(Ty::Void, Kind::Capability));
     }
-    let mut node =
-        hgl_value_check::prepare_node(&signature, &mut Env::new(), "flow::probe".into(), ty)?;
+    let mut node = hgl_semantics::value_check::prepare_node(
+        &signature,
+        &mut Env::new(),
+        "flow::probe".into(),
+        ty,
+    )?;
     let tokens = hgl_source::lex(&sources[2].1)?;
     Ok(checker.hooks(
         &declaration,

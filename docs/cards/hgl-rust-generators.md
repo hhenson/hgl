@@ -1,5 +1,7 @@
 # Card: hgl-rust-generators
 
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `generators` module of `hgl-rust` (`crates/hgl-rust/src/generators.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+
 Lower checked generator source bodies into typed Rust resume machines under
 ADR0015 and its pinned operand-order clarification. Uses local `hgl-source`,
 `hgl-rust-ir` and `hgl-rust-values`; budget 500 source lines. No third-party or

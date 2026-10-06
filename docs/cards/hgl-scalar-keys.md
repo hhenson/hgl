@@ -1,5 +1,7 @@
 # Card: hgl-scalar-keys
 
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `scalar_keys` module of `hgl-semantics` (`crates/hgl-semantics/src/scalar_keys.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+
 Cold ordinary scalar collection identity, specified by scalar-collection-keys
 (spec 06e576a). Depends only on hgl-source; budget 100 source lines.
 

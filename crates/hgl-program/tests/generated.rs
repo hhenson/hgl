@@ -105,12 +105,8 @@ fn manifest(
         "hgl-store",
         "hgl-kernel",
         "hgl-describe",
-        "hgl-harness",
-        "hgl-harness-ir",
-        "hgl-rust-ir",
+        "hgl-semantics",
         "hgl-source",
-        "hgl-value-eval",
-        "hgl-time-context",
         "hgl-testkit",
     ] {
         let path = root.join("crates").join(name);

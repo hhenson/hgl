@@ -1,5 +1,7 @@
 # Card: hgl-collection-check
 
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `collection_check` module of `hgl-semantics` (`crates/hgl-semantics/src/collection_check.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+
 Exact typed ordinary set/map construction checks. Uses source, checked IR,
 ordinary evaluation, context-free classification and collection value identity;
 budget 180 source lines, no runtime or third-party dependencies.

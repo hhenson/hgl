@@ -1,6 +1,6 @@
 # Card: hgl-time-context
 
-Status: accepted
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `time_context` module of `hgl-source` (`crates/hgl-source/src/time_context.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
 
 Host-only construction context. Uses hgl-time-values, hgl-literals, hgl-types
 and Jiff; budget 200 source lines. Jiff is approved for this implementation and

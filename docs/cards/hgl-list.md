@@ -1,5 +1,7 @@
 # Card: hgl-list
 
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `list` module of `hgl-store` (`crates/hgl-store/src/list.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+
 Ordinary owning and globally borrowed list operations under LIST-EMPTY/READ/GROW/
 RETAIN/ERROR, VAL-17, and value-mutability. Uses `hgl-types` and
 `hgl-global-value`; budget 260 lines. No unsafe code or third-party dependencies.

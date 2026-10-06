@@ -1,7 +1,7 @@
 use crate::{emit, index, resolve};
-use hgl_harness_ir::Test;
+use hgl_semantics::harness_ir::Test;
 
-pub use hgl_harness_ir::Suite;
+pub use hgl_semantics::harness_ir::Suite;
 /// Check named tests without executing ordinary setup or supplied eval values.
 pub fn compile_suite(sources: &[(String, String)]) -> Result<Suite, String> {
     suite(sources, false)
@@ -11,14 +11,14 @@ pub fn compile_module_suite(sources: &[(String, String)]) -> Result<Suite, Strin
     suite(sources, true)
 }
 fn suite(sources: &[(String, String)], module_only: bool) -> Result<Suite, String> {
-    let errors = hgl_source_check::with_module_semantics(sources, |_, _| Ok(()));
+    let errors = hgl_semantics::source_check::with_module_semantics(sources, |_, _| Ok(()));
     if module_only {
-        hgl_diagnostics::ensure(errors)?;
+        hgl_source::diagnostics::ensure(errors)?;
     } else {
-        hgl_source_check::ensure_sources(sources)?;
+        hgl_semantics::source_check::ensure_sources(sources)?;
     }
     let library = index::load(sources)?;
-    hgl_enums::validate(&library)?;
+    hgl_semantics::enums::validate(&library)?;
     let mut suite = Suite::default();
     let mut names = std::collections::BTreeSet::new();
     for decl in &library.declarations {
@@ -29,16 +29,16 @@ fn suite(sources: &[(String, String)], module_only: bool) -> Result<Suite, Strin
         if !names.insert(name.clone()) {
             return Err(format!("duplicate test {name}"));
         }
-        let steps = hgl_harness_check::block(
-            hgl_eval_data::steps(&decl.tokens)?,
-            &mut hgl_static_values::PreparedLexicalScope::default(),
+        let steps = hgl_semantics::harness_check::block(
+            hgl_semantics::eval_data::steps(&decl.tokens)?,
+            &mut hgl_semantics::static_values::PreparedLexicalScope::default(),
             &mut suite.plans,
             &mut resolve::TestChecker {
                 library: library.clone(),
                 module: decl.module.clone(),
             },
         )
-        .map_err(|e| hgl_diagnostics::render_issue(sources, e.in_source(&decl.source)))?;
+        .map_err(|e| hgl_source::diagnostics::render_issue(sources, e.in_source(&decl.source)))?;
         suite.tests.push(Test { name, steps });
     }
     Ok(suite)
@@ -58,10 +58,10 @@ pub fn emit_tests(suite: &Suite) -> String {
         ));
     }
     for (i, test) in suite.tests.iter().enumerate() {
-        let code = hgl_rust_preparation::emit_test(test, &suite.plans)
+        let code = hgl_rust::preparation::emit_test(test, &suite.plans)
             .replace("fn test()", "pub fn test()");
         out.push(format!("mod test{i} {{ use super::*; {code} }}\n"));
     }
-    out.push(hgl_rust_preparation::emit_main(&suite.tests));
+    out.push(hgl_rust::preparation::emit_main(&suite.tests));
     out.concat()
 }

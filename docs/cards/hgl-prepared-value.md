@@ -1,5 +1,7 @@
 # Card: hgl-prepared-value
 
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `prepared_value` module of `hgl-store` (`crates/hgl-store/src/prepared_value.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+
 Finite ordinary value preparation, using hgl-global-value, hgl-columns and
 hgl-types; budget 160 source lines. No unsafe code or third-party dependencies.
 

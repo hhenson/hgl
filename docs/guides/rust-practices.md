@@ -138,7 +138,8 @@ Search the diff for these before reading it line by line:
    clauses longer than the function body.
 6. Tests — do they assert ticks and values, or only that nothing crashed?
    A mock of our own code is a smell.
-7. Line count against the crate's budget.
+7. Line count against the crate's budget and, for a module with a card, the
+   module's budget and its `uses` list in `[package.metadata.hgl.modules]`.
 
 If a change is hard to follow, that is a finding about the change. Ask for the
 plainer version; the rule in `CLAUDE.md` makes that a requirement.

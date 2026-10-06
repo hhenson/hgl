@@ -18,7 +18,7 @@ fn run() -> Result<(), String> {
     let usage = "usage: hglc check|emit-rust|emit-tests|doc FILE [--part FILE] [--library DIR] [--entry NAME] [--out FILE]";
     let command = args.next().ok_or(usage)?;
     if command == "test" {
-        return hgl_test_runner::run(
+        return hgl_compiler::test_runner::run(
             &args.collect::<Vec<_>>(),
             &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."),
         );
@@ -62,7 +62,7 @@ fn standalone(files: &[PathBuf], output: Option<PathBuf>, command: &str) -> Resu
             })
         })
         .collect::<Result<Vec<_>, String>>()?;
-    hgl_source_check::ensure_sources(
+    hgl_semantics::source_check::ensure_sources(
         &sources
             .iter()
             .map(|s| (s.name.clone(), s.text.clone()))

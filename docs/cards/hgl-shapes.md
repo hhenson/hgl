@@ -1,5 +1,7 @@
 # Card: hgl-shapes
 
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `shapes` module of `hgl-store` (`crates/hgl-store/src/shapes.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+
 Prepared compile-time shape proofs for recursive endpoints. Uses hgl-types and
 hgl-bindings; budget 350 source lines. No unsafe or third-party dependencies.
 

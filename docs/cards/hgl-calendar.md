@@ -1,5 +1,7 @@
 # Card: hgl-calendar
 
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `calendar` module of `hgl-types` (`crates/hgl-types/src/calendar.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+
 Calendar literal parsing and native projections. Uses `hgl-types`; budget 400
 lines. Calendar payloads are independent of the engine's scheduling bounds.
 

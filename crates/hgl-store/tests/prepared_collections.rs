@@ -180,8 +180,8 @@ fn owning_key_cycles<K: hgl_store::Key>(value: &K::Value, ty: ScalarType) -> hgl
 #[test]
 fn string_and_provider_owning_keys_publish_remove_and_reinsert_without_allocating()
 -> Result<(), Box<dyn std::error::Error>> {
-    use hgl_literals::{Literal, TemporalLiteral};
-    let mut context = hgl_time_context::RunContext::from_bundled()?;
+    use hgl_source::literals::{Literal, TemporalLiteral};
+    let mut context = hgl_source::time_context::RunContext::from_bundled()?;
     let Literal::TimeZone(zone) =
         context.materialize(&TemporalLiteral::TimeZone("US/Eastern".into()))?
     else {

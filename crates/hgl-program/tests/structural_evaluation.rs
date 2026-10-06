@@ -33,12 +33,8 @@ fn structural_values_and_nested_generator_effects_execute_in_both_profiles()
         "hgl-store",
         "hgl-kernel",
         "hgl-describe",
-        "hgl-harness",
-        "hgl-harness-ir",
-        "hgl-rust-ir",
+        "hgl-semantics",
         "hgl-source",
-        "hgl-value-eval",
-        "hgl-time-context",
         "hgl-testkit",
         "hgl-stdlib",
     ] {

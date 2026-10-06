@@ -1,5 +1,7 @@
 # Card: hgl-delta-check
 
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `delta_check` module of `hgl-semantics` (`crates/hgl-semantics/src/delta_check.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+
 Validate bounded structural delta constructor syntax against an already checked
 origin shape. Dependencies: hgl-source, hgl-rust-ir and hgl-scalar-keys; budget 350 source lines. Semantic
 authority: spec443b92c scalar-collection-keys, ordinary-delta-types and contextual-collection-deltas.

@@ -1,6 +1,6 @@
 # Card: hgl-rust-preparation
 
-Status: accepted
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `preparation` module of `hgl-rust` (`crates/hgl-rust/src/preparation.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
 
 Emit cold, schema-specialized preparation and test execution code. Uses
 hgl-source, hgl-rust-ir and hgl-harness-ir; budget 300 source lines. Expose

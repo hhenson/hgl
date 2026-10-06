@@ -1,5 +1,7 @@
 # hgl-growing-range
 
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `growing_range` module of `hgl-types` (`crates/hgl-types/src/growing_range.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+
 Shared canonical dense-index rules for cold replay preflight and typed runtime
 publication. No dependencies, storage, allocation or source-expression evaluation;
 budget 100 source lines.

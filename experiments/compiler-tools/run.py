@@ -36,7 +36,7 @@ def validate_generated(output):
         (target / "src").mkdir()
         (target / "tests").mkdir()
         shutil.copyfile(ROOT / "rust-toolchain.toml", target / "rust-toolchain.toml")
-        dependencies = "\n".join(f'{name} = {{ path = {json.dumps(str(ROOT / "crates" / name))} }}' for name in ["hgl-types", "hgl-store", "hgl-kernel", "hgl-describe", "hgl-nested", "hgl-testkit", "hgl-plan"])
+        dependencies = "\n".join(f'{name} = {{ path = {json.dumps(str(ROOT / "crates" / name))} }}' for name in ["hgl-types", "hgl-store", "hgl-kernel", "hgl-describe", "hgl-testkit"])
         (target / "Cargo.toml").write_text('[package]\nname = "hgl-emitted-spike"\nversion = "0.0.0"\nedition = "2024"\n[workspace]\n[dependencies]\n' + dependencies + '\n')
         shutil.copyfile(HERE / "runtime-tests.rs.in", target / "tests/runtime.rs")
         fixture = ROOT / "crates/hgl-describe/tests/recursive_support"

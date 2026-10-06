@@ -1,5 +1,7 @@
 # Card: hgl-observation
 
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `observation` module of `hgl-store` (`crates/hgl-store/src/observation.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+
 Immutable borrowed temporal source views for prepared publication and recording.
 Uses bindings, columns, types, atomic, rolling and keys; budget 100 source lines.
 No ownership, allocation, unsafe code or third-party dependencies.

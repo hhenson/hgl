@@ -39,8 +39,7 @@ hgl-types = { path = "../hgl-types" }
 
 [dev-dependencies]
 hgl-alloc-count = { path = "../hgl-alloc-count" }
-hgl-literals = { path = "../hgl-literals" }
-hgl-time-context = { path = "../hgl-time-context" }
+hgl-source = { path = "../hgl-source" }
 
 [lints]
 workspace = true

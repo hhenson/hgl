@@ -13,6 +13,128 @@ built"): card → agent → a reviewer with fresh context who sees only the diff
 and the card → the owner. When something comes out wrong, the card, a lint, a
 budget or a test is fixed, and the work is regenerated.
 
+## Where each card lives now
+
+[Decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) folded the
+crates below into modules of fourteen packages. A card still describes one unit
+of work; the unit is now a module directory, and `cargo xtask ci` holds its
+budget and "may use" list from the crate's `[package.metadata.hgl.modules]` table.
+
+| Card | Now | Of |
+|---|---|---|
+| `hgl-bench-twin` | binary `twin` | `hgl-bench` |
+| [hgl-atomic](hgl-atomic.md) | module `atomic` | `hgl-store` |
+| [hgl-binding-build](hgl-binding-build.md) | module `binding_build` | `hgl-store` |
+| [hgl-bindings](hgl-bindings.md) | module `bindings` | `hgl-store` |
+| [hgl-body-check](hgl-body-check.md) | module `body_check` | `hgl-semantics` |
+| [hgl-calendar](hgl-calendar.md) | module `calendar` | `hgl-types` |
+| [hgl-collection-check](hgl-collection-check.md) | module `collection_check` | `hgl-semantics` |
+| [hgl-collection-values](hgl-collection-values.md) | module `collection_values` | `hgl-semantics` |
+| [hgl-columns](hgl-columns.md) | module `columns` | `hgl-store` |
+| [hgl-composite-keys](hgl-composite-keys.md) | module `composite_keys` | `hgl-semantics` |
+| [hgl-deadlines](hgl-deadlines.md) | module `deadlines` | `hgl-kernel` |
+| [hgl-delta-check](hgl-delta-check.md) | module `delta_check` | `hgl-semantics` |
+| [hgl-diagnostics](hgl-diagnostics.md) | module `diagnostics` | `hgl-source` |
+| [hgl-documentation](hgl-documentation.md) | module `documentation` | `hgl-program` |
+| [hgl-endpoint-check](hgl-endpoint-check.md) | module `endpoint_check` | `hgl-semantics` |
+| [hgl-endpoints](hgl-endpoints.md) | module `endpoints` | `hgl-store` |
+| [hgl-enums](hgl-enums.md) | module `enums` | `hgl-semantics` |
+| [hgl-eval-data](hgl-eval-data.md) | module `eval_data` | `hgl-semantics` |
+| [hgl-family-types](hgl-family-types.md) | module `family_types` | `hgl-semantics` |
+| [hgl-family-values](hgl-family-values.md) | module `family_values` | `hgl-semantics` |
+| [hgl-fixed-bench](hgl-fixed-bench.md) | binary `fixed` | `hgl-bench` |
+| [hgl-flow-check](hgl-flow-check.md) | module `flow_check` | `hgl-semantics` |
+| [hgl-global](hgl-global.md) | module `global` | `hgl-store` |
+| [hgl-global-arena](hgl-global-arena.md) | module `global_arena` | `hgl-store` |
+| [hgl-global-value](hgl-global-value.md) | module `global_value` | `hgl-store` |
+| [hgl-growing-range](hgl-growing-range.md) | module `growing_range` | `hgl-types` |
+| [hgl-harness](hgl-harness.md) | module `harness` | `hgl-semantics` |
+| [hgl-harness-check](hgl-harness-check.md) | module `harness_check` | `hgl-semantics` |
+| [hgl-harness-ir](hgl-harness-ir.md) | module `harness_ir` | `hgl-semantics` |
+| [hgl-inheritance](hgl-inheritance.md) | module `inheritance` | `hgl-semantics` |
+| [hgl-keys](hgl-keys.md) | module `keys` | `hgl-store` |
+| [hgl-lex](hgl-lex.md) | module `lex` | `hgl-source` |
+| [hgl-library](hgl-library.md) | module `library` | `hgl-semantics` |
+| [hgl-library-files](hgl-library-files.md) | module `library_files` | `hgl-program` |
+| [hgl-list](hgl-list.md) | module `list` | `hgl-store` |
+| [hgl-list-storage](hgl-list-storage.md) | module `list_storage` | `hgl-store` |
+| [hgl-literals](hgl-literals.md) | module `literals` | `hgl-source` |
+| [hgl-local-check](hgl-local-check.md) | module `local_check` | `hgl-semantics` |
+| [hgl-member-table](hgl-member-table.md) | module `member_table` | `hgl-store` |
+| [hgl-name-check](hgl-name-check.md) | module `name_check` | `hgl-semantics` |
+| [hgl-native](hgl-native.md) | module `native` | `hgl-stdlib` |
+| [hgl-nested](hgl-nested.md) | module `nested` | `hgl-kernel` |
+| [hgl-node-error](hgl-node-error.md) | module `node_error` | `hgl-types` |
+| [hgl-nominal-batch](hgl-nominal-batch.md) | module `nominal_batch` | `hgl-source` |
+| [hgl-observation](hgl-observation.md) | module `observation` | `hgl-store` |
+| [hgl-optional](hgl-optional.md) | module `optional` | `hgl-store` |
+| [hgl-plan](hgl-plan.md) | module `plan` | `hgl-describe` |
+| [hgl-prepared-store](hgl-prepared-store.md) | module `prepared_store` | `hgl-store` |
+| [hgl-prepared-value](hgl-prepared-value.md) | module `prepared_value` | `hgl-store` |
+| [hgl-proto-nodes](hgl-proto-nodes.md) | module `proto_nodes` | `hgl-testkit` |
+| [hgl-publication-trace](hgl-publication-trace.md) | module `publication_trace` | `hgl-semantics` |
+| [hgl-recursive-types](hgl-recursive-types.md) | module `recursive_types` | `hgl-semantics` |
+| [hgl-recursive-value](hgl-recursive-value.md) | module `recursive_value` | `hgl-store` |
+| [hgl-reject](hgl-reject.md) | module `reject` | `hgl-compiler` |
+| [hgl-rolling](hgl-rolling.md) | module `rolling` | `hgl-store` |
+| [hgl-rust-capacity](hgl-rust-capacity.md) | module `capacity` | `hgl-rust` |
+| [hgl-rust-checked-data](hgl-rust-checked-data.md) | module `checked_data` | `hgl-rust` |
+| [hgl-rust-collections](hgl-rust-collections.md) | module `collections` | `hgl-rust` |
+| [hgl-rust-composite-keys](hgl-rust-composite-keys.md) | module `composite_keys` | `hgl-rust` |
+| [hgl-rust-deltas](hgl-rust-deltas.md) | module `deltas` | `hgl-rust` |
+| [hgl-rust-direct-deltas](hgl-rust-direct-deltas.md) | module `direct_deltas` | `hgl-rust` |
+| [hgl-rust-enums](hgl-rust-enums.md) | module `enums` | `hgl-rust` |
+| [hgl-rust-execution-proof](hgl-rust-execution-proof.md) | module `execution_proof` | `hgl-rust` |
+| [hgl-rust-families](hgl-rust-families.md) | module `families` | `hgl-rust` |
+| [hgl-rust-finite-domains](hgl-rust-finite-domains.md) | module `finite_domains` | `hgl-rust` |
+| [hgl-rust-generators](hgl-rust-generators.md) | module `generators` | `hgl-rust` |
+| [hgl-rust-ir](hgl-rust-ir.md) | module `ir` | `hgl-semantics` |
+| [hgl-rust-key-origins](hgl-rust-key-origins.md) | module `key_origins` | `hgl-rust` |
+| [hgl-rust-keyed](hgl-rust-keyed.md) | module `keyed` | `hgl-rust` |
+| [hgl-rust-layouts](hgl-rust-layouts.md) | module `layouts` | `hgl-rust` |
+| [hgl-rust-mutation-bounds](hgl-rust-mutation-bounds.md) | module `mutation_bounds` | `hgl-rust` |
+| [hgl-rust-observed](hgl-rust-observed.md) | module `observed` | `hgl-rust` |
+| [hgl-rust-preparation](hgl-rust-preparation.md) | module `preparation` | `hgl-rust` |
+| [hgl-rust-prepared-values](hgl-rust-prepared-values.md) | module `prepared_values` | `hgl-rust` |
+| [hgl-rust-pure-bounds](hgl-rust-pure-bounds.md) | module `pure_bounds` | `hgl-rust` |
+| [hgl-rust-recursive-convert](hgl-rust-recursive-convert.md) | module `recursive_convert` | `hgl-rust` |
+| [hgl-rust-scalars](hgl-rust-scalars.md) | module `scalars` | `hgl-rust` |
+| [hgl-rust-source-slots](hgl-rust-source-slots.md) | module `source_slots` | `hgl-rust` |
+| [hgl-rust-structs](hgl-rust-structs.md) | module `structs` | `hgl-rust` |
+| [hgl-rust-type-data](hgl-rust-type-data.md) | module `type_data` | `hgl-rust` |
+| [hgl-rust-value-convert](hgl-rust-value-convert.md) | module `value_convert` | `hgl-rust` |
+| [hgl-rust-values](hgl-rust-values.md) | module `values` | `hgl-rust` |
+| [hgl-rust-windows](hgl-rust-windows.md) | module `windows` | `hgl-rust` |
+| [hgl-scalar-copy](hgl-scalar-copy.md) | module `scalar_copy` | `hgl-store` |
+| [hgl-scalar-keys](hgl-scalar-keys.md) | module `scalar_keys` | `hgl-semantics` |
+| [hgl-shape-obligations](hgl-shape-obligations.md) | module `shape_obligations` | `hgl-semantics` |
+| [hgl-shapes](hgl-shapes.md) | module `shapes` | `hgl-store` |
+| [hgl-source-check](hgl-source-check.md) | module `source_check` | `hgl-semantics` |
+| [hgl-static-values](hgl-static-values.md) | module `static_values` | `hgl-semantics` |
+| [hgl-std-native](hgl-std-native.md) | module `std_native` | `hgl-stdlib` |
+| [hgl-store-build](hgl-store-build.md) | module `store_build` | `hgl-store` |
+| [hgl-struct-check](hgl-struct-check.md) | module `struct_check` | `hgl-semantics` |
+| [hgl-struct-declarations](hgl-struct-declarations.md) | module `struct_declarations` | `hgl-semantics` |
+| [hgl-struct-names](hgl-struct-names.md) | module `struct_names` | `hgl-semantics` |
+| [hgl-test-annotations](hgl-test-annotations.md) | module `test_annotations` | `hgl-compiler` |
+| [hgl-test-runner](hgl-test-runner.md) | module `test_runner` | `hgl-compiler` |
+| [hgl-test-units](hgl-test-units.md) | module `test_units` | `hgl-compiler` |
+| [hgl-time-context](hgl-time-context.md) | module `time_context` | `hgl-source` |
+| [hgl-time-values](hgl-time-values.md) | module `time_values` | `hgl-types` |
+| [hgl-type-shape](hgl-type-shape.md) | module `type_shape` | `hgl-source` |
+| [hgl-type-sizes](hgl-type-sizes.md) | module `type_sizes` | `hgl-semantics` |
+| [hgl-type-syntax](hgl-type-syntax.md) | module `type_syntax` | `hgl-source` |
+| [hgl-value-access](hgl-value-access.md) | module `value_access` | `hgl-semantics` |
+| [hgl-value-bind](hgl-value-bind.md) | module `value_bind` | `hgl-semantics` |
+| [hgl-value-check](hgl-value-check.md) | module `value_check` | `hgl-semantics` |
+| [hgl-value-constant](hgl-value-constant.md) | module `value_constant` | `hgl-semantics` |
+| [hgl-value-eval](hgl-value-eval.md) | module `value_eval` | `hgl-semantics` |
+| [hgl-value-lists](hgl-value-lists.md) | module `value_lists` | `hgl-store` |
+| [hgl-value-operations](hgl-value-operations.md) | module `value_operations` | `hgl-semantics` |
+| [hgl-value-types](hgl-value-types.md) | module `value_types` | `hgl-semantics` |
+| [hgl-window-types](hgl-window-types.md) | module `window_types` | `hgl-types` |
+| [hgl-wiring-locals](hgl-wiring-locals.md) | module `wiring_locals` | `hgl-semantics` |
+
 ## What a card holds
 
 1. **Purpose** — one paragraph.

@@ -1,5 +1,7 @@
 # Card: hgl-rust-keyed
 
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `keyed` module of `hgl-rust` (`crates/hgl-rust/src/keyed.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+
 Typed set/map code generation and finite cold key-domain preparation. Uses
 hgl-source, hgl-rust-ir, hgl-rust-layouts and hgl-rust-checked-data; budget 450
 source lines. Emits static Key calls, never type-erased per-tick key operations.

@@ -1,5 +1,7 @@
 # Card: hgl-type-sizes
 
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `type_sizes` module of `hgl-semantics` (`crates/hgl-semantics/src/type_sizes.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+
 Normalize constant list-size expressions before canonical type formation.
 Dependencies source, rust-ir, value-eval, value-check; budget 180 source lines.
 Public: normalize(name,evaluate), literal(expression). Normalize preserves type

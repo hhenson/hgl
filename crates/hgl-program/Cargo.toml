@@ -6,38 +6,17 @@ rust-version.workspace = true
 publish.workspace = true
 
 [package.metadata.hgl]
-line-budget = 2200
+line-budget = 2550
+
+# Budgets of the modules that were crates of their own (docs/decisions/0004).
+[package.metadata.hgl.modules]
+documentation = { budget = 250, uses = [] }
+library_files = { budget = 100, uses = [] }
+
+[dependencies]
+hgl-rust = { path = "../hgl-rust" }
+hgl-semantics = { path = "../hgl-semantics" }
+hgl-source = { path = "../hgl-source" }
 
 [lints]
 workspace = true
-
-[dependencies]
-hgl-collection-check = { path = "../hgl-collection-check" }
-hgl-family-values = { path = "../hgl-family-values" }
-hgl-library-files = { path = "../hgl-library-files" }
-hgl-source = { path = "../hgl-source" }
-hgl-documentation = { path = "../hgl-documentation" }
-hgl-library = { path = "../hgl-library" }
-hgl-rust = { path = "../hgl-rust" }
-hgl-value-check = { path = "../hgl-value-check" }
-hgl-value-types = { path = "../hgl-value-types" }
-hgl-value-bind = { path = "../hgl-value-bind" }
-hgl-value-eval = { path = "../hgl-value-eval" }
-hgl-struct-check = { path = "../hgl-struct-check" }
-hgl-body-check = { path = "../hgl-body-check" }
-hgl-flow-check = { path = "../hgl-flow-check" }
-hgl-delta-check = { path = "../hgl-delta-check" }
-hgl-endpoint-check = { path = "../hgl-endpoint-check" }
-hgl-type-sizes = { path = "../hgl-type-sizes" }
-hgl-eval-data = { path = "../hgl-eval-data" }
-hgl-value-access = { path = "../hgl-value-access" }
-hgl-harness-ir = { path = "../hgl-harness-ir" }
-hgl-rust-preparation = { path = "../hgl-rust-preparation" }
-hgl-local-check = { path = "../hgl-local-check" }
-hgl-wiring-locals = { path = "../hgl-wiring-locals" }
-hgl-enums = { path = "../hgl-enums" }
-hgl-static-values = { path = "../hgl-static-values" }
-hgl-harness-check = { path = "../hgl-harness-check" }
-hgl-source-check = { path = "../hgl-source-check" }
-hgl-diagnostics = { path = "../hgl-diagnostics" }
-hgl-name-check = { path = "../hgl-name-check" }
