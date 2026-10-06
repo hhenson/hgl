@@ -6,18 +6,22 @@ rust-version.workspace = true
 publish.workspace = true
 
 [package.metadata.hgl]
-line-budget = 220
+line-budget = 1050
+
+# Budgets of the modules that were crates of their own (docs/decisions/0004).
+[package.metadata.hgl.modules]
+native = { budget = 130, uses = [] }
+std_native = { budget = 700, uses = [] }
 
 [dependencies]
-hgl-native = { path = "../hgl-native" }
-hgl-types = { path = "../hgl-types" }
-hgl-store = { path = "../hgl-store" }
-hgl-kernel = { path = "../hgl-kernel" }
 hgl-describe = { path = "../hgl-describe" }
+hgl-kernel = { path = "../hgl-kernel" }
+hgl-store = { path = "../hgl-store" }
+hgl-types = { path = "../hgl-types" }
 
 [dev-dependencies]
-hgl-testkit = { path = "../hgl-testkit" }
 hgl-alloc-count = { path = "../hgl-alloc-count" }
+hgl-testkit = { path = "../hgl-testkit" }
 
 [lints]
 workspace = true

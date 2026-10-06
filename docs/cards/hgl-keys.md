@@ -1,5 +1,7 @@
 # Card: hgl-keys
 
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `keys` module of `hgl-store` (`crates/hgl-store/src/keys.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+
 Typed, cold-prepared scalar and finite composite collection identity. Depends on hgl-types and
 hgl-global-value; budget 500 source lines. No provider lookup or erased scalar
 values occur here.

@@ -1,8 +1,8 @@
 //! A checked description brought to life in the caller's current scope.
+use crate::plan::validate;
 use crate::registry::Ports;
 use crate::{BuildError, GraphDescription, InputPort, OutputPort, Registry, Step, index};
 use hgl_kernel::{Graph, NodeSlot};
-use hgl_plan::validate;
 use hgl_store::{InputId, OutputId, Store, Wake};
 use hgl_types::{EngineTime, NodeId, NodeType, TsType};
 
@@ -134,7 +134,7 @@ pub(crate) fn walk_input(
         return Err(BuildError::MissingKey);
     }
     for step in path {
-        hgl_plan::project(
+        crate::plan::project(
             &store.bindings().input(id).kind,
             std::slice::from_ref(step),
             key.is_some(),
@@ -153,7 +153,7 @@ pub(crate) fn walk_input(
     Ok(id)
 }
 fn position(kind: &TsType, step: &Step) -> Result<usize, BuildError> {
-    hgl_plan::project(kind, std::slice::from_ref(step), false)?;
+    crate::plan::project(kind, std::slice::from_ref(step), false)?;
     match step {
         Step::Field(name) => kind
             .field(name)

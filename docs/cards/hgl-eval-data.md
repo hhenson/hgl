@@ -1,5 +1,7 @@
 # Card: hgl-eval-data
 
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `eval_data` module of `hgl-semantics` (`crates/hgl-semantics/src/eval_data.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+
 Compile-time preparation for finite eval publication traces. Depends only on
 hgl-source and hgl-rust-ir; budget 350 source lines. No runtime dispatch.
 

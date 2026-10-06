@@ -1,6 +1,6 @@
 # hgl-test-units
 
-Status: accepted
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `test_units` module of `hgl-compiler` (`crates/hgl-compiler/src/test_units.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
 
 Recover declaration and named-test extents for annotation ownership without
 changing ordinary semantic checking. units returns module/name/kind and original

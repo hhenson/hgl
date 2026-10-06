@@ -1,6 +1,6 @@
 use crate::CheckedModule;
-pub use hgl_documentation::Documentation;
-pub(crate) use hgl_documentation::{normalize, validate};
+pub use hgl_program::documentation::Documentation;
+pub(crate) use hgl_program::documentation::{normalize, validate};
 impl CheckedModule {
     /// Documents in source order, including separate selected implementation docs.
     pub fn documentation(&self) -> &[Documentation] {
@@ -9,5 +9,5 @@ impl CheckedModule {
 }
 /// Emit Google-style HGL documentation as reStructuredText for Sphinx.
 pub fn emit_documentation(module: &CheckedModule) -> String {
-    hgl_documentation::render(&module.documentation)
+    hgl_program::documentation::render(&module.documentation)
 }

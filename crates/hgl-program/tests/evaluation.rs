@@ -269,7 +269,7 @@ fn actual_stdlib_and_harness_regressions_run_on_rust() -> Result<(), Box<dyn std
         )));
     }
     parts.push(root.join("crates/hgl-program/tests/fixtures/contextual_locals.hgl"));
-    let sources = hgl_library_files::sources(&parts, &[library])?;
+    let sources = hgl_program::library_files::sources(&parts, &[library])?;
     let summary = expected_summary(&sources)?;
     let dir = std::env::temp_dir().join(format!(
         "hgl-eval-{}-{}",
@@ -300,11 +300,11 @@ fn standard_batches(
     sources: &[(String, String)],
     expected: &ExpectedSummary,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let library = hgl_library::load(sources)?;
+    let library = hgl_semantics::library::load(sources)?;
     let tests = library
         .declarations
         .iter()
-        .filter(|decl| decl.role == hgl_library::Role::Test)
+        .filter(|decl| decl.role == hgl_semantics::library::Role::Test)
         .collect::<Vec<_>>();
     let mut observed = Vec::new();
     let mut evaluations = 0;
@@ -394,8 +394,8 @@ struct ExpectedSummary {
     minimum: usize,
     maximum: usize,
 }
-fn step_bounds(steps: &[hgl_eval_data::TestStep]) -> (usize, usize) {
-    use hgl_eval_data::TestStep;
+fn step_bounds(steps: &[hgl_semantics::eval_data::TestStep]) -> (usize, usize) {
+    use hgl_semantics::eval_data::TestStep;
     steps.iter().fold((0, 0), |(minimum, maximum), step| {
         let (low, high) = match step {
             TestStep::Ordinary(_) => (0, 0),
@@ -413,18 +413,18 @@ fn step_bounds(steps: &[hgl_eval_data::TestStep]) -> (usize, usize) {
     })
 }
 fn expected_summary(sources: &[(String, String)]) -> Result<ExpectedSummary, String> {
-    let library = hgl_library::load(sources)?;
+    let library = hgl_semantics::library::load(sources)?;
     let mut summary = ExpectedSummary {
         names: Vec::new(),
         minimum: 0,
         maximum: 0,
     };
     for declaration in library.declarations {
-        if declaration.role == hgl_library::Role::Test {
+        if declaration.role == hgl_semantics::library::Role::Test {
             summary
                 .names
                 .push(format!("{}::{}", declaration.module, declaration.name));
-            let (low, high) = step_bounds(&hgl_eval_data::steps(&declaration.tokens)?);
+            let (low, high) = step_bounds(&hgl_semantics::eval_data::steps(&declaration.tokens)?);
             summary.minimum += low;
             summary.maximum += high;
         }
@@ -531,7 +531,7 @@ fn image_main<'a>(dir: &Path, names: impl Iterator<Item = &'a str>) -> std::io::
     fs::write(
         dir.join("src/main.rs"),
         format!(
-            "struct Provider;\nmod native {{pub use hgl_std_native::*;}}\n{modules}fn main() {{match std::env::args().nth(1).as_deref() {{{calls}_=>panic!(\"unknown test image\")}}}}"
+            "struct Provider;\nmod native {{pub use hgl_stdlib::std_native::*;}}\n{modules}fn main() {{match std::env::args().nth(1).as_deref() {{{calls}_=>panic!(\"unknown test image\")}}}}"
         ),
     )
 }
@@ -842,14 +842,10 @@ fn manifest(root: &Path, dir: &Path) -> std::io::Result<()> {
         "hgl-store",
         "hgl-kernel",
         "hgl-describe",
-        "hgl-harness",
-        "hgl-harness-ir",
-        "hgl-rust-ir",
+        "hgl-semantics",
         "hgl-source",
-        "hgl-value-eval",
-        "hgl-time-context",
         "hgl-testkit",
-        "hgl-std-native",
+        "hgl-stdlib",
     ] {
         let path = root
             .join("crates")

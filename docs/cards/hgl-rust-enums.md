@@ -1,5 +1,7 @@
 # Card: hgl-rust-enums
 
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `enums` module of `hgl-rust` (`crates/hgl-rust/src/enums.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+
 Static Rust emission for exact declared enum storage markers. Uses hgl-source;
 budget 180 source lines. No runtime lookup or third-party dependencies.
 

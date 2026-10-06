@@ -1,5 +1,7 @@
 # Card: hgl-rust-value-convert
 
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `value_convert` module of `hgl-rust` (`crates/hgl-rust/src/value_convert.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+
 Exact cold native conversion of retained checked ordinary values. Uses source,
 checked-data emission, layouts, families and collections; budget 320 lines.
 

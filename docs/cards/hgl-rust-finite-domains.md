@@ -1,5 +1,7 @@
 # hgl-rust-finite-domains
 
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `finite_domains` module of `hgl-rust` (`crates/hgl-rust/src/finite_domains.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+
 Cold checked source-domain analysis, separate from storage capacity planning.
 `constants` traverses checked hooks and returns closed data while preserving
 runtime expressions for normal hook evaluation. `include` emits accumulation of

@@ -4,7 +4,7 @@
 //! a run. It knows nothing about nodes beyond an id to wake.
 //!
 //! Values live in typed columns; endpoint metadata and graph scopes live in
-//! `hgl-bindings`. Indices survive vector growth. References and scalar write
+//! the `bindings` module. Indices survive vector growth. References and scalar write
 //! handles carry generations so reused child slots cannot revive old endpoints.
 //!
 //! Fixed scalar propagation borrows typed columns without allocation. Creating
@@ -16,24 +16,45 @@
 //! entry. Only [`Store::bind`] reports an unknown id, because the builder
 //! calls it with ids read from a description.
 
-pub use hgl_rolling::{Rolling, WindowShape};
+pub use rolling::{Rolling, WindowShape};
 use std::marker::PhantomData;
 
-pub use hgl_global::{
+pub use global::{
     Capacity, Global, GlobalState, GlobalValue, Layouts, List, ListBounds, Optional, PreparedValue,
     Recursive, RecursiveTarget, ValueColumns, ValueSlot, append_slot, commit_append, list_index,
     list_index_mut, list_len, list_push,
 };
 use hgl_types::{EngineTime, NodeId, NodeResult, ScalarType, ScalarValue};
 
-use hgl_bindings::Bindings;
-pub use hgl_bindings::{BindError, InputId, Kind, OutputId, Reference, ScopeId, Wake};
-pub use hgl_columns::{Columns, Scalar};
-pub use hgl_keys::{Key, Keys};
-pub use hgl_prepared_store::{Observation, PreparedStorage, PreparedTick};
-mod atomic;
+use bindings::Bindings;
+pub use bindings::{BindError, InputId, Kind, OutputId, Reference, ScopeId, Wake};
+pub use columns::{Columns, Scalar};
+pub use keys::{Key, Keys};
+pub use prepared_store::{Observation, PreparedStorage, PreparedTick};
+pub mod atomic;
+mod atomic_publication;
+pub mod binding_build;
+pub mod bindings;
+pub mod columns;
+pub mod endpoints;
 mod fixed;
-pub use hgl_shapes as shapes;
+pub mod global;
+pub mod global_arena;
+pub mod global_value;
+pub mod keys;
+pub mod list;
+pub mod list_storage;
+pub mod member_table;
+pub mod observation;
+pub mod optional;
+pub mod prepared_store;
+pub mod prepared_value;
+pub mod recursive_value;
+pub mod rolling;
+pub mod scalar_copy;
+pub mod shapes;
+pub mod store_build;
+pub mod value_lists;
 
 /// A node's handle to its own `TS<T>` output. Eight bytes.
 #[derive(Debug, Clone)]
@@ -83,9 +104,9 @@ pub struct Store {
     columns: Columns,
     bindings: Bindings,
     globals: GlobalState,
-    atomic: hgl_atomic::Arena,
+    atomic: atomic::Arena,
     /// Independently prepared ordinary arrival windows.
-    pub rolling: hgl_rolling::Arena,
+    pub rolling: rolling::Arena,
 }
 
 /// A dictionary with i64 keys and scalar children.
@@ -135,7 +156,7 @@ impl Store {
     }
     /// Allocate a scalar output in the current graph scope.
     pub fn add_output<T: Scalar>(&mut self, owner: NodeId) -> Out<T> {
-        let id = hgl_store_build::scalar::<T>(&mut self.bindings, &mut self.columns, owner);
+        let id = store_build::scalar::<T>(&mut self.bindings, &mut self.columns, owner);
         self.scalar_output(id)
             .unwrap_or_else(|_| unreachable!("new scalar output"))
     }
@@ -215,13 +236,7 @@ impl Store {
     ) {
         let o = self.bindings.output(output.id);
         debug_assert_eq!(o.kind, Kind::Ts(T::TYPE), "foreign handle");
-        hgl_prepared_store::validate_write(
-            &self.bindings,
-            output.id,
-            output.generation,
-            now,
-            writer,
-        );
+        prepared_store::validate_write(&self.bindings, output.id, output.generation, now, writer);
         T::column_mut(&mut self.columns)[o.slot as usize] = value;
         self.bindings.publish(output.id, now, wake);
     }

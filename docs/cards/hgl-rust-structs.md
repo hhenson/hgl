@@ -1,6 +1,6 @@
 # Card: hgl-rust-structs
 
-Status: accepted.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `structs` module of `hgl-rust` (`crates/hgl-rust/src/structs.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
 
 Generate ordinary concrete struct ownership and field-presence operations.
 Depends on hgl-source and hgl-rust-prepared-values; budget 230 source lines. Type collection and spelling

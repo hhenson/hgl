@@ -1,5 +1,7 @@
 # Card: hgl-atomic
 
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `atomic` module of `hgl-store` (`crates/hgl-store/src/atomic.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+
 Prepared ordinary payload storage for atomic endpoints. Uses hgl-types,
 hgl-bindings, hgl-shapes and hgl-global-value; budget 180 source lines. No unsafe code or
 third-party dependencies. This reuses the ordinary value layout and retention

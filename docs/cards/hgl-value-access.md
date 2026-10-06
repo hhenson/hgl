@@ -1,5 +1,7 @@
 # Card: hgl-value-access
 
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `value_access` module of `hgl-semantics` (`crates/hgl-semantics/src/value_access.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+
 Ordinary access classification, separate from effect traversal and payload
 operations. Dependencies hgl-source/hgl-rust-ir; budget 200 source lines.
 

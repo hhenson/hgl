@@ -1,6 +1,6 @@
 # Card: hgl-rust-checked-data
 
-Status: accepted
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `checked_data` module of `hgl-rust` (`crates/hgl-rust/src/checked_data.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
 
 Serialize already-checked test IR as Rust source for the generated test host.
 Uses hgl-source, hgl-rust-ir and hgl-harness-ir; budget 250 source lines.

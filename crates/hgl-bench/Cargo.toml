@@ -1,0 +1,36 @@
+[package]
+name = "hgl-bench"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "Benchmark binaries: the Rust half of each benchmark pair."
+
+[package.metadata.hgl]
+line-budget = 550
+
+# Budgets of the modules that were crates of their own (docs/decisions/0004).
+[package.metadata.hgl.modules]
+fixed = { budget = 250, uses = [] }
+twin = { budget = 300, uses = [] }
+
+[[bin]]
+name = "hgl_twin"
+path = "src/twin.rs"
+
+[[bin]]
+name = "hgl_fixed"
+path = "src/fixed.rs"
+
+[dependencies]
+hgl-describe = { path = "../hgl-describe" }
+hgl-kernel = { path = "../hgl-kernel" }
+hgl-store = { path = "../hgl-store" }
+hgl-testkit = { path = "../hgl-testkit" }
+hgl-types = { path = "../hgl-types" }
+
+[dev-dependencies]
+hgl-alloc-count = { path = "../hgl-alloc-count" }
+
+[lints]
+workspace = true

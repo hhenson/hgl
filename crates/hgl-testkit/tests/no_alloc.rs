@@ -18,7 +18,7 @@ const CYCLES: usize = 1_000;
 fn a_thousand_cycles_of_the_harness_allocate_nothing() {
     let total = WARM_UP + CYCLES;
     let mut registry = Registry::new();
-    hgl_proto_nodes::register_all(&mut registry).unwrap();
+    hgl_testkit::proto_nodes::register_all(&mut registry).unwrap();
     registry.register::<Replay>().unwrap();
     registry.register::<Record>().unwrap();
 

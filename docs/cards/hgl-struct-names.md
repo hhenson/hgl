@@ -1,5 +1,7 @@
 # Card: hgl-struct-names
 
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `struct_names` module of `hgl-semantics` (`crates/hgl-semantics/src/struct_names.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+
 Resolve finite struct declaration names and export visibility. Dependencies:
 hgl-library and hgl-source; budget 160 source lines. Compile-time only.
 

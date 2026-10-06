@@ -1,5 +1,7 @@
 # Card: hgl-struct-check
 
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `struct_check` module of `hgl-semantics` (`crates/hgl-semantics/src/struct_check.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+
 Check ordinary finite-field constructors and infer their type parameters.
 Uses hgl-source, hgl-library, hgl-value-types, hgl-value-access and hgl-rust-ir;
 budget 450 source lines. No runtime or third-party dependency.

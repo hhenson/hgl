@@ -21,8 +21,8 @@ pub fn instantiate_child(
         .iter()
         .map(|&i| store.bindings().input(i).kind.clone())
         .collect();
-    hgl_plan::validate(&template.graph, registry)?;
-    hgl_plan::check_boundaries(template, &kinds, registry)?;
+    crate::plan::validate(&template.graph, registry)?;
+    crate::plan::check_boundaries(template, &kinds, registry)?;
     let mut sources = Vec::new();
     for edge in &template.inputs {
         let mut source = owners[edge.source_input];

@@ -15,6 +15,7 @@ started; the number is only there to give a stable way to refer to it.
 | 0008 | [Prototype runtime: outline](0008-prototype-outline.md) | sketch |
 | 0009 | [Designing for speed](0009-designing-for-speed.md) | sketch |
 | 0010 | [Rust compiler tooling comparison](0010-rust-compiler-tooling.md) | measured spike; recommendations proposed |
+| 0011 | [Crate boundaries](0011-crate-boundaries.md) | measured; layout adopted by decision 0004 |
 
 ## Template
 

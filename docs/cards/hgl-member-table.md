@@ -1,6 +1,6 @@
 # Card: hgl-member-table
 
-Status: accepted.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `member_table` module of `hgl-store` (`crates/hgl-store/src/member_table.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
 
 Membership storage with a cold finite domain. May use the standard library only.
 Budget: 220 source lines. This crate owns occupancy, not key identity, endpoint

@@ -1,5 +1,7 @@
 # Card: hgl-static-values
 
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `static_values` module of `hgl-semantics` (`crates/hgl-semantics/src/static_values.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+
 Compiler-only lexical provenance, shared by graph selection and ordered test
 preparation. Uses hgl-rust-ir, hgl-source, hgl-library, hgl-value-constant and
 hgl-value-eval and hgl-composite-keys. Budget 150 source lines. No provider execution or runtime store.

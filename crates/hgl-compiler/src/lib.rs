@@ -5,6 +5,10 @@ mod emit;
 mod lex;
 mod model;
 mod parse;
+pub mod reject;
+pub mod test_annotations;
+pub mod test_runner;
+pub mod test_units;
 
 pub use check::check;
 pub use documentation::{Documentation, emit_documentation};

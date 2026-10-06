@@ -1,16 +1,26 @@
 [package]
-name="hgl-source"
-version="0.0.0"
-edition.workspace=true
-rust-version.workspace=true
-publish.workspace=true
+name = "hgl-source"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
 [package.metadata.hgl]
-line-budget=700
-[lints]
-workspace=true
+line-budget = 2090
+
+# Budgets of the modules that were crates of their own (docs/decisions/0004).
+[package.metadata.hgl.modules]
+diagnostics = { budget = 200, uses = [] }
+lex = { budget = 180, uses = [] }
+literals = { budget = 250, uses = ["type_shape"] }
+nominal_batch = { budget = 160, uses = [] }
+time_context = { budget = 200, uses = ["literals"] }
+type_shape = { budget = 300, uses = ["nominal_batch", "type_syntax"] }
+type_syntax = { budget = 100, uses = [] }
+
 [dependencies]
-hgl-calendar={path="../hgl-calendar"}
-hgl-type-shape={path="../hgl-type-shape"}
-hgl-lex={path="../hgl-lex"}
-hgl-literals={path="../hgl-literals"}
-hgl-diagnostics={path="../hgl-diagnostics"}
+hgl-types = { path = "../hgl-types" }
+jiff.workspace = true
+
+[lints]
+workspace = true

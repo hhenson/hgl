@@ -1,8 +1,8 @@
 //! Source tokens, expressions and statements shared by HGL compiler stages.
-pub use hgl_diagnostics::Issue;
-pub use hgl_lex::{Token, lex};
-pub use hgl_literals::{Literal, ParsedLiteral, TemporalLiteral};
-pub use hgl_type_shape::{
+pub use diagnostics::Issue;
+pub use lex::{Token, lex};
+pub use literals::{Literal, ParsedLiteral, TemporalLiteral};
+pub use type_shape::{
     EnumType, FamilyType, Nominal, NominalDefinition, RecursiveType, Ty, Window, WindowKind,
     application, delta_argument,
 };
@@ -322,7 +322,7 @@ impl<'a> Cursor<'a> {
         }
         let negative = self.take("-");
         let text = self.consume()?;
-        if let Some(literal) = hgl_literals::numeric(&text, negative)? {
+        if let Some(literal) = literals::numeric(&text, negative)? {
             return Ok(match literal {
                 ParsedLiteral::Value(value) => Expr::Literal(value),
                 ParsedLiteral::Contextual(value) => Expr::TemporalLiteral(value),
@@ -728,3 +728,11 @@ fn type_admitted(name: &str, ordinary: bool) -> bool {
     };
     args.iter().all(|arg| type_admitted(arg, child_ordinary))
 }
+
+pub mod diagnostics;
+pub mod lex;
+pub mod literals;
+pub mod nominal_batch;
+pub mod time_context;
+pub mod type_shape;
+pub mod type_syntax;

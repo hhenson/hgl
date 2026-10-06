@@ -1,6 +1,6 @@
 # Card: hgl-binding-build
 
-Status: accepted.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `binding_build` module of `hgl-store` (`crates/hgl-store/src/binding_build.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
 
 Cold endpoint allocation and projection construction. May use hgl-endpoints and
 hgl-types. Budget: 160 source lines. Binding event policy remains in hgl-bindings.

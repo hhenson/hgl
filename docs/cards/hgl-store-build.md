@@ -1,6 +1,6 @@
 # Card: hgl-store-build
 
-Status: accepted.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `store_build` module of `hgl-store` (`crates/hgl-store/src/store_build.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
 
 Cold recursive allocation of typed value storage and output endpoints. May use
 hgl-bindings, hgl-types, hgl-columns and hgl-atomic. Budget: 100 source lines.

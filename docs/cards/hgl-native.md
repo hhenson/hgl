@@ -1,6 +1,6 @@
 # Card: hgl-native
 
-Status: scalar provider migration; [contract](https://github.com/hhenson/hgraph_spec/blob/main/language/docs/design/node-authoring.md).
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `native` module of `hgl-stdlib` (`crates/hgl-stdlib/src/native.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
 
 Thin native helpers. May use `hgl-store`, `hgl-types`. Budget: 130 lines.
 Tests may use `hgl-alloc-count`. No registry, node lifecycle, mutation, scheduler

@@ -1,5 +1,7 @@
 # hgl-rust-observed
 
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `observed` module of `hgl-rust` (`crates/hgl-rust/src/observed.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+
 Statically typed publication transport for prepared finite evaluations. `methods` emits exact structural `apply_slot`, `observe_slot`, and `pass` implementations; `apply`, `capture`, and `pass` render leaf or recursive calls. Ordinary values remain in independently owned destination storage. Key visitation borrows cold retained identities. Sparse membership and validity use existing endpoint semantics, and capacity overflow fails rather than allocating.
 
 Growing typed slot application and pass-through validate canonical ranges against destination length before mutation. Capture retains changed child publications and the complete removed tail, including shrink to a valid empty root.

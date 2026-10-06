@@ -1,6 +1,6 @@
 # Card: hgl-endpoints
 
-Status: implemented for the fixed collection slice.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `endpoints` module of `hgl-store` (`crates/hgl-store/src/endpoints.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
 
 Own endpoint records and reusable slot allocation. Re-export recursive shapes
 from hgl-types. No

@@ -183,3 +183,4 @@ fn count(value: usize) -> ScalarValue {
 }
 
 pub mod evaluation;
+pub mod proto_nodes;

@@ -1,5 +1,7 @@
 # Card: hgl-endpoint-check
 
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `endpoint_check` module of `hgl-semantics` (`crates/hgl-semantics/src/endpoint_check.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+
 Independent checking for runtime endpoint operations and scalar payload
 boundaries. Dependencies hgl-source/hgl-rust-ir; budget 220 source lines.
 Public: set_call, scalar, endpoint_metadata, injected_clock, clock_property,

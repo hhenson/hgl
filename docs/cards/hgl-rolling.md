@@ -1,5 +1,7 @@
 # Card: hgl-rolling
 
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `rolling` module of `hgl-store` (`crates/hgl-store/src/rolling.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+
 Prepared rolling arrival retention under normative rolling-publications a3f5cf8.
 Uses bindings, global-value, prepared-value, shapes and types; budget 350 source
 lines. No unsafe code or third-party dependencies.

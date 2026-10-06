@@ -1,6 +1,6 @@
 # Card: hgl-harness-ir
 
-Status: accepted
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `harness_ir` module of `hgl-semantics` (`crates/hgl-semantics/src/harness_ir.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
 
 Checked ordered test preparation; uses hgl-rust-ir and hgl-source. Budget 200
 source lines. Test { name: String, steps: Vec<Step> } preserves lexical order.

@@ -7,16 +7,16 @@ publish.workspace = true
 description = "The graph description, a builder for writing one by hand, and instantiation."
 
 [package.metadata.hgl]
-line-budget = 500
+line-budget = 1000
+
+# Budgets of the modules that were crates of their own (docs/decisions/0004).
+[package.metadata.hgl.modules]
+plan = { budget = 500, uses = [] }
 
 [dependencies]
-hgl-plan = { path = "../hgl-plan" }
-hgl-types = { path = "../hgl-types" }
-hgl-store = { path = "../hgl-store" }
 hgl-kernel = { path = "../hgl-kernel" }
+hgl-store = { path = "../hgl-store" }
+hgl-types = { path = "../hgl-types" }
 
 [lints]
 workspace = true
-
-[dev-dependencies]
-hgl-nested = { path = "../hgl-nested" }

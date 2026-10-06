@@ -14,7 +14,7 @@
 - [Runtime implementation](runtime-implementation.md) — supported shapes and validation
 - [Recursive description contracts](recursive-description-contracts.md) — boundary validation before implementation
 - [Contract cards](cards/README.md) — the one page an agent is given to build
-  one crate; the first slice's six are written and await review
+  one crate or module; where each card lives since decision 0004
 - [Runtime specification](https://github.com/hhenson/hgraph_spec/blob/main/runtime/overview.md) — what an HGraph runtime
   is, concept by concept; includes extracted conformance cases and evidence
 

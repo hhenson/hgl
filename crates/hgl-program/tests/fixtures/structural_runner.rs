@@ -1,5 +1,5 @@
 mod native {
- pub use hgl_std_native::*;
+ pub use hgl_stdlib::std_native::*;
  pub fn count_start_i64(_:i64)->hgl_types::NodeResult {crate::STARTS.fetch_add(1,std::sync::atomic::Ordering::SeqCst);Ok(())}
 }
 static STARTS:AtomicI64=AtomicI64::new(0);

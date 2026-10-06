@@ -1,5 +1,7 @@
 # Card: hgl-rust-values
 
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `values` module of `hgl-rust` (`crates/hgl-rust/src/values.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+
 Emit checked hook expressions, statements and nominal global value layouts.
 Uses `hgl-source`, `hgl-rust-ir` and `hgl-rust-layouts`; budget 800 source lines. No runtime
 execution or third-party dependencies. Graph registration, lifecycle wrapper

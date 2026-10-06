@@ -1,5 +1,7 @@
 # Card: hgl-prepared-store
 
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `prepared_store` module of `hgl-store` (`crates/hgl-store/src/prepared_store.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+
 Disjoint prepared runtime access, using hgl-global, hgl-atomic, hgl-bindings,
 hgl-columns, hgl-keys, hgl-shapes and hgl-types; budget 280. No unsafe code or
 third-party dependencies. This facade owns no values or endpoint identity.

@@ -24,9 +24,9 @@ def main(argv=None):
             parser.error(f"--{interface.replace('_', '-')} and "
                          f"--{implementation.replace('_', '-')} must be supplied together")
     contracts = [
-        ('crates/hgl-native/interfaces/scalar.hgl', 'crates/hgl-native/src/scalar_interface.rs', args.interface, 'crates/hgl-native/interfaces/scalar-impl.hgl', args.implementation),
-        ('crates/hgl-native/interfaces/capabilities.hgl', 'crates/hgl-native/tests/support/capability_interface.rs',
-         args.capability_interface, 'crates/hgl-native/interfaces/capabilities-impl.hgl', args.capability_implementation),
+        ('crates/hgl-stdlib/interfaces/scalar.hgl', 'crates/hgl-stdlib/src/native/scalar_interface.rs', args.interface, 'crates/hgl-stdlib/interfaces/scalar-impl.hgl', args.implementation),
+        ('crates/hgl-stdlib/interfaces/capabilities.hgl', 'crates/hgl-stdlib/tests/native_support/capability_interface.rs',
+         args.capability_interface, 'crates/hgl-stdlib/interfaces/capabilities-impl.hgl', args.capability_implementation),
     ]
     for source_name, target_name, authority, implementation_name, implementation_authority in contracts:
         source = ROOT / source_name

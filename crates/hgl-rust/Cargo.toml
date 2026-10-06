@@ -6,21 +6,42 @@ rust-version.workspace = true
 publish.workspace = true
 
 [package.metadata.hgl]
-line-budget = 700
+line-budget = 8940
+
+# Budgets of the modules that were crates of their own (docs/decisions/0004).
+[package.metadata.hgl.modules]
+capacity = { budget = 400, uses = ["collections", "deltas", "finite_domains", "keyed", "layouts", "pure_bounds", "windows"] }
+checked_data = { budget = 250, uses = ["enums", "type_data"] }
+collections = { budget = 250, uses = ["families", "prepared_values"] }
+composite_keys = { budget = 250, uses = [] }
+deltas = { budget = 700, uses = ["keyed", "layouts", "observed", "windows"] }
+direct_deltas = { budget = 400, uses = ["layouts", "observed"] }
+enums = { budget = 180, uses = ["prepared_values"] }
+execution_proof = { budget = 250, uses = ["direct_deltas", "mutation_bounds"] }
+families = { budget = 200, uses = ["type_data"] }
+finite_domains = { budget = 250, uses = ["execution_proof", "layouts", "mutation_bounds"] }
+generators = { budget = 500, uses = ["deltas", "finite_domains", "source_slots", "values", "windows"] }
+key_origins = { budget = 180, uses = [] }
+keyed = { budget = 450, uses = ["checked_data", "key_origins", "layouts", "value_convert"] }
+layouts = { budget = 400, uses = ["collections", "composite_keys", "enums", "families", "prepared_values", "scalars", "structs"] }
+mutation_bounds = { budget = 250, uses = [] }
+observed = { budget = 500, uses = ["composite_keys", "layouts", "windows"] }
+preparation = { budget = 300, uses = ["checked_data", "collections", "families", "layouts", "recursive_convert", "value_convert", "values"] }
+prepared_values = { budget = 250, uses = [] }
+pure_bounds = { budget = 300, uses = [] }
+recursive_convert = { budget = 160, uses = ["checked_data", "layouts"] }
+scalars = { budget = 150, uses = [] }
+source_slots = { budget = 100, uses = ["layouts"] }
+structs = { budget = 230, uses = ["collections", "prepared_values"] }
+type_data = { budget = 120, uses = ["enums"] }
+value_convert = { budget = 320, uses = ["checked_data", "collections", "families", "layouts"] }
+values = { budget = 800, uses = ["collections", "deltas", "direct_deltas", "finite_domains", "layouts", "observed", "windows"] }
+windows = { budget = 100, uses = ["layouts"] }
+
+[dependencies]
+hgl-semantics = { path = "../hgl-semantics" }
+hgl-source = { path = "../hgl-source" }
+hgl-types = { path = "../hgl-types" }
 
 [lints]
 workspace = true
-
-[dependencies]
-hgl-rust-direct-deltas = { path = "../hgl-rust-direct-deltas" }
-hgl-rust-finite-domains = { path = "../hgl-rust-finite-domains" }
-hgl-rust-keyed = { path = "../hgl-rust-keyed" }
-hgl-rust-deltas = { path = "../hgl-rust-deltas" }
-hgl-source = { path = "../hgl-source" }
-hgl-rust-ir = { path = "../hgl-rust-ir" }
-hgl-rust-values = { path = "../hgl-rust-values" }
-hgl-rust-generators = { path = "../hgl-rust-generators" }
-hgl-rust-preparation = { path = "../hgl-rust-preparation" }
-hgl-rust-capacity = { path = "../hgl-rust-capacity" }
-hgl-rust-source-slots = { path = "../hgl-rust-source-slots" }
-hgl-rust-families = { path = "../hgl-rust-families" }

@@ -7,12 +7,16 @@ publish.workspace = true
 description = "What runs a graph: the node interface, the schedule, the evaluation cycle, node lifecycle and the simulation engine."
 
 [package.metadata.hgl]
-line-budget = 700
+line-budget = 1150
+
+# Budgets of the modules that were crates of their own (docs/decisions/0004).
+[package.metadata.hgl.modules]
+deadlines = { budget = 100, uses = [] }
+nested = { budget = 350, uses = ["deadlines"] }
 
 [dependencies]
-hgl-deadlines = { path = "../hgl-deadlines" }
-hgl-types = { path = "../hgl-types" }
 hgl-store = { path = "../hgl-store" }
+hgl-types = { path = "../hgl-types" }
 
 [dev-dependencies]
 hgl-alloc-count = { path = "../hgl-alloc-count" }

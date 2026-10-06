@@ -1,5 +1,7 @@
 # Card: hgl-shape-obligations
 
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `shape_obligations` module of `hgl-semantics` (`crates/hgl-semantics/src/shape_obligations.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+
 Declaration lookup uses hgl-struct-names, an allowed dependency, so generic
 occurrence requirements and type resolution select the same declaration.
 

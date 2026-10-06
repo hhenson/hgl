@@ -1,5 +1,7 @@
 # Card: hgl-rust-collections
 
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `collections` module of `hgl-rust` (`crates/hgl-rust/src/collections.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+
 Checked ordinary collection layout, constructor and equality emission. Uses
 source, IR and prepared-value emission; budget 250 lines, no runtime execution.
 

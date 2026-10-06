@@ -1,5 +1,7 @@
 # Card: hgl-std-native
 
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `std_native` module of `hgl-stdlib` (`crates/hgl-stdlib/src/std_native.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+
 Rust implementations of the selected shared native scalar interfaces. Uses
 `hgl-types`, `hgl-calendar`, `hgl-kernel`, `hgl-store`; budget 700 lines. No third-party
 crates. Selection stays beside Rust binding code in `native/stdlib/rust.hgl`;

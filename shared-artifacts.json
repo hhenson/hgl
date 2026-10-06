@@ -1,10 +1,10 @@
 {
   "files": {
-    "crates/hgl-native/interfaces/capabilities.hgl": {
+    "crates/hgl-stdlib/interfaces/capabilities.hgl": {
       "path": "language/examples/native-provider.hgl",
       "repository": "hgraph_spec"
     },
-    "crates/hgl-native/interfaces/scalar.hgl": {
+    "crates/hgl-stdlib/interfaces/scalar.hgl": {
       "path": "hgl/hgraph/native/scalar_values_i64.hgl",
       "repository": "hgraph_std"
     },

@@ -284,7 +284,7 @@ impl Registry {
             .map(|(_, kind)| kind)
             .chain(node_type.output.iter())
         {
-            hgl_plan::check_shape(kind)?;
+            crate::plan::check_shape(kind)?;
         }
         node_type
             .validate_metadata()
@@ -311,7 +311,7 @@ impl Registry {
     }
 }
 
-impl hgl_plan::Catalog for Registry {
+impl crate::plan::Catalog for Registry {
     fn node_type(&self, implementation: &str) -> Option<&NodeType> {
         Registry::node_type(self, implementation)
     }
