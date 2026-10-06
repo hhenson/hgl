@@ -45,17 +45,11 @@ fn shared_recursive_cases_execute_without_tick_allocations()
     run_shared(true)
 }
 fn run_shared(measure: bool) -> Result<(), Box<dyn std::error::Error>> {
-    use std::{fmt::Write as _, fs, process::Command, time::SystemTime};
+    use std::{fmt::Write as _, fs, process::Command};
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .canonicalize()?;
-    let dir = std::env::temp_dir().join(format!(
-        "hgl-recursive-{}-{}",
-        SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)?
-            .as_nanos(),
-        NEXT_DIR.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-    ));
+    let dir = scratch_dir("hgl-recursive")?;
     fs::create_dir_all(dir.join("src"))?;
     let suite = compile_tests(&sources(include_str!(
         "../../../external/hgraph_std/hgl/hgraph/tests/recursive_atomic_values.hgl"
@@ -133,4 +127,13 @@ fn unique_package(manifest: &str, dir: &std::path::Path) -> String {
         .file_name()
         .map_or_else(String::new, |name| name.to_string_lossy().into_owned());
     manifest.replacen("\"\n", &format!("-{suffix}\"\n"), 1)
+}
+
+/// A directory of this test's own under the temp root; see `NEXT_DIR`.
+fn scratch_dir(prefix: &str) -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
+    let tick = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)?
+        .as_nanos();
+    let serial = NEXT_DIR.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    Ok(std::env::temp_dir().join(format!("{prefix}-{}-{tick}-{serial}", std::process::id())))
 }
