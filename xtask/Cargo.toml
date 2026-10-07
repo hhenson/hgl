@@ -6,7 +6,7 @@ rust-version.workspace = true
 publish.workspace = true
 
 [package.metadata.hgl]
-line-budget = 560
+line-budget = 580
 
 [lints]
 workspace = true

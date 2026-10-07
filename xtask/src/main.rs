@@ -2,8 +2,9 @@
 //!
 //! `cargo xtask ci` runs every gate that CI runs, in the same order, and ends
 //! with one line per gate. Work is not done until it passes. `cargo xtask ci
-//! test "test --release"` runs only the named gates, which is how CI spreads
-//! the gates over parallel jobs.
+//! test "test ci-release"` runs only the named gates, which is how CI spreads
+//! the gates over parallel jobs, and `cargo xtask ci test -- -p hgl-program`
+//! passes the rest to that gate's cargo command, which is how CI shards one.
 //!
 //! `cargo xtask bench` measures one benchmark program; see [`mod@bench`].
 #![expect(clippy::print_stdout, reason = "xtask is a command-line tool")]
@@ -61,11 +62,12 @@ const GATES: &[Gate] = &[
         optional: false,
         capped: true,
     },
-    // Debug builds check the assertions; release builds run what ships, where
-    // a wrong schedule can hang or allocate instead of asserting.
+    // Debug builds check the assertions; optimised builds run without them,
+    // where a wrong schedule can hang or allocate instead of asserting. The
+    // ci-release profile is release without its link-time optimisation.
     Gate {
-        name: "test --release",
-        args: &["test", "--workspace", "--release", "--quiet"],
+        name: "test ci-release",
+        args: &["test", "--workspace", "--profile", "ci-release", "--quiet"],
         env: &[],
         optional: false,
         capped: true,
@@ -130,7 +132,17 @@ fn report(outcome: Result<(), String>) -> ExitCode {
 
 /// Run every gate, or only the named ones: CI runs the two test profiles as
 /// separate jobs so they overlap instead of following each other.
-fn ci(selected: &[String]) -> ExitCode {
+fn ci(args: &[String]) -> ExitCode {
+    // `cargo xtask ci GATE -- EXTRA...` passes EXTRA to that one gate's cargo
+    // command: CI shards the test stages by package.
+    let (selected, extra) = args
+        .iter()
+        .position(|arg| arg == "--")
+        .map_or((args, &[][..]), |at| (&args[..at], &args[at + 1..]));
+    if !extra.is_empty() && selected.len() != 1 {
+        println!("extra cargo arguments need exactly one gate");
+        return ExitCode::FAILURE;
+    }
     let known = |name: &str| name == "budget" || GATES.iter().any(|gate| gate.name == name);
     if let Some(unknown) = selected.iter().find(|name| !known(name)) {
         let names: Vec<&str> = GATES.iter().map(|gate| gate.name).collect();
@@ -143,7 +155,7 @@ fn ci(selected: &[String]) -> ExitCode {
     let wanted = |name: &str| selected.is_empty() || selected.iter().any(|chosen| chosen == name);
     let cargo = env::var_os("CARGO").unwrap_or_else(|| OsString::from("cargo"));
     let gates: Vec<&Gate> = GATES.iter().filter(|gate| wanted(gate.name)).collect();
-    let outcomes: Vec<Outcome> = gates.iter().map(|gate| run(&cargo, gate)).collect();
+    let outcomes: Vec<Outcome> = gates.iter().map(|gate| run(&cargo, gate, extra)).collect();
 
     let budget = wanted("budget").then(|| {
         println!("== budget");
@@ -196,12 +208,15 @@ fn budgets() -> Outcome {
     }
 }
 
-fn run(cargo: &OsStr, gate: &Gate) -> Outcome {
+fn run(cargo: &OsStr, gate: &Gate, extra: &[String]) -> Outcome {
     if gate.optional && !installed(cargo, gate) {
         return Outcome::Skipped;
     }
     println!("== {}", gate.name);
-    let status = command(cargo, gate).envs(gate.env.iter().copied()).status();
+    let status = command(cargo, gate)
+        .args(extra)
+        .envs(gate.env.iter().copied())
+        .status();
     if status.is_ok_and(|status| status.success()) {
         Outcome::Passed
     } else {

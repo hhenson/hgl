@@ -84,3 +84,13 @@ debug = "line-tables-only" # backtraces keep line numbers; builds stay fast
 lto = "thin"
 codegen-units = 1
 debug = "line-tables-only"
+
+# The gate's optimised test stage: the release profile minus its link-time
+# optimisation, which made each of the 172 test binaries pay a full LTO link
+# (303 s against 40 s at four jobs). Optimisation and the absence of debug
+# assertions, which are what that stage checks, are unchanged; benchmarks and
+# what ships still use `release`.
+[profile.ci-release]
+inherits = "release"
+lto = false
+codegen-units = 16
