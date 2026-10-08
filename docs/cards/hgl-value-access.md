@@ -50,3 +50,8 @@ scalar projection; structural ordinary payload reads require explicit retained
 ownership. Retained Struct field projection preserves the physical snapshot flag.
 Abstract families retain their declared common-field boundary, and optional
 ordinary field projection remains outside this profile.
+
+A concrete shape inferred for a signal never grants ordinary field payload access.
+The signal marker is checked before resolving any concrete Struct field; root
+metadata remains admitted and the existing signal-shape rejection tests remain
+unchanged.

@@ -54,6 +54,9 @@ pub fn writable(value: &Value) -> bool {
 }
 /// Resolve a declared ordinary field without changing its parent's authority.
 pub fn field(parent: Value, name: &str) -> Result<Value, String> {
+    if matches!(parent.kind, Kind::Input(_, true)) {
+        return Err("signal has no ordinary scalar value".into());
+    }
     let schema = if let Ty::Family(family) = &parent.ty {
         family
             .members()
