@@ -45,8 +45,8 @@ fn used(value: &Value, id: Option<usize>) -> bool {
         Kind::ValueCall(args, body) => {
             (id.is_none()
                 && args.iter().enumerate().any(|(i, v)| {
-                    v.ty == Ty::Str
-                        && (!matches!(v.kind, Kind::Literal(Literal::Str(_)))
+                    crate::execution_proof::owning_argument(&v.ty)
+                        && (!(v.ty == Ty::Str && matches!(v.kind, Kind::Literal(Literal::Str(_))))
                             || statements(body, Some(i)))
                 }))
                 || args.iter().any(|v| used(v, id))

@@ -15,6 +15,36 @@ fn owning(ty: &Ty) -> bool {
             | Ty::Void
     )
 }
+/// Whether ordinary helper argument retention can allocate native owning storage.
+pub fn owning_argument(ty: &Ty) -> bool {
+    match ty {
+        Ty::Tuple(children) => children.iter().any(owning_argument),
+        Ty::Struct(_, fields, _) => fields.iter().any(|(_, child)| owning_argument(child)),
+        Ty::Nullable(child) | Ty::Atomic(child) => owning_argument(child),
+        Ty::Rolling(..)
+        | Ty::Family(_)
+        | Ty::Recursive(_)
+        | Ty::Enum(_)
+        | Ty::Map(..)
+        | Ty::Delta(_)
+        | Ty::List(..)
+        | Ty::I64
+        | Ty::F64
+        | Ty::Bool
+        | Ty::Str
+        | Ty::Duration
+        | Ty::Date
+        | Ty::Time
+        | Ty::DateTime
+        | Ty::CivilDateTime
+        | Ty::TimeZone
+        | Ty::ZonedTime
+        | Ty::ZonedDateTime
+        | Ty::Ref(_)
+        | Ty::Set(_)
+        | Ty::Void => owning(ty),
+    }
+}
 fn value(plan: &Plan, input: &Value, looping: bool) -> bool {
     match &input.kind {
         Kind::Captured(..) => false,

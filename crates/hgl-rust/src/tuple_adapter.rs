@@ -39,7 +39,7 @@ pub fn prepared(plan: Plan) -> Result<Plan, hgl_source::Issue> {
     if !crate::value_calls::prepared(&plan) {
         return Err(hgl_source::Issue::typed(
             0..0,
-            "owning text helper arguments require prepared storage",
+            "owning helper arguments require prepared storage",
         ));
     }
     let proved = crate::execution_proof::prepared(&plan);

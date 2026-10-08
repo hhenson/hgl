@@ -557,7 +557,7 @@ fn used_text_helper_arguments_require_prepared_owning_storage() {
     let error = compile_tests(&sources(source))
         .expect_err("the two-cycle owning text call must reject before emission");
     assert!(
-        error.contains("owning text helper arguments require prepared storage"),
+        error.contains("owning helper arguments require prepared storage"),
         "{error}"
     );
     assert!(!error.contains("delta.type_mismatch"), "{error}");
@@ -588,6 +588,25 @@ fn numeric_and_boolean_helper_arguments_allocate_nothing() -> Result<(), Box<dyn
 {
     run_source(
         "module hgraph.std part safe_helpers\nconst fn number(value:i64)->i64=>value+1\nconst fn flag(value:bool)->bool=>!value\nfn checked(value:i64)->tuple<i64,bool> {when {return(number(value),flag(false))}}\ntest safe {assert eval(checked,[1,2])==[(2,true),(3,true)]}",
+        true,
+        false,
+    )
+}
+
+#[test]
+fn nested_text_helper_arguments_require_prepared_owning_storage() {
+    let source = "module hgraph.std part nested_text_arg\nconst fn choose(pair:tuple<str,i64>)->i64=>pair[1]\nfn checked(value:i64,const pair:tuple<str,i64>)->i64 {when{return choose(pair)}}\ntest used {assert eval(checked,value:[1,1],pair:(\"2\",7))==[7,7]}";
+    let error = compile_tests(&sources(source))
+        .expect_err("nested owning text must reject before emission");
+    assert!(
+        error.contains("owning helper arguments require prepared storage"),
+        "{error}"
+    );
+}
+#[test]
+fn fixed_positional_helper_arguments_allocate_nothing() -> Result<(), Box<dyn std::error::Error>> {
+    run_source(
+        "module hgraph.std part fixed_tuple_arg\nconst fn choose(pair:tuple<i64,bool>)->i64=>pair[0]\nfn checked(value:i64,const pair:tuple<i64,bool>)->i64 {when{return choose(pair)}}\ntest fixed {assert eval(checked,value:[1,1],pair:(7,false))==[7,7]}",
         true,
         false,
     )

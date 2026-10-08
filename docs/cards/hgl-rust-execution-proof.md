@@ -46,3 +46,9 @@ this proof. Allocation-counted complete-publication fixtures exercise the path.
 The complete owning proof delegates text value-call argument storage to
 value_calls. A used owning text formal has no finite helper slot preparation;
 it cannot establish a zero-allocation transport proof.
+
+`owning_argument(&Ty)` checks native helper argument storage recursively through
+Tuple, Struct, nullable and atomic children, using the existing scalar owning
+classification for leaves. This cold proof distinguishes fixed positional
+arguments from text or collection descendants; it changes no runtime layout or
+return/mutation proof. value_calls combines it with structured literal-use proof.

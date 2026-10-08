@@ -2,6 +2,7 @@
 mod owning;
 use hgl_semantics::ir::{Kind, Plan, Statement, Value};
 use hgl_source::Literal;
+pub use owning::owning_argument;
 fn local(value: &Value, id: usize) -> bool {
     matches!(value.kind,Kind::MutableLocal(actual) if actual==id)
 }

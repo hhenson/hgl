@@ -33,3 +33,7 @@ The whole-adapter proof cannot claim them allocation-free. Constant-context and
 standalone ordinary helper calls keep their existing owned ABI; numeric/Boolean
 helper arguments remain prepared. The original two-cycle used-text node is a
 source rejection control, alongside the constant ABI positive.
+
+The native owning argument proof is delegated to execution_proof recursively;
+text/collection descendants of configured Tuple/Struct arguments cannot escape
+by returning a scalar. Fixed positional scalar arguments remain prepared.

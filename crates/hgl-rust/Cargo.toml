@@ -43,7 +43,7 @@ windows = { budget = 100, uses = ["layouts"] }
 
 structural_publication = { budget = 220, uses = ["layouts", "snapshot_slots", "snapshots"] }
 
-value_calls = { budget = 100, uses = [] }
+value_calls = { budget = 100, uses = ["execution_proof"] }
 
 [dependencies]
 hgl-semantics = { path = "../hgl-semantics" }
