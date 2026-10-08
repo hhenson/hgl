@@ -90,6 +90,12 @@ fn nonempty(ty: &Ty) -> bool {
 }
 /// Own output assignments use the same complete-value/delta boundary as returns.
 pub fn assignment(target: Value, value: Value, expected: &Ty) -> Result<Statement, String> {
-    let value = result(value, &target.ty, expected, true)?;
+    let value = result(value, &target.ty, expected, true).map_err(|error| {
+        if error == "node return type mismatch" {
+            "assignment type mismatch".into()
+        } else {
+            error
+        }
+    })?;
     Ok(Statement::Assign(target, value))
 }
