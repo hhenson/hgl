@@ -15,3 +15,7 @@ is introduced; no private optional slot is admitted without preparation.
 Acceptance: finite shared/own Tuple evals execute with prepared descendants;
 standalone and unproved growing-generator observation programs fail before
 emission with an ordinary uncatalogued backend profile diagnostic.
+
+Own-output assignments are included in the observation-slot scan. Runtime helper
+calls requiring unprepared owning text arguments reject before eval emission,
+using value_calls' cold proof; standalone/constant ordinary text ABI is unchanged.

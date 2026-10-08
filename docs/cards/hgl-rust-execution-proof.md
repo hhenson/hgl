@@ -42,3 +42,7 @@ when payload widths and schedules are proved. Insert/update/upsert/remove and
 invalidate effects contribute to finite membership bounds; contains is read-only.
 No dynamic key, growing payload, provider execution or opaque loop is added to
 this proof. Allocation-counted complete-publication fixtures exercise the path.
+
+The complete owning proof delegates text value-call argument storage to
+value_calls. A used owning text formal has no finite helper slot preparation;
+it cannot establish a zero-allocation transport proof.

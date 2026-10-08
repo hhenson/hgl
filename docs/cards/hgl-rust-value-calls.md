@@ -25,3 +25,11 @@ allocation-counted first/repeated Tuple publications remain at zero. Effectful
 fixed labels reject with the existing phase diagnostic; used non-const text
 arguments execute through owned storage. Existing argument-failure/effect order
 controls remain intact. No dependency, source budget or suppression is added.
+
+`prepared(&Plan)` checks reachable runtime value calls with the same structured
+local-use proof. Used owning text parameters and nonliteral text arguments have
+no prepared helper-argument storage and are explicitly diagnosed in eval adapters.
+The whole-adapter proof cannot claim them allocation-free. Constant-context and
+standalone ordinary helper calls keep their existing owned ABI; numeric/Boolean
+helper arguments remain prepared. The original two-cycle used-text node is a
+source rejection control, alongside the constant ABI positive.

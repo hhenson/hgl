@@ -69,6 +69,7 @@ pub fn direct_arrivals(plan: &Plan) -> Option<usize> {
 /// Unknown plans retain the existing whole-adapter execution path; no hook is evaluated here.
 pub fn prepared(plan: &Plan) -> bool {
     !plan.ordinary_instantiation
+        && crate::value_calls::prepared(plan)
         && owning::finite(plan)
         && direct_arrivals(plan).is_some()
         && plan.nodes.iter().all(|node| {

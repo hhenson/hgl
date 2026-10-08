@@ -550,3 +550,45 @@ fn temporal_loop_binding_shadows_an_outer_constant_without_changing_it() {
     let diagnostics = hgl_program::diagnostics(&[("shadow.hgl".into(), source.into())]);
     assert!(diagnostics.is_empty(), "{diagnostics:?}");
 }
+
+#[test]
+fn used_text_helper_arguments_require_prepared_owning_storage() {
+    let source = "module hgraph.std part used_text\nconst fn used_label(text:str)->bool => text==\"2\"\nfn used_argument(value:i64)->bool {when {return used_label(\"2\")}}\ntest used {assert eval(used_argument,[1,1])==[true,true]}";
+    let error = compile_tests(&sources(source))
+        .expect_err("the two-cycle owning text call must reject before emission");
+    assert!(
+        error.contains("owning text helper arguments require prepared storage"),
+        "{error}"
+    );
+    assert!(!error.contains("delta.type_mismatch"), "{error}");
+}
+#[test]
+fn own_output_snapshot_assignments_require_standalone_preparation() {
+    for source in [
+        "module own_snapshot\nfn source()->tuple<i64,bool> {yield 0s:delta<tuple<i64,bool>>(items:[0:1,1:false])}\nfn copy(value:tuple<i64,bool>)->tuple<i64,bool> {inject out\nwhen {out=value}}\nfn main()->tuple<i64,bool> => copy(source())",
+        "module own_snapshot\nstruct Pair {number:i64\nflag:bool}\nfn source()->Pair {yield 0s:delta<Pair>(number:1,flag:false)}\nfn copy(value:Pair)->Pair {inject out\nwhen {out=value}}\nfn main()->Pair => copy(source())",
+    ] {
+        let error = hgl_program::compile(&[("own_snapshot.hgl".into(), source.into())], "main")
+            .expect_err("own-output observation slots need preparation");
+        assert!(
+            error.contains("owning Tuple observations require finite prepared transport"),
+            "{error}"
+        );
+    }
+    let source = "module hgraph.std part tuple_assign_unproved\nfn source()->tuple<i64,bool> {var index:i64=0\nwhile index>=0 {yield 0s:delta<tuple<i64,bool>>(items:[0:7,1:false])\nindex+=1}}\nfn copied(value:tuple<i64,bool>)->tuple<i64,bool>{inject out\nwhen {out=value}}\nfn entry()->tuple<i64,bool> => copied(source())\ntest unproved {eval(entry)}";
+    let error = compile_tests(&sources(source))
+        .expect_err("unproved own-output private capture must reject");
+    assert!(
+        error.contains("owning Tuple observations require finite prepared transport"),
+        "{error}"
+    );
+}
+#[test]
+fn numeric_and_boolean_helper_arguments_allocate_nothing() -> Result<(), Box<dyn std::error::Error>>
+{
+    run_source(
+        "module hgraph.std part safe_helpers\nconst fn number(value:i64)->i64=>value+1\nconst fn flag(value:bool)->bool=>!value\nfn checked(value:i64)->tuple<i64,bool> {when {return(number(value),flag(false))}}\ntest safe {assert eval(checked,[1,2])==[(2,true),(3,true)]}",
+        true,
+        false,
+    )
+}
