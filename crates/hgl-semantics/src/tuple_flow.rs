@@ -7,6 +7,8 @@ use std::collections::{BTreeMap, BTreeSet};
 pub struct Facts {
     /// Bindings whose payload currently depends on execution.
     pub runtime: BTreeSet<String>,
+    /// Selection dependence is kept separate from binding initialization.
+    pub writes: crate::tuple_writes::Writes,
     entries: BTreeMap<String, (usize, bool)>,
     next: usize,
 }
@@ -32,10 +34,11 @@ impl Facts {
         self.next += 1;
     }
     /// Update an existing binding without changing its lexical identity.
-    pub fn assign(&mut self, target: &Expr, expression: &Expr) {
-        if let Expr::Name(name) = target.syntax() {
+    pub fn assign(&mut self, target: &Expr, expression: &Expr, compound: bool) {
+        if let Some((name, _)) = crate::tuple_writes::root(target) {
             let persistent = self.entries.get(name).is_some_and(|entry| entry.1);
-            self.record(name, expression, persistent);
+            let controlled = self.writes.preserve(target, &self.runtime, compound);
+            self.record(name, expression, persistent || controlled);
         }
     }
     /// Admitted temporal iteration bindings shadow outer names and carry runtime payloads.
@@ -46,10 +49,8 @@ impl Facts {
     /// Merge writes only when the nested scope retains the same outer identity.
     pub fn merge(&mut self, other: &Self) {
         for name in &other.runtime {
-            if self
-                .entries
-                .get(name)
-                .is_some_and(|entry| other.entries.get(name) == Some(entry))
+            if let Some(entry) = self.entries.get(name)
+                && other.entries.get(name) == Some(entry)
             {
                 self.runtime.insert(name.clone());
             }

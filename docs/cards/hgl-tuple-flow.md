@@ -5,11 +5,12 @@ The internal tuple_flow module has an initial 60 source-line budget within the
 unchanged hgl-semantics limit. It uses name_check Scope and tuple_phase dependence.
 
 Public surface: defaultable/clonable/debug `Facts`, `Facts::new(BTreeSet<String>)`,
-`bind(&str,&Expr,bool)`, `assign(&Expr,&Expr)`, `iteration(&str)`, `merge(&Facts)`, and `nested(&mut Scope, closure)`.
-`runtime` exposes known runtime source names. Facts retains private lexical
+`bind(&str,&Expr,bool)`, `assign(&Expr,&Expr,bool)`, `iteration(&str)`, `merge(&Facts)`, and `nested(&mut Scope, closure)`.
+`runtime` exposes known runtime source names; `writes` carries tuple_writes selection facts. Facts retains private lexical
 binding identities, so an inner same-spelling let/var cannot change an outer
 binding's provenance. State/cache bindings remain runtime; ordinary assignment
-records RHS dependence and can clear it after an unconditional fixed assignment.
+records RHS and target/control dependence through tuple_writes, and can clear it
+after an unconditional fixed whole assignment.
 Branch/loop checks merge runtime assignments only for matching outer identities.
 No source type/category, runtime execution state or provider behavior changes.
 

@@ -1,6 +1,7 @@
 use crate::library::Library;
 use crate::name_check::Scope;
 use crate::source_check::{annotation, inferred};
+use crate::tuple_writes::{assignment, conditional, handler};
 use hgl_source::{Cursor, Issue, Ty};
 pub(super) struct Checker<'a> {
     pub library: &'a Library,
@@ -14,16 +15,11 @@ impl Checker<'_> {
         environment: &Scope,
     ) -> Result<hgl_source::Expr, Issue> {
         let span = cursor.span();
-        let expression = cursor.expr()?;
-        crate::name_check::expression(
-            self.library,
-            self.module,
-            self.test_only.then_some(self.module),
-            &expression,
-            environment,
-        )
-        .map_err(|issue| issue.at(span))?;
-        Ok(expression)
+        let value = cursor.expr()?;
+        let selected = self.test_only.then_some(self.module);
+        crate::name_check::expression(self.library, self.module, selected, &value, environment)
+            .map_err(|issue| issue.at(span))?;
+        Ok(value)
     }
 
     pub(super) fn block(
@@ -74,22 +70,22 @@ impl Checker<'_> {
         } else if cursor.at("start") || cursor.at("stop") {
             cursor.consume()?;
             self.scoped(cursor, environment)?;
-        } else if cursor.take("when") || cursor.take("while") {
-            if !cursor.at("{") {
-                self.expression(cursor, environment)?;
-            }
-            self.scoped(cursor, environment)?;
+        } else if matches!(cursor.peek(), "when" | "while") {
+            handler(
+                cursor,
+                environment,
+                |c, s| self.expression(c, s),
+                |c, s| self.block(c, s),
+            )?;
         } else if cursor.take("if") {
-            self.expression(cursor, environment)?;
-            self.scoped(cursor, environment)?;
-            cursor.lines();
-            if cursor.take("else") {
-                if cursor.at("if") {
-                    crate::tuple_flow::nested(environment, |scope| self.statement(cursor, scope))?;
-                } else {
-                    self.scoped(cursor, environment)?;
-                }
-            }
+            let selector = self.expression(cursor, environment)?;
+            conditional(
+                cursor,
+                environment,
+                &selector,
+                |c, s| self.block(c, s),
+                |c, s| self.statement(c, s),
+            )?;
         } else if cursor.take("for") {
             let mut body = environment.clone();
             body.iteration(&cursor.name()?);
@@ -97,7 +93,10 @@ impl Checker<'_> {
                 body.iteration(&cursor.name()?);
             }
             cursor.need("in")?;
-            self.expression(cursor, environment)?;
+            let collection = self.expression(cursor, environment)?;
+            body.tuple
+                .writes
+                .select(&collection, &environment.tuple.runtime);
             self.block(cursor, &mut body)?;
             environment.tuple.merge(&body.tuple);
         } else if cursor.take("return") {
@@ -106,10 +105,7 @@ impl Checker<'_> {
             }
         } else {
             let target = self.expression(cursor, environment)?;
-            if cursor.take("=") || cursor.take("+=") {
-                let value = self.expression(cursor, environment)?;
-                environment.tuple.assign(&target, &value);
-            }
+            assignment(cursor, environment, &target, |c, s| self.expression(c, s))?;
         }
         Ok(())
     }

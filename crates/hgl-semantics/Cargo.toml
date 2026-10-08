@@ -34,15 +34,16 @@ publication_trace = { budget = 150, uses = ["composite_keys", "delta_check", "ir
 recursive_types = { budget = 350, uses = ["enums", "library", "shape_obligations", "struct_names", "value_access"] }
 scalar_keys = { budget = 100, uses = [] }
 shape_obligations = { budget = 150, uses = ["library", "struct_names", "value_access"] }
-source_check = { budget = 550, uses = ["tuple_flow", "tuple_phase", "ir", "enums", "eval_data", "library", "name_check", "type_sizes", "value_access", "value_check", "value_types"] }
+source_check = { budget = 550, uses = ["tuple_writes", "tuple_flow", "tuple_phase", "ir", "enums", "eval_data", "library", "name_check", "type_sizes", "value_access", "value_check", "value_types"] }
 static_values = { budget = 150, uses = ["composite_keys", "ir", "library", "value_constant", "value_eval"] }
 struct_check = { budget = 450, uses = ["enums", "family_types", "inheritance", "ir", "library", "type_sizes", "value_access", "value_types"] }
 struct_declarations = { budget = 200, uses = [] }
 struct_names = { budget = 160, uses = ["library"] }
 type_sizes = { budget = 180, uses = ["ir", "value_check", "value_eval"] }
 tuple_admission = { budget = 60, uses = ["ir", "endpoint_check", "tuple_values"] }
-tuple_flow = { budget = 60, uses = ["name_check", "tuple_phase"] }
+tuple_flow = { budget = 60, uses = ["name_check", "tuple_phase", "tuple_writes"] }
 tuple_phase = { budget = 100, uses = ["library", "name_check", "struct_names"] }
+tuple_writes = { budget = 100, uses = ["name_check", "tuple_phase", "tuple_flow"] }
 tuple_values = { budget = 100, uses = ["endpoint_check", "ir"] }
 value_access = { budget = 200, uses = ["ir", "library", "static_values"] }
 value_bind = { budget = 500, uses = ["ir", "library", "source_check", "value_access", "value_types"] }

@@ -32,6 +32,7 @@ pub mod tuple_admission;
 pub mod tuple_flow;
 pub mod tuple_phase;
 pub mod tuple_values;
+pub mod tuple_writes;
 pub mod type_sizes;
 pub mod value_access;
 pub mod value_bind;

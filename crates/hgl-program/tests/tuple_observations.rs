@@ -198,6 +198,127 @@ fn unused_clock_and_temporal_alias_tuple_const_arguments_reject() {
 }
 
 #[test]
+fn mutable_tuple_phase_preserves_target_and_runtime_selection_dependencies() {
+    let cases = [
+        (
+            "value:i64",
+            "var alias:i64=value",
+            "alias+=0",
+            "(alias,false)",
+        ),
+        (
+            "value:i64",
+            "var alias:i64=0",
+            "if value>0 {alias=1}",
+            "(alias,false)",
+        ),
+        (
+            "value:i64",
+            "var alias:i64=0",
+            "if value>0 {} else {alias=1}",
+            "(alias,false)",
+        ),
+        (
+            "value:i64",
+            "var alias:i64=0",
+            "if value>0 {} else if true {alias=1}",
+            "(alias,false)",
+        ),
+        (
+            "value:i64",
+            "var alias:i64=0",
+            "while value>0 {alias=1}",
+            "(alias,false)",
+        ),
+        (
+            "value:i64,members:set<i64>",
+            "var alias:i64=0",
+            "for member in elements(members,added) {alias+=1}",
+            "(alias,false)",
+        ),
+        (
+            "value:i64",
+            "var alias:tuple<i64,bool> = (value,false)",
+            "alias[0]=0",
+            "alias",
+        ),
+        (
+            "value:i64",
+            "var alias:Pair = Pair(first:value)",
+            "alias.first=0",
+            "(alias.first,false)",
+        ),
+        (
+            "value:i64",
+            "var alias:list<tuple<i64,bool>,2> = [(0,false),(0,false)]",
+            "alias[value]=(1,false)",
+            "alias[0]",
+        ),
+    ];
+    for (parameters, binding, update, argument) in cases {
+        let source = format!(
+            "module tuple_writes\nstruct Pair {{first:i64}}\nfn configured(const pair:tuple<i64,bool>)->i64 {{yield 0s:1}}\nfn unused({parameters})->i64 {{{binding}\nwhen {{{update}\nlet rejected=configured({argument})\nreturn value}}}}"
+        );
+        let diagnostics = hgl_program::diagnostics(&[("writes.hgl".into(), source.clone())]);
+        assert!(
+            diagnostics.iter().any(|d| d
+                .issue
+                .message
+                .contains("ordinary tuple constant context cannot read a temporal binding")),
+            "{source}\n{diagnostics:?}"
+        );
+        assert!(
+            diagnostics.iter().all(|d| d.issue.code.is_none()),
+            "{diagnostics:?}"
+        );
+    }
+}
+
+#[test]
+fn fixed_updates_resets_and_guarded_fresh_bindings_preserve_constant_tuple_phase() {
+    for (binding, update, argument) in [
+        ("var alias:i64=0", "alias+=1", "(alias,false)"),
+        ("var alias:i64=value", "alias=0", "(alias,false)"),
+        (
+            "var alias:tuple<i64,bool> = (value,false)",
+            "alias=(1,false)",
+            "alias",
+        ),
+        (
+            "var alias:tuple<i64,bool> = (0,false)",
+            "alias[0]=1",
+            "alias",
+        ),
+        (
+            "var alias:list<tuple<i64,bool>,2> = [(0,false),(0,false)]",
+            "alias[0]=(1,false)",
+            "alias[0]",
+        ),
+        (
+            "let alias=0",
+            "if value>0 {let fresh=1\nlet accepted=configured((fresh,false))}",
+            "(alias,false)",
+        ),
+        (
+            "let alias=0",
+            "if value>0 {} else {let alias=value}",
+            "(alias,false)",
+        ),
+        (
+            "let alias=0",
+            "if value>0 {} else if true {let alias=value}",
+            "(alias,false)",
+        ),
+    ] {
+        let source = format!(
+            "module tuple_fixed_writes\nfn configured(const pair:tuple<i64,bool>)->i64 {{yield 0s:1}}\nfn unused(value:i64)->i64 {{{binding}\nwhen {{{update}\nlet accepted=configured({argument})\nreturn value}}}}"
+        );
+        let diagnostics = hgl_program::diagnostics(&[("fixed.hgl".into(), source.clone())]);
+        assert!(diagnostics.is_empty(), "{source}\n{diagnostics:?}");
+    }
+}
+
+#[test]
 fn tuple_elements_run_once_in_written_order_and_failure_stops_later_elements()
 -> Result<(), Box<dyn std::error::Error>> {
     use std::{fmt::Write as _, fs, process::Command};
