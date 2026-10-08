@@ -37,12 +37,13 @@ pub fn substitute(
     bindings: &BTreeMap<String, Ty>,
     active: &mut BTreeSet<String>,
 ) -> Result<Ty, hgl_source::Issue> {
+    let written = name;
     let normalized = type_sizes::normalize(name, &mut |expr| size(library, module, expr))?;
     let name = normalized.as_str();
     if let Some(ty) = bindings.get(name) {
         return Ok(ty.clone());
     }
-    if let Some(origin) = delta_argument(name) {
+    if let Some(origin) = delta_argument(written) {
         if origin == "signal" {
             return Err(hgl_source::Issue::delta_shape(origin).at(6..6 + origin.len()));
         }
@@ -56,7 +57,8 @@ pub fn substitute(
     if let Some(ty) = Ty::parse(name) {
         return Ok(ty);
     }
-    if let Some((element, size)) = Ty::list_parts(name) {
+    if let Some((_, size)) = Ty::list_parts(name) {
+        let element = application(written).ok_or("invalid list type")?.1[0];
         return Ok(Ty::List(
             Box::new(
                 substitute(library, module, element, bindings, active)
@@ -65,13 +67,14 @@ pub fn substitute(
             size,
         ));
     }
-    let (base, arguments) = application(name).unwrap_or((name, Vec::new()));
+    let (base, arguments) = application(written).unwrap_or((name, Vec::new()));
     if matches!(base, "map" | "tuple" | "set") {
         let children = arguments
             .into_iter()
             .map(|arg| {
-                substitute(library, module, arg, bindings, active)
-                    .map_err(|issue| issue.shifted(arg.as_ptr() as usize - name.as_ptr() as usize))
+                substitute(library, module, arg, bindings, active).map_err(|issue| {
+                    issue.shifted(arg.as_ptr() as usize - written.as_ptr() as usize)
+                })
             })
             .collect::<Result<Vec<_>, _>>()?;
         return match (base, children.as_slice()) {
@@ -88,7 +91,8 @@ pub fn substitute(
         return if base == "atomic" {
             Ok(payload.atomic())
         } else {
-            let window = hgl_source::Window::parse(arguments[1], arguments.get(2).copied())
+            let bounds = application(name).ok_or("invalid rolling type")?.1;
+            let window = hgl_source::Window::parse(bounds[1], bounds.get(2).copied())
                 .ok_or("invalid rolling bounds")?;
             Ok(Ty::Rolling(Box::new(payload), window))
         };
@@ -110,7 +114,7 @@ pub fn substitute(
     let arguments = arguments.into_iter().map(|arg| {
         if arg == "_" { return Err("struct arguments require complete concrete types; placeholders are not admitted".into()); }
         substitute(library, module, arg, bindings, active)
-            .map_err(|issue| issue.shifted(arg.as_ptr() as usize - name.as_ptr() as usize))
+            .map_err(|issue| issue.shifted(arg.as_ptr() as usize - written.as_ptr() as usize))
     }).collect::<Result<Vec<_>, hgl_source::Issue>>()?;
     Ok(specialize(library, decl, arguments, active)?)
 }

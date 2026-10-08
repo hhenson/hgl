@@ -2251,10 +2251,15 @@ pub(crate) fn validate_declaration(library: Library, decl: &Decl) -> Result<(), 
         )))
     {
         if name.contains("delta<") {
+            let written = tokens
+                .iter()
+                .filter(|token| token.text != "\n")
+                .map(|token| token.text.as_str())
+                .collect::<String>();
             hgl_semantics::value_types::concrete(
                 &checker.library,
                 &decl.module,
-                name,
+                &written,
                 &BTreeMap::new(),
             )
             .map_err(|issue| {

@@ -36,6 +36,7 @@ fn concrete_unsupported_nested_type_locates_written_child() {
         "delta<\n signal\n>",
         "list<delta<\n signal\n>>",
         "tuple<i64,delta<\n ref<i64>\n>>",
+        "tuple<list<i64,1+2>,delta<\n signal\n>>",
     ] {
         let text = format!("fn unused(value:{annotation}) {{when {{}}}}");
         let diagnostics = errors(&text);
