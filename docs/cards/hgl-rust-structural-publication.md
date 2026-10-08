@@ -39,3 +39,6 @@ Acceptance: the shared four/eight publication matrix and allocation-counted own
 remove/reinsert, key-registration order, nested Struct/List/Map, scalar text,
 initial sparse and own-output controls. Ordinary reverse-order Map identity and
 specific native collection profile rejection are separate controls.
+
+May use snapshot_views to select scalar required reads versus the existing whole
+structural publication exclusion. Required-read coding adds no publication policy.

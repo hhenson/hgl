@@ -31,17 +31,18 @@ prepared_values = { budget = 250, uses = [] }
 pure_bounds = { budget = 300, uses = [] }
 recursive_convert = { budget = 160, uses = ["checked_data", "layouts"] }
 scalars = { budget = 150, uses = [] }
-snapshot_slots = { budget = 350, uses = ["structural_publication", "layouts", "observed", "snapshots"] }
+snapshot_slots = { budget = 350, uses = ["snapshot_views", "structural_publication", "layouts", "observed", "snapshots"] }
+snapshot_views = { budget = 160, uses = ["layouts", "snapshots"] }
 snapshots = { budget = 300, uses = ["layouts", "structural_publication"] }
 source_slots = { budget = 100, uses = ["layouts"] }
 structs = { budget = 230, uses = ["collections", "prepared_values"] }
 type_data = { budget = 120, uses = ["enums"] }
 value_convert = { budget = 320, uses = ["checked_data", "collections", "families", "layouts"] }
 tuple_adapter = { budget = 60, uses = ["value_calls", "execution_proof"] }
-values = { budget = 800, uses = ["value_calls", "structural_publication", "snapshot_slots", "snapshots", "collections", "deltas", "direct_deltas", "finite_domains", "layouts", "observed", "windows"] }
+values = { budget = 800, uses = ["snapshot_views", "value_calls", "structural_publication", "snapshot_slots", "snapshots", "collections", "deltas", "direct_deltas", "finite_domains", "layouts", "observed", "windows"] }
 windows = { budget = 100, uses = ["layouts"] }
 
-structural_publication = { budget = 220, uses = ["layouts", "snapshot_slots", "snapshots"] }
+structural_publication = { budget = 220, uses = ["snapshot_views", "layouts", "snapshot_slots", "snapshots"] }
 
 value_calls = { budget = 100, uses = ["execution_proof"] }
 

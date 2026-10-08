@@ -611,3 +611,24 @@ fn fixed_positional_helper_arguments_allocate_nothing() -> Result<(), Box<dyn st
         false,
     )
 }
+
+#[test]
+fn shared_unset_reads_and_partial_retention_allocate_nothing()
+-> Result<(), Box<dyn std::error::Error>> {
+    run_source(
+        include_str!(
+            "../../../external/hgraph_std/hgl/hgraph/tests/unset_required_read_values.hgl"
+        ),
+        true,
+        false,
+    )
+}
+#[test]
+fn unset_child_aliases_preserve_presence_without_consuming_payloads()
+-> Result<(), Box<dyn std::error::Error>> {
+    run_source(
+        include_str!("fixtures/unset_required_read_values.hgl"),
+        true,
+        false,
+    )
+}

@@ -182,53 +182,28 @@ fn capture(ty: &Ty, input: &str, destination: &str) -> String {
 }
 /// Initialize one independent prepared local from the current temporal value or another owner.
 pub fn local(id: usize, value: &Value, emit: impl Fn(&Value) -> String) -> String {
-    let marker = global_type(&crate::snapshots::storage(&value.ty));
     // The private destination index is replaced by the caller from its node's exact globals.
     let destination = format!("self.snapshot{id}");
     let write = if let Kind::Unary(op, input) = &value.kind
         && op == "snapshot"
     {
         format!(
-            "let input={};let mut prepared=_ctx.prepared();let(observation,globals)=prepared.storage.observations();let columns=globals.values_mut();if !observation.bindings.valid(input.id()) {{return Err(hgl_types::NodeError::new(\"ordinary tuple input is invalid\"));}}{}",
+            "let input={};let mut prepared=_ctx.prepared();let(observation,globals)=prepared.storage.observations();let columns=globals.values_mut();if !observation.bindings.valid(input.id()) {{return Err(hgl_types::NodeError::new(\"ordinary tuple input is invalid\"));}}{}true",
             crate::observed::input(input),
             capture(&value.ty, "input", "destination")
         )
     } else if matches!(value.kind, Kind::Construct(_)) {
-        constructed(value, "destination", &emit)
+        format!("{}true", constructed(value, "destination", &emit))
     } else {
-        format!(
-            "let source={};let globals=_ctx.global_state();let columns=globals.values_mut();<{marker} as hgl_store::PreparedValue>::check_slots(columns,source,columns,destination)?;<{marker} as hgl_store::PreparedValue>::copy_within(columns,source,destination);",
-            projection(value, &emit)
-        )
+        crate::snapshot_views::copy(value, "destination", &emit)
     };
     format!(
-        "let local{id}={{let destination=_ctx.global_state().destination({destination});{write}destination}};\n"
+        "let local{id}={{let destination=_ctx.global_state().destination({destination});let present={{{write}}};(destination,present)}};\n"
     )
 }
 /// Project optional descendants without erasing their validity; scalars retain only themselves.
 pub fn projection(value: &Value, emit: impl Fn(&Value) -> String) -> String {
-    if let Kind::Local(id) | Kind::MutableLocal(id) = &value.kind {
-        format!("local{id}")
-    } else if let Kind::Field(parent, index) = &value.kind {
-        format!(
-            "{{let parent={};let optional=parent.fields().{index};if _ctx.store().global_values().list(optional.fields()).is_empty() {{return Err(hgl_types::NodeError::new(\"absent ordinary tuple child\"));}}{}}}",
-            emit(parent),
-            slot(&value.ty, "optional", "_ctx.store().global_values()")
-        )
-    } else if let Kind::Index(parent, index) = &value.kind {
-        let Ty::List(wrapper, _) = crate::snapshots::storage(&parent.ty) else {
-            unreachable!("list snapshot");
-        };
-        format!(
-            "{{let parent={};let index={};let item={{let columns=_ctx.store().global_values();let positions=hgl_store::list_index(columns.list(parent.fields()),index)?;hgl_store::ValueSlot::<{}>::bind(&mut positions.as_slice())}};let optional=item.fields().0;if _ctx.store().global_values().list(optional.fields()).is_empty() {{return Err(hgl_types::NodeError::new(\"absent ordinary list child\"));}}{}}}",
-            emit(parent),
-            emit(index),
-            global_type(&wrapper),
-            slot(&value.ty, "optional", "_ctx.store().global_values()")
-        )
-    } else {
-        unreachable!("prepared snapshot local")
-    }
+    crate::snapshot_views::payload(value, emit)
 }
 /// Retain a scalar projection; aggregate projections remain independently owned slots.
 pub fn read(value: &Value, emit: impl Fn(&Value) -> String) -> String {
@@ -291,7 +266,7 @@ fn constructed(value: &Value, destination: &str, emit: &impl Fn(&Value) -> Strin
             } else if matches!(child.kind,Kind::Construct(_)) {
                 format!("let destination={{let globals=_ctx.global_state();let columns=globals.values();{child_slot}}};{} _ctx.global_state().values_mut().set_list_len(({target}).fields(),1);",constructed(child,"destination",emit))
             } else {
-                format!("let source={};let columns=_ctx.global_state().values_mut();let to={child_slot};<{marker} as hgl_store::PreparedValue>::check_slots(columns,source,columns,to)?;<{marker} as hgl_store::PreparedValue>::copy_within(columns,source,to);columns.set_list_len(({target}).fields(),1);",projection(child,emit))
+                crate::snapshot_views::constructor(child, target, emit)
             }
         } else {
             let native = crate::snapshots::complete(&child.ty,&emit(child));

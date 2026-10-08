@@ -115,3 +115,7 @@ Dense fixed List iteration visits unset child endpoints for metadata. Reading
 its payload uses the same checked required-child transport as direct projection;
 valid zero, false and floating zero remain available values. This guard changes
 no iteration selection or metadata query and holds in debug and release.
+
+May use snapshot_views for retained ordinary observation presence and List length.
+Required scalar/Boolean payload reads preserve value.unset_read; let retention and
+Tuple constructor copying preserve absence without consuming payloads.

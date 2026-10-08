@@ -49,3 +49,9 @@ Map capture scans the prepared domain, then stores live entries in that order;
 remove/reinsert cannot introduce live-vector ordering assumptions. Invalid keys
 remain stored with unset child slots. Empty/wholly invalid Map reads fail through
 the existing uncatalogued path rather than creating a new publication policy.
+
+Retained locals carry their existing typed prepared slot and a stack presence
+Boolean. snapshot_views owns observation projection/copy versus required reads;
+initializing owning child lets and constructing Tuples copy exact unset state.
+Private capacity/layout preparation is unchanged. Temporal-root validity errors
+remain separate from value.unset_read on retained ordinary payload consumption.

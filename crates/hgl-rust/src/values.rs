@@ -274,7 +274,7 @@ pub fn statements(plan: &Plan, body: &[Statement], out: &mut Vec<String>, result
             Statement::Var(i, v) => format!("let mut local{i} = {};\n", condition_code(plan, v)),
             Statement::Return(v) => {
                 if crate::finite_domains::prepared(plan) && plan.recording.is_some() && let Some(code)=prepared::forward(plan,v,result) {out.push(code);continue;}
-                let publication=if v.snapshot {crate::snapshot_slots::projection(v,|v|value(plan,v))}else{condition_code(plan,v)};
+                let publication=if v.snapshot {crate::snapshot_views::publication(v,|v|value(plan,v))}else{condition_code(plan,v)};
                 if let Some(code)=crate::snapshot_slots::returned(v,&publication,result) {code} else {
                     let publish=if matches!(v.ty,Ty::Ref(_)) {"_ctx.set_reference(self._output, publication)?;".into()} else {result.filter(|ty|matches!(ty,Ty::Rolling(..))).map_or_else(||crate::deltas::publish(&v.ty,"publication"),|ty|crate::windows::apply(ty,"self._output","publication"))};
                     format!("let publication={publication};{publish}return Ok(());\n")
@@ -647,6 +647,9 @@ fn prepare_place(plan: &Plan, target: &Value, setup: &mut Vec<String>) -> String
 }
 
 fn length(plan: &Plan, parent: &Value) -> String {
+    if parent.snapshot {
+        return crate::snapshot_views::length(parent, |v| value(plan, v));
+    }
     if let Some(slot) = atomic_place(plan, parent) {
         return format!(
             "hgl_store::list_len(_ctx.store().atomic_values().list(({slot}).fields()))?"

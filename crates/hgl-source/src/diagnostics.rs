@@ -194,6 +194,7 @@ pub const SOURCE_CODES: &[(&str, &str)] = &[
 ];
 /// Initial execution-error catalogue, disjoint from source-error codes.
 pub const EXECUTION_CODES: &[&str] = &[
+    "value.unset_read",
     "yield.negative_duration",
     "yield.non_increasing_time",
     "eval.input_delta_profile",

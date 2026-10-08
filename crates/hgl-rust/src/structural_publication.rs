@@ -170,7 +170,7 @@ pub fn assignment(value: &Value, emit: impl Fn(&Value) -> String) -> Option<Stri
         return None;
     }
     let expression = if value.snapshot {
-        crate::snapshot_slots::projection(value, &emit)
+        crate::snapshot_views::publication(value, &emit)
     } else {
         crate::snapshots::complete(&value.ty, &emit(value))
     };

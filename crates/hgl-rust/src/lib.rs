@@ -25,6 +25,7 @@ pub mod pure_bounds;
 pub mod recursive_convert;
 pub mod scalars;
 pub mod snapshot_slots;
+pub mod snapshot_views;
 pub mod snapshots;
 pub mod source_slots;
 pub mod structs;
