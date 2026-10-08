@@ -112,6 +112,7 @@ pub fn replacement(target: &Value, value: Value, mutable_port: bool) -> Result<V
 
 /// Build ordinary binary IR or a temporal scalar node from checked operands.
 pub fn binary(op: &str, mut values: [Value; 2], plan: &mut Plan) -> Result<Value, String> {
+    values.iter().try_for_each(require_payload)?;
     if values.iter().any(|value| {
         matches!(value.ty, Ty::Set(_) | Ty::Map(..))
             && matches!(
