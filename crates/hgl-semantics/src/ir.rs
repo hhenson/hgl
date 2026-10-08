@@ -10,6 +10,8 @@ pub struct Value {
     pub kind: Kind,
     /// Source checking provenance for an explicit reduced delta requirement.
     pub delta_required: bool,
+    /// Ordinary retained temporal children use typed optional snapshot storage.
+    pub snapshot: bool,
 }
 impl Value {
     /// Pair a checked expression with its resolved type.
@@ -18,6 +20,7 @@ impl Value {
             ty,
             kind,
             delta_required: false,
+            snapshot: false,
         }
     }
 }

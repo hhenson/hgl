@@ -58,3 +58,8 @@ through the ordinary global-value facade.
 
 Reexports Recursive and RecursiveTarget from hgl-recursive-value for generated
 internal owning recursive fields. No ordinary source operation is added.
+
+GlobalState::copy_scalar copies a statically typed prepared scalar position into
+an already reserved scalar destination after capacity preflight. It preserves
+ordinary entry presence and uses no runtime key or type lookup. Generated private
+Tuple local slots use it through PreparedTick::scalar_from_global.

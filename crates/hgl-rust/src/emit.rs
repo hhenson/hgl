@@ -23,6 +23,14 @@ fn node(plan: &Plan, n: &Node, index: usize, out: &mut Vec<String>) {
             global_type(ty)
         ));
     }
+    for (key, ty) in &n.globals {
+        if let Some(id) = key.strip_prefix(&format!("\0snapshot:{index}:")) {
+            out.push(format!(
+                "snapshot{id}:hgl_store::Global<{}>,",
+                global_type(ty)
+            ));
+        }
+    }
     out.push("configuration_columns:hgl_store::ValueColumns,\n".into());
     for (id, value) in n.configuration.iter().enumerate() {
         out.push(format!(
@@ -121,6 +129,14 @@ fn node_build(
             "global{i}: ports.global::<{}>({key:?})?,\n",
             global_type(ty)
         ));
+    }
+    for (key, ty) in &n.globals {
+        if let Some(id) = key.strip_prefix(&format!("\0snapshot:{index}:")) {
+            out.push(format!(
+                "snapshot{id}:ports.global::<{}>({key:?})?,",
+                global_type(ty)
+            ));
+        }
     }
     for id in 0..n.configuration.len() {
         out.push(format!("configuration{id},configuration_slot{id},\n"));
@@ -234,7 +250,7 @@ pub fn emit_shared(plan: &Plan) -> String {
 pub fn shared_layouts(plans: &[Plan]) -> String {
     let nodes = plans
         .iter()
-        .flat_map(|plan| plan.nodes.iter().cloned())
+        .flat_map(|plan| crate::snapshot_slots::prepare(plan).nodes.into_iter())
         .collect();
     let types = Plan {
         nodes,
@@ -246,7 +262,7 @@ pub fn shared_layouts(plans: &[Plan]) -> String {
 }
 fn emit_inner(plan: &Plan, layouts: bool) -> String {
     let prepared = crate::families::prepare(plan);
-    let normalized = crate::direct_deltas::prepare(&prepared);
+    let normalized = crate::snapshot_slots::prepare(&crate::direct_deltas::prepare(&prepared));
     let plan = &normalized;
     let mut out = vec![String::from("// Generated from checked HGL source.\n")];
     for doc in &plan.docs {
@@ -311,7 +327,7 @@ fn emit_inner(plan: &Plan, layouts: bool) -> String {
 /// Emit execution and observation of one checked eval plan.
 pub fn emit_test_body(plan: &Plan, expected: Option<&[Option<Value>]>) -> String {
     let prepared = crate::families::prepare(plan);
-    let normalized = crate::direct_deltas::prepare(&prepared);
+    let normalized = crate::snapshot_slots::prepare(&crate::direct_deltas::prepare(&prepared));
     let plan = &normalized;
     let mut out = vec![crate::keyed::preparation(plan), capacities(plan)];
     register_prepared(plan, &mut out);
@@ -562,7 +578,7 @@ fn register_prepared(plan: &Plan, out: &mut Vec<String>) {
 /// Emit fresh graph execution from already constructed owning arguments.
 pub fn emit_prepared_test_body(plan: &Plan) -> String {
     let prepared = crate::families::prepare(plan);
-    let normalized = crate::direct_deltas::prepare(&prepared);
+    let normalized = crate::snapshot_slots::prepare(&crate::direct_deltas::prepare(&prepared));
     let plan = &normalized;
     let legacy = emit_test_body(plan, None);
     let adapters = legacy.split("pub fn test()").next().unwrap_or_default();

@@ -16,6 +16,7 @@ fn widen(value: Value, expected: &Ty) -> Value {
 
 /// Check a resolved local annotation in the initializer's own category.
 pub fn initializer(value: Value, annotation: Option<&Ty>) -> Result<Value, String> {
+    let value = crate::tuple_values::retain(value, false);
     if value.ty == Ty::Void {
         return Err("statement operation has no initializer value".into());
     }
@@ -43,6 +44,9 @@ pub fn statement(
     annotated: bool,
 ) -> Result<(Value, Statement), String> {
     if mutable {
+        if value.snapshot {
+            return Err("mutable retained tuple locals are outside this backend profile".into());
+        }
         owning_payload(&value)?;
         if !ordinary(&value.ty) {
             return Err("mutable locals currently require an ordinary scalar or struct".into());
@@ -118,6 +122,12 @@ pub fn binary(op: &str, mut values: [Value; 2], plan: &mut Plan) -> Result<Value
         return Err(format!(
             "unsupported binary operation {op} on structural collection endpoints"
         ));
+    }
+    if values
+        .iter()
+        .any(|v| v.snapshot && matches!(v.ty, Ty::Tuple(_) | Ty::List(..) | Ty::Map(..)))
+    {
+        return Err("retained aggregate comparisons are outside this backend profile".into());
     }
     let temporal = values.iter().any(|v| matches!(v.kind, Kind::Wire(_)));
     let mut node = Node {

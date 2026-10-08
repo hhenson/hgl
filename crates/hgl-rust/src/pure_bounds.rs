@@ -162,3 +162,22 @@ pub fn text_factor(plan: &Plan) -> usize {
         .max()
         .unwrap_or(1)
 }
+
+/// Whether selected native formatters require the fixed complete scalar text envelope.
+pub fn native_text(plan: &Plan) -> bool {
+    plan.natives.iter().any(|native| {
+        native.name == "hgraph.native::as_str"
+            && native.result == Ty::Str
+            && native.args.as_slice() != [Ty::Str]
+    })
+}
+
+/// Reserve the existing fixed envelope only when scalar formatters are selected.
+pub fn native_limits(plan: &Plan, index: impl Fn() -> usize) -> String {
+    if native_text(plan) {
+        let index = index();
+        format!("capacity.limit{index}=capacity.limit{index}.max(64);")
+    } else {
+        String::new()
+    }
+}

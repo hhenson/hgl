@@ -16,7 +16,7 @@ binding_build = { budget = 160, uses = ["endpoints"] }
 bindings = { budget = 1100, uses = ["binding_build", "endpoints"] }
 columns = { budget = 350, uses = ["scalar_copy"] }
 endpoints = { budget = 650, uses = ["member_table"] }
-global = { budget = 200, uses = ["global_value", "list", "optional", "prepared_value", "recursive_value"] }
+global = { budget = 200, uses = ["columns", "global_value", "list", "optional", "prepared_value", "recursive_value"] }
 global_arena = { budget = 220, uses = ["columns", "value_lists"] }
 global_value = { budget = 200, uses = ["columns", "global_arena"] }
 keys = { budget = 500, uses = ["global_value"] }
@@ -25,6 +25,7 @@ list_storage = { budget = 300, uses = ["global_value", "prepared_value"] }
 member_table = { budget = 220, uses = [] }
 observation = { budget = 100, uses = ["atomic", "bindings", "columns", "keys", "rolling"] }
 optional = { budget = 160, uses = ["global_value", "list_storage", "prepared_value"] }
+prepared_globals = { budget = 80, uses = ["columns", "prepared_store"] }
 prepared_store = { budget = 280, uses = ["atomic", "bindings", "columns", "global", "keys", "observation", "rolling", "shapes"] }
 prepared_value = { budget = 160, uses = ["columns", "global_value"] }
 recursive_value = { budget = 220, uses = ["global_value", "prepared_value"] }

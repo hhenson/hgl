@@ -39,3 +39,8 @@ Ordinary collection grammar checks K/V recursively before payload projection.
 Nominal fields may carry declared atomic boundaries, while explicit composite
 atomic container arguments remain temporal shapes. Key/profile admission uses
 the resulting ordinary projection; nominal source identities stay exact.
+
+Bindings preserve the IR snapshot representation flag for independently retained
+Tuple observations. Aggregate helper/global replacement escapes are explicitly
+diagnosed until their ordinary ownership ABI supports optional descendant slots.
+Node return itself remains an admitted publication boundary.

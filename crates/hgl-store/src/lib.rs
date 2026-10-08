@@ -47,6 +47,7 @@ pub mod list_storage;
 pub mod member_table;
 pub mod observation;
 pub mod optional;
+pub mod prepared_globals;
 pub mod prepared_store;
 pub mod prepared_value;
 pub mod recursive_value;
@@ -150,6 +151,11 @@ impl Store {
     pub fn global_state(&mut self) -> &mut GlobalState {
         &mut self.globals
     }
+    /// Borrow prepared ordinary columns without granting global mutation authority.
+    pub fn global_values(&self) -> &ValueColumns {
+        self.globals.values()
+    }
+
     /// An empty run.
     pub fn new() -> Self {
         Self::default()

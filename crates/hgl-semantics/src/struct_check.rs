@@ -197,6 +197,9 @@ impl Constructor {
     }
     /// Unify and retain the checked field once, without executing its expression.
     pub fn checked(&mut self, library: &Library, index: usize, value: Value) -> Result<(), String> {
+        if value.snapshot {
+            crate::value_access::helper_argument(&value)?;
+        }
         let resolved = crate::value_types::field_type(
             library,
             &self.patterns[self.fields[index]],

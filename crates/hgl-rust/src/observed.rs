@@ -396,6 +396,16 @@ pub fn input(v: &Value) -> String {
         } else {
             format!("hgl_store::Store::prepared_input(local{id})")
         }
+    } else if let Kind::Field(parent, index) = &v.kind {
+        let input = format!(
+            "({}).field::<{index}>(_ctx.store().bindings())",
+            input(parent)
+        );
+        if crate::deltas::shaped(&v.ty) {
+            input
+        } else {
+            format!("hgl_store::Store::prepared_input({input})")
+        }
     } else {
         unreachable!("checked endpoint query")
     }

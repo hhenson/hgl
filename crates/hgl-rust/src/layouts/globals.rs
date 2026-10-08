@@ -224,6 +224,9 @@ fn value_types(value: &hgl_semantics::ir::Value, types: &mut BTreeMap<String, Ty
     ) {
         collect(&value.ty, types);
     }
+    if value.snapshot {
+        collect(&crate::snapshots::storage(&value.ty), types);
+    }
     match &value.kind {
         Kind::List(values) | Kind::Native(_, values) | Kind::Query(_, values) => {
             for value in values {

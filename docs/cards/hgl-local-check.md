@@ -59,3 +59,8 @@ Ordinary collection equality does not read structural temporal endpoints. Binary
 checking rejects set/map endpoint operands before scalar lowering; complete
 ordinary constructors, configuration and explicit atomic observations retain
 their existing value category.
+
+Supported current Tuple inputs initialize independently retained ordinary locals,
+using tuple_values classification. Mutable snapshot locals and snapshot aggregate
+comparisons are explicitly outside this implementation profile. Complete native
+ordinary tuples retain the existing writable ordinary value behavior.

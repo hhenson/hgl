@@ -39,14 +39,13 @@ pub fn set_call(
         "len" => Ty::I64,
         _ => Ty::Void,
     };
-    Ok(Value {
-        delta_required: false,
+    Ok(Value::new(
         ty,
-        kind: Kind::Query(
+        Kind::Query(
             format!("set_{op}"),
             args.into_iter().map(|(_, v)| v).collect(),
         ),
-    })
+    ))
 }
 /// Check scalar within the admitted endpoint profile.
 pub fn scalar(ty: &Ty) -> bool {
@@ -120,11 +119,7 @@ pub fn endpoint_call(name: &str, args: Arguments, runtime: bool) -> Result<Value
     if !runtime
         || args.is_empty()
         || args.iter().any(|(n, v)| {
-            n.is_some()
-                || !matches!(
-                    v.kind,
-                    Kind::Input(..) | Kind::IterationInput(_) | Kind::Output
-                )
+            n.is_some() || !matches!(v.kind, Kind::Output) && !crate::tuple_values::endpoint(v)
         })
     {
         return Err("endpoint query requires runtime endpoints".into());

@@ -182,19 +182,7 @@ impl Capacity {
     }
     /// Reserve the fixed textual envelope of built-in scalar formatters.
     pub fn native_limits(&self, plan: &Plan) -> String {
-        if plan.natives.iter().any(|native| {
-            native.name == "hgraph.native::as_str"
-                && native.result == Ty::Str
-                && native.args.as_slice() != [Ty::Str]
-        }) {
-            format!(
-                "capacity.limit{}=capacity.limit{}.max(64);",
-                self.index(&Ty::Str),
-                self.index(&Ty::Str)
-            )
-        } else {
-            String::new()
-        }
+        crate::pure_bounds::native_limits(plan, || self.index(&Ty::Str))
     }
     /// Widen retained text for checked pure concatenation expressions.
     pub fn text_limits(&self, plan: &Plan) -> String {
@@ -209,6 +197,11 @@ impl Capacity {
     }
     /// Assemble exact typed bounds; structural deltas include every possible changed member.
     pub fn bounds(&self, ty: &Ty) -> String {
+        if let Some(bounds) =
+            crate::snapshots::bounds(ty, |ty| self.bounds(ty), |ty| self.snapshot_domain(ty))
+        {
+            return bounds;
+        }
         if matches!(ty, Ty::Recursive(_)) {
             return format!("capacity.limit{}.clone()", self.index(ty));
         }
@@ -275,6 +268,12 @@ impl Capacity {
             return format!("PreparedBounds{} {{{args}}}", global_type(ty));
         }
         format!("capacity.limit{}", self.index(ty))
+    }
+    fn snapshot_domain(&self, ty: &Ty) -> String {
+        format!(
+            "capacity.topology{}.children.len()",
+            self.index(&delta_type(ty))
+        )
     }
     /// Emit a compact cold capacity record without runtime type lookup.
     pub fn declaration(&self) -> String {

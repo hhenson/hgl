@@ -13,6 +13,30 @@ pub struct Scope {
     pub requirements: BTreeSet<String>,
     /// Injected service bindings, removed by local shadowing.
     pub services: BTreeSet<String>,
+    /// Known temporal dependencies, retained through ordinary local aliases.
+    pub tuple: crate::tuple_flow::Facts,
+}
+impl Scope {
+    pub(crate) fn inject(&mut self, name: String) {
+        self.tuple.runtime.insert(name.clone());
+        self.services.insert(name);
+    }
+    pub(crate) fn alias(&mut self, name: &str, expression: &Expr, runtime: bool) {
+        self.tuple.bind(name, expression, runtime);
+        if matches!(expression.syntax(),Expr::Name(source) if self.services.contains(source)) {
+            self.services.insert(name.into());
+        } else {
+            self.services.remove(name);
+        }
+    }
+    fn lambda(&self, parameters: &[(String, String)]) -> Self {
+        let mut scope = self.clone();
+        for (name, _) in parameters {
+            scope.services.remove(name);
+            scope.tuple.runtime.remove(name);
+        }
+        scope
+    }
 }
 /// Whether an ordinary callable declaration is visible in this lexical test scope.
 pub fn visible(
@@ -43,6 +67,7 @@ pub fn expression(
     match expr.syntax() {
         Expr::Located(..) => unreachable!("syntax strips source origins"),
         Expr::Call(name, args) | Expr::Applied(name, args) => {
+            crate::tuple_phase::call(library, module, test_scope, name, args, scope)?;
             let base = hgl_source::application(name).map_or(name.as_str(), |(base, _)| base);
             let receiver = args.first().and_then(|(_, value)| {
                 if let Expr::Name(name) = value.syntax()
@@ -111,11 +136,7 @@ pub fn expression(
             }
         }
         Expr::Lambda(parameters, _, body) => {
-            let mut scope = scope.clone();
-            for (name, _) in parameters {
-                scope.services.remove(name);
-            }
-            expression(library, module, test_scope, body, &scope)?;
+            expression(library, module, test_scope, body, &scope.lambda(parameters))?;
         }
         Expr::Null | Expr::Literal(_) | Expr::TemporalLiteral(_) => {}
     }

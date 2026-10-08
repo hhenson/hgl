@@ -118,7 +118,7 @@ pub(crate) fn compile(library: Library, module: &str, entry: &str) -> Result<Pla
         ..Checker::default()
     };
     checker.call(module, entry, &[], false)?;
-    Ok(checker.plan)
+    hgl_rust::tuple_adapter::standalone(checker.plan)
 }
 impl Checker {
     fn call(
@@ -1297,23 +1297,24 @@ impl Checker {
         if self.generator && self.value_context == ValueContext::Outside {
             return Err("generator return cannot carry a value; use yield".into());
         }
-        let expected =
-            if self.value_context == ValueContext::Outside && !matches!(result, Ty::Ref(_)) {
-                result.clone().delta()?
-            } else {
-                result.clone()
-            };
+        let expected = hgl_semantics::tuple_admission::expected(
+            result,
+            self.value_context == ValueContext::Outside,
+        )?;
         let previous_complete = self.requirements.complete;
         self.requirements.complete = matches!(result, Ty::Atomic(_));
         let previous = self.requirements.delta;
-        self.requirements.delta = self.requirements.result || matches!(expected, Ty::Delta(_));
+        self.requirements.delta =
+            hgl_semantics::tuple_values::delta_result(self.requirements.result, result, &expected);
         let v = self.expected_expression(module, expr, env, true, Some(&expected))?;
         self.requirements.delta = previous;
         self.requirements.complete = previous_complete;
-        if v.ty != expected || *result == Ty::Void {
-            return Err("node return type mismatch".into());
-        }
-        require_payload(&v)?;
+        let v = hgl_semantics::tuple_admission::result(
+            v,
+            result,
+            &expected,
+            self.value_context == ValueContext::Outside,
+        )?;
         Ok(if self.value_context == ValueContext::Outside {
             Statement::Return(v)
         } else {
@@ -2015,7 +2016,7 @@ pub(crate) fn prepare_evaluation(
         checker.plan.recording = Some((key, recording));
         checker.plan.output = Some((record, ty));
     }
-    Ok((checker.plan, prepared))
+    Ok((hgl_rust::tuple_adapter::prepared(checker.plan)?, prepared))
 }
 
 type EvalInputs = Vec<(Vec<Option<Value>>, Option<Value>)>;

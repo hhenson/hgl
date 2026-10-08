@@ -41,7 +41,9 @@ fn block(body: &[Statement], live: &mut BTreeMap<usize, bool>) -> Result<(), Str
                 expression(value, live)?;
             }
             Statement::Return(value) | Statement::Yield(value) => {
-                if !matches!(statement, Statement::Return(_)) || !observed(value) {
+                if !matches!(statement, Statement::Return(_))
+                    || (!observed(value) && !value.snapshot)
+                {
                     helper_argument(value)?;
                 }
                 expression(value, live)?;
@@ -94,6 +96,9 @@ fn expression(value: &Value, live: &BTreeMap<usize, bool>) -> Result<(), String>
             }
         }
         Kind::GlobalSet(entry, value) => {
+            if value.snapshot {
+                helper_argument(value)?;
+            }
             expression(value, live)?;
             conflict(*entry, true, live)?;
         }
@@ -108,10 +113,8 @@ fn expression(value: &Value, live: &BTreeMap<usize, bool>) -> Result<(), String>
             }
         }
         Kind::ValueCall(args, body) => {
-            for value in args {
-                helper_argument(value)?;
-                expression(value, live)?;
-            }
+            crate::tuple_admission::value_arguments(args)?;
+            call_arguments(args, live)?;
             block(body, &mut live.clone())?;
         }
         Kind::Index(parent, index) | Kind::Push(parent, index) | Kind::Binary(_, parent, index) => {
@@ -124,10 +127,7 @@ fn expression(value: &Value, live: &BTreeMap<usize, bool>) -> Result<(), String>
             }
         }
         Kind::Native(_, args) | Kind::Query(_, args) => {
-            for value in args {
-                helper_argument(value)?;
-                expression(value, live)?;
-            }
+            call_arguments(args, live)?;
         }
         Kind::Length(value)
         | Kind::Field(value, _)
@@ -158,15 +158,6 @@ fn expression(value: &Value, live: &BTreeMap<usize, bool>) -> Result<(), String>
     Ok(())
 }
 
-/// Check complete ordinary aggregate literals through contextual child checking.
-pub fn aggregate(
-    expr: &hgl_source::Expr,
-    expected: Option<&Ty>,
-    constant_context: bool,
-    check: impl FnMut(&hgl_source::Expr, Option<&Ty>) -> Result<Value, String>,
-) -> Result<Value, String> {
-    aggregate_checked(expr, expected, constant_context, check)
-}
 /// Check aggregate elements while preserving source-origin callback failures.
 pub fn aggregate_checked<E: From<&'static str> + From<hgl_source::Issue>>(
     expr: &hgl_source::Expr,
@@ -179,6 +170,12 @@ pub fn aggregate_checked<E: From<&'static str> + From<hgl_source::Issue>>(
         return Err("expected an ordinary aggregate literal".into());
     };
     let tuple = matches!(expr.syntax(), Expr::Tuple(_));
+    let expected = match expected {
+        Some(Ty::Delta(origin)) if tuple && matches!(origin.as_ref(), Ty::Tuple(_)) => {
+            Some(origin.as_ref())
+        }
+        _ => expected,
+    };
     let mut values = Vec::new();
     for (index, expr) in cells.iter().enumerate() {
         let child = match expected {
@@ -189,17 +186,21 @@ pub fn aggregate_checked<E: From<&'static str> + From<hgl_source::Issue>>(
         let expr = expr
             .as_ref()
             .ok_or("ordinary aggregate literals cannot contain absent elements")?;
-        let value = check(expr, child)?;
+        let value = crate::tuple_values::retain(check(expr, child)?, true);
         if !ordinary(&value.ty)
-            || (!constant_context && !value.closed())
+            || matches!(value.kind, Kind::Wire(_) | Kind::Input(_, true))
+            || (!tuple && !constant_context && !value.closed())
             || child.is_some_and(|ty| *ty != value.ty)
         {
             let message = if tuple {
-                "ordinary tuple literals require constant elements of the expected type"
+                "ordinary tuple element type or access mismatch"
             } else {
                 "ordinary nonempty list literals require constant elements"
             };
             return Err(hgl_source::Issue::typed(expr.span(), message).into());
+        }
+        if tuple {
+            crate::tuple_admission::constructor_child(&value, constant_context).map_err(E::from)?;
         }
         values.push(value);
     }
@@ -212,10 +213,13 @@ pub fn aggregate_checked<E: From<&'static str> + From<hgl_source::Issue>>(
             )
             .into());
         }
-        return Ok(Value::new(
+        let snapshot = crate::tuple_values::nested_snapshot(&values);
+        let mut value = Value::new(
             ty,
             Kind::Construct(values.into_iter().enumerate().collect()),
-        ));
+        );
+        value.snapshot = snapshot;
+        return Ok(value);
     }
     let Some(Ty::List(child, size)) = expected else {
         return Err(if cells.is_empty() { "empty list requires an expected concrete list type" } else { "uncontextualized nonempty ordinary list literal inference is unsupported; expected concrete list type required" }.into());
@@ -236,7 +240,7 @@ pub fn list_literal(
     elements: &[Option<hgl_source::Expr>],
     expected: Option<&Ty>,
 ) -> Result<Value, String> {
-    aggregate(
+    aggregate_checked::<String>(
         &hgl_source::Expr::Sequence(elements.to_vec()),
         expected,
         false,
@@ -252,24 +256,7 @@ pub fn list_literal(
         },
     )
 }
-/// Check an ordinary indexed read without introducing copy or write authority.
-pub fn indexed(parent: Value, index: Value) -> Result<Value, String> {
-    if matches!(parent.kind, Kind::Input(..) | Kind::Wire(_) | Kind::Output) {
-        return Err(
-            "temporal child indexing is outside the admitted publication-delta profile".into(),
-        );
-    }
-    let Ty::List(element, _) = &parent.ty else {
-        return Err("indexing requires an ordinary list".into());
-    };
-    if index.ty != Ty::I64 {
-        return Err("ordinary list index requires i64".into());
-    }
-    Ok(Value::new(
-        *element.clone(),
-        Kind::Index(Box::new(parent), Box::new(index)),
-    ))
-}
+pub use crate::tuple_values::indexed;
 /// Check receiver-first list observation or growth.
 pub fn list_operation(name: &str, args: &[Value]) -> Result<Value, String> {
     let receiver = args
@@ -396,7 +383,9 @@ pub fn binary_type(op: &str, a: &Ty, b: &Ty) -> Result<Ty, String> {
         {
             Ty::Bool
         }
-        "==" | "!=" if matches!(a, Ty::Family(_) | Ty::Set(_) | Ty::Map(..)) => Ty::Bool,
+        "==" | "!=" if matches!(a, Ty::Family(_) | Ty::Set(_) | Ty::Map(..) | Ty::Tuple(_)) => {
+            Ty::Bool
+        }
         "==" | "!="
             if !matches!(
                 a.name(),
@@ -412,3 +401,11 @@ pub fn binary_type(op: &str, a: &Ty, b: &Ty) -> Result<Ty, String> {
 }
 
 pub use crate::value_constant::context_free;
+
+fn call_arguments(args: &[Value], live: &BTreeMap<usize, bool>) -> Result<(), String> {
+    for value in args {
+        helper_argument(value)?;
+        expression(value, live)?;
+    }
+    Ok(())
+}

@@ -10,7 +10,7 @@ line-budget = 8940
 
 # Budgets of the modules that were crates of their own (docs/decisions/0004).
 [package.metadata.hgl.modules]
-capacity = { budget = 400, uses = ["collections", "deltas", "finite_domains", "keyed", "layouts", "pure_bounds", "windows"] }
+capacity = { budget = 400, uses = ["snapshots", "collections", "deltas", "finite_domains", "keyed", "layouts", "pure_bounds", "windows"] }
 checked_data = { budget = 250, uses = ["enums", "type_data"] }
 collections = { budget = 250, uses = ["families", "prepared_values"] }
 composite_keys = { budget = 250, uses = [] }
@@ -23,19 +23,22 @@ finite_domains = { budget = 250, uses = ["execution_proof", "layouts", "mutation
 generators = { budget = 500, uses = ["deltas", "finite_domains", "source_slots", "values", "windows"] }
 key_origins = { budget = 180, uses = [] }
 keyed = { budget = 450, uses = ["checked_data", "key_origins", "layouts", "value_convert"] }
-layouts = { budget = 400, uses = ["collections", "composite_keys", "enums", "families", "prepared_values", "scalars", "structs"] }
+layouts = { budget = 400, uses = ["snapshots", "collections", "composite_keys", "enums", "families", "prepared_values", "scalars", "structs"] }
 mutation_bounds = { budget = 250, uses = [] }
-observed = { budget = 500, uses = ["composite_keys", "layouts", "windows"] }
+observed = { budget = 500, uses = ["deltas", "composite_keys", "layouts", "windows"] }
 preparation = { budget = 300, uses = ["checked_data", "collections", "families", "layouts", "recursive_convert", "value_convert", "values"] }
 prepared_values = { budget = 250, uses = [] }
 pure_bounds = { budget = 300, uses = [] }
 recursive_convert = { budget = 160, uses = ["checked_data", "layouts"] }
 scalars = { budget = 150, uses = [] }
+snapshot_slots = { budget = 350, uses = ["layouts", "observed", "snapshots"] }
+snapshots = { budget = 300, uses = ["layouts"] }
 source_slots = { budget = 100, uses = ["layouts"] }
 structs = { budget = 230, uses = ["collections", "prepared_values"] }
 type_data = { budget = 120, uses = ["enums"] }
 value_convert = { budget = 320, uses = ["checked_data", "collections", "families", "layouts"] }
-values = { budget = 800, uses = ["collections", "deltas", "direct_deltas", "finite_domains", "layouts", "observed", "windows"] }
+tuple_adapter = { budget = 60, uses = ["execution_proof"] }
+values = { budget = 800, uses = ["snapshot_slots", "snapshots", "collections", "deltas", "direct_deltas", "finite_domains", "layouts", "observed", "windows"] }
 windows = { budget = 100, uses = ["layouts"] }
 
 [dependencies]

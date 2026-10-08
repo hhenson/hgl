@@ -129,6 +129,7 @@ fn function(library: &Library, declaration: &Decl, signature: &Signature) -> Res
     let mut environment = crate::name_check::Scope {
         types,
         parameters: signature.generics.iter().cloned().collect(),
+        tuple: crate::tuple_flow::Facts::new(crate::tuple_phase::signature(signature)?),
         ..Default::default()
     };
     if let Some((name, _, _)) = &signature.requirement {

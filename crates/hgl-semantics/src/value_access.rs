@@ -123,10 +123,14 @@ pub fn binding(id: usize, value: &Value, mutable: bool, annotated: bool) -> Resu
     };
     let mut binding = Value::new(value.ty.clone(), kind);
     binding.delta_required = value.delta_required;
+    binding.snapshot = value.snapshot;
     Ok(binding)
 }
 /// Reject passing a borrowed aggregate through an ordinary helper boundary.
 pub fn helper_argument(value: &Value) -> Result<(), String> {
+    if value.snapshot && aggregate(&value.ty) {
+        return Err("retained tuple aggregates cannot yet cross an ordinary helper or global replacement boundary".into());
+    }
     if observed(value) {
         return Err(
             "structural delta observation cannot escape through an ordinary helper call".into(),

@@ -96,3 +96,8 @@ propagated through nested blocks. Rolling returns publish ordinary arrival V int
 the typed window; ordinary helper bodies pass None. Window-specific delta_value
 and all_valid queries delegate to hgl-rust-windows; metadata queries retain the
 existing statically selected endpoint path.
+
+Current Tuple node-local copies and complete results lower through
+hgl-rust-snapshot-slots; ordinary aggregate constructor assembly lowers through
+hgl-rust-snapshots. Owned optional positions preserve unset data independently.
+No structural-delta observation or canonical type identity is substituted.
