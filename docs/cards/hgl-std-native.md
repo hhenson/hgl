@@ -81,3 +81,5 @@ declares this adapter and the Rust binding part selects its provider. It uses ep
 or DST dependency; admitted years 0001–9999 fit exactly in microseconds.
 Acceptance includes epoch/leap/calendar boundaries and the shared tick/silence
 conversion test under the pinned std date-conversion contract.
+
+logarithm_f64 is the selected ordinary f64 logarithm provider. It delegates to the platform Rust floating-point logarithm, retaining infinity and NaN outcomes required by the shared numeric boundary tests.

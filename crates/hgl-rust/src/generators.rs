@@ -69,6 +69,7 @@ impl Generator {
                 Block::Yield(hoist::value(time), hoist::value(value), next)
             }
             Statement::Borrow(..)
+            | Statement::ForItems(..)
             | Statement::For(..)
             | Statement::Return(_)
             | Statement::Yield(_) => unreachable!("checked generator statement"),

@@ -14,7 +14,7 @@ pub fn resolve(
     name: &str,
     active: &mut BTreeSet<String>,
 ) -> Result<Ty, String> {
-    substitute(library, module, name, &BTreeMap::new(), active)
+    substitute(library, module, name, &BTreeMap::new(), active).map_err(String::from)
 }
 /// Resolve a source type into its ordinary payload representation.
 pub fn resolve_ordinary(library: &Library, module: &str, name: &str) -> Result<Ty, String> {
@@ -26,7 +26,7 @@ pub fn concrete(
     module: &str,
     name: &str,
     bindings: &BTreeMap<String, Ty>,
-) -> Result<Ty, String> {
+) -> Result<Ty, hgl_source::Issue> {
     substitute(library, module, name, bindings, &mut BTreeSet::new())
 }
 /// Substitute declared type parameters through finite ordinary source shapes.
@@ -36,21 +36,32 @@ pub fn substitute(
     name: &str,
     bindings: &BTreeMap<String, Ty>,
     active: &mut BTreeSet<String>,
-) -> Result<Ty, String> {
+) -> Result<Ty, hgl_source::Issue> {
     let normalized = type_sizes::normalize(name, &mut |expr| size(library, module, expr))?;
     let name = normalized.as_str();
     if let Some(ty) = bindings.get(name) {
         return Ok(ty.clone());
     }
     if let Some(origin) = delta_argument(name) {
-        return substitute(library, module, origin, bindings, active)?.delta();
+        if origin == "signal" {
+            return Err(hgl_source::Issue::delta_shape(origin).at(6..6 + origin.len()));
+        }
+        let resolved = substitute(library, module, origin, bindings, active)
+            .map_err(|issue| issue.shifted(6))?;
+        return resolved.delta().map_err(|mut issue| {
+            issue.span = 6..6 + origin.len();
+            issue
+        });
     }
     if let Some(ty) = Ty::parse(name) {
         return Ok(ty);
     }
     if let Some((element, size)) = Ty::list_parts(name) {
         return Ok(Ty::List(
-            Box::new(substitute(library, module, element, bindings, active)?),
+            Box::new(
+                substitute(library, module, element, bindings, active)
+                    .map_err(|issue| issue.shifted(5))?,
+            ),
             size,
         ));
     }
@@ -58,17 +69,21 @@ pub fn substitute(
     if matches!(base, "map" | "tuple" | "set") {
         let children = arguments
             .into_iter()
-            .map(|arg| substitute(library, module, arg, bindings, active))
+            .map(|arg| {
+                substitute(library, module, arg, bindings, active)
+                    .map_err(|issue| issue.shifted(arg.as_ptr() as usize - name.as_ptr() as usize))
+            })
             .collect::<Result<Vec<_>, _>>()?;
         return match (base, children.as_slice()) {
             ("map", [key, child]) => Ok(Ty::Map(Box::new(key.clone()), Box::new(child.clone()))),
             ("set", [member]) => Ok(Ty::Set(Box::new(member.clone()))),
             ("tuple", _) => Ok(Ty::Tuple(children)),
-            _ => Err(format!("invalid structural type arguments {name}")),
+            _ => Err(format!("invalid structural type arguments {name}").into()),
         };
     }
     if (base == "atomic" && arguments.len() == 1) || base == "rolling" {
-        let payload = substitute(library, module, arguments[0], bindings, active)?;
+        let payload = substitute(library, module, arguments[0], bindings, active)
+            .map_err(|issue| issue.shifted(base.len() + 1))?;
         let payload = crate::value_access::project(&payload);
         return if base == "atomic" {
             Ok(payload.atomic())
@@ -78,10 +93,11 @@ pub fn substitute(
             Ok(Ty::Rolling(Box::new(payload), window))
         };
     }
-    if base == "ref" {
-        return Err(format!(
-            "unsupported ordinary struct argument or field {name}"
-        ));
+    if base == "ref" && arguments.len() == 1 {
+        return Ok(Ty::Ref(Box::new(
+            substitute(library, module, arguments[0], bindings, active)
+                .map_err(|issue| issue.shifted(4))?,
+        )));
     }
     if let Some(ty) = crate::enums::resolve(library, module, base)? {
         if !arguments.is_empty() {
@@ -94,8 +110,9 @@ pub fn substitute(
     let arguments = arguments.into_iter().map(|arg| {
         if arg == "_" { return Err("struct arguments require complete concrete types; placeholders are not admitted".into()); }
         substitute(library, module, arg, bindings, active)
-    }).collect::<Result<Vec<_>, String>>()?;
-    specialize(library, decl, arguments, active)
+            .map_err(|issue| issue.shifted(arg.as_ptr() as usize - name.as_ptr() as usize))
+    }).collect::<Result<Vec<_>, hgl_source::Issue>>()?;
+    Ok(specialize(library, decl, arguments, active)?)
 }
 /// Build a validated nominal specialization with fully substituted fields.
 pub fn specialize(
@@ -119,12 +136,12 @@ pub fn specialize(
             &arguments,
             active,
             |decl, args, active| specialize(library, decl, args, active),
-            |module, name, bindings| concrete(library, module, name, bindings),
+            |module, name, bindings| Ok(concrete(library, module, name, bindings)?),
         );
     }
     if let Some(ty) =
         crate::recursive_types::resolve(library, decl, &arguments, |owner, pattern, bindings| {
-            concrete(library, &owner.module, pattern, bindings)
+            Ok(concrete(library, &owner.module, pattern, bindings)?)
         })?
     {
         return Ok(ty);
@@ -156,7 +173,7 @@ pub fn specialize(
             return Err("ordinary struct fields require ordinary value types".into());
         }
         for (_, value) in schema.defaults.iter().filter(|(field, _)| *field == index) {
-            if !matches!(value, hgl_source::Expr::Null)
+            if !matches!(value.syntax(), hgl_source::Expr::Null)
                 && crate::enums::default(library, &decl.module, value)?.ty()
                     != crate::value_access::project(&ty)
             {

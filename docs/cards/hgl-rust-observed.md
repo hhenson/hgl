@@ -14,3 +14,7 @@ use prepared scalar text; rolling<str,...> uses prepared rolling_text so valid
 metadata, retained arrival, count/span and readiness advance together. Other
 result kinds do not select this optimization. Pure source fragments are measured
 before any destination mutation and copied directly into prepared storage.
+
+read emits exact scalar, rolling, atomic and structural payload reads for scoped iteration children, sharing ordinary publication transport rather than assuming every child is rolling.
+
+input renders scalar or shaped input binding names for queries, including scoped iteration inputs; invalid non-input IR is rejected by its checked invariant.

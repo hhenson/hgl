@@ -485,6 +485,7 @@ fn prepared_values(value: &Value, out: &mut std::collections::BTreeMap<usize, Ty
         | Kind::GlobalSet(..)
         | Kind::GeneratorLocal(_)
         | Kind::Wire(_)
+        | Kind::IterationInput(_)
         | Kind::Input(..)
         | Kind::Cache(_)
         | Kind::Local(_)

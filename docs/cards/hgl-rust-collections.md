@@ -22,3 +22,5 @@ retained(&str,&Ty,fn(&Ty)->String)->String emits independent owning reads throug
 Constructor key validation walks finite tuple/concrete struct fields, preserving optional presence and rejecting every present NaN leaf before the associated map value executes. Native key equality uses complete exact typed components; keys cannot contain collections, recursive values or abstract families.
 
 Native equality preserves optional field presence and family discriminators. Recursive descendants invoke generated typed marker comparison methods, so recursion follows only finite present payloads and never allocates or expands schemas during emission.
+
+family_field maps only declared family/common field identities through each retained member schema. iteration_start traverses retained map/list membership or modified keys without copying keys; missing removed children are skipped for the modified selector. Child locals retain exact endpoint types and scalar payload reads use typed transport.

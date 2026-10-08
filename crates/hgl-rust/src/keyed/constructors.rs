@@ -149,7 +149,9 @@ fn statements(body: &[Statement], locals: &mut Locals, visit: &mut impl FnMut(&V
                 values(a, locals, visit);
                 values(b, locals, visit);
             }
-            Statement::For(_, v, body) | Statement::While(v, body) => {
+            Statement::ForItems(_, _, _, v, body)
+            | Statement::For(_, v, body)
+            | Statement::While(v, body) => {
                 values(v, locals, visit);
                 statements(body, &mut locals.clone(), visit);
             }
@@ -210,6 +212,7 @@ fn values(value: &Value, locals: &Locals, visit: &mut impl FnMut(&Value, &Locals
         | Kind::Captured(..)
         | Kind::Prepared(_)
         | Kind::Wire(_)
+        | Kind::IterationInput(_)
         | Kind::Input(..)
         | Kind::Cache(_)
         | Kind::GeneratorLocal(_)

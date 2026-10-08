@@ -5,29 +5,22 @@ use hgl_source::{Cursor, Expr, Literal, Stmt, lex};
 fn nested_yields_preserve_time_and_payload_positions() {
     let tokens = lex("{ var i=0\nwhile i<2 { if i==0 { yield 1us:10 } else { yield @2026-10-03T00:00:00Z:20 }\ni+=1 }\nwhile { return } }").unwrap();
     let statements = Cursor::new(&tokens).block().unwrap();
-    let Stmt::While(Expr::Binary(comparison, _, _), body) = &statements[1] else {
+    let Stmt::While(condition, body) = &statements[1] else {
         panic!("expected conditional loop")
+    };
+    let Expr::Binary(comparison, _, _) = condition.syntax() else {
+        panic!("expected comparison")
     };
     assert_eq!(comparison, "<");
     let Stmt::If(_, yes, no) = &body[0] else {
         panic!("expected nested branches")
     };
-    assert!(matches!(
-        &yes[0],
-        Stmt::TimedYield(
-            Expr::Literal(Literal::Duration(1)),
-            Expr::Literal(Literal::Int(10)),
-            _
-        )
-    ));
-    assert!(matches!(
-        &no[0],
-        Stmt::TimedYield(
-            Expr::Literal(Literal::DateTime(_)),
-            Expr::Literal(Literal::Int(20)),
-            _
-        )
-    ));
+    assert!(
+        matches!(&yes[0], Stmt::TimedYield(time,payload,_) if matches!(time.syntax(),Expr::Literal(Literal::Duration(1))) && matches!(payload.syntax(),Expr::Literal(Literal::Int(10))))
+    );
+    assert!(
+        matches!(&no[0], Stmt::TimedYield(time,payload,_) if matches!(time.syntax(),Expr::Literal(Literal::DateTime(_))) && matches!(payload.syntax(),Expr::Literal(Literal::Int(20))))
+    );
     assert!(
         matches!(&statements[2], Stmt::While(Expr::Literal(Literal::Bool(true)), body) if matches!(body[0], Stmt::Exit))
     );

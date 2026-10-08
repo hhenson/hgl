@@ -69,7 +69,9 @@ fn incomplete_malformed_and_unsupported_components_are_rejected() {
 #[test]
 fn nested_provider_leaves_have_no_guessed_identity() -> Result<(), String> {
     let tokens = hgl_source::lex("@[UTC]")?;
-    let hgl_source::Expr::TemporalLiteral(recipe) = hgl_source::Cursor::new(&tokens).expr()? else {
+    let hgl_source::Expr::TemporalLiteral(recipe) =
+        hgl_source::Cursor::new(&tokens).expr()?.syntax().clone()
+    else {
         return Err("provider recipe required".into());
     };
     let value = Value::new(

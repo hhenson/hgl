@@ -95,7 +95,7 @@ fn annotation(comment: &str, line: usize) -> Result<Expectation, String> {
     }
     cursor.need(",")?;
     let start = cursor.pos;
-    let Expr::Literal(Literal::Str(code)) = cursor.expr()? else {
+    let Expr::Literal(Literal::Str(code)) = cursor.expr()?.syntax().clone() else {
         return Err("expected literal source-error code".into());
     };
     if cursor.pos != start + 1 {

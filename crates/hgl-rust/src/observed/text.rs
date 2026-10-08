@@ -32,6 +32,7 @@ fn text_parts(value: &Value, parts: &mut Vec<String>) -> Option<()> {
         | Kind::TemporalLiteral(_)
         | Kind::Prepared(_)
         | Kind::Wire(_)
+        | Kind::IterationInput(_)
         | Kind::Input(..)
         | Kind::Cache(_)
         | Kind::GeneratorLocal(_)

@@ -427,14 +427,14 @@ fn instantiate(library: &mut Library, module: &str, d: &mut Cursor<'_>) -> Resul
 }
 
 fn parse_native_requirement(c: &mut Cursor<'_>) -> Result<(String, Vec<String>, String), String> {
-    let Expr::Call(name, args) = c.expr()? else {
+    let Expr::Call(name, args) = c.expr()?.syntax().clone() else {
         return Err("expected native requirement".into());
     };
     let args = args
         .into_iter()
         .map(|(_, e)| {
-            if let Expr::Name(n) = e {
-                Ok(n)
+            if let Expr::Name(n) = e.syntax() {
+                Ok(n.clone())
             } else {
                 Err("requirement takes types".to_owned())
             }

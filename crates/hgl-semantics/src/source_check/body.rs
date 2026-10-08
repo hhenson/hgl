@@ -134,7 +134,7 @@ impl Checker<'_> {
             &expression,
             &environment.types,
         )?);
-        if matches!(&expression, hgl_source::Expr::Name(source) if environment.services.contains(source))
+        if matches!(expression.syntax(), hgl_source::Expr::Name(source) if environment.services.contains(source))
         {
             environment.services.insert(name.clone());
         } else {

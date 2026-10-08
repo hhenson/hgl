@@ -98,7 +98,7 @@ fn validate_field(
         );
     }
     for (_, value) in schema.defaults.iter().filter(|(field, _)| *field == index) {
-        if !matches!(value, hgl_source::Expr::Null)
+        if !matches!(value.syntax(), hgl_source::Expr::Null)
             && crate::enums::default(library, &decl.module, value)?.ty() != *ty
         {
             return Err(format!("struct field {name}: default type mismatch"));

@@ -11,6 +11,6 @@ pub fn field_type(
     active: &mut BTreeSet<String>,
 ) -> Result<Ty, String> {
     crate::family_types::field_type(pattern, bindings, |module, name, bindings| {
-        substitute(library, module, name, bindings, active)
+        Ok(substitute(library, module, name, bindings, active)?)
     })
 }

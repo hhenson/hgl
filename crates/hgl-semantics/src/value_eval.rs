@@ -141,6 +141,7 @@ impl Execution<'_, '_> {
             | Kind::ObservedLocal(_)
             | Kind::GeneratorLocal(_)
             | Kind::Wire(_)
+            | Kind::IterationInput(_)
             | Kind::Input(..)
             | Kind::Cache(_)
             | Kind::Native(..)
@@ -240,6 +241,7 @@ impl Execution<'_, '_> {
             }
             Statement::Borrow(..)
             | Statement::Return(_)
+            | Statement::ForItems(..)
             | Statement::For(..)
             | Statement::While(..)
             | Statement::TimedYield(..) => {
@@ -358,6 +360,25 @@ fn list(value: &Value) -> Result<&[Value], EvalError> {
     }
 }
 fn field_value(value: &Value, id: usize) -> Result<&Value, EvalError> {
+    let id = if let Ty::Family(family) = &value.ty {
+        let name = &family.members()[0]
+            .1
+            .structure()
+            .map_err(EvalError::Unsupported)?
+            .1[id]
+            .0;
+        crate::family_values::concrete(value)
+            .ty
+            .structure()
+            .map_err(EvalError::Unsupported)?
+            .1
+            .iter()
+            .position(|(field, _)| field == name)
+            .ok_or_else(|| unsupported("missing common family field"))?
+    } else {
+        id
+    };
+    let value = crate::family_values::concrete(value);
     let Kind::Construct(fields) = &value.kind else {
         return Err(unsupported("ordinary struct required"));
     };

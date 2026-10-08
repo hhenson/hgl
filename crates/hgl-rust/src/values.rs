@@ -71,6 +71,7 @@ fn value(plan: &Plan, v: &Value) -> String {
             value(plan, v)
         ),
         Kind::Literal(l) => literal(l),
+        Kind::IterationInput(id) => crate::deltas::read(&v.ty, &format!("local{id}")),
         Kind::Input(i, _) => {
             if matches!(v.ty, Ty::Enum(_)) {
                 format!(
@@ -102,19 +103,22 @@ fn value(plan: &Plan, v: &Value) -> String {
             crate::layouts::family_coerce(&v.ty, &operand.ty, &value(plan, operand))
         }
         Kind::Unary(op, v) => unary(plan, op, v),
-        Kind::Query(op, args) => {
-            if op.contains('.') {
-                capability_call(plan, op, args)
-            } else if op.starts_with("set_") {
-                set_query(plan, op, args)
-            } else {
-                query(op, args)
-            }
-        }
+        Kind::Query(op, args) => query_value(plan, op, args),
         Kind::Output => "_ctx.output_value(self._output).expect(\"valid output\")".into(),
         Kind::Captured(..) | Kind::Wire(_) | Kind::Void | Kind::Capability => {
             unreachable!("checked runtime value")
         }
+    }
+}
+fn query_value(plan: &Plan, op: &str, args: &[Value]) -> String {
+    if op.starts_with("collection_") {
+        crate::deltas::collection_operation(op, args, |v| value(plan, v))
+    } else if op.contains('.') {
+        capability_call(plan, op, args)
+    } else if op.starts_with("set_") {
+        set_query(plan, op, args)
+    } else {
+        query(op, args)
     }
 }
 fn unary(plan: &Plan, op: &str, operand: &Value) -> String {
@@ -190,6 +194,9 @@ fn place(plan: &Plan, v: &Value) -> String {
         );
     }
     if let Kind::Field(parent, index) = &v.kind {
+        if let Ty::Family(family) = &parent.ty {
+            return crate::collections::family_field(family, *index, &place(plan, parent));
+        }
         return format!("({}).{index}", place(plan, parent));
     }
     value(plan, v)
@@ -293,6 +300,13 @@ pub fn statements(plan: &Plan, body: &[Statement], out: &mut Vec<String>, result
                 format!("let publication = {};\n{publish}\nreturn Ok(());\n", condition_code(plan, v))
             },
             Statement::Call(v) => format!("{};\n", condition_code(plan, v)),
+            Statement::ForItems(key_id, child_id, modified, collection, body) => {
+                let Kind::Input(input, _) = collection.kind else { unreachable!("checked map input"); };
+                let mut code = vec![crate::collections::iteration_start(&collection.ty, &format!("self.input{input}"), (*key_id,*child_id), *modified, global_type)];
+                statements(plan,body,&mut code,result);
+                code.push("}}".into());
+                code.concat()
+            }
             Statement::For(id,collection,body)=> {
                 let Kind::Input(input, _)=collection.kind else {unreachable!("checked collection")};
                 let Ty::Set(element)=&collection.ty else {unreachable!("checked collection")};
@@ -367,22 +381,19 @@ pub fn query(op: &str, args: &[Value]) -> String {
                     _ => unreachable!("checked output query"),
                 };
             }
-            let Kind::Input(i, _) = v.kind else {
-                unreachable!("checked endpoint query")
-            };
-            if let Some(code) = crate::windows::query(&v.ty, op, &format!("self.input{i}")) {
+            let input = crate::observed::input(v);
+            if let Some(code) = crate::windows::query(&v.ty, op, &input) {
                 return code;
             }
             if let Some(payload) = whole_payload(&v.ty)
                 && op == "delta_value"
             {
                 return format!(
-                    "_ctx.store().atomic_get::<{}>(self.input{i})?",
+                    "_ctx.store().atomic_get::<{}>({input})?",
                     global_type(payload)
                 );
             }
             if crate::deltas::shaped(&v.ty) {
-                let input = format!("self.input{i}");
                 return match op {
                     "delta_value" => crate::deltas::observe(
                         &v.ty
@@ -404,23 +415,23 @@ pub fn query(op: &str, args: &[Value]) -> String {
             }
             if matches!(v.ty, Ty::Ref(_)) {
                 return match op {
-                    "valid" => format!("_ctx.store().input_valid(self.input{i})"),
-                    "modified" => format!(
-                        "_ctx.store().bindings().modified(self.input{i},_ctx.evaluation_time())"
-                    ),
+                    "valid" => format!("_ctx.store().input_valid({input})"),
+                    "modified" => {
+                        format!("_ctx.store().bindings().modified({input},_ctx.evaluation_time())")
+                    }
                     "last_modified" => {
-                        format!("_ctx.store().bindings().last_modified(self.input{i})")
+                        format!("_ctx.store().bindings().last_modified({input})")
                     }
                     _ => unreachable!("unsupported structural query"),
                 };
             }
             match op {
-                "delta_value" => format!("_ctx.get(self.input{i})"),
-                "last_modified" => format!("_ctx.last_modified(self.input{i})"),
+                "delta_value" => format!("_ctx.get({input})"),
+                "last_modified" => format!("_ctx.last_modified({input})"),
                 "activate" | "passivate" => {
-                    format!("_ctx.set_active(self.input{i},{})", op == "activate")
+                    format!("_ctx.set_active({input},{})", op == "activate")
                 }
-                _ => format!("_ctx.{op}(self.input{i})"),
+                _ => format!("_ctx.{op}({input})"),
             }
         })
         .collect::<Vec<_>>();
@@ -473,6 +484,7 @@ fn native_argument(plan: &Plan, v: &Value) -> String {
         return format!("&({})", value(plan, v));
     }
     match &v.kind {
+        Kind::IterationInput(_) => value(plan, v),
         Kind::Input(i, _) => {
             format!("_ctx.store().get_ref(self.input{i}).as_str()")
         }

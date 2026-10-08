@@ -150,9 +150,9 @@ pub fn statement(cursor: &mut hgl_source::Cursor<'_>) -> Result<hgl_source::Stmt
     }
     let target = cursor.expr()?;
     Ok(if cursor.take("=") {
-        Stmt::Assign(target, cursor.expr()?)
+        Stmt::Assign(target.syntax().clone(), cursor.expr()?)
     } else if cursor.take("+=") {
-        Stmt::Add(target, cursor.expr()?)
+        Stmt::Add(target.syntax().clone(), cursor.expr()?)
     } else {
         Stmt::Call(target)
     })
@@ -187,26 +187,27 @@ pub struct Evaluation {
 /// Extract an eval call or equality assertion without evaluating source data.
 pub fn evaluation(expr: Expr, assertion: bool) -> Result<Evaluation, String> {
     let (call, expected) = if assertion {
-        let Expr::Binary(op, call, expected) = expr else {
+        let Expr::Binary(op, call, expected) = expr.syntax().clone() else {
             return Err("expected eval comparison".into());
         };
         if op != "==" {
             return Err("eval assertion requires ==".into());
         }
-        let Expr::Sequence(elements) = *expected else {
+        let Expr::Sequence(elements) = expected.syntax().clone() else {
             return Err("expected a dense sequence".into());
         };
         (*call, Some(elements))
     } else {
         (expr, None)
     };
-    let Expr::Call(eval, mut arguments) = call else {
+    let Expr::Call(eval, mut arguments) = call.syntax().clone() else {
         return Err("expected eval call".into());
     };
     if eval != "eval" || arguments.is_empty() {
         return Err("expected eval(function, ...)".into());
     }
-    let (label, Expr::Name(function)) = arguments.remove(0) else {
+    let (label, expression) = arguments.remove(0);
+    let Expr::Name(function) = expression.syntax().clone() else {
         return Err("eval requires a named function".into());
     };
     if label.is_some() {
@@ -301,7 +302,7 @@ fn step(cursor: &mut hgl_source::Cursor<'_>) -> Result<TestStep, Issue> {
         let ordinary = statement(cursor)?;
         if let hgl_source::Stmt::Let(name, annotation, expr)
         | hgl_source::Stmt::Var(name, annotation, expr) = &ordinary
-            && matches!(expr, Expr::Call(name, _) if name == "eval")
+            && matches!(expr.syntax(), Expr::Call(name, _) if name == "eval")
         {
             if annotation.is_some() || matches!(ordinary, hgl_source::Stmt::Var(..)) {
                 return Err("eval result requires an inferred immutable let binding".into());
@@ -329,16 +330,16 @@ fn step(cursor: &mut hgl_source::Cursor<'_>) -> Result<TestStep, Issue> {
                 "raises requires one literal catalogued execution code",
             )
         };
-        let Expr::Literal(Literal::Str(code)) = expression else {
+        let Expr::Literal(Literal::Str(code)) = expression.syntax() else {
             return Err(failure());
         };
         if !literal_form || !hgl_source::diagnostics::EXECUTION_CODES.contains(&code.as_str()) {
             return Err(failure());
         }
-        return Ok(TestStep::Raises(code, step_block(cursor)?));
+        return Ok(TestStep::Raises(code.clone(), step_block(cursor)?));
     }
     let expr = cursor.expr()?;
-    let eval = matches!(&expr,Expr::Binary(_,left,_) if matches!(left.as_ref(),Expr::Call(name,_) if name=="eval"));
+    let eval = matches!(expr.syntax(),Expr::Binary(_,left,_) if matches!(left.as_ref().syntax(),Expr::Call(name,_) if name=="eval"));
     if assertion && !eval {
         Ok(TestStep::Assert(expr))
     } else {

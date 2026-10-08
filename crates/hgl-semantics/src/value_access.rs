@@ -54,7 +54,16 @@ pub fn writable(value: &Value) -> bool {
 }
 /// Resolve a declared ordinary field without changing its parent's authority.
 pub fn field(parent: Value, name: &str) -> Result<Value, String> {
-    let (_, fields, optional) = parent.ty.structure().map_err(|error| {
+    let schema = if let Ty::Family(family) = &parent.ty {
+        family
+            .members()
+            .first()
+            .map(|(_, ty)| ty)
+            .ok_or("empty family has no field")?
+    } else {
+        &parent.ty
+    };
+    let (_, fields, optional) = schema.structure().map_err(|error| {
         format!("field access requires an ordinary struct or direct injected clock: {error}")
     })?;
     if matches!(parent.kind, Kind::Input(..) | Kind::Wire(_) | Kind::Output) {
@@ -112,7 +121,9 @@ pub fn binding(id: usize, value: &Value, mutable: bool, annotated: bool) -> Resu
     } else {
         Kind::Local(id)
     };
-    Ok(Value::new(value.ty.clone(), kind))
+    let mut binding = Value::new(value.ty.clone(), kind);
+    binding.delta_required = value.delta_required;
+    Ok(binding)
 }
 /// Reject passing a borrowed aggregate through an ordinary helper boundary.
 pub fn helper_argument(value: &Value) -> Result<(), String> {

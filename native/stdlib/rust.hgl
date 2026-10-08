@@ -14,6 +14,7 @@ native const fn contains(value: str, needle: str) -> bool {}
 native const fn starts_with(value: str, prefix: str) -> bool {}
 native const fn ends_with(value: str, suffix: str) -> bool {}
 native const fn truthy(value: f64) -> bool {}
+native const fn logarithm(value: f64) -> f64 {}
 native const fn truthy(value: str) -> bool {}
 native const fn round_decimal(value: f64, digits: i64) -> f64 throws {}
 native const fn power(lhs: i64, rhs: i64) -> i64 throws {}

@@ -33,7 +33,9 @@ fn invalidate(body: &[Statement], constants: &mut Constants) {
             ) => {
                 constants.remove(id);
             }
-            Statement::While(_, body) | Statement::For(_, _, body) => invalidate(body, constants),
+            Statement::While(_, body)
+            | Statement::ForItems(_, _, _, _, body)
+            | Statement::For(_, _, body) => invalidate(body, constants),
             Statement::If(_, yes, no) => {
                 invalidate(yes, constants);
                 invalidate(no, constants);
@@ -135,11 +137,14 @@ fn width(
                 width(yes, source, &mut constants.clone())?,
                 width(no, source, &mut constants.clone())?
             ),
-            Statement::For(_, collection, body) => format!(
-                "({}).checked_mul({}).ok_or(\"prepared loop width overflow\")?",
-                source(collection),
-                width(body, source, &mut constants.clone())?
-            ),
+            Statement::ForItems(_, _, _, collection, body)
+            | Statement::For(_, collection, body) => {
+                format!(
+                    "({}).checked_mul({}).ok_or(\"prepared loop width overflow\")?",
+                    source(collection),
+                    width(body, source, &mut constants.clone())?
+                )
+            }
             Statement::While(condition, body) => {
                 let count = iterations(condition, body, constants);
                 if count.is_none() && mutations(body) > 0 {
@@ -191,6 +196,7 @@ fn width(
             | Statement::Yield(_)
             | Statement::Call(_)
             | Statement::Assign(..)
+            | Statement::ForItems(..)
             | Statement::For(..)
             | Statement::If(..) => invalidate(std::slice::from_ref(statement), constants),
         }
@@ -215,7 +221,9 @@ pub fn mutations(body: &[Statement]) -> usize {
                 ..
             }) if op == "set_upsert" || op == "set_discard" => 1,
             Statement::If(_, yes, no) => mutations(yes).max(mutations(no)),
-            Statement::For(_, _, body) | Statement::While(_, body) => mutations(body),
+            Statement::ForItems(_, _, _, _, body)
+            | Statement::For(_, _, body)
+            | Statement::While(_, body) => mutations(body),
             Statement::Exit
             | Statement::Let(..)
             | Statement::Var(..)

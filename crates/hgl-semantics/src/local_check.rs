@@ -67,7 +67,7 @@ pub fn assignment_type(target: &Value, evaluation: bool) -> Result<Ty, String> {
         return Err("assignment requires writable var, state, cache or out".into());
     }
     if matches!(target.kind, Kind::Output) {
-        target.ty.clone().delta()
+        Ok(target.ty.clone().delta()?)
     } else {
         Ok(target.ty.clone())
     }
@@ -110,7 +110,10 @@ pub fn replacement(target: &Value, value: Value, mutable_port: bool) -> Result<V
 pub fn binary(op: &str, mut values: [Value; 2], plan: &mut Plan) -> Result<Value, String> {
     if values.iter().any(|value| {
         matches!(value.ty, Ty::Set(_) | Ty::Map(..))
-            && matches!(value.kind, Kind::Wire(_) | Kind::Input(..) | Kind::Output)
+            && matches!(
+                value.kind,
+                Kind::Wire(_) | Kind::IterationInput(_) | Kind::Input(..) | Kind::Output
+            )
     }) {
         return Err(format!(
             "unsupported binary operation {op} on structural collection endpoints"
@@ -190,7 +193,7 @@ impl GraphLocals {
         }
     }
     fn signal(&self, expr: &Expr) -> bool {
-        matches!(expr, Expr::Name(name) if self.signals.contains(name))
+        matches!(expr.syntax(), Expr::Name(name) if self.signals.contains(name))
     }
     /// Reject payload arithmetic on a formal signal, including its lexical aliases.
     pub fn payload(&self, (a, b): (&Expr, &Expr)) -> Result<(), String> {

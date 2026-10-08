@@ -40,11 +40,12 @@ pub fn expression(
     expr: &Expr,
     scope: &Scope,
 ) -> Result<(), Issue> {
-    match expr {
+    match expr.syntax() {
+        Expr::Located(..) => unreachable!("syntax strips source origins"),
         Expr::Call(name, args) | Expr::Applied(name, args) => {
             let base = hgl_source::application(name).map_or(name.as_str(), |(base, _)| base);
             let receiver = args.first().and_then(|(_, value)| {
-                if let Expr::Name(name) = value
+                if let Expr::Name(name) = value.syntax()
                     && scope.services.contains(name)
                 {
                     Some(name.as_str())
@@ -53,7 +54,7 @@ pub fn expression(
                 }
             });
             let (owner, item) = crate::struct_names::identity(library, module, base);
-            if matches!(expr, Expr::Applied(..)) {
+            if matches!(expr.syntax(), Expr::Applied(..)) {
                 if library
                     .declarations
                     .iter()
@@ -109,43 +110,21 @@ pub fn expression(
                 return Err(format!("unknown value {name}").into());
             }
         }
+        Expr::Lambda(parameters, _, body) => {
+            let mut scope = scope.clone();
+            for (name, _) in parameters {
+                scope.services.remove(name);
+            }
+            expression(library, module, test_scope, body, &scope)?;
+        }
         Expr::Null | Expr::Literal(_) | Expr::TemporalLiteral(_) => {}
     }
     Ok(())
 }
 fn intrinsic(name: &str, receiver: Option<&str>, owner: &str, item: &str) -> bool {
     receiver.is_some()
-        || matches!(
-            name,
-            "schedule"
-                | "schedule_at"
-                | "key_set"
-                | "keys"
-                | "values"
-                | "added"
-                | "removed"
-                | "insert"
-                | "update"
-                | "remove"
-                | "invalidate"
-                | "clear"
-                | "pop"
-                | "scheduled"
-                | "items"
-                | "delta_value"
-                | "elements"
-                | "len"
-                | "push"
-                | "upsert"
-                | "discard"
-                | "contains"
-                | "valid"
-                | "modified"
-                | "all_valid"
-                | "last_modified"
-                | "passivate"
-                | "activate"
-        )
+        || "schedule schedule_at key_set keys values added removed insert update remove invalidate clear pop scheduled items delta_value elements len push upsert discard contains valid modified all_valid last_modified passivate activate"
+            .split_ascii_whitespace().any(|intrinsic| intrinsic == name)
         || (owner == "hgraph.native" && matches!(item, "bound" | "len"))
 }
 

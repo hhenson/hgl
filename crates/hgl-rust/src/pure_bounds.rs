@@ -72,6 +72,7 @@ fn text(value: &Value, locals: &BTreeMap<usize, Text>) -> Text {
         | Kind::TemporalLiteral(_)
         | Kind::Prepared(_)
         | Kind::Wire(_)
+        | Kind::IterationInput(_)
         | Kind::Input(..)
         | Kind::Cache(_)
         | Kind::Native(..)
@@ -124,7 +125,9 @@ fn text_statements(body: &[Statement], locals: &mut BTreeMap<usize, Text>, maxim
                     locals.entry(id).or_insert(Text::Width(1)).merge(bound);
                 }
             }
-            Statement::For(_, _, body) | Statement::While(_, body) => {
+            Statement::ForItems(_, _, _, _, body)
+            | Statement::For(_, _, body)
+            | Statement::While(_, body) => {
                 text_statements(body, &mut locals.clone(), maximum);
             }
             Statement::Borrow(..) | Statement::Exit => {}

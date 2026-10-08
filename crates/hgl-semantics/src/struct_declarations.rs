@@ -62,7 +62,7 @@ pub fn parse(tokens: &[Token]) -> Result<RequiredStruct, String> {
         }
         if c.take("=") {
             let value = scalar_default(c.expr()?)?;
-            if matches!(value, Expr::Null) {
+            if matches!(value.syntax(), Expr::Null) {
                 optional.push(fields.len());
             }
             defaults.push((fields.len(), value));
@@ -116,7 +116,10 @@ pub fn parse_domain(
 }
 
 fn scalar_default(expr: Expr) -> Result<Expr, String> {
-    if matches!(&expr, Expr::Null | Expr::TemporalLiteral(_) | Expr::Name(_)) {
+    if matches!(
+        expr.syntax(),
+        Expr::Null | Expr::TemporalLiteral(_) | Expr::Name(_)
+    ) {
         return Ok(expr);
     }
     expr.fixed()

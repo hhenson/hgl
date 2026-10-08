@@ -62,6 +62,7 @@ fn collect(value: &Value, keys: &mut Vec<Value>, origins: &StaticValues) {
         | Kind::Captured(..)
         | Kind::Prepared(_)
         | Kind::Wire(_)
+        | Kind::IterationInput(_)
         | Kind::Input(..)
         | Kind::Cache(_)
         | Kind::GeneratorLocal(_)
@@ -87,7 +88,9 @@ fn statements(body: &[Statement], keys: &mut Vec<Value>, origins: &mut StaticVal
                 collect(a, keys, origins);
                 collect(b, keys, origins);
             }
-            Statement::While(v, body) | Statement::For(_, v, body) => {
+            Statement::While(v, body)
+            | Statement::ForItems(_, _, _, v, body)
+            | Statement::For(_, v, body) => {
                 collect(v, keys, origins);
                 statements(body, keys, &mut origins.clone());
             }

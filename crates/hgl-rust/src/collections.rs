@@ -193,3 +193,61 @@ fn key_checks(ty: &Ty, value: &str) -> String {
         })
         .collect()
 }
+
+/// Project an inherited family field through its exact retained member tag.
+/// # Panics
+/// Panics when supplied IR lacks the checked common field or concrete members.
+pub fn family_field(family: &hgl_source::FamilyType, index: usize, source: &str) -> String {
+    let (_, fields, _) = family.members()[0]
+        .1
+        .structure()
+        .unwrap_or_else(|_| unreachable!("checked family member"));
+    let name = &fields[index].0;
+    let mut arms = String::new();
+    for (tag, (_, ty)) in family.members().iter().enumerate() {
+        let (_, fields, _) = ty
+            .structure()
+            .unwrap_or_else(|_| unreachable!("checked family member"));
+        let index = fields
+            .iter()
+            .position(|(field, _)| field == name)
+            .unwrap_or_else(|| unreachable!("checked common family field"));
+        append(
+            &mut arms,
+            format_args!(
+                "{tag}=>&parent.{}.as_ref().expect(\"family member\").{index},",
+                tag + 1
+            ),
+        );
+    }
+    format!(
+        "*{{let parent=&({source});match parent.0 {{{arms}_=>unreachable!(\"checked family tag\")}}}}"
+    )
+}
+
+/// Start a borrowed live or modified membership traversal without collecting keys.
+pub fn iteration_start(
+    shape: &Ty,
+    input: &str,
+    ids: (usize, usize),
+    modified: bool,
+    marker: fn(&Ty) -> String,
+) -> String {
+    let (key_id, child_id) = ids;
+    let key = if let Ty::Map(key, _) = shape {
+        key.as_ref()
+    } else {
+        &Ty::I64
+    };
+    let next = if modified {
+        format!("_ctx.store().bindings().changed_keys({input}.id()).get(index{key_id}).copied()")
+    } else {
+        format!(
+            "{{let table=&_ctx.store().bindings().input({input}.id()).members.live;if table.prepared() {{table.item(index{key_id}).map(|(key,_)|key)}} else {{table.dynamic_after(previous{key_id}).map(|(key,_)|key)}}}}"
+        )
+    };
+    format!(
+        "let mut index{key_id}=0;let mut previous{key_id}=None;while let Some(key{key_id})={next} {{index{key_id}+=1;previous{key_id}=Some(key{key_id});if let Some(local{child_id})={input}.member(_ctx.store().bindings(),key{key_id}) {{let local{key_id}=<{} as hgl_store::Key>::value(&_ctx.store().keys,key{key_id})?;",
+        marker(key)
+    )
+}

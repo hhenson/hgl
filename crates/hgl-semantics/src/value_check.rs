@@ -61,7 +61,9 @@ fn block(body: &[Statement], live: &mut BTreeMap<usize, bool>) -> Result<(), Str
                 }
                 expression(payload, live)?;
             }
-            Statement::For(_, value, body) | Statement::While(value, body) => {
+            Statement::ForItems(_, _, _, value, body)
+            | Statement::For(_, value, body)
+            | Statement::While(value, body) => {
                 expression(value, live)?;
                 block(body, &mut live.clone())?;
             }
@@ -139,6 +141,7 @@ fn expression(value: &Value, live: &BTreeMap<usize, bool>) -> Result<(), String>
         | Kind::BorrowedLocal(..)
         | Kind::Literal(_)
         | Kind::Wire(_)
+        | Kind::IterationInput(_)
         | Kind::Input(..)
         | Kind::Configuration(_)
         | Kind::Cache(_)
@@ -165,17 +168,17 @@ pub fn aggregate(
     aggregate_checked(expr, expected, constant_context, check)
 }
 /// Check aggregate elements while preserving source-origin callback failures.
-pub fn aggregate_checked<E: From<&'static str>>(
+pub fn aggregate_checked<E: From<&'static str> + From<hgl_source::Issue>>(
     expr: &hgl_source::Expr,
     expected: Option<&Ty>,
     constant_context: bool,
     mut check: impl FnMut(&hgl_source::Expr, Option<&Ty>) -> Result<Value, E>,
 ) -> Result<Value, E> {
     use hgl_source::Expr;
-    let (Expr::Sequence(cells) | Expr::Tuple(cells)) = expr else {
+    let (Expr::Sequence(cells) | Expr::Tuple(cells)) = expr.syntax() else {
         return Err("expected an ordinary aggregate literal".into());
     };
-    let tuple = matches!(expr, Expr::Tuple(_));
+    let tuple = matches!(expr.syntax(), Expr::Tuple(_));
     let mut values = Vec::new();
     for (index, expr) in cells.iter().enumerate() {
         let child = match expected {
@@ -183,28 +186,31 @@ pub fn aggregate_checked<E: From<&'static str>>(
             Some(Ty::Tuple(children)) if tuple => children.get(index),
             _ => None,
         };
-        let value = check(
-            expr.as_ref()
-                .ok_or("ordinary aggregate literals cannot contain absent elements")?,
-            child,
-        )?;
+        let expr = expr
+            .as_ref()
+            .ok_or("ordinary aggregate literals cannot contain absent elements")?;
+        let value = check(expr, child)?;
         if !ordinary(&value.ty)
             || (!constant_context && !value.closed())
             || child.is_some_and(|ty| *ty != value.ty)
         {
-            return Err(if tuple {
+            let message = if tuple {
                 "ordinary tuple literals require constant elements of the expected type"
             } else {
                 "ordinary nonempty list literals require constant elements"
-            }
-            .into());
+            };
+            return Err(hgl_source::Issue::typed(expr.span(), message).into());
         }
         values.push(value);
     }
     if tuple {
         let ty = Ty::Tuple(values.iter().map(|value| value.ty.clone()).collect());
         if expected.is_some_and(|expected| *expected != ty) {
-            return Err("ordinary tuple type or arity mismatch".into());
+            return Err(hgl_source::Issue::typed(
+                expr.span(),
+                "ordinary tuple type or arity mismatch",
+            )
+            .into());
         }
         return Ok(Value::new(
             ty,
@@ -215,7 +221,7 @@ pub fn aggregate_checked<E: From<&'static str>>(
         return Err(if cells.is_empty() { "empty list requires an expected concrete list type" } else { "uncontextualized nonempty ordinary list literal inference is unsupported; expected concrete list type required" }.into());
     };
     if size.is_some_and(|size| size != values.len()) {
-        return Err("fixed list size mismatch".into());
+        return Err(hgl_source::Issue::typed(expr.span(), "fixed list size mismatch").into());
     }
     if !ordinary(child) {
         return Err("ordinary list element type mismatch".into());
@@ -235,10 +241,11 @@ pub fn list_literal(
         expected,
         false,
         |expr, context| {
-            if let hgl_source::Expr::Sequence(elements) = expr {
+            if let hgl_source::Expr::Sequence(elements) = expr.syntax() {
                 return list_literal(elements, context);
             }
             let fixed = expr
+                .syntax()
                 .fixed()
                 .ok_or("ordinary list literals require constant elements")?;
             Ok(Value::new(fixed.ty(), Kind::Literal(fixed)))
@@ -392,16 +399,8 @@ pub fn binary_type(op: &str, a: &Ty, b: &Ty) -> Result<Ty, String> {
         "==" | "!=" if matches!(a, Ty::Family(_) | Ty::Set(_) | Ty::Map(..)) => Ty::Bool,
         "==" | "!="
             if !matches!(
-                *a,
-                Ty::Void
-                    | Ty::Set(_)
-                    | Ty::Recursive(_)
-                    | Ty::Family(_)
-                    | Ty::Struct(..)
-                    | Ty::List(..)
-                    | Ty::Delta(_)
-                    | Ty::Map(..)
-                    | Ty::Tuple(_)
+                a.name(),
+                "void" | "set" | "struct" | "list" | "delta" | "map" | "tuple"
             ) =>
         {
             Ty::Bool

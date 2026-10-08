@@ -108,6 +108,7 @@ pub fn value(v: &Value) -> String {
         | Kind::GlobalSet(..)
         | Kind::GeneratorLocal(_)
         | Kind::Wire(_)
+        | Kind::IterationInput(_)
         | Kind::Input(..)
         | Kind::Cache(_)
         | Kind::Native(..)
@@ -136,6 +137,7 @@ fn statement(s: &Statement) -> String {
         ),
         Statement::Borrow(..)
         | Statement::Return(_)
+        | Statement::ForItems(..)
         | Statement::For(..)
         | Statement::While(..)
         | Statement::TimedYield(..) => unreachable!("checked ordinary harness statement"),
@@ -159,11 +161,16 @@ fn argument(a: &Argument) -> String {
             shape,
             entry_type,
             slots: vs,
+            sequence,
         } => format!(
-            "Dense {{parameter:{parameter:?}.into(),binding:{binding},shape:{},entry_type:{},slots:{}}}",
+            "Dense {{parameter:{parameter:?}.into(),binding:{binding},shape:{},entry_type:{},slots:{},sequence:{}}}",
             ty(shape),
             ty(entry_type),
-            slots(vs)
+            slots(vs),
+            sequence.as_ref().map_or_else(
+                || "None".into(),
+                |v| format!("Some(Box::new({}))", value(v))
+            )
         ),
     };
     format!("hgl_semantics::harness_ir::Argument::{a}")

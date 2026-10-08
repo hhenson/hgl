@@ -11,7 +11,7 @@ use hgl_semantics::static_values::PreparedLexicalScope;
 use hgl_semantics::value_bind::{
     bind, bind_prepared, method_arguments, order_arguments, resolve_type,
 };
-use hgl_semantics::value_check::{field, ordinary, writable};
+use hgl_semantics::value_check::{ordinary, writable};
 use hgl_source::Issue;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -25,6 +25,7 @@ struct Checker {
     harness_values: Env,
     static_values: hgl_semantics::value_access::StaticValues,
     result_hint: Option<Ty>,
+    requirements: Requirements,
     phase: Phase,
     types: BTreeMap<String, Ty>,
     runtime_node: bool,
@@ -38,6 +39,12 @@ struct Checker {
     globals: Vec<(String, Ty)>,
     failed_globals: BTreeSet<usize>,
     facts: BTreeSet<(String, usize)>,
+}
+#[derive(Default)]
+struct Requirements {
+    delta: bool,
+    result: bool,
+    complete: bool,
 }
 #[derive(Default, Clone, Copy, PartialEq, Eq)]
 enum ValueContext {
@@ -341,7 +348,19 @@ impl Checker {
                 );
             }
         }
-        let body = self.statements(&decl.module, &body, &mut env, &result, &mut args.len())?;
+        let previous_delta = self.requirements.result;
+        self.requirements.result = hgl_source::delta_argument(&signature.result).is_some();
+        let body = self
+            .statements(&decl.module, &body, &mut env, &result, &mut args.len())
+            .map_err(|mut issue| {
+                if issue.code == Some("delta.unsupported_shape") && !signature.generics.is_empty() {
+                    issue.span = 0..0;
+                    issue
+                } else {
+                    issue.in_source(&decl.source)
+                }
+            })?;
+        self.requirements.result = previous_delta;
         self.types = previous_types;
         self.value_context = previous_context;
         self.static_values.locals = previous_constants;
@@ -351,30 +370,6 @@ impl Checker {
             return Err("ordinary value function requires a return on every path".into());
         }
         Ok(Value::new(result, Kind::ValueCall(args, body)))
-    }
-    fn argument_hint(
-        &self,
-        module: &str,
-        name: &str,
-        index: usize,
-        label: Option<&str>,
-    ) -> Option<Ty> {
-        let (owner, item) = hgl_semantics::value_types::identity(&self.library, module, name);
-        let mut declarations = self.library.declarations.iter().filter(|d| {
-            d.module == owner
-                && d.name == item
-                && matches!(d.role, Role::Function | Role::Native | Role::Operator)
-        });
-        let signature = declarations.next()?.signature().ok()?;
-        if declarations.next().is_some() {
-            return None;
-        }
-        let parameter = if let Some(label) = label {
-            signature.parameters.iter().find(|p| p.name == label)?
-        } else {
-            signature.parameters.get(index)?
-        };
-        hgl_semantics::value_types::resolve_ordinary(&self.library, &owner, &parameter.ty).ok()
     }
     fn select(
         &mut self,
@@ -416,7 +411,7 @@ impl Checker {
             ) {
                 Ok(types) => types,
                 Err(error) => {
-                    errors.push(error.into());
+                    errors.push(error);
                     continue;
                 }
             };
@@ -668,14 +663,8 @@ impl Checker {
                         env,
                     )?;
                 }
-                Stmt::Call(expr) => {
-                    output = self.expression(module, expr, env, false)?;
-                    if !matches!(output.kind, Kind::Wire(_) | Kind::Void) {
-                        self.wiring_value(&output)?;
-                    }
-                }
-                Stmt::Return(expr) => {
-                    if position + 1 != statements.len() {
+                Stmt::Call(expr) | Stmt::Return(expr) => {
+                    if matches!(statement, Stmt::Return(_)) && position + 1 != statements.len() {
                         return Err("statements after return".into());
                     }
                     output = self.expression(module, expr, env, false)?;
@@ -712,7 +701,9 @@ impl Checker {
                     return Err("while requires a runtime body, not composition".into());
                 }
                 Stmt::TimedYield(..) => return Err("yield requires a generator source".into()),
-                Stmt::Exit | Stmt::For(..) => return Err("runtime statement in graph".into()),
+                Stmt::Exit | Stmt::For(..) | Stmt::ForItems(..) => {
+                    return Err("runtime statement in graph".into());
+                }
             }
         }
         self.graph_locals = previous_locals;
@@ -1041,7 +1032,12 @@ impl Checker {
                 hgl_semantics::value_access::project(ty)
             }
         });
-        let value = self.expected_expression(module, expr, env, runtime, hint.as_ref())?;
+        let previous = self.requirements.delta;
+        self.requirements.delta =
+            annotation.is_some_and(|name| hgl_source::delta_argument(name).is_some());
+        let mut value = self.expected_expression(module, expr, env, runtime, hint.as_ref())?;
+        value.delta_required = self.requirements.delta;
+        self.requirements.delta = previous;
         if !matches!(value.kind, Kind::Wire(_)) {
             ty = hint;
         }
@@ -1111,49 +1107,22 @@ impl Checker {
         expr: &Expr,
         expected: &Ty,
     ) -> Result<Value, Issue> {
-        let Expr::Tuple(cells) = expr else {
-            return self.expected_expression(
-                module,
-                expr,
-                &self.harness_values.clone(),
-                false,
-                Some(expected),
-            );
-        };
-        let Ty::Delta(origin) = expected else {
-            return self.expected_expression(
-                module,
-                expr,
-                &self.harness_values.clone(),
-                false,
-                Some(expected),
-            );
-        };
-        let Ty::Tuple(children) = origin.as_ref() else {
-            return Err("tuple shorthand requires an exact tuple publication shape".into());
-        };
-        if children.len() != cells.len() {
-            return Err("tuple shorthand arity mismatch".into());
+        if let Expr::Tuple(cells) = expr.syntax()
+            && matches!(expected, Ty::Delta(_))
+        {
+            return hgl_semantics::delta_check::tuple_shorthand(cells, expected, |expr, ty| {
+                self.harness_expression(module, expr, ty)
+            });
         }
-        let mut entries = Vec::new();
-        for (index, (child, expr)) in children.iter().zip(cells).enumerate() {
-            if let Some(expr) = expr {
-                let ty = child.clone().delta()?;
-                let mut value = self.harness_expression(module, expr, &ty)?;
-                if ty == Ty::F64 && value.ty == Ty::I64 {
-                    value = Value::new(Ty::F64, Kind::Unary("float".into(), Box::new(value)));
-                }
-                if value.ty != ty {
-                    return Err("tuple shorthand child type mismatch".into());
-                }
-                entries.push(hgl_rust::DeltaEntry::Child(
-                    i64::try_from(index).map_err(|e| e.to_string())?,
-                    value,
-                ));
-            }
-        }
-        Ok(Value::new(expected.clone(), Kind::Delta(entries)))
+        self.expected_expression(
+            module,
+            expr,
+            &self.harness_values.clone(),
+            false,
+            Some(expected),
+        )
     }
+
     fn expected_expression(
         &mut self,
         module: &str,
@@ -1162,8 +1131,33 @@ impl Checker {
         runtime: bool,
         expected: Option<&Ty>,
     ) -> Result<Value, Issue> {
-        let value = self.expected_inner(module, expr, env, runtime, expected)?;
-        Ok(hgl_semantics::family_values::coerce(expected, value)?)
+        let value = self
+            .expected_inner(module, expr, env, runtime, expected)
+            .map_err(|mut issue| {
+                if self.requirements.delta && issue.code.is_none() && issue.category == "type" {
+                    issue.code = Some("delta.type_mismatch");
+                }
+                issue.at(expr.span())
+            })?;
+        let value = hgl_semantics::family_values::coerce(expected, value).map_err(|message| {
+            if self.requirements.delta {
+                Issue::coded("type", "delta.type_mismatch", expr.span(), message)
+            } else {
+                message.into()
+            }
+        })?;
+        if self.requirements.delta
+            && expected
+                .is_some_and(|ty| value.ty != *ty && !(ty == &Ty::F64 && value.ty == Ty::I64))
+        {
+            return Err(Issue::coded(
+                "type",
+                "delta.type_mismatch",
+                expr.span(),
+                "delta required expression type mismatch",
+            ));
+        }
+        Ok(value)
     }
     fn expected_inner(
         &mut self,
@@ -1173,26 +1167,27 @@ impl Checker {
         runtime: bool,
         expected: Option<&Ty>,
     ) -> Result<Value, Issue> {
-        if let Expr::Applied(name, args) | Expr::Call(name, args) = expr
-            && (matches!(expr, Expr::Applied(..))
+        if let Expr::Applied(name, args) | Expr::Call(name, args) = expr.syntax()
+            && (matches!(expr.syntax(), Expr::Applied(..))
                 || self.struct_declaration(module, name)?.is_some())
         {
             return self.constructor(module, (name, args), env, runtime, expected);
         }
-        if matches!(expr, Expr::Sequence(_) | Expr::Tuple(_)) {
+        if matches!(expr.syntax(), Expr::Sequence(_) | Expr::Tuple(_)) {
             return hgl_semantics::value_check::aggregate_checked(
                 expr,
                 expected,
                 matches!(
                     self.value_context,
                     ValueContext::Constant | ValueContext::Preparation
-                ) || !runtime,
+                ) || !runtime
+                    || self.requirements.complete,
                 |expr, expected| self.expected_expression(module, expr, env, runtime, expected),
             );
         }
-        if let Expr::Call(name, args) = expr
+        if let Expr::Call(name, args) = expr.syntax()
             && name == "get"
-            && matches!(args.first(), Some((None, Expr::Name(receiver))) if receiver == "global_state" && env.get(receiver).is_some_and(|v| matches!(v.kind, Kind::Capability)))
+            && args.first().is_some_and(|(name, expression)| name.is_none() && matches!(expression.syntax(), Expr::Name(receiver) if receiver == "global_state" && env.get(receiver).is_some_and(|v| matches!(v.kind, Kind::Capability))))
         {
             if !runtime {
                 return Err("global_state: requires a runtime hook".into());
@@ -1256,8 +1251,20 @@ impl Checker {
             Stmt::While(expr, body) => {
                 self.while_statement(module, (expr, body), env, result, next_local)?
             }
+            Stmt::ForItems(name, child_name, collection, body) => {
+                let (key_id, child_id, modified, collection, mut scope) =
+                    hgl_semantics::collection_check::items_scope(
+                        collection,
+                        (name, child_name),
+                        env,
+                        next_local,
+                        |expr| self.expression(module, expr, env, true),
+                    )?;
+                let body = self.statements(module, body, &mut scope, result, next_local)?;
+                Statement::ForItems(key_id, child_id, modified, collection, body)
+            }
             Stmt::For(name, collection, body) => {
-                if !matches!(collection, Expr::Call(name, _) if name == "elements") {
+                if !matches!(collection.syntax(), Expr::Call(name, _) if name == "elements") {
                     return Err("for currently requires elements(input, added)".into());
                 }
                 let collection = self.expression(module, collection, env, true)?;
@@ -1296,7 +1303,13 @@ impl Checker {
             } else {
                 result.clone()
             };
+        let previous_complete = self.requirements.complete;
+        self.requirements.complete = matches!(result, Ty::Atomic(_));
+        let previous = self.requirements.delta;
+        self.requirements.delta = self.requirements.result || matches!(expected, Ty::Delta(_));
         let v = self.expected_expression(module, expr, env, true, Some(&expected))?;
+        self.requirements.delta = previous;
+        self.requirements.complete = previous_complete;
         if v.ty != expected || *result == Ty::Void {
             return Err("node return type mismatch".into());
         }
@@ -1357,12 +1370,12 @@ impl Checker {
         target: &Expr,
         env: &Env,
     ) -> Result<Value, Issue> {
-        if let Expr::Property(parent, _) = target
+        if let Expr::Property(parent, _) = target.syntax()
             && injected_clock(parent, env)
         {
             return Err("clock properties are read-only".into());
         }
-        if !matches!(target, Expr::Name(_) | Expr::Property(..)) {
+        if !matches!(target.syntax(), Expr::Name(_) | Expr::Property(..)) {
             return Err("assignment requires a writable variable or struct field; indexed replacement is not admitted".into());
         }
         self.expression(module, target, env, true)
@@ -1402,7 +1415,10 @@ impl Checker {
         let target = self.assignment_target(module, target, env)?;
         let expected =
             hgl_semantics::local_check::assignment_type(&target, self.phase == Phase::Evaluation)?;
+        let previous = self.requirements.delta;
+        self.requirements.delta = hgl_semantics::struct_check::delta_place(&self.library, &target);
         let value = self.expected_expression(module, expr, env, true, Some(&expected))?;
+        self.requirements.delta = previous;
         Ok(hgl_semantics::local_check::assignment(target, value)?)
     }
     fn conditional(
@@ -1442,7 +1458,16 @@ impl Checker {
         env: &Env,
         runtime: bool,
     ) -> Result<Value, Issue> {
-        match expr {
+        match expr.syntax() {
+        Expr::Located(..) => unreachable!("syntax strips source origins"),
+            Expr::Lambda(parameters, result, body) => {
+                let mut env = env.clone();
+                for (index, (name, ty)) in parameters.iter().enumerate() { env.insert(name.clone(), Value::new(hgl_semantics::value_types::concrete(&self.library, module, ty, &self.types)?, Kind::Local(index))); }
+                self.requirements.delta = hgl_source::delta_argument(result).is_some();
+                let ty = hgl_semantics::value_types::concrete(&self.library, module, result, &self.types)?;
+                self.expected_expression(module, body, &env, false, Some(&ty))?;
+                Err("ordinary callable lowering is outside this backend profile".into())
+            }
             Expr::Tuple(_) => self.expected_expression(module, expr, env, runtime, None),
             Expr::Sparse(_) => Err("sparse entries require a delta constructor context".into()),
             Expr::Null => Err("null requires a contextual nullable comparison".into()),
@@ -1451,7 +1476,7 @@ impl Checker {
                     return Ok(clock_property(receiver, name, env, runtime)?);
                 }
                 let parent = self.expression(module, receiver, env, runtime)?;
-                Ok(field(parent, name)?)
+                Ok(hgl_semantics::struct_check::field(&self.library, parent, name)?)
             }
             Expr::Index(receiver, index) => {
                 let parent = self.expression(module, receiver, env, runtime)?;
@@ -1515,7 +1540,8 @@ impl Checker {
         runtime: bool,
     ) -> Result<Value, Issue> {
         hgl_semantics::enums::check_call(&self.library, module, name, args)?;
-        if let Some((label, Expr::Name(receiver))) = args.first()
+        if let Some((label, expression)) = args.first()
+            && let Expr::Name(receiver) = expression.syntax()
             && env
                 .get(receiver)
                 .is_some_and(|v| matches!(v.kind, Kind::Capability))
@@ -1543,11 +1569,46 @@ impl Checker {
                 self.phase == Phase::Stop,
             )?);
         }
+        if matches!(
+            name,
+            "insert" | "update" | "remove" | "invalidate" | "push" | "pop" | "contains"
+        ) && let Some((_, first)) = args.first()
+        {
+            let receiver = self.expression(module, first, env, runtime)?;
+            if matches!(receiver.ty, Ty::Map(..) | Ty::List(..))
+                && (matches!(receiver.kind, Kind::Output) || name == "contains")
+            {
+                if !runtime
+                    || !self.runtime_node
+                    || self.phase != Phase::Evaluation
+                    || args.iter().any(|(label, _)| label.is_some())
+                {
+                    return Err(
+                        "collection operation requires positional evaluation operands".into(),
+                    );
+                }
+                let mut values = vec![receiver];
+                for (_, expr) in &args[1..] {
+                    values.push(self.expression(module, expr, env, runtime)?);
+                }
+                return Ok(hgl_semantics::collection_check::operation(name, values)?);
+            }
+        }
+        self.value_expression(module, name, args, env, runtime)
+    }
+    fn value_expression(
+        &mut self,
+        module: &str,
+        name: &str,
+        args: &[(Option<String>, Expr)],
+        env: &Env,
+        runtime: bool,
+    ) -> Result<Value, Issue> {
         if name == "delta_value" {
             return self.delta_value(module, args, env, runtime);
         }
         if name == "elements" {
-            if args.len() != 2 || !matches!(&args[1].1,Expr::Name(n) if n=="added") {
+            if args.len() != 2 || !matches!(args[1].1.syntax(),Expr::Name(n) if n=="added") {
                 return Err("elements currently requires added".into());
             }
             let collection = self.expression(module, &args[0].1, env, runtime)?;
@@ -1582,8 +1643,23 @@ impl Checker {
             .iter()
             .enumerate()
             .map(|(index, (n, v))| {
-                let hint = self.argument_hint(module, name, index, n.as_deref());
-                let value = self.expected_expression(module, v, env, runtime, hint.as_ref())?;
+                let hint = hgl_semantics::source_check::argument_hint(
+                    &self.library,
+                    module,
+                    name,
+                    index,
+                    n.as_deref(),
+                );
+                let previous = self.requirements.delta;
+                self.requirements.delta = hint.as_ref().is_some_and(|(_, delta)| *delta);
+                let value = self.expected_expression(
+                    module,
+                    v,
+                    env,
+                    runtime,
+                    hint.as_ref().map(|(ty, _)| ty),
+                )?;
+                self.requirements.delta = previous;
                 if !endpoint_metadata(name) {
                     require_payload(&value)?;
                 }
@@ -1645,8 +1721,11 @@ impl Checker {
             &self.types,
         )?;
         while let Some((index, hint)) = check.next(&self.library, args)? {
+            let previous = self.requirements.delta;
+            self.requirements.delta |= check.delta_required(index);
             let value =
                 self.expected_expression(module, &args[index].1, env, runtime, hint.as_ref())?;
+            self.requirements.delta = previous;
             require_payload(&value)?;
             check.checked(&self.library, index, value)?;
         }
@@ -1672,21 +1751,39 @@ impl Checker {
         let origin =
             hgl_semantics::value_types::concrete(&self.library, module, origin, &self.types)?;
         let ty = origin.clone().delta()?;
-        if expected.is_some_and(|expected| *expected != ty) {
-            return Err("delta originating shape mismatch".into());
-        }
         let parts = hgl_semantics::delta_check::constructor(&origin, args, |expr, ty| {
+            let previous = self.requirements.delta;
+            self.requirements.delta = false;
             let value = self.expected_expression(module, expr, env, false, Some(ty))?;
-            self.static_values.key(value)
+            self.requirements.delta = previous;
+            if value.ty != *ty {
+                return Err(Issue::coded(
+                    "type",
+                    "delta.entry_type",
+                    expr.span(),
+                    "delta entry requires exact type",
+                ));
+            }
+            self.static_values.key(value).map_err(|message| {
+                Issue::coded("type", "delta.entry_constant", expr.span(), message)
+            })
         })?;
         let entries = hgl_semantics::delta_check::values(parts, |ty, expr| {
+            let previous = self.requirements.delta;
+            self.requirements.delta = true;
             let value = self.expected_expression(module, expr, env, runtime, Some(ty))?;
+            self.requirements.delta = previous;
             require_payload(&value)?;
-            if value.ty != *ty {
-                return Err("delta child type mismatch".into());
-            }
             Ok(value)
         })?;
+        if expected.is_some_and(|expected| *expected != ty) {
+            return Err(Issue::coded(
+                "type",
+                "delta.type_mismatch",
+                0..0,
+                "delta originating shape mismatch",
+            ));
+        }
         Ok(Value::new(ty, Kind::Delta(entries)))
     }
     fn value_call(
@@ -1745,16 +1842,16 @@ impl Checker {
         env: &Env,
         runtime: bool,
     ) -> Result<Value, Issue> {
-        if matches!(operands.0, Expr::Null) || matches!(operands.1, Expr::Null) {
+        if matches!(operands.0.syntax(), Expr::Null) || matches!(operands.1.syntax(), Expr::Null) {
             if !matches!(op, "==" | "!=") {
                 return Err("null only supports nullable presence comparisons".into());
             }
-            let expr = if matches!(operands.0, Expr::Null) {
+            let expr = if matches!(operands.0.syntax(), Expr::Null) {
                 operands.1
             } else {
                 operands.0
             };
-            let value = if let Expr::Name(name) = expr {
+            let value = if let Expr::Name(name) = expr.syntax() {
                 env.get(name)
                     .cloned()
                     .ok_or_else(|| format!("unknown value {name}"))?
@@ -1871,7 +1968,7 @@ pub(crate) fn prepare_evaluation(
     for (binding, (name, value)) in values.iter_mut().enumerate() {
         if let Kind::Wire(input) = value.kind {
             let shape = value.ty.clone();
-            let entry_type = replay_type(&checker.library, &shape)?;
+            let entry_type = hgl_semantics::source_check::replay_type(&checker.library, &shape)?;
             let data = Value::new(
                 Ty::List(Box::new(entry_type.clone()), None),
                 Kind::Prepared(binding),
@@ -1881,7 +1978,8 @@ pub(crate) fn prepare_evaluation(
                 binding,
                 shape,
                 entry_type,
-                slots: plan[input].clone(),
+                slots: plan[input].0.clone(),
+                sequence: plan[input].1.clone().map(Box::new),
             });
             *value = checker.call("hgraph.std", "replay", &[(None, data)], false)?;
         } else {
@@ -1926,18 +2024,7 @@ pub(crate) fn prepare_evaluation(
     Ok((checker.plan, prepared))
 }
 
-fn replay_type(library: &Library, ty: &Ty) -> Result<Ty, Issue> {
-    let decl = hgl_semantics::value_types::declaration(library, "hgraph.std", "TimedValue")?
-        .ok_or("eval requires the ordinary TimedValue declaration")?;
-    Ok(hgl_semantics::value_types::specialize(
-        library,
-        decl,
-        vec![ty.clone()],
-        &mut BTreeSet::new(),
-    )?)
-}
-
-type EvalInputs = Vec<Vec<Option<Value>>>;
+type EvalInputs = Vec<(Vec<Option<Value>>, Option<Value>)>;
 
 fn checked_eval(
     checker: &mut Checker,
@@ -1956,7 +2043,12 @@ fn checked_eval(
     if let Some(ty) = expected
         && value.ty != *ty
     {
-        return Err(format!("expected {}, got {}", ty.name(), value.ty.name()).into());
+        return Err(Issue::coded(
+            "type",
+            "delta.type_mismatch",
+            expr.span(),
+            format!("expected {}, got {}", ty.name(), value.ty.name()),
+        ));
     }
     Ok(value)
 }
@@ -2029,7 +2121,7 @@ fn eval_arguments(
         )
         .ok()
         .map(|ty| if let Ty::Ref(child) = ty { *child } else { ty });
-        let value = if let Expr::Sequence(ticks) = expr {
+        let value = if let Expr::Sequence(ticks) = expr.syntax() {
             if parameter.constant {
                 return Err("const parameter requires a fixed value".into());
             }
@@ -2038,11 +2130,31 @@ fn eval_arguments(
                     checked_eval(checker, module, expr, expected)
                 })?;
             let index = plan.len();
-            plan.push(slots);
+            plan.push((slots, None));
             Value::new(ty, Kind::Wire(index))
         } else {
             if !parameter.constant {
-                return Err("temporal eval argument requires a sequence".into());
+                let value = checked_eval(checker, module, expr, None)?;
+                let Ty::List(child, _) = &value.ty else {
+                    return Err("temporal eval argument requires a sequence".into());
+                };
+                let ty =
+                    hint.ok_or("ordinary publication sequence requires a concrete parameter")?;
+                if child.as_ref() != &ty.clone().delta()? {
+                    return Err(Issue::coded(
+                        "type",
+                        "delta.type_mismatch",
+                        expr.span(),
+                        "ordinary publication sequence child mismatch",
+                    ));
+                }
+                let input = plan.len();
+                plan.push((Vec::new(), Some(value)));
+                values.push((
+                    Some(parameter.name.clone()),
+                    Value::new(ty, Kind::Wire(input)),
+                ));
+                continue;
             }
             configuration
                 .iter()
@@ -2135,6 +2247,27 @@ pub(crate) fn validate_declaration(library: Library, decl: &Decl) -> Result<(), 
         ..Checker::default()
     };
     let signature = checker.signature_sizes(&decl.module, signature, &[], &decl.source)?;
+    for (name, tokens) in signature
+        .parameters
+        .iter()
+        .map(|parameter| (&parameter.ty, &parameter.type_tokens))
+        .chain(std::iter::once((
+            &signature.result,
+            &signature.result_tokens,
+        )))
+    {
+        if name.contains("delta<") {
+            hgl_semantics::value_types::concrete(
+                &checker.library,
+                &decl.module,
+                name,
+                &BTreeMap::new(),
+            )
+            .map_err(|issue| {
+                hgl_semantics::library::locate_type_issue(issue, tokens, &decl.source)
+            })?;
+        }
+    }
     if decl.role == Role::Function && signature.parameters.is_empty() && !signature.body.is_empty()
     {
         checker.call(&decl.module, &decl.name, &[], false)?;

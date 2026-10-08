@@ -46,3 +46,5 @@ Cold prepared-value traversal decodes exact admitted composite key schemas befor
 calling their statically selected Key implementation. Every provider recipe has
 already been materialized by ordered harness preparation; decoding cannot replay
 it. Set key types are ordinary values, not child temporal publication shapes.
+
+collection_operation emits the admitted scalar-child i64 map/list insert, update, remove, invalidate, push, pop and contains operations through existing shaped Store calls. Child application and allocation remain typed callbacks. Invalidate requires retained membership in this admitted profile. Dynamic effects select the generic adapter; they do not claim prepared hot-path allocation bounds.

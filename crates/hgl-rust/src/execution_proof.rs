@@ -41,7 +41,7 @@ fn direct(body: &[Statement]) -> Option<usize> {
         let arrivals = match statement {
             Statement::Yield(_) | Statement::TimedYield(..) => 1,
             Statement::If(_, yes, no) => direct(yes)?.max(direct(no)?),
-            Statement::While(..) | Statement::For(..) => return None,
+            Statement::While(..) | Statement::ForItems(..) | Statement::For(..) => return None,
             Statement::Let(..)
             | Statement::Var(..)
             | Statement::Borrow(..)

@@ -31,6 +31,7 @@ fn value(plan: &Plan, input: &Value, looping: bool) -> bool {
             !looping && value(plan, parent, looping) && value(plan, item, looping)
         }
         Kind::List(_) if !input.closed() => false,
+        Kind::Query(op, _) if op.starts_with("collection_") => false,
         Kind::List(args) | Kind::Query(_, args) => args.iter().all(|arg| value(plan, arg, looping)),
         Kind::Construct(fields) => fields.iter().all(|(_, child)| value(plan, child, looping)),
         Kind::Delta(parts) => {
@@ -57,6 +58,7 @@ fn value(plan: &Plan, input: &Value, looping: bool) -> bool {
         | Kind::TemporalLiteral(_)
         | Kind::Prepared(_)
         | Kind::Wire(_)
+        | Kind::IterationInput(_)
         | Kind::Input(..)
         | Kind::Cache(_)
         | Kind::GeneratorLocal(_)
@@ -74,7 +76,9 @@ fn statements(plan: &Plan, body: &[Statement], looping: bool) -> bool {
                 && value(plan, target, looping)
                 && value(plan, source, looping)
         }
-        Statement::While(condition, body) | Statement::For(_, condition, body) => {
+        Statement::While(condition, body)
+        | Statement::ForItems(_, _, _, condition, body)
+        | Statement::For(_, condition, body) => {
             value(plan, condition, looping) && statements(plan, body, true)
         }
         Statement::If(condition, yes, no) => {

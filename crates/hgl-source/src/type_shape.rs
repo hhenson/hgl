@@ -270,10 +270,9 @@ impl Ty {
         self.components(Self::publication)
     }
     /// Form the exact ordinary publication type, reducing scalar origins.
-    pub fn delta(self) -> Result<Self, String> {
+    pub fn delta(self) -> Result<Self, crate::Issue> {
         if !self.publication() {
-            let name = self.source_name();
-            return Err(format!("delta: unsupported publication shape {name}"));
+            return Err(crate::Issue::delta_shape(&self.source_name()));
         }
         if let Self::Atomic(payload) | Self::Rolling(payload, _) = self {
             return Ok(*payload);

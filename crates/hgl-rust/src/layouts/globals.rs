@@ -201,7 +201,9 @@ fn statement_types(statements: &[hgl_semantics::ir::Statement], types: &mut BTre
                 value_types(target, types);
                 value_types(value, types);
             }
-            Statement::While(value, body) | Statement::For(_, value, body) => {
+            Statement::While(value, body)
+            | Statement::ForItems(_, _, _, value, body)
+            | Statement::For(_, value, body) => {
                 value_types(value, types);
                 statement_types(body, types);
             }
@@ -216,7 +218,10 @@ fn statement_types(statements: &[hgl_semantics::ir::Statement], types: &mut BTre
 }
 fn value_types(value: &hgl_semantics::ir::Value, types: &mut BTreeMap<String, Ty>) {
     use hgl_semantics::ir::Kind;
-    if !matches!(value.kind, Kind::Wire(_) | Kind::Input(..) | Kind::Output) {
+    if !matches!(
+        value.kind,
+        Kind::Wire(_) | Kind::IterationInput(_) | Kind::Input(..) | Kind::Output
+    ) {
         collect(&value.ty, types);
     }
     match &value.kind {
@@ -259,6 +264,7 @@ fn value_types(value: &hgl_semantics::ir::Value, types: &mut BTreeMap<String, Ty
         | Kind::Configuration(_)
         | Kind::Literal(_)
         | Kind::Wire(_)
+        | Kind::IterationInput(_)
         | Kind::Input(..)
         | Kind::Cache(_)
         | Kind::GeneratorLocal(_)

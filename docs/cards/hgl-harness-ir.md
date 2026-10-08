@@ -36,3 +36,5 @@ Step::Raises(code, body) owns a lexical assertion block. Failure distinguishes E
 Suite { tests, plans } owns the checked test inventory and graph plans. select accepts short/qualified names, rejects each unknown name, and filters tests without renumbering graph plan indices.
 
 Suite is Default. require_tests preserves the ordinary empty-suite error after mixed-run orchestration.
+
+Argument::Dense retains optional boxed ordinary sequence IR alongside literal sparse slots. The harness evaluates that sequence once, then applies the same fresh pre-start trace validation.

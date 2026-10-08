@@ -73,3 +73,5 @@ then unifies V. Neither an ordinary arrival nor its delta invents window identit
 nominal argument identity from projected ordinary payloads through the scoped
 family inference helper. Constructor inference and direct unification share
 this recovery, preserving nested atomic source boundaries in exact arguments.
+
+concrete and substitute preserve structured Issues for excluded delta origins. Relative primary ranges accumulate through nested source arguments, so written delta<T> exclusions locate concrete T; bound substitutions locate the constraining call. Reference types resolve as temporal shapes and remain excluded from delta formation.

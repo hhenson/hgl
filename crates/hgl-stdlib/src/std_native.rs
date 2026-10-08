@@ -302,3 +302,7 @@ pub fn log_info_str(text: &str) {
 pub fn raise_error_str(text: &str) -> Result<()> {
     Err(NodeError::new(text))
 }
+/// Natural logarithm retains IEEE infinity and NaN results.
+pub fn logarithm_f64(value: f64) -> f64 {
+    value.ln()
+}

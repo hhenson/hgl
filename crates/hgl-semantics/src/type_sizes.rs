@@ -90,7 +90,8 @@ pub fn literal(source: &str) -> Result<Literal, String> {
     Ok(value)
 }
 fn expression_value(expr: &Expr) -> Result<Value, String> {
-    match expr {
+    match expr.syntax() {
+        Expr::Located(..) => unreachable!("syntax strips source origins"),
         Expr::Literal(value) => Ok(Value::new(value.ty(), Kind::Literal(value.clone()))),
         Expr::Binary(op, a, b) => {
             let a = expression_value(a)?;
@@ -114,7 +115,8 @@ fn expression_value(expr: &Expr) -> Result<Value, String> {
                 Kind::Unary(op.clone(), Box::new(value)),
             ))
         }
-        Expr::Name(_)
+        Expr::Lambda(..)
+        | Expr::Name(_)
         | Expr::Call(..)
         | Expr::Applied(..)
         | Expr::Property(..)

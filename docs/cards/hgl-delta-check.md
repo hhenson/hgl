@@ -38,6 +38,8 @@ construction has exact contextual K. Known complete keys include nominal identit
 field positions and optional presence; partial provider recipes defer identity.
 Only structural child positions require a known Literal::Int. Compound key fields
 are never treated as sparse delta children.
-Growing-list items require constant nonnegative positions; remove accepts constant nonnegative i64 tail positions. Formation rejects duplicates and overlap independently of trace length; tail/gap validation belongs to pre-start publication state.
+Growing-list items require constant nonnegative positions; remove accepts constant nonnegative i64 tail positions. Formation rejects duplicate indices independently of trace length; tail/gap and items/remove compatibility validation belongs to pre-start publication state.
 
 delta_value checks the exact input endpoint, publication shape and valid/modified facts after the frontend verifies evaluation phase.
+
+Constructor and payload callbacks preserve structured Issues. Formation diagnostics retain named argument, member, key and index source ranges. Exact child/destination mismatches use delta.type_mismatch after source formation succeeds; scalar-reduced publication requirements stay explicit in the checker. tuple_shorthand checks contextual sparse tuple children with the same exact type rule. Growing items/remove overlap is a trace profile failure after ordinary arguments execute, rather than a formation overlap.

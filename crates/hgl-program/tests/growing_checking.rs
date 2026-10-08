@@ -56,14 +56,21 @@ fn construction_checks_indices_and_keeps_empty_ordinary_values() {
     };
     check("delta<list<i64>>()").unwrap();
     check("delta<list<i64>>(items:[4:1])").unwrap();
+    check("delta<list<i64>>(items:[0:1],remove:[0])").unwrap();
+    let shape = Ty::List(Box::new(Ty::I64), None);
+    assert_eq!(
+        hgl_semantics::eval_data::validate(&shape, &[Some(delta(&[0], &[0]))])
+            .unwrap_err()
+            .0,
+        0
+    );
     for (value, message) in [
-        ("delta<list<i64>>(items:[-1:1])", "out of bounds"),
-        ("delta<list<i64>>(remove:[-1])", "nonnegative"),
-        ("delta<list<i64>>(items:[0:1,0:2])", "duplicate"),
-        ("delta<list<i64>>(remove:[0,0])", "duplicate"),
-        ("delta<list<i64>>(items:[0:1],remove:[0])", "overlap"),
-        ("delta<list<i64>>(remove:[0.0])", "constant i64"),
-        ("delta<list<i64,2>>(remove:[1])", "unknown delta argument"),
+        ("delta<list<i64>>(items:[-1:1])", "delta.index_bounds"),
+        ("delta<list<i64>>(remove:[-1])", "delta.index_bounds"),
+        ("delta<list<i64>>(items:[0:1,0:2])", "delta.duplicate_entry"),
+        ("delta<list<i64>>(remove:[0,0])", "delta.duplicate_entry"),
+        ("delta<list<i64>>(remove:[0.0])", "delta.entry_type"),
+        ("delta<list<i64,2>>(remove:[1])", "delta.argument_name"),
     ] {
         let error = check(value).unwrap_err();
         assert!(error.contains(message), "{value}: {error}");

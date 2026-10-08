@@ -9,6 +9,14 @@ pub use type_shape::{
 #[derive(Debug, Clone)]
 /// An expression before name and type resolution.
 pub enum Expr {
+    /// Original expression and optional named-argument origin.
+    Located(
+        Box<Self>,
+        std::ops::Range<usize>,
+        Option<std::ops::Range<usize>>,
+    ),
+    /// Typed ordinary lambda body, checked before callable lowering.
+    Lambda(Vec<(String, String)>, String, Box<Self>),
     /// Contextual absence, checked at its use site.
     Null,
     /// Read a selected property or field of an expression.
@@ -36,6 +44,32 @@ pub enum Expr {
     /// Binary operator.
     Binary(String, Box<Self>, Box<Self>),
 }
+impl Expr {
+    /// Access syntax while retaining its original expression at the caller.
+    pub fn syntax(&self) -> &Self {
+        if let Self::Located(value, _, _) = self {
+            value.syntax()
+        } else {
+            self
+        }
+    }
+    /// Original source range, or no range for synthesized expressions.
+    pub fn span(&self) -> std::ops::Range<usize> {
+        if let Self::Located(_, span, _) = self {
+            span.clone()
+        } else {
+            0..0
+        }
+    }
+    /// Named argument label's range; positional expressions use their own range.
+    pub fn argument_span(&self) -> std::ops::Range<usize> {
+        if let Self::Located(_, _, Some(span)) = self {
+            span.clone()
+        } else {
+            self.span()
+        }
+    }
+}
 #[derive(Debug, Clone)]
 /// A statement before phase and type checking.
 pub enum Stmt {
@@ -57,6 +91,8 @@ pub enum Stmt {
     TimedYield(Expr, Expr, std::ops::Range<usize>),
     /// Runtime conditional loop; omitted source condition is true.
     While(Expr, Vec<Self>),
+    /// Modified map child iteration retaining both ordinary key and endpoint.
+    ForItems(String, String, Expr, Vec<Self>),
     /// Collection iteration.
     For(String, Expr, Vec<Self>),
     /// Conditional branches.
@@ -251,7 +287,10 @@ impl<'a> Cursor<'a> {
     }
     /// Parse an expression using operator precedence.
     pub fn expr(&mut self) -> Result<Expr, Issue> {
-        self.binary(0)
+        let start = self.span().start;
+        let value = self.binary(0)?;
+        let end = self.tokens[self.pos - 1].span.end;
+        Ok(Expr::Located(Box::new(value), start..end, None))
     }
     fn binary(&mut self, min: u8) -> Result<Expr, Issue> {
         let mut left = self.atom()?;
@@ -341,6 +380,9 @@ impl<'a> Cursor<'a> {
         if text.starts_with('"') {
             return string_literal(&text);
         }
+        if text == "fn" {
+            return self.lambda();
+        }
         let mut name = text;
         while self.at("::") {
             name.push_str(&self.consume()?);
@@ -360,6 +402,23 @@ impl<'a> Cursor<'a> {
         } else {
             Expr::Call(name, args)
         })
+    }
+    fn lambda(&mut self) -> Result<Expr, Issue> {
+        self.need("(")?;
+        let mut parameters = Vec::new();
+        while !self.take(")") {
+            let name = self.name()?;
+            self.need(":")?;
+            parameters.push((name, self.type_name()?));
+            if !self.take(",") {
+                self.need(")")?;
+                break;
+            }
+        }
+        self.need("->")?;
+        let result = self.type_name()?;
+        self.need("=>")?;
+        Ok(Expr::Lambda(parameters, result, Box::new(self.expr()?)))
     }
     fn parenthesized(&mut self) -> Result<Expr, Issue> {
         self.lines();
@@ -394,6 +453,7 @@ impl<'a> Cursor<'a> {
         let mut args = Vec::new();
         self.lines();
         while !self.at(")") {
+            let label = self.span();
             let named = if self.tokens.get(self.pos + 1).is_some_and(|t| t.text == ":") {
                 let name = self.name()?;
                 self.need(":")?;
@@ -401,11 +461,20 @@ impl<'a> Cursor<'a> {
             } else {
                 None
             };
-            let value = if delta && self.take("[") {
-                self.delta_entries()?
+            let start = self.span().start;
+            let mut value = if delta && self.take("[") {
+                let value = self.delta_entries()?;
+                Expr::Located(
+                    Box::new(value),
+                    start..self.tokens[self.pos - 1].span.end,
+                    None,
+                )
             } else {
                 self.expr()?
             };
+            if let Expr::Located(_, _, origin) = &mut value {
+                *origin = named.as_ref().map(|_| label);
+            }
             args.push((named, value));
             self.lines();
             if !self.take(",") {
@@ -471,17 +540,29 @@ impl<'a> Cursor<'a> {
         self.need("{")?;
         self.block_contents()
     }
+    fn for_loop(&mut self) -> Result<Stmt, Issue> {
+        let name = self.name()?;
+        let child = if self.take(",") {
+            Some(self.name()?)
+        } else {
+            None
+        };
+        self.need("in")?;
+        let collection = self.expr()?;
+        let body = self.block()?;
+        Ok(if let Some(child) = child {
+            Stmt::ForItems(name, child, collection, body)
+        } else {
+            Stmt::For(name, collection, body)
+        })
+    }
     /// Parse a block after its opening brace has already been consumed.
     pub fn block_contents(&mut self) -> Result<Vec<Stmt>, Issue> {
         self.lines();
         let mut out = Vec::new();
         while !self.take("}") {
             let statement = if self.take("for") {
-                let name = self.name()?;
-                self.need("in")?;
-                let collection = self.expr()?;
-                let body = self.block()?;
-                out.push(Stmt::For(name, collection, body));
+                out.push(self.for_loop()?);
                 self.lines();
                 continue;
             } else if self.take("while") {
@@ -534,9 +615,9 @@ impl<'a> Cursor<'a> {
             } else {
                 let target = self.expr()?;
                 if self.take("=") {
-                    Stmt::Assign(target, self.expr()?)
+                    Stmt::Assign(target.syntax().clone(), self.expr()?)
                 } else if self.take("+=") {
-                    Stmt::Add(target, self.expr()?)
+                    Stmt::Add(target.syntax().clone(), self.expr()?)
                 } else {
                     Stmt::Call(target)
                 }
@@ -575,6 +656,7 @@ impl Expr {
     /// Evaluate supported fixed expressions without engine or native calls.
     pub fn fixed(&self) -> Option<Literal> {
         match self {
+            Self::Located(value, _, _) => value.fixed(),
             Self::Literal(l) => Some(l.clone()),
             Self::Binary(op, a, b) => match (op.as_str(), a.fixed()?, b.fixed()?) {
                 ("-", Literal::Duration(a), Literal::Duration(b)) => {
@@ -593,7 +675,8 @@ impl Expr {
                 ("!", Literal::Bool(b)) => Some(Literal::Bool(!b)),
                 _ => None,
             },
-            Self::Null
+            Self::Lambda(..)
+            | Self::Null
             | Self::TemporalLiteral(_)
             | Self::Property(..)
             | Self::Index(..)
@@ -633,6 +716,10 @@ impl Expr {
 }
 fn expand_selectors(expr: Expr, inputs: &[(Option<String>, Expr)]) -> (Expr, u8) {
     match expr {
+        Expr::Located(value, span, label) => {
+            let (value, selectors) = expand_selectors(*value, inputs);
+            (Expr::Located(Box::new(value), span, label), selectors)
+        }
         Expr::Binary(op, a, b) if op == "&&" => {
             let (a, left) = expand_selectors(*a, inputs);
             let (b, right) = expand_selectors(*b, inputs);
@@ -652,7 +739,8 @@ fn expand_selectors(expr: Expr, inputs: &[(Option<String>, Expr)]) -> (Expr, u8)
                 flag,
             )
         }
-        other @ (Expr::Null
+        other @ (Expr::Lambda(..)
+        | Expr::Null
         | Expr::Property(..)
         | Expr::Index(..)
         | Expr::Literal(_)

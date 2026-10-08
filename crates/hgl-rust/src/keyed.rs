@@ -51,3 +51,59 @@ pub fn allocation(key: &Ty, shape: &str, child: &str) -> String {
 
 mod constructors;
 pub use constructors::constructors;
+
+/// Expose staged scalar collection operations through existing typed store methods.
+pub fn collection_operation(
+    op: &str,
+    args: &[hgl_semantics::ir::Value],
+    mut emit: impl FnMut(&hgl_semantics::ir::Value) -> String,
+    allocation: fn(&Ty) -> String,
+    apply: fn(&Ty, &str, &str) -> String,
+) -> String {
+    let receiver = &args[0];
+    let shape = &receiver.ty;
+    let endpoint = if let hgl_semantics::ir::Kind::Input(id, _) = receiver.kind {
+        format!("self.input{id}")
+    } else {
+        "self._output".into()
+    };
+    let args = args[1..].iter().map(&mut emit).collect::<Vec<_>>();
+    let child = if let Ty::Map(_, child) | Ty::List(child, _) = shape {
+        child.as_ref()
+    } else {
+        unreachable!("checked collection effect")
+    };
+    let key = if matches!(op, "collection_push" | "collection_pop") {
+        format!(
+            "i64::try_from(_ctx.store().bindings().output({endpoint}.id()).members.live.len()).map_err(|error|hgl_types::NodeError::new(error.to_string()))?{}",
+            if op == "collection_pop" { "-1" } else { "" }
+        )
+    } else {
+        args[0].clone()
+    };
+    if op == "collection_contains" {
+        return format!(
+            "{endpoint}.member(_ctx.store().bindings(),{}).is_some()",
+            args[0]
+        );
+    }
+    let create = allocation(child);
+    let payload = args.last().map_or("", String::as_str);
+    let write = apply(child, "child", payload);
+    let effect = match op {
+        "collection_insert" | "collection_push" => format!(
+            "if {endpoint}.member(_ctx.store().bindings(),key).is_some() {{return Err(hgl_types::NodeError::new(\"collection insert requires absence\"));}} _ctx.get_or_create_with({endpoint}.id(),key,|store,owner|{create});let child={endpoint}.member(_ctx.store().bindings(),key).expect(\"created child\");{write}"
+        ),
+        "collection_update" => format!(
+            "let child={endpoint}.member(_ctx.store().bindings(),key).ok_or_else(||hgl_types::NodeError::new(\"collection update requires presence\"))?;{write}"
+        ),
+        "collection_remove" | "collection_pop" => format!(
+            "if {endpoint}.member(_ctx.store().bindings(),key).is_none() {{return Err(hgl_types::NodeError::new(\"collection removal requires presence\"));}} _ctx.remove_shaped({endpoint}.id(),key);"
+        ),
+        "collection_invalidate" => format!(
+            "let child={endpoint}.member(_ctx.store().bindings(),key).ok_or_else(||hgl_types::NodeError::new(\"absent collection invalidation is outside the admitted effect profile\"))?;_ctx.invalidate(child.id());"
+        ),
+        _ => unreachable!("checked collection effect"),
+    };
+    format!("{{let key={key};{effect}}}")
+}
