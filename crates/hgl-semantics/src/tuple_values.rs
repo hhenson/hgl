@@ -35,7 +35,8 @@ fn profile(ty: &Ty, growing: bool) -> bool {
 /// Retain a current tuple value; source identity and child validity remain exact.
 pub fn retain(value: Value, text_child: bool) -> Value {
     if (ordinary_result(&value.ty)
-        || ((text_child || matches!(value.kind, Kind::Field(..))) && value.ty == Ty::Str))
+        || ((text_child || matches!(value.kind, Kind::Field(..) | Kind::IterationInput(_)))
+            && value.ty == Ty::Str))
         && profile(&value.ty, matches!(value.ty, Ty::Tuple(_)))
         && endpoint(&value)
         && !matches!(value.kind, Kind::Input(_, true))

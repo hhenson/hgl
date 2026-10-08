@@ -58,3 +58,20 @@ test fixed_primitive_iteration_keeps_valid_zero_and_false_values {
     assert eval(present_boolean,[delta<list<bool,2>>(items:[1:false])])==[false]
     assert eval(present_float,[delta<list<f64,2>>(items:[1:0.0])])==[0.0]
 }
+
+fn copied_iterated_text(value:map<i64,str>)->i64 {
+    when {for key,child in items(value,modified) {if valid(child) {
+        let copy=child
+        return text_len(copy)
+    }}}
+}
+test iterated_text_local_copies_keep_prepared_ownership {
+    assert eval(copied_iterated_text,[delta<map<i64,str>>(upsert:[1:"held"]),delta<map<i64,str>>(upsert:[1:"xy"])])==[4,2]
+}
+
+fn returned_iterated_text(value:map<i64,str>)->str {
+    when {for key,child in items(value,modified) {if valid(child) {return child}}}
+}
+test iterated_text_results_keep_prepared_ownership {
+    assert eval(returned_iterated_text,[delta<map<i64,str>>(upsert:[1:"held"]),delta<map<i64,str>>(upsert:[1:"xy"])])==["held","xy"]
+}
