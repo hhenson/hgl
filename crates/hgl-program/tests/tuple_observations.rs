@@ -153,7 +153,7 @@ fn measured_simulation(graph:&mut hgl_kernel::Graph, store:&mut hgl_store::Store
 }
 "#);
     }
-    code.push_str("struct Provider;mod native {pub fn echo_i64(value:i64)->i64 {value} pub fn text_len_str(value:&str)->i64 {value.len() as i64} pub fn both_str_str(first:&str,second:&str)->i64 {(first.len()+second.len()) as i64}}\n");
+    code.push_str("struct Provider;mod native {pub use hgl_stdlib::std_native::log_info_str;pub fn echo_i64(value:i64)->i64 {value} pub fn text_len_str(value:&str)->i64 {value.len() as i64} pub fn both_str_str(first:&str,second:&str)->i64 {(first.len()+second.len()) as i64}}\n");
 
     fs::write(dir.join("src/main.rs"), code)?;
     manifest(&root, &dir)?;
