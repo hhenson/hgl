@@ -43,3 +43,18 @@ test iterated_text_native_arguments_borrow_child_payloads {
     assert eval(iterated_text,[delta<map<i64,str>>(upsert:[1:"held"]),delta<map<i64,str>>(upsert:[1:"xy"])]) == [4,2]
     assert eval(fixed_text,[delta<list<str,2>>(items:[0:"held"]),delta<list<str,2>>(items:[1:"xy"])]) == [4,2]
 }
+
+fn present_integer(value:list<i64,2>)->i64 {
+    when {for index,child in items(value) {if valid(child) {return child}}}
+}
+fn present_boolean(value:list<bool,2>)->bool {
+    when {for index,child in items(value) {if valid(child) {return child}}}
+}
+fn present_float(value:list<f64,2>)->f64 {
+    when {for index,child in items(value) {if valid(child) {return child}}}
+}
+test fixed_primitive_iteration_keeps_valid_zero_and_false_values {
+    assert eval(present_integer,[delta<list<i64,2>>(items:[1:0])])==[0]
+    assert eval(present_boolean,[delta<list<bool,2>>(items:[1:false])])==[false]
+    assert eval(present_float,[delta<list<f64,2>>(items:[1:0.0])])==[0.0]
+}

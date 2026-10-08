@@ -77,7 +77,7 @@ fn value(plan: &Plan, v: &Value) -> String {
             value(plan, v)
         ),
         Kind::Literal(l) => literal(l),
-        Kind::IterationInput(id) => crate::deltas::read(&v.ty, &format!("local{id}")),
+        Kind::IterationInput(_) => crate::snapshot_slots::endpoint_read(v),
         Kind::Input(i, _) => {
             if matches!(v.ty, Ty::Enum(_)) {
                 format!(

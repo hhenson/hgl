@@ -92,6 +92,7 @@ fn native_reverse_order_collection_results_require_prepared_publication() {
 fn required_scalar_and_native_text_child_reads_fail_without_default_values()
 -> Result<(), Box<dyn std::error::Error>> {
     for source in [
+        "module hgraph.std part missing_child\nfn missing(value:list<i64,2>)->i64 {when valid(value) {for index,child in items(value) {return child}}}\ntest missing {eval(missing,[delta<list<i64,2>>(items:[1:7])])}",
         "module hgraph.std part missing_child\nfn missing(value:tuple<bool,i64>)->i64 {when valid(value) {return value[1]}}\ntest missing {eval(missing,[(false,_)])}",
         "module hgraph.std part missing_child\nstruct Required {held:bool\nnumber:i64}\nfn missing(value:Required)->i64 {when valid(value) {return value.number}}\ntest missing {eval(missing,[delta<Required>(held:false)])}",
         "module hgraph.std part missing_child\nfn missing(value:tuple<bool,str>)->i64 {when valid(value) {return text_len(value[1])}}\ntest missing {eval(missing,[(false,_)])}",

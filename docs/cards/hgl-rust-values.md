@@ -110,3 +110,8 @@ Own-output complete ordinary assignment delegates to structural_publication.
 Required projected scalar and native text child reads check existing input
 validity before access; an unset child never becomes a default scalar. Prepared
 text projections keep read-only native borrows and independent local ownership.
+
+Dense fixed List iteration visits unset child endpoints for metadata. Reading
+its payload uses the same checked required-child transport as direct projection;
+valid zero, false and floating zero remain available values. This guard changes
+no iteration selection or metadata query and holds in debug and release.
