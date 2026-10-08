@@ -2,8 +2,7 @@
 use hgl_source::literals::{Literal, TemporalLiteral};
 use hgl_source::time_context::RunContext;
 
-// Two tests can start within the same clock tick, and on Windows a second test
-// in the same directory then fights the first for its executable.
+#[cfg(unix)]
 static NEXT_DIR: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 fn zoned(zone: &str, instant_micros: i64, offset_seconds: i32) -> TemporalLiteral {
     TemporalLiteral::ZonedDateTime {
