@@ -1639,38 +1639,32 @@ impl Checker {
         if self.struct_declaration(module, name)?.is_some() {
             return self.constructor(module, (name, args), env, runtime, None);
         }
-        let args = args
-            .iter()
-            .enumerate()
-            .map(|(index, (n, v))| {
-                let hint = hgl_semantics::source_check::argument_hint(
-                    &self.library,
-                    module,
-                    name,
-                    index,
-                    n.as_deref(),
-                );
-                let previous = self.requirements.delta;
-                self.requirements.delta = hint.as_ref().is_some_and(|(_, delta)| *delta);
-                let value = self.expected_expression(
-                    module,
-                    v,
-                    env,
-                    runtime,
-                    hint.as_ref().map(|(ty, _)| ty),
-                )?;
-                self.requirements.delta = previous;
-                if !endpoint_metadata(name) {
-                    require_payload(&value)?;
-                }
-                Ok((n.clone(), value))
-            })
-            .collect::<Result<Vec<_>, Issue>>()?;
-        for (_, value) in &args {
+        let mut values = Vec::new();
+        for (index, (n, v)) in args.iter().enumerate() {
+            let hint = hgl_semantics::source_check::argument_hint(
+                &self.library,
+                module,
+                name,
+                index,
+                n.as_deref(),
+                &values,
+            );
+            let previous = self.requirements.delta;
+            self.requirements.delta = hint.as_ref().is_some_and(|(_, delta)| *delta);
+            let value =
+                self.expected_expression(module, v, env, runtime, hint.as_ref().map(|(ty, _)| ty))?;
+            self.requirements.delta = previous;
+            if !endpoint_metadata(name) {
+                require_payload(&value)?;
+            }
+            values.push((n.clone(), value));
+        }
+        for (_, value) in &values {
             hgl_semantics::value_check::helper_argument(value)?;
         }
-        self.value_call(module, name, args, runtime)
+        self.value_call(module, name, values, runtime)
     }
+
     fn delta_value(
         &mut self,
         module: &str,

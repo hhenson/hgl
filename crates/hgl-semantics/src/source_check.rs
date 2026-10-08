@@ -323,6 +323,7 @@ pub fn argument_hint(
     name: &str,
     index: usize,
     label: Option<&str>,
+    earlier: &[(Option<String>, crate::ir::Value)],
 ) -> Option<(Ty, bool)> {
     let (owner, item) = crate::value_types::identity(library, module, name);
     let mut declarations = library.declarations.iter().filter(|declaration| {
@@ -345,8 +346,23 @@ pub fn argument_hint(
     } else {
         signature.parameters.get(index)?
     };
+    let mut bindings = BTreeMap::new();
+    for (position, (label, value)) in earlier.iter().enumerate() {
+        let parameter = crate::eval_data::parameter(&signature, position, label.as_deref()).ok()?;
+        crate::value_types::unify(
+            library,
+            &owner,
+            &parameter.ty,
+            &value.ty,
+            &signature.generics,
+            &mut bindings,
+        )
+        .ok()?;
+    }
     Some((
-        crate::value_types::resolve_ordinary(library, &owner, &parameter.ty).ok()?,
+        crate::value_access::project(
+            &crate::value_types::concrete(library, &owner, &parameter.ty, &bindings).ok()?,
+        ),
         hgl_source::delta_argument(&parameter.ty).is_some(),
     ))
 }

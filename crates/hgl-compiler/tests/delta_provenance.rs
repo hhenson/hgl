@@ -20,6 +20,17 @@ fn written_scalar_delta_parameter_and_result_requirements_are_coded() {
     }
 }
 #[test]
+fn constrained_generic_delta_argument_locates_supplied_expression() {
+    let text = "const fn need<T>(seed:T,value:delta<T>)->T=>seed\ntest bad {let x=need(1,false)}";
+    let diagnostics = errors(text);
+    assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
+    let source = format!("module controls\n{text}");
+    let at = source.find("false").unwrap();
+    assert_eq!(diagnostics[0].issue.span, at..at + 5);
+    assert_eq!(diagnostics[0].issue.code, Some("delta.type_mismatch"));
+}
+
+#[test]
 fn concrete_unsupported_nested_type_locates_written_child() {
     for annotation in [
         "delta<\n signal\n>",
