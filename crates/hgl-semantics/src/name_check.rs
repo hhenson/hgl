@@ -29,6 +29,10 @@ impl Scope {
             self.services.remove(name);
         }
     }
+    pub(crate) fn iteration(&mut self, name: &str) {
+        self.services.remove(name);
+        self.tuple.iteration(name);
+    }
     fn lambda(&self, parameters: &[(String, String)]) -> Self {
         let mut scope = self.clone();
         for (name, _) in parameters {

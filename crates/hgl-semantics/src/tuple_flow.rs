@@ -34,14 +34,17 @@ impl Facts {
     /// Update an existing binding without changing its lexical identity.
     pub fn assign(&mut self, target: &Expr, expression: &Expr) {
         if let Expr::Name(name) = target.syntax() {
-            let persistent = self
-                .entries
-                .get(name)
-                .is_some_and(|(_, persistent)| *persistent);
+            let persistent = self.entries.get(name).is_some_and(|entry| entry.1);
             self.record(name, expression, persistent);
         }
     }
-    fn merge(&mut self, other: &Self) {
+    /// Admitted temporal iteration bindings shadow outer names and carry runtime payloads.
+    pub fn iteration(&mut self, name: &str) {
+        self.entries.remove(name);
+        self.runtime.insert(name.into());
+    }
+    /// Merge writes only when the nested scope retains the same outer identity.
+    pub fn merge(&mut self, other: &Self) {
         for name in &other.runtime {
             if self
                 .entries

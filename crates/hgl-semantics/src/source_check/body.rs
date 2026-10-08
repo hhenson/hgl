@@ -92,13 +92,14 @@ impl Checker<'_> {
             }
         } else if cursor.take("for") {
             let mut body = environment.clone();
-            body.services.remove(&cursor.name()?);
+            body.iteration(&cursor.name()?);
             while cursor.take(",") {
-                body.services.remove(&cursor.name()?);
+                body.iteration(&cursor.name()?);
             }
             cursor.need("in")?;
             self.expression(cursor, environment)?;
             self.block(cursor, &mut body)?;
+            environment.tuple.merge(&body.tuple);
         } else if cursor.take("return") {
             if !cursor.at("}") && !cursor.at("\n") {
                 self.expression(cursor, environment)?;
@@ -113,8 +114,7 @@ impl Checker<'_> {
         Ok(())
     }
     fn binding(&self, cursor: &mut Cursor<'_>, environment: &mut Scope) -> Result<(), Issue> {
-        let retained = matches!(cursor.peek(), "state" | "cache");
-        cursor.consume()?;
+        let retained = matches!(cursor.consume()?.as_str(), "state" | "cache");
         let name = cursor.name()?;
         let declared = if cursor.take(":") {
             let start = cursor.pos;

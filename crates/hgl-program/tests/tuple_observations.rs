@@ -175,6 +175,8 @@ fn unused_clock_and_temporal_alias_tuple_const_arguments_reject() {
     for source in [
         "module tuple_clock\nfn configured(const pair:tuple<datetime,bool>)->i64 {yield 0s:1}\nfn unused(value:i64)->i64 {inject clock\nwhen {let timestamp=clock.evaluation_time\nlet rejected=configured((timestamp,false))\nreturn value}}",
         "module tuple_branch\nfn configured(const pair:tuple<i64,bool>)->i64 {yield 0s:1}\nfn unused(value:i64)->i64 {var alias:i64=0\nwhen {if value>0 {alias=value}\nlet rejected=configured((alias,false))\nreturn value}}",
+        "module tuple_for_assignment\nfn configured(const pair:tuple<i64,bool>)->i64 {yield 0s:1}\nfn unused(value:i64,members:set<i64>)->i64 {var alias:i64=0\nwhen {for member in elements(members,added) {alias=value}\nlet rejected=configured((alias,false))\nreturn value}}",
+        "module tuple_for_member\nfn configured(const pair:tuple<i64,bool>)->i64 {yield 0s:1}\nfn unused(value:i64,members:set<i64>)->i64 {when {for member in elements(members,added) {let rejected=configured((member,false))}\nreturn value}}",
         "module tuple_loop\nfn configured(const pair:tuple<i64,bool>)->i64 {yield 0s:1}\nfn unused(value:i64)->i64 {var alias:i64=0\nwhen {while value>0 {alias=value}\nlet rejected=configured((alias,false))\nreturn value}}",
         "module tuple_global\nfn configured(const pair:tuple<i64,bool>)->i64 {yield 0s:1}\nfn unused(value:i64)->i64 {inject global_state\nwhen {let pair:tuple<i64,bool> = get(global_state,\"pair\")\nlet rejected=configured(pair)\nreturn value}}",
         "module tuple_out\nfn configured(const pair:tuple<i64,bool>)->i64 {yield 0s:1}\nfn unused(value:i64)->i64 {inject out\nwhen {let rejected=configured((out,false))\nreturn value}}",
@@ -355,4 +357,11 @@ fn owning_tuple_observations_require_finite_adapter_preparation() {
         error.contains("owning Tuple observations require finite prepared transport"),
         "{error}"
     );
+}
+
+#[test]
+fn temporal_loop_binding_shadows_an_outer_constant_without_changing_it() {
+    let source = "module tuple_loop_shadow\nfn configured(const pair:tuple<i64,bool>)->i64 {yield 0s:1}\nfn unused(value:i64,members:set<i64>)->i64 {let alias=0\nwhen {for alias in elements(members,added) {let inner=alias}\nlet accepted=configured((alias,false))\nreturn value}}";
+    let diagnostics = hgl_program::diagnostics(&[("shadow.hgl".into(), source.into())]);
+    assert!(diagnostics.is_empty(), "{diagnostics:?}");
 }
