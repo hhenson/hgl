@@ -126,29 +126,44 @@ fn run_source(
     measure: bool,
     expect_failure: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    run_selected(source, measure, expect_failure, &[], None).map(|_| ())
+}
+fn run_selected(
+    source: &str,
+    measure: bool,
+    expect_failure: bool,
+    selection: &[&str],
+    expected_error: Option<&str>,
+) -> Result<String, Box<dyn std::error::Error>> {
     use std::{fs, process::Command};
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .canonicalize()?;
     let dir = scratch_dir("hgl-tuple-observations")?;
     fs::create_dir_all(dir.join("src"))?;
-    let suite = compile_tests(&sources(source))?;
+    let mut suite = compile_tests(&sources(source))?;
+    suite.select(selection)?;
     let mut code = hgl_program::emit_tests(&suite);
     if measure {
         code = code.replace("hgl_kernel::run_simulation(", "crate::measured_simulation(");
         code.push_str(r#"
 #[global_allocator] static ALLOCATOR:hgl_alloc_count::CountingAllocator=hgl_alloc_count::CountingAllocator;
 fn measured_simulation(graph:&mut hgl_kernel::Graph, store:&mut hgl_store::Store, config:&hgl_kernel::RunConfig)->Result<u64,hgl_kernel::EngineError> {
-    graph.start(store,config.start_time).map_err(hgl_kernel::EngineError::Node)?;
-    let mut cycles=0; let mut total=0; let mut now=config.start_time;
-    while !graph.stop_requested() {
-        let next=graph.next_scheduled_time(); if next>=config.end_time {break;} now=next;
+    let (start,end)=(config.start_time,config.end_time);
+    if start<hgl_types::EngineTime::MIN_START || end>hgl_types::EngineTime::MAX_END || start>=end {return Err(hgl_kernel::EngineError::BadTimes);}
+    graph.start(store,start).map_err(hgl_kernel::EngineError::Node)?;
+    let mut cycles=0; let mut successful=0; let mut failed=0; let mut now=start; let mut outcome=Ok(());
+    while outcome.is_ok() && !graph.stop_requested() {
+        let next=graph.next_scheduled_time(); if next>=end {break;} now=next;
         let (result,count)=hgl_alloc_count::count_in(||graph.evaluate(store,now));
-        result.map_err(hgl_kernel::EngineError::Node)?; total+=count; cycles+=1;
+        if result.is_ok() {successful+=count;} else {failed+=count;}
+        outcome=result; cycles+=1;
     }
-    graph.stop(store,now).map_err(hgl_kernel::EngineError::Node)?;
-    eprintln!("tuple_observations measured cycles={cycles} tick_allocations={total}");
-    assert_eq!(total,0,"tuple_observations first/repeated publication and recording must allocate nothing");
+    let stopped=graph.stop(store,now);
+    outcome=hgl_types::finish(outcome,stopped);
+    eprintln!("tuple_observations measured cycles={cycles} successful_tick_allocations={successful} failed_tick_allocations={failed}");
+    assert_eq!(successful,0,"successful first/repeated publication and recording must allocate nothing");
+    outcome.map_err(hgl_kernel::EngineError::Node)?;
     Ok(cycles)
 }
 "#);
@@ -177,7 +192,8 @@ fn measured_simulation(graph:&mut hgl_kernel::Graph, store:&mut hgl_store::Store
             "invalid embedded payload must fail"
         );
         assert!(
-            String::from_utf8_lossy(&output.stderr).contains("ordinary tuple input is invalid"),
+            String::from_utf8_lossy(&output.stderr)
+                .contains(expected_error.unwrap_or("ordinary tuple input is invalid")),
             "{}",
             String::from_utf8_lossy(&output.stderr)
         );
@@ -192,7 +208,7 @@ fn measured_simulation(graph:&mut hgl_kernel::Graph, store:&mut hgl_store::Store
     }
 
     fs::remove_dir_all(dir)?;
-    Ok(())
+    Ok(String::from_utf8_lossy(&output.stderr).into_owned())
 }
 #[test]
 fn ordinary_tuple_errors_do_not_borrow_delta_codes() {
@@ -613,22 +629,89 @@ fn fixed_positional_helper_arguments_allocate_nothing() -> Result<(), Box<dyn st
 }
 
 #[test]
-fn shared_unset_reads_and_partial_retention_allocate_nothing()
+fn shared_unset_reads_match_codes_through_real_simulation() -> Result<(), Box<dyn std::error::Error>>
+{
+    run_selected(
+        include_str!(
+            "../../../external/hgraph_std/hgl/hgraph/tests/unset_required_read_values.hgl"
+        ),
+        false,
+        false,
+        &["unset_required_payload_reads_raise"],
+        None,
+    )
+    .map(|_| ())
+}
+#[test]
+fn shared_present_payloads_and_partial_retention_allocate_nothing()
 -> Result<(), Box<dyn std::error::Error>> {
-    run_source(
+    run_selected(
         include_str!(
             "../../../external/hgraph_std/hgl/hgraph/tests/unset_required_read_values.hgl"
         ),
         true,
         false,
+        &["unset_required_payload_controls_and_retention"],
+        None,
     )
+    .map(|_| ())
 }
 #[test]
 fn unset_child_aliases_preserve_presence_without_consuming_payloads()
 -> Result<(), Box<dyn std::error::Error>> {
-    run_source(
+    run_selected(
         include_str!("fixtures/unset_required_read_values.hgl"),
         true,
         false,
+        &["retention_does_not_consume_unset_payloads"],
+        None,
     )
+    .map(|_| ())
+}
+#[test]
+fn required_alias_payload_reads_match_codes_through_real_simulation()
+-> Result<(), Box<dyn std::error::Error>> {
+    run_selected(
+        include_str!("fixtures/unset_required_read_values.hgl"),
+        false,
+        false,
+        &["required_retained_alias_reads_raise"],
+        None,
+    )
+    .map(|_| ())
+}
+#[test]
+fn measured_unset_failure_stops_and_preserves_primary_cleanup_context()
+-> Result<(), Box<dyn std::error::Error>> {
+    let source = "module hgraph.std part unset_cleanup\nstruct RequiredRead {sibling:i64\nchild:i64}\nfn broken(value:RequiredRead)->i64 {inject logger\nwhen {let copy=value\nreturn copy.child+1}\nstop {info(logger,\"cleanup reached\")}}\ntest clean_stop {assert raises(\"value.unset_read\") {eval(broken,[delta<RequiredRead>(sibling:1)])}}";
+    let stderr = run_selected(source, true, false, &["clean_stop"], None)?;
+    assert!(
+        stderr.lines().any(|line| line == "INFO cleanup reached"),
+        "{stderr}"
+    );
+    assert!(stderr.contains("failed_tick_allocations="), "{stderr}");
+    let source = source.replace(
+        "info(logger,\"cleanup reached\")",
+        "info(logger,\"cleanup reached\")\nvar divisor:i64=0\nlet failed=1/divisor",
+    );
+    let stderr = run_selected(
+        &source,
+        true,
+        true,
+        &["clean_stop"],
+        Some("cleanup: [NodeError"),
+    )?;
+    assert!(
+        stderr.contains("phase: Eval") && stderr.contains("phase: Stop"),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("code: Some(\"value.unset_read\")"),
+        "{stderr}"
+    );
+    assert!(
+        stderr.lines().any(|line| line == "INFO cleanup reached"),
+        "{stderr}"
+    );
+    Ok(())
 }

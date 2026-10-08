@@ -33,8 +33,9 @@ validity and capacity. An invalid embedded current Tuple fails its payload read.
 
 Acceptance: shared three tests/eight evals and own direct return, nested embedding,
 copy/read tests; the complete generated graph evaluation and recording paths
-are measured with CountingAllocator and allocate zero times in first and repeated
-evaluations. Existing adapter proof and capacity budgets are unchanged.
+have successful first/repeated evaluations measured with CountingAllocator and
+allocate zero times. Failed cycles retain lifecycle cleanup and are reported
+separately; their error construction is outside the successful-tick profile. Existing adapter proof and capacity budgets are unchanged.
 
 Owning observation adapters require the existing finite prepared execution proof;
 standalone/unproved private-slot use rejects before emission. Atomic ordinary

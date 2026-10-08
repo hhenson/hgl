@@ -30,8 +30,11 @@ lookup, type test or dynamic capacity is introduced.
 
 Acceptance: Spec79 required Number/Flag/List reads match exact execution codes;
 present zero/false controls pass; copying partial Tuple children and assembling
-a Tuple preserve absence and independent ownership. Shared tests and counted
-first/repeated evaluations run with zero allocations.
+a Tuple preserve absence and independent ownership. Shared error tests run through lifecycle-faithful simulation and match the code.
+Successful first/repeated zero/false/partial retention evaluations are counted
+separately and run with zero allocations. Error construction can allocate; the
+measured harness reports failed-cycle allocation counts separately, always stops
+the graph, and preserves the primary error plus cleanup failures.
 
 List indexing still requires the parent payload and existing bounds checks before
 retaining the selected child; this extension supplies no absent-List indexing rule.
