@@ -234,6 +234,16 @@ pub fn iteration_start(
     marker: fn(&Ty) -> String,
 ) -> String {
     let (key_id, child_id) = ids;
+    if let Ty::List(_, Some(length)) = shape {
+        let selected = if modified {
+            format!("_ctx.store().bindings().modified(local{child_id}.id(),_ctx.evaluation_time())")
+        } else {
+            "true".into()
+        };
+        return format!(
+            "let mut index{key_id}=0;while index{key_id}<{length} {{let local{key_id}=index{key_id} as i64;let local{child_id}={input}.index(_ctx.store().bindings(),index{key_id});index{key_id}+=1;if {selected} {{"
+        );
+    }
     let key = if let Ty::Map(key, _) = shape {
         key.as_ref()
     } else {

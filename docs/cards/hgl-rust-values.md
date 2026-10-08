@@ -101,3 +101,7 @@ Current Tuple node-local copies and complete results lower through
 hgl-rust-snapshot-slots; ordinary aggregate constructor assembly lowers through
 hgl-rust-snapshots. Owned optional positions preserve unset data independently.
 No structural-delta observation or canonical type identity is substituted.
+
+Native text arguments from iteration child endpoints borrow the typed scalar
+column through the existing prepared input token. They do not clone text or
+convert endpoint identity to an ordinary owning argument.

@@ -1,0 +1,45 @@
+module hgraph.std part collection_iteration_own
+
+fn complete_fixed_sum(value:list<i64,2>)->i64 {
+    when {
+        var total:i64=0
+        for index,child in items(value) {
+            if valid(child) {total+=child+index}
+        }
+        return total
+    }
+}
+fn modified_fixed_sum(value:list<i64,2>)->i64 {
+    when {
+        var total:i64=0
+        for index,child in items(value,modified) {
+            if valid(child) {total+=child+index}
+        }
+        return total
+    }
+}
+fn iterated_text(value:map<i64,str>)->i64 {
+    when {
+        for key,child in items(value,modified) {
+            if valid(child) {return text_len(child)}
+        }
+    }
+}
+fn fixed_text(value:list<str,2>)->i64 {
+    when {
+        for index,child in items(value,modified) {
+            if valid(child) {return text_len(child)}
+        }
+    }
+}
+test fixed_items_traverse_dense_children_and_keep_modified_selection {
+    let first=delta<list<i64,2>>(items:[0:7])
+    let second=delta<list<i64,2>>(items:[1:9])
+    let third=delta<list<i64,2>>(items:[0:8])
+    assert eval(complete_fixed_sum,[first,second,third]) == [7,17,18]
+    assert eval(modified_fixed_sum,[first,second,third]) == [7,10,8]
+}
+test iterated_text_native_arguments_borrow_child_payloads {
+    assert eval(iterated_text,[delta<map<i64,str>>(upsert:[1:"held"]),delta<map<i64,str>>(upsert:[1:"xy"])]) == [4,2]
+    assert eval(fixed_text,[delta<list<str,2>>(items:[0:"held"]),delta<list<str,2>>(items:[1:"xy"])]) == [4,2]
+}

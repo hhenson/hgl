@@ -50,6 +50,15 @@ fn tuple_observations_generated_cycles_allocate_nothing() -> Result<(), Box<dyn 
 {
     run_shared(true)
 }
+#[test]
+fn fixed_iteration_and_native_text_children_execute_without_tick_allocation()
+-> Result<(), Box<dyn std::error::Error>> {
+    run_source(
+        include_str!("fixtures/collection_iteration.hgl"),
+        true,
+        false,
+    )
+}
 fn run_shared(measure: bool) -> Result<(), Box<dyn std::error::Error>> {
     run_source(
         include_str!("../../../external/hgraph_std/hgl/hgraph/tests/tuple_observation_values.hgl"),

@@ -477,7 +477,10 @@ fn native_argument(plan: &Plan, v: &Value) -> String {
         return format!("&({})", value(plan, v));
     }
     match &v.kind {
-        Kind::IterationInput(_) => value(plan, v),
+        Kind::IterationInput(_) => format!(
+            "_ctx.store().get_ref({}).as_str()",
+            crate::observed::input(v)
+        ),
         Kind::Input(i, _) => {
             format!("_ctx.store().get_ref(self.input{i}).as_str()")
         }
