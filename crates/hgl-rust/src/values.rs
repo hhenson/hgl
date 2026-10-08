@@ -610,7 +610,10 @@ fn push(plan: &Plan, parent: &Value, item: &Value) -> String {
 fn direct_call(plan: &Plan, result: &Ty, args: &[Value], body: &[Statement]) -> String {
     let mut code = vec!["{ ".into()];
     for (i, arg) in args.iter().enumerate() {
-        code.push(format!("let argument{i} = {};", value(plan, arg)));
+        code.push(format!(
+            "let argument{i} = {};",
+            crate::value_calls::argument(arg, i, body, |v| value(plan, v))
+        ));
     }
     code.push(format!(
         "(|| -> Result<{}, Box<hgl_types::NodeError>> {{",

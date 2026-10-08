@@ -31,6 +31,7 @@ pub mod structs;
 pub mod structural_publication;
 pub mod tuple_adapter;
 pub mod type_data;
+pub mod value_calls;
 pub mod value_convert;
 pub mod values;
 pub mod windows;

@@ -38,10 +38,12 @@ structs = { budget = 230, uses = ["collections", "prepared_values"] }
 type_data = { budget = 120, uses = ["enums"] }
 value_convert = { budget = 320, uses = ["checked_data", "collections", "families", "layouts"] }
 tuple_adapter = { budget = 60, uses = ["execution_proof"] }
-values = { budget = 800, uses = ["structural_publication", "snapshot_slots", "snapshots", "collections", "deltas", "direct_deltas", "finite_domains", "layouts", "observed", "windows"] }
+values = { budget = 800, uses = ["value_calls", "structural_publication", "snapshot_slots", "snapshots", "collections", "deltas", "direct_deltas", "finite_domains", "layouts", "observed", "windows"] }
 windows = { budget = 100, uses = ["layouts"] }
 
 structural_publication = { budget = 220, uses = ["layouts", "snapshot_slots", "snapshots"] }
+
+value_calls = { budget = 100, uses = [] }
 
 [dependencies]
 hgl-semantics = { path = "../hgl-semantics" }
