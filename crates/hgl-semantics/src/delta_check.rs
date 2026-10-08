@@ -127,12 +127,16 @@ fn members<'a>(
         } else {
             &mut *removed
         };
-        remember(&value, member, keys, expression)?;
+        let known = remember(&value, member, keys, expression)?;
         if matches!(origin, Ty::List(..)) {
             index(&value, expression)?;
         }
         if !matches!(origin, Ty::List(..)) {
-            overlap(added, removed, expression)?;
+            overlap(
+                known.as_ref(),
+                if name == "added" { removed } else { added },
+                expression,
+            )?;
         }
         parts.push(if name == "added" {
             Part::Added(value.0)
@@ -147,7 +151,7 @@ fn remember(
     expected: &Ty,
     keys: &mut BTreeSet<Key>,
     expr: &Expr,
-) -> Result<(), Issue> {
+) -> Result<Option<Key>, Issue> {
     if value.0.ty != *expected {
         return Err(error(
             "delta.entry_type",
@@ -158,8 +162,9 @@ fn remember(
             ),
         ));
     }
-    if let Some(value) = &value.1
-        && !keys.insert(key(value)?)
+    let known = value.1.as_ref().map(key).transpose()?;
+    if let Some(key) = &known
+        && !keys.insert(key.clone())
     {
         return Err(error(
             "delta.duplicate_entry",
@@ -167,10 +172,10 @@ fn remember(
             "duplicate delta entry",
         ));
     }
-    Ok(())
+    Ok(known)
 }
-fn overlap(added: &BTreeSet<Key>, removed: &BTreeSet<Key>, expr: &Expr) -> Result<(), Issue> {
-    if added.intersection(removed).next().is_some() {
+fn overlap(known: Option<&Key>, other: &BTreeSet<Key>, expr: &Expr) -> Result<(), Issue> {
+    if known.is_some_and(|key| other.contains(key)) {
         return Err(error(
             "delta.overlap",
             expr,
@@ -221,9 +226,9 @@ fn sparse<'a>(
             &Ty::I64
         };
         let value = fixed(position, expected)?;
-        remember(&value, expected, added, position)?;
+        let known = remember(&value, expected, added, position)?;
         if let Ty::Map(_, child) = origin {
-            overlap(added, removed, position)?;
+            overlap(known.as_ref(), removed, position)?;
             parts.push(Part::Keyed(value.0, child.clone().delta()?, payload));
         } else {
             let index = index(&value, position)?;

@@ -83,13 +83,20 @@ pub fn collection_operation(
     };
     if op == "collection_contains" {
         return format!(
-            "{endpoint}.member(_ctx.store().bindings(),{}).is_some()",
+            "{{let key={};{endpoint}.member(_ctx.store().bindings(),key).is_some()}}",
             args[0]
         );
     }
     let create = allocation(child);
     let payload = args.last().map_or("", String::as_str);
-    let write = apply(child, "child", payload);
+    let staged = if op == "collection_push" {
+        format!("let payload={payload};let key={key};")
+    } else if matches!(op, "collection_insert" | "collection_update") {
+        format!("let key={key};let payload={payload};")
+    } else {
+        format!("let key={key};")
+    };
+    let write = apply(child, "child", "payload");
     let effect = match op {
         "collection_insert" | "collection_push" => format!(
             "if {endpoint}.member(_ctx.store().bindings(),key).is_some() {{return Err(hgl_types::NodeError::new(\"collection insert requires absence\"));}} _ctx.get_or_create_with({endpoint}.id(),key,|store,owner|{create});let child={endpoint}.member(_ctx.store().bindings(),key).expect(\"created child\");{write}"
@@ -105,5 +112,5 @@ pub fn collection_operation(
         ),
         _ => unreachable!("checked collection effect"),
     };
-    format!("{{let key={key};{effect}}}")
+    format!("{{{staged}{effect}}}")
 }

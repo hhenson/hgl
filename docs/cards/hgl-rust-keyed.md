@@ -48,3 +48,7 @@ already been materialized by ordered harness preparation; decoding cannot replay
 it. Set key types are ordinary values, not child temporal publication shapes.
 
 collection_operation emits the admitted scalar-child i64 map/list insert, update, remove, invalidate, push, pop and contains operations through existing shaped Store calls. Child application and allocation remain typed callbacks. Invalidate requires retained membership in this admitted profile. Dynamic effects select the generic adapter; they do not claim prepared hot-path allocation bounds.
+
+Collection operands are retained once before membership preconditions, using the backend's existing positional value-call convention. This does not establish a general source-language argument-order guarantee. Push retains its supplied payload before selecting the current tail index; contains retains its key before borrowing membership.
+
+The narrower invocation boundary follows the shared [value-function argument contract](../../external/hgraph_spec/language/docs/user-guide/value-functions.md) and [collection preconditions at the call](../../external/hgraph_spec/language/docs/developer-guide/syntax-and-semantics.md). General multi-argument evaluation order remains unspecified by those rules.

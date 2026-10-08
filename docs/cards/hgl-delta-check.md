@@ -43,3 +43,5 @@ Growing-list items require constant nonnegative positions; remove accepts consta
 delta_value checks the exact input endpoint, publication shape and valid/modified facts after the frontend verifies evaluation phase.
 
 Constructor and payload callbacks preserve structured Issues. Formation diagnostics retain named argument, member, key and index source ranges. Exact child/destination mismatches use delta.type_mismatch after source formation succeeds; scalar-reduced publication requirements stay explicit in the checker. tuple_shorthand checks contextual sparse tuple children with the same exact type rule. Growing items/remove overlap is a trace profile failure after ordinary arguments execute, rather than a formation overlap.
+
+Each known newly inserted key checks only the opposing membership set, retaining the later entry source range with logarithmic lookup; materialized cold validation checks one final intersection.
