@@ -28,6 +28,7 @@ pub mod static_values;
 pub mod struct_check;
 pub mod struct_declarations;
 pub mod struct_names;
+pub mod structural_admission;
 pub mod tuple_admission;
 pub mod tuple_flow;
 pub mod tuple_phase;

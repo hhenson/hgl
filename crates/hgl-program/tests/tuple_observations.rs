@@ -59,6 +59,60 @@ fn fixed_iteration_and_native_text_children_execute_without_tick_allocation()
         false,
     )
 }
+#[test]
+fn complete_structural_value_publication_executes_without_tick_allocation()
+-> Result<(), Box<dyn std::error::Error>> {
+    run_source(
+        include_str!("fixtures/structural_value_publication.hgl"),
+        true,
+        false,
+    )
+}
+#[test]
+fn native_reverse_order_collection_results_require_prepared_publication() {
+    for body in [
+        "fn bad(value:i64)->tuple<map<i64,i64>,bool> {when {return(map<i64,i64>(items:[8:value,7:1]),false)}}",
+        "struct Holder {book:map<i64,i64>}\nfn bad(value:i64)->Holder {when {return Holder(book:map<i64,i64>(items:[8:value,7:1]))}}",
+        "struct TextHolder {text:str}\nfn bad(value:i64)->TextHolder {when {return TextHolder(text:\"held\")}}",
+        "struct SetHolder {members:set<i64>}\nfn bad(value:i64)->SetHolder {when {return SetHolder(members:set<i64>(items:[1]))}}",
+    ] {
+        let source = format!(
+            "module hgraph.std part native_collection_boundary\n{body}\ntest rejected {{eval(bad,[1])}}"
+        );
+        let error = compile_tests(&sources(&source))
+            .expect_err("native collection/text publication lacks prepared ownership");
+        assert!(
+            error.contains("prepared retained observations"),
+            "{source}\n{error}"
+        );
+        assert!(!error.contains("delta.type_mismatch"), "{error}");
+    }
+}
+#[test]
+fn required_scalar_and_native_text_child_reads_fail_without_default_values()
+-> Result<(), Box<dyn std::error::Error>> {
+    for source in [
+        "module hgraph.std part missing_child\nfn missing(value:tuple<bool,i64>)->i64 {when valid(value) {return value[1]}}\ntest missing {eval(missing,[(false,_)])}",
+        "module hgraph.std part missing_child\nstruct Required {held:bool\nnumber:i64}\nfn missing(value:Required)->i64 {when valid(value) {return value.number}}\ntest missing {eval(missing,[delta<Required>(held:false)])}",
+        "module hgraph.std part missing_child\nfn missing(value:tuple<bool,str>)->i64 {when valid(value) {return text_len(value[1])}}\ntest missing {eval(missing,[(false,_)])}",
+    ] {
+        run_source(source, false, true)?;
+    }
+    Ok(())
+}
+#[test]
+fn wholly_invalid_complete_structures_fail_the_existing_profile_boundary()
+-> Result<(), Box<dyn std::error::Error>> {
+    for source in [
+        "module hgraph.std part invalid_complete\nstruct RequiredValue {number:i64}\nfn copy(step:i64,value:RequiredValue)->RequiredValue {when valid(step) {let saved=value\nreturn saved}}\ntest empty {eval(copy,step:[1,_],value:[_,delta<RequiredValue>(number:7)])}",
+        "module hgraph.std part invalid_complete\nfn copy(step:i64,value:tuple<i64,bool>)->tuple<i64,bool> {when valid(step) {let saved=value\nreturn saved}}\ntest empty {eval(copy,step:[1,_],value:[_,(7,false)])}",
+        "module hgraph.std part invalid_complete\nfn source(step:i64)->map<i64,i64> {inject out\nwhen {if step==1 {upsert(out,7,10)} else {invalidate(out,7)}}}\nfn copy(step:i64,value:map<i64,i64>)->map<i64,i64> {when valid(step) {let saved=value\nreturn saved}}\nfn entry(step:i64)->map<i64,i64> => copy(step,source(step))\ntest invalid {eval(entry,[1,2])}",
+        "module hgraph.std part invalid_complete\nfn source(step:i64)->map<i64,i64> {inject out\nwhen {if step==1 {upsert(out,7,10)} else {remove(out,7)}}}\nfn copy(step:i64,value:map<i64,i64>)->map<i64,i64> {when valid(step) {let saved=value\nreturn saved}}\nfn entry(step:i64)->map<i64,i64> => copy(step,source(step))\ntest empty {eval(entry,[1,2])}",
+    ] {
+        run_source(source, false, true)?;
+    }
+    Ok(())
+}
 fn run_shared(measure: bool) -> Result<(), Box<dyn std::error::Error>> {
     run_source(
         include_str!("../../../external/hgraph_std/hgl/hgraph/tests/tuple_observation_values.hgl"),

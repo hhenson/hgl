@@ -28,6 +28,7 @@ pub mod snapshot_slots;
 pub mod snapshots;
 pub mod source_slots;
 pub mod structs;
+pub mod structural_publication;
 pub mod tuple_adapter;
 pub mod type_data;
 pub mod value_convert;

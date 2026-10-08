@@ -50,7 +50,7 @@ fn block(body: &[Statement], live: &mut BTreeMap<usize, bool>) -> Result<(), Str
             }
             Statement::Assign(target, value) => {
                 if matches!(target.kind, Kind::Cache(_))
-                    || (matches!(target.kind, Kind::Output) && !observed(value))
+                    || (matches!(target.kind, Kind::Output) && !observed(value) && !value.snapshot)
                 {
                     helper_argument(value)?;
                 }

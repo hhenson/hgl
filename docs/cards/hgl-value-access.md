@@ -44,3 +44,9 @@ Bindings preserve the IR snapshot representation flag for independently retained
 Tuple observations. Aggregate helper/global replacement escapes are explicitly
 diagnosed until their ordinary ownership ABI supports optional descendant slots.
 Node return itself remains an admitted publication boundary.
+
+Concrete Struct input fields retain typed endpoint identity for metadata and
+scalar projection; structural ordinary payload reads require explicit retained
+ownership. Retained Struct field projection preserves the physical snapshot flag.
+Abstract families retain their declared common-field boundary, and optional
+ordinary field projection remains outside this profile.

@@ -103,13 +103,15 @@ pub fn require_payload(value: &Value) -> Result<(), String> {
     if matches!(value.ty, Ty::Nullable(_)) {
         return Err("nullable replay result requires presence proof before payload use".into());
     }
-    if matches!(
-        value.kind,
-        Kind::Input(..) | Kind::IterationInput(_) | Kind::Output
-    ) && matches!(
-        value.ty,
-        Ty::Atomic(_) | Ty::Map(..) | Ty::Tuple(_) | Ty::List(..) | Ty::Struct(..)
-    ) {
+    if (crate::tuple_values::endpoint(value) || matches!(value.kind, Kind::Output))
+        && matches!(
+            value.ty,
+            Ty::Atomic(_) | Ty::Map(..) | Ty::Tuple(_) | Ty::List(..) | Ty::Struct(..)
+        )
+        || (crate::tuple_values::endpoint(value)
+            && matches!(value.kind, Kind::Field(..))
+            && matches!(value.ty, Ty::Set(_)))
+    {
         return Err("structural endpoint payload requires delta_value observation".into());
     }
     Ok(())

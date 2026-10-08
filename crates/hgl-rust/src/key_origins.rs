@@ -2,6 +2,14 @@
 use hgl_semantics::ir::{DeltaEntry, Kind, Statement, Value};
 use hgl_semantics::static_values::StaticValues;
 fn collect(value: &Value, keys: &mut Vec<Value>, origins: &StaticValues) {
+    if let Kind::Query(op, args) = &value.kind
+        && op.starts_with("collection_")
+        && matches!(args.first().map(|v| &v.ty), Some(hgl_source::Ty::Map(..)))
+        && let Some(key) = args.get(1)
+        && let Ok((_, Some(key))) = origins.key(key.clone())
+    {
+        keys.push(key);
+    }
     match &value.kind {
         Kind::Delta(parts) => {
             for part in parts {

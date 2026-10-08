@@ -64,3 +64,8 @@ Supported current Tuple inputs initialize independently retained ordinary locals
 using tuple_values classification. Mutable snapshot locals and snapshot aggregate
 comparisons are explicitly outside this implementation profile. Complete native
 ordinary tuples retain the existing writable ordinary value behavior.
+
+Own-output assignment delegates complete ordinary/delta compatibility to
+structural_admission. Writable ordinary local widening remains separate from
+exact temporal output compatibility. Retained concrete Struct/fixed List/Map
+locals share Tuple ownership rules; mutable retained locals remain diagnosed.

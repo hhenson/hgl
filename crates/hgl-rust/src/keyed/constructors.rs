@@ -13,6 +13,21 @@ pub fn constructors(
     let mut code = String::new();
     for (node, definition) in plan.nodes.iter().enumerate() {
         let mut visit = |value: &Value, locals: &Locals| {
+            if let Kind::Query(op, args) = &value.kind
+                && matches!(
+                    op.as_str(),
+                    "collection_insert" | "collection_update" | "collection_upsert"
+                )
+                && let [receiver, key, payload] = args.as_slice()
+                && let Ok(ty) = receiver.ty.clone().delta()
+                && let Some(domain) = root(&ty)
+            {
+                let publication = Value::new(
+                    ty,
+                    Kind::Delta(vec![DeltaEntry::Keyed(key.clone(), payload.clone())]),
+                );
+                code += &paths(&publication, locals, node, &domain, &width, &emit);
+            }
             if matches!(value.kind, Kind::Delta(_))
                 && let Some(domain) = root(&value.ty)
             {

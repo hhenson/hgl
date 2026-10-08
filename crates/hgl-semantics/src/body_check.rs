@@ -59,6 +59,7 @@ fn is_construct(tokens: &[Token], index: usize) -> bool {
 /// Parse an ordinary body, retaining its function-level service declarations.
 pub fn ordinary_body(cursor: &mut Cursor<'_>) -> Result<(Vec<String>, Vec<Stmt>), String> {
     if cursor.take("=>") {
+        cursor.lines();
         return Ok((Vec::new(), vec![Stmt::Return(cursor.expr()?)]));
     }
     cursor.need("{")?;

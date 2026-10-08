@@ -105,3 +105,8 @@ No structural-delta observation or canonical type identity is substituted.
 Native text arguments from iteration child endpoints borrow the typed scalar
 column through the existing prepared input token. They do not clone text or
 convert endpoint identity to an ordinary owning argument.
+
+Own-output complete ordinary assignment delegates to structural_publication.
+Required projected scalar and native text child reads check existing input
+validity before access; an unset child never becomes a default scalar. Prepared
+text projections keep read-only native borrows and independent local ownership.

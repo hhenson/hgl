@@ -19,8 +19,12 @@ fn scan(
                 locals.insert(*id, v.ty.clone());
             }
             Statement::Return(value)
-                if value.snapshot && matches!(value.kind, Kind::Unary(..) | Kind::Construct(_)) =>
-            {
+            | Statement::Assign(
+                Value {
+                    kind: Kind::Output, ..
+                },
+                value,
+            ) if value.snapshot && matches!(value.kind, Kind::Unary(..) | Kind::Construct(_)) => {
                 let id = *next;
                 *next += 1;
                 locals.insert(id, value.ty.clone());
@@ -118,7 +122,7 @@ fn capture_child(ty: &Ty, input: &str, destination: &str) -> String {
     )
 }
 fn capture(ty: &Ty, input: &str, destination: &str) -> String {
-    if let Ty::Tuple(children) = ty {
+    if let Some(children) = crate::snapshots::children(ty) {
         return children
             .iter()
             .enumerate()
@@ -165,15 +169,9 @@ fn capture(ty: &Ty, input: &str, destination: &str) -> String {
         ]);
         let marker = global_type(key);
         return format!(
-            "{{let destination={destination};let count=observation.bindings.input(({input}).id()).members.live.len();if columns.prepared_list(destination.fields()).len()<count {{return Err(hgl_types::NodeError::new(\"snapshot map capacity exceeded\"));}}for(index,key) in observation.bindings.keys(({input}).id()).enumerate() {{let item={};<{marker} as hgl_store::Key>::with_value(observation.keys,key,|value|->hgl_types::NodeResult {{<{marker} as hgl_store::PreparedValue>::check_native(columns,item.fields().0,value)?;<{marker} as hgl_store::PreparedValue>::copy_native(columns,item.fields().0,value);Ok(())}})??;{}}}columns.set_list_len(destination.fields(),count);}}",
+            "{{let destination={destination};let count=observation.bindings.input(({input}).id()).members.live.len();if columns.prepared_list(destination.fields()).len()<count {{return Err(hgl_types::NodeError::new(\"snapshot map capacity exceeded\"));}}let mut index=0;let mut any=false;for &(key,_) in &observation.bindings.input(({input}).id()).members.prepared {{if let Some(input)=({input}).member(observation.bindings,key) {{let item={};<{marker} as hgl_store::Key>::with_value(observation.keys,key,|value|->hgl_types::NodeResult {{<{marker} as hgl_store::PreparedValue>::check_native(columns,item.fields().0,value)?;<{marker} as hgl_store::PreparedValue>::copy_native(columns,item.fields().0,value);Ok(())}})??;{}any|=!columns.list(item.fields().1.fields().0.fields()).is_empty();index+=1;}}}}if count==0||!any {{return Err(hgl_types::NodeError::new(\"ordinary tuple input is invalid\"));}}if index!=count {{return Err(hgl_types::NodeError::new(\"snapshot map requires prepared key domain\"));}}columns.set_list_len(destination.fields(),count);}}",
             element(&pair, "destination", "index", "columns"),
-            capture_child(
-                child,
-                &format!(
-                    "({input}).member(observation.bindings,key).ok_or_else(||hgl_types::NodeError::new(\"missing live child\"))?"
-                ),
-                "item.fields().1.fields().0"
-            )
+            capture_child(child, "input", "item.fields().1.fields().0")
         );
     }
     let marker = global_type(ty);
@@ -191,9 +189,9 @@ pub fn local(id: usize, value: &Value, emit: impl Fn(&Value) -> String) -> Strin
         && op == "snapshot"
     {
         format!(
-            "let mut prepared=_ctx.prepared();let(observation,globals)=prepared.storage.observations();let columns=globals.values_mut();if !observation.bindings.valid(({}).id()) {{return Err(hgl_types::NodeError::new(\"ordinary tuple input is invalid\"));}}{}",
+            "let input={};let mut prepared=_ctx.prepared();let(observation,globals)=prepared.storage.observations();let columns=globals.values_mut();if !observation.bindings.valid(input.id()) {{return Err(hgl_types::NodeError::new(\"ordinary tuple input is invalid\"));}}{}",
             crate::observed::input(input),
-            capture(&value.ty, &crate::observed::input(input), "destination")
+            capture(&value.ty, "input", "destination")
         )
     } else if matches!(value.kind, Kind::Construct(_)) {
         constructed(value, "destination", &emit)
@@ -235,62 +233,23 @@ pub fn projection(value: &Value, emit: impl Fn(&Value) -> String) -> String {
 /// Retain a scalar projection; aggregate projections remain independently owned slots.
 pub fn read(value: &Value, emit: impl Fn(&Value) -> String) -> String {
     let source = projection(value, emit);
-    if matches!(value.ty, Ty::Tuple(_) | Ty::List(..) | Ty::Map(..)) {
+    if matches!(
+        value.ty,
+        Ty::Tuple(_) | Ty::Struct(..) | Ty::List(..) | Ty::Map(..)
+    ) {
         source
     } else {
         format!("({source}).read(_ctx.store().global_values())?")
     }
 }
-/// Apply complete retained children directly from prepared ordinary storage.
+/// Publish a complete retained value through the structural publication owner.
 pub fn publish(ty: &Ty, output: &str, source: &str) -> String {
-    if let Ty::Tuple(children) = ty {
-        return children.iter().enumerate().fold(String::new(),|mut code,(i,child)| {append(&mut code,format_args!("{{let optional=({source}).fields().{i};let output=({output}).field::<{i}>(_ctx.store().bindings());if !_ctx.store().global_values().list(optional.fields()).is_empty() {{let source={};{}}}}}",slot(child,"optional","_ctx.store().global_values()"),publish(child,"output","source")));code});
-    }
-    if let Ty::List(child, size) = ty {
-        let n = size.map_or_else(
-            || format!("_ctx.store().global_values().list(({source}).fields()).len()"),
-            |n| n.to_string(),
-        );
-        let output_child = if size.is_some() {
-            "output.index(_ctx.store().bindings(),index)".into()
-        } else {
-            String::from(
-                "{let key=index as i64;_ctx.get_or_create_with(output.id(),key,|_,_|unreachable!(\"finite snapshot member prepared before start\"));output.member(_ctx.store().bindings(),key).ok_or_else(||hgl_types::NodeError::new(\"missing prepared member\"))?}",
-            )
-        };
-        let Ty::List(wrapper, _) = crate::snapshots::storage(ty) else {
-            unreachable!()
-        };
-        return format!(
-            "{{let source={source};let output={output};for index in 0..{n} {{let item={};let optional=item.fields().0;let output={output_child};if !_ctx.store().global_values().list(optional.fields()).is_empty() {{let source={};{}}}}}}}",
-            element(&wrapper, "source", "index", "_ctx.store().global_values()"),
-            slot(child, "optional", "_ctx.store().global_values()"),
-            publish(child, "output", "source")
-        );
-    }
-    if let Ty::Map(key, child) = ty {
-        let Ty::Map(_, wrapper) = crate::snapshots::storage(ty) else {
-            unreachable!()
-        };
-        let pair = Ty::Tuple(vec![(**key).clone(), *wrapper]);
-        let marker = global_type(key);
-        return format!(
-            "{{let source={source};let output={output};let count=_ctx.store().global_values().list(source.fields()).len();for index in 0..count {{let item={};let key={{let prepared=_ctx.prepared();<{marker} as hgl_store::Key>::id(prepared.storage.keys,prepared.storage.globals.values().scalar::<{}>(item.fields().0.fields()))?}};_ctx.get_or_create_with(output.id(),key,|_,_|unreachable!(\"finite snapshot member prepared before start\"));let output=output.member(_ctx.store().bindings(),key).ok_or_else(||hgl_types::NodeError::new(\"missing prepared member\"))?;let optional=item.fields().1.fields().0;if !_ctx.store().global_values().list(optional.fields()).is_empty() {{let source={};{}}}}}}}",
-            element(&pair, "source", "index", "_ctx.store().global_values()"),
-            rust_type(key),
-            slot(child, "optional", "_ctx.store().global_values()"),
-            publish(child, "output", "source")
-        );
-    }
-    format!(
-        "_ctx.prepared().scalar_from_global::<{}>(({output}).id(),({output}).generation(),({source}).fields())?;",
-        rust_type(ty)
-    )
+    crate::structural_publication::prepared(ty, output, source)
 }
 /// Select the complete ordinary tuple publication boundary before ordinary scalar transport.
 pub fn returned(value: &Value, expression: &str, result: Option<&Ty>) -> Option<String> {
     if result.is_some_and(|ty| matches!(ty, Ty::Atomic(_)))
-        || (!value.snapshot && !matches!(value.ty, Ty::Tuple(_)))
+        || (!value.snapshot && !matches!(value.ty, Ty::Tuple(_) | Ty::Struct(..)))
     {
         return None;
     }
@@ -300,8 +259,10 @@ pub fn returned(value: &Value, expression: &str, result: Option<&Ty>) -> Option<
         crate::snapshots::complete(&value.ty, expression)
     };
     let publish = if value.snapshot
-        && !matches!(value.ty, Ty::Tuple(_) | Ty::List(..) | Ty::Map(..))
-    {
+        && !matches!(
+            value.ty,
+            Ty::Tuple(_) | Ty::Struct(..) | Ty::List(..) | Ty::Map(..)
+        ) {
         format!(
             "_ctx.prepared().scalar_from_global::<{}>(self._output.id(),self._output.generation(),publication.fields())?;",
             rust_type(&value.ty)
@@ -326,7 +287,7 @@ fn constructed(value: &Value, destination: &str, emit: &impl Fn(&Value) -> Strin
         let marker = global_type(&crate::snapshots::storage(&child.ty));
         let write = if child.snapshot {
             if let Kind::Unary(op,input) = &child.kind && op == "snapshot" {
-                format!("let mut prepared=_ctx.prepared();let(observation,globals)=prepared.storage.observations();let columns=globals.values_mut();let destination={child_slot};{}columns.set_list_len(({target}).fields(),1);",format_args!("if !observation.bindings.valid(({}).id()) {{return Err(hgl_types::NodeError::new(\"ordinary tuple input is invalid\"));}}{}",crate::observed::input(input),capture(&child.ty,&crate::observed::input(input),"destination")))
+                format!("let input={};let mut prepared=_ctx.prepared();let(observation,globals)=prepared.storage.observations();let columns=globals.values_mut();let destination={child_slot};if !observation.bindings.valid(input.id()) {{return Err(hgl_types::NodeError::new(\"ordinary tuple input is invalid\"));}}{}columns.set_list_len(({target}).fields(),1);",crate::observed::input(input),capture(&child.ty,"input","destination"))
             } else if matches!(child.kind,Kind::Construct(_)) {
                 format!("let destination={{let globals=_ctx.global_state();let columns=globals.values();{child_slot}}};{} _ctx.global_state().values_mut().set_list_len(({target}).fields(),1);",constructed(child,"destination",emit))
             } else {
@@ -343,14 +304,26 @@ fn constructed(value: &Value, destination: &str, emit: &impl Fn(&Value) -> Strin
 /// Read a statically projected runtime tuple child using its existing typed transport.
 pub fn endpoint_read(value: &Value) -> String {
     let input = crate::observed::input(value);
-    if crate::layouts::whole_payload(&value.ty).is_some()
+    let read = if crate::layouts::whole_payload(&value.ty).is_some()
         || matches!(
             value.ty,
             Ty::List(..) | Ty::Map(..) | Ty::Tuple(_) | Ty::Struct(..) | Ty::Rolling(..)
-        )
-    {
-        crate::observed::read(&value.ty, &input, None)
+        ) {
+        crate::observed::read(&value.ty, "input", None)
     } else {
-        format!("_ctx.get({input})")
-    }
+        "_ctx.get(input)".into()
+    };
+    format!(
+        "{{let input={input};if !_ctx.store().input_valid(input.id()) {{return Err(hgl_types::NodeError::new(\"ordinary tuple input is invalid\"));}}{read}}}"
+    )
+}
+/// Borrow scalar text from an endpoint, preserving required child-read validity.
+pub fn native_text(value: &Value) -> String {
+    let input = crate::observed::input(value);
+    let check = if matches!(value.kind, Kind::Input(..)) {
+        ""
+    } else {
+        "if !_ctx.store().input_valid(input.id()) {return Err(hgl_types::NodeError::new(\"ordinary tuple input is invalid\"));}"
+    };
+    format!("{{let input={input};{check}_ctx.store().get_ref(input).as_str()}}")
 }

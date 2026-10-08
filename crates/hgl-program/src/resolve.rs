@@ -1572,7 +1572,7 @@ impl Checker {
         }
         if matches!(
             name,
-            "insert" | "update" | "remove" | "invalidate" | "push" | "pop" | "contains"
+            "insert" | "update" | "upsert" | "remove" | "invalidate" | "push" | "pop" | "contains"
         ) && let Some((_, first)) = args.first()
         {
             let receiver = self.expression(module, first, env, runtime)?;

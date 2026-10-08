@@ -66,7 +66,10 @@ pub fn field(parent: Value, name: &str) -> Result<Value, String> {
     let (_, fields, optional) = schema.structure().map_err(|error| {
         format!("field access requires an ordinary struct or direct injected clock: {error}")
     })?;
-    if matches!(parent.kind, Kind::Input(..) | Kind::Wire(_) | Kind::Output) {
+    if matches!(parent.kind, Kind::Wire(_) | Kind::Output)
+        || (matches!(parent.kind, Kind::Input(..) | Kind::IterationInput(_))
+            && !matches!(parent.ty, Ty::Struct(..)))
+    {
         return Err(
             "temporal child projection is outside the admitted publication-delta profile".into(),
         );
@@ -79,7 +82,10 @@ pub fn field(parent: Value, name: &str) -> Result<Value, String> {
     if optional.contains(&index) {
         return Err("optional field access is outside the admitted value profile".into());
     }
-    Ok(Value::new(ty.clone(), Kind::Field(Box::new(parent), index)))
+    let snapshot = parent.snapshot;
+    let mut value = Value::new(ty.clone(), Kind::Field(Box::new(parent), index));
+    value.snapshot = snapshot;
+    Ok(value)
 }
 /// Return the entry and access mode carried by an aggregate view.
 pub fn provenance(value: &Value) -> Option<(usize, bool)> {

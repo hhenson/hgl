@@ -31,7 +31,25 @@ fn value(plan: &Plan, input: &Value, looping: bool) -> bool {
             !looping && value(plan, parent, looping) && value(plan, item, looping)
         }
         Kind::List(_) if !input.closed() => false,
-        Kind::Query(op, _) if op.starts_with("collection_") => false,
+        Kind::Query(op, args) if op.starts_with("collection_") => {
+            !looping
+                && matches!(
+                    op.as_str(),
+                    "collection_insert"
+                        | "collection_update"
+                        | "collection_upsert"
+                        | "collection_remove"
+                        | "collection_invalidate"
+                        | "collection_contains"
+                )
+                && args.first().is_some_and(
+                    |v| matches!(&v.ty,Ty::Map(key,child) if **key==Ty::I64 && !owning(child)),
+                )
+                && args
+                    .get(1)
+                    .is_some_and(|v| matches!(v.kind, Kind::Literal(hgl_source::Literal::Int(_))))
+                && args.iter().all(|arg| value(plan, arg, looping))
+        }
         Kind::List(args) | Kind::Query(_, args) => args.iter().all(|arg| value(plan, arg, looping)),
         Kind::Construct(fields) => fields.iter().all(|(_, child)| value(plan, child, looping)),
         Kind::Delta(parts) => {

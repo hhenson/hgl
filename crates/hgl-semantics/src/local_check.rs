@@ -6,8 +6,9 @@ use hgl_source::{Expr, Ty};
 use std::collections::BTreeSet;
 
 /// Apply ordinary widening without turning a value into a connection.
-fn widen(value: Value, expected: &Ty) -> Value {
-    if *expected == Ty::F64 && value.ty == Ty::I64 && !matches!(value.kind, Kind::Wire(_)) {
+fn widen(value: Value, expected: &Ty, allowed: bool) -> Value {
+    let numeric = *expected == Ty::F64 && value.ty == Ty::I64;
+    if allowed && numeric && !matches!(value.kind, Kind::Wire(_)) {
         Value::new(Ty::F64, Kind::Unary("float".into(), Box::new(value)))
     } else {
         value
@@ -24,7 +25,7 @@ pub fn initializer(value: Value, annotation: Option<&Ty>) -> Result<Value, Strin
         owning_payload(&value)?;
     }
     let value = if let Some(ty) = annotation {
-        widen(value, ty)
+        widen(value, ty, true)
     } else {
         value
     };
@@ -80,14 +81,13 @@ pub fn assignment_type(target: &Value, evaluation: bool) -> Result<Ty, String> {
 /// Ordinary mutation never changes a binding into a temporal connection.
 pub fn assignment(target: Value, value: Value) -> Result<Statement, String> {
     let expected = assignment_type(&target, true)?;
+    if matches!(target.kind, Kind::Output) {
+        return crate::structural_admission::assignment(target, value, &expected);
+    }
     if matches!(value.kind, Kind::Wire(_)) {
         return Err("local assignment category mismatch: ordinary value required".into());
     }
-    let value = if writable(&target) {
-        widen(value, &expected)
-    } else {
-        value
-    };
+    let value = widen(value, &expected, writable(&target));
     if expected != value.ty || !ordinary(&expected) {
         return Err("assignment type mismatch".into());
     }
@@ -103,7 +103,7 @@ pub fn replacement(target: &Value, value: Value, mutable_port: bool) -> Result<V
     if matches!(target.kind, Kind::Wire(_)) != matches!(value.kind, Kind::Wire(_)) {
         return Err("local assignment category mismatch".into());
     }
-    let value = widen(value, &target.ty);
+    let value = widen(value, &target.ty, true);
     if target.ty != value.ty {
         return Err("local assignment type mismatch".into());
     }
@@ -162,10 +162,10 @@ pub fn binary(op: &str, mut values: [Value; 2], plan: &mut Plan) -> Result<Value
     require_payload(&a)?;
     require_payload(&b)?;
     if a.ty == Ty::I64 && b.ty == Ty::F64 {
-        a = widen(a, &Ty::F64);
+        a = widen(a, &Ty::F64, true);
     }
     if a.ty == Ty::F64 && b.ty == Ty::I64 {
-        b = widen(b, &Ty::F64);
+        b = widen(b, &Ty::F64, true);
     }
     let ty = crate::value_check::binary_type(op, &a.ty, &b.ty)?;
     let value = Value::new(

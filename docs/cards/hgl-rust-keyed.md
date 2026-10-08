@@ -52,3 +52,8 @@ collection_operation emits the admitted scalar-child i64 map/list insert, update
 Collection operands are retained once before membership preconditions, using the backend's existing positional value-call convention. This does not establish a general source-language argument-order guarantee. Push retains its supplied payload before selecting the current tail index; contains retains its key before borrowing membership.
 
 The narrower invocation boundary follows the shared [value-function argument contract](../../external/hgraph_spec/language/docs/user-guide/value-functions.md) and [collection preconditions at the call](../../external/hgraph_spec/language/docs/developer-guide/syntax-and-semantics.md). General multi-argument evaluation order remains unspecified by those rules.
+
+Scalar-child i64 Map upsert is admitted alongside insert/update. Cold constructor
+topology preparation includes known operation keys and child widths; it never
+executes the operation or payload. These keys seed existing prepared membership
+slots so proved imperative sources can execute without per-cycle allocation.

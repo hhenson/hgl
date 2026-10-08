@@ -91,7 +91,10 @@ pub fn collection_operation(
     let payload = args.last().map_or("", String::as_str);
     let staged = if op == "collection_push" {
         format!("let payload={payload};let key={key};")
-    } else if matches!(op, "collection_insert" | "collection_update") {
+    } else if matches!(
+        op,
+        "collection_insert" | "collection_update" | "collection_upsert"
+    ) {
         format!("let key={key};let payload={payload};")
     } else {
         format!("let key={key};")
@@ -103,6 +106,9 @@ pub fn collection_operation(
         ),
         "collection_update" => format!(
             "let child={endpoint}.member(_ctx.store().bindings(),key).ok_or_else(||hgl_types::NodeError::new(\"collection update requires presence\"))?;{write}"
+        ),
+        "collection_upsert" => format!(
+            "_ctx.get_or_create_with({endpoint}.id(),key,|store,owner|{create});let child={endpoint}.member(_ctx.store().bindings(),key).expect(\"created child\");{write}"
         ),
         "collection_remove" | "collection_pop" => format!(
             "if {endpoint}.member(_ctx.store().bindings(),key).is_none() {{return Err(hgl_types::NodeError::new(\"collection removal requires presence\"));}} _ctx.remove_shaped({endpoint}.id(),key);"

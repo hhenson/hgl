@@ -11,26 +11,32 @@ pub fn endpoint(value: &Value) -> bool {
 }
 /// Recursively supported retained tuple observations, without nominal publication changes.
 pub fn supported(ty: &Ty) -> bool {
+    profile(ty, true)
+}
+fn profile(ty: &Ty, growing: bool) -> bool {
     if let Ty::Tuple(children) = ty {
-        children.iter().all(supported)
-    } else if let Ty::List(child, _) = ty {
-        supported(child)
+        children.iter().all(|child| profile(child, growing))
+    } else if let Ty::Struct(_, fields, _) = ty {
+        fields.iter().all(|(_, child)| profile(child, false))
+    } else if let Ty::List(child, size) = ty {
+        (growing || size.is_some()) && profile(child, growing)
     } else if let Ty::Map(key, child) = ty {
         key.collection_key()
             && !matches!(key.as_ref(), Ty::Tuple(_) | Ty::Struct(..) | Ty::Enum(_))
-            && supported(child)
+            && profile(child, growing)
     } else {
         ty.atomic_payload()
             && !matches!(
                 ty,
-                Ty::Struct(..) | Ty::Recursive(_) | Ty::Family(_) | Ty::Enum(_) | Ty::Set(_)
+                Ty::Recursive(_) | Ty::Family(_) | Ty::Enum(_) | Ty::Set(_)
             )
     }
 }
 /// Retain a current tuple value; source identity and child validity remain exact.
 pub fn retain(value: Value, text_child: bool) -> Value {
-    if (matches!(value.ty, Ty::Tuple(_)) || (text_child && value.ty == Ty::Str))
-        && supported(&value.ty)
+    if (ordinary_result(&value.ty)
+        || ((text_child || matches!(value.kind, Kind::Field(..))) && value.ty == Ty::Str))
+        && profile(&value.ty, matches!(value.ty, Ty::Tuple(_)))
         && endpoint(&value)
         && !matches!(value.kind, Kind::Input(_, true))
     {
@@ -87,7 +93,14 @@ pub fn indexed(parent: Value, index: Value) -> Result<Value, String> {
 
 /// Implicit ordinary tuple output accepts complete values; explicit delta requirements stay exact.
 pub fn delta_result(explicit: bool, result: &Ty, expected: &Ty) -> bool {
-    explicit || (matches!(expected, Ty::Delta(_)) && !matches!(result, Ty::Tuple(_)))
+    explicit || (matches!(expected, Ty::Delta(_)) && !ordinary_result(result))
+}
+/// Ordinary complete structural publication remains separate from explicit delta requirements.
+pub fn ordinary_result(ty: &Ty) -> bool {
+    matches!(
+        ty,
+        Ty::Tuple(_) | Ty::Struct(..) | Ty::Map(..) | Ty::List(..)
+    )
 }
 
 /// Whether tuple construction includes an owning aggregate child.

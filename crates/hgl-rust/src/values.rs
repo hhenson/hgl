@@ -307,6 +307,11 @@ pub fn statements(plan: &Plan, body: &[Statement], out: &mut Vec<String>, result
     }
 }
 fn assignment(plan: &Plan, target: &Value, v: &Value) -> String {
+    if matches!(target.kind, Kind::Output)
+        && let Some(code) = crate::structural_publication::assignment(v, |v| value(plan, v))
+    {
+        return code;
+    }
     let publish = crate::deltas::publish(&v.ty, "publication");
     let v = condition_code(plan, v);
     if let Some(slot) = borrowed_place(plan, target) {
@@ -468,22 +473,13 @@ fn native_argument(plan: &Plan, v: &Value) -> String {
         );
     }
     if hgl_semantics::tuple_values::endpoint(v) && matches!(v.kind, Kind::Field(..)) {
-        return format!(
-            "_ctx.store().get_ref({}).as_str()",
-            crate::observed::input(v)
-        );
+        return crate::snapshot_slots::native_text(v);
     }
     if borrowed_place(plan, v).is_some() {
         return format!("&({})", value(plan, v));
     }
     match &v.kind {
-        Kind::IterationInput(_) => format!(
-            "_ctx.store().get_ref({}).as_str()",
-            crate::observed::input(v)
-        ),
-        Kind::Input(i, _) => {
-            format!("_ctx.store().get_ref(self.input{i}).as_str()")
-        }
+        Kind::IterationInput(_) | Kind::Input(..) => crate::snapshot_slots::native_text(v),
         Kind::Literal(Literal::Str(s)) => format!("{s:?}"),
         Kind::Cache(i) => format!("self.cache{i}.as_str()"),
         Kind::Local(i) | Kind::MutableLocal(i) => format!("local{i}.as_str()"),

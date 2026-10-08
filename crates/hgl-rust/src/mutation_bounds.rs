@@ -2,6 +2,11 @@
 use hgl_semantics::ir::{Kind, Statement, Value};
 use hgl_source::Literal;
 use std::collections::BTreeMap;
+fn membership(op: &str) -> bool {
+    op == "set_upsert"
+        || op == "set_discard"
+        || (op.starts_with("collection_") && op != "collection_contains")
+}
 type Constants = BTreeMap<usize, i64>;
 fn integer(value: &Value, constants: &Constants) -> Option<i64> {
     if let Kind::Literal(Literal::Int(value)) = &value.kind {
@@ -131,7 +136,7 @@ fn width(
             Statement::Call(Value {
                 kind: Kind::Query(op, _),
                 ..
-            }) if op == "set_upsert" || op == "set_discard" => "1usize".into(),
+            }) if membership(op) => "1usize".into(),
             Statement::If(_, yes, no) => format!(
                 "({}).max({})",
                 width(yes, source, &mut constants.clone())?,
@@ -219,7 +224,7 @@ pub fn mutations(body: &[Statement]) -> usize {
             Statement::Call(Value {
                 kind: Kind::Query(op, _),
                 ..
-            }) if op == "set_upsert" || op == "set_discard" => 1,
+            }) if membership(op) => 1,
             Statement::If(_, yes, no) => mutations(yes).max(mutations(no)),
             Statement::ForItems(_, _, _, _, body)
             | Statement::For(_, _, body)

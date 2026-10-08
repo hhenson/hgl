@@ -105,7 +105,7 @@ pub fn operation(name: &str, args: Vec<Value>) -> Result<Value, String> {
     }
     let map = matches!(receiver.ty, Ty::Map(..));
     let (size, payload) = match (map, name) {
-        (true, "insert" | "update") => (3, true),
+        (true, "insert" | "update" | "upsert") => (3, true),
         (true, "remove" | "contains") | (_, "invalidate") => (2, false),
         (false, "push") => (2, true),
         (false, "pop") => (1, false),

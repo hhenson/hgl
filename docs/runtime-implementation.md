@@ -99,3 +99,14 @@ rejecting expired children even after their slots have been reused.
 
 Scope slots also wait for the next cycle before reuse, preserving retained
 references' original graph rank through the removal cycle.
+
+Complete ordinary publication follows the pinned
+[bounded structural value contract](../external/hgraph_spec/language/docs/design/structural-value-publication.md).
+Prepared Tuple, concrete Struct, fixed List and Map observations reconcile child
+validity and membership at return or own-output assignment. Sparse deltas preserve
+omitted children. Empty/wholly invalid results, new invalid Map membership and
+new growing-List reconciliation remain outside this slice. The previous retained
+Tuple growing-List behavior remains admitted. Runtime native collection result
+children require prepared ownership; unsupported paths diagnose before emission.
+Shared complete-publication scenarios and recursive own controls measure all
+first/repeated graph evaluations and recording with zero tick allocations.

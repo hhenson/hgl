@@ -1,12 +1,12 @@
 # Card: hgl-tuple-admission
 
-Own ordinary Tuple construction and node-result publication admission. The
+Own ordinary Tuple constructor and helper ABI admission. The
 internal tuple_admission module has an initial 60 source-line budget within the
-unchanged hgl-semantics crate limit. It uses ir, endpoint_check and tuple_values.
+unchanged hgl-semantics crate limit. It uses ir, tuple_values and structural_admission.
 
 Public surface: `value_arguments(&[Value]) -> Result<(), String>`, `expected(&Ty, bool) -> Result<Ty, Issue>`, `constructor_child(&Value, bool) -> Result<(), &'static str>` and
 `result(Value, &Ty, &Ty, bool) -> Result<Value, String>`. The booleans distinguish
-constant ordinary execution and node publication, respectively. expected selects the existing implicit node delta context; value functions retain
+constant ordinary execution and node publication, respectively. expected and result re-export the structural_admission owner; expected selects the existing implicit node delta context; value functions retain
 ordinary result context. Results retain
 canonical type compatibility and existing payload-access checks. Implicit Tuple
 outputs admit complete ordinary values; explicit delta requirements stay exact.

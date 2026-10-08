@@ -150,6 +150,7 @@ fn function(library: &Library, declaration: &Decl, signature: &Signature) -> Res
     }
 
     if cursor.take("=>") {
+        cursor.lines();
         checker.expression(&mut cursor, &environment)?;
     } else {
         checker.block(&mut cursor, &mut environment)?;

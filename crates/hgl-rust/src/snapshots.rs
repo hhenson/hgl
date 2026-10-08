@@ -2,7 +2,16 @@
 use crate::layouts::global_type;
 use hgl_semantics::ir::Value;
 use hgl_source::Ty;
-use std::fmt::Write as _;
+/// Declared positional children; this cold representation preserves canonical source fields.
+pub fn children(ty: &Ty) -> Option<Vec<&Ty>> {
+    if let Ty::Tuple(children) = ty {
+        Some(children.iter().collect())
+    } else if let Ty::Struct(_, fields, _) = ty {
+        Some(fields.iter().map(|(_, child)| child).collect())
+    } else {
+        None
+    }
+}
 fn optional(ty: &Ty) -> Ty {
     Ty::Struct(
         format!("\0snapshot-child<{}>", ty.source_name()).into(),
@@ -22,6 +31,17 @@ pub fn storage(ty: &Ty) -> Ty {
                 .collect(),
             (0..children.len()).collect(),
         ),
+        Ty::Struct(_, fields, _) => Ty::Struct(
+            hgl_source::type_shape::Nominal {
+                origin: "\0snapshot-struct".into(),
+                arguments: vec![ty.clone()],
+            },
+            fields
+                .iter()
+                .map(|(name, child)| (name.clone(), storage(child)))
+                .collect(),
+            (0..fields.len()).collect(),
+        ),
         Ty::List(child, size) => Ty::List(Box::new(optional(child)), *size),
         Ty::Map(key, child) => Ty::Map(key.clone(), Box::new(optional(child))),
         Ty::Rolling(..)
@@ -30,7 +50,6 @@ pub fn storage(ty: &Ty) -> Ty {
         | Ty::Enum(_)
         | Ty::Atomic(_)
         | Ty::Delta(_)
-        | Ty::Struct(..)
         | Ty::I64
         | Ty::F64
         | Ty::Bool
@@ -56,16 +75,23 @@ fn reserve(collection: &str, count: &str) -> String {
 }
 /// Turn a complete ordinary native value into the same typed snapshot representation.
 pub fn complete(ty: &Ty, value: &str) -> String {
+    if let Some(children) = children(ty) {
+        let optional = ty.structure().map_or(&[][..], |(_, _, optional)| optional);
+        let fields = children
+            .iter()
+            .enumerate()
+            .map(|(i, ty)| {
+                if optional.contains(&i) {
+                    format!("value.{i}.map(|value|{})", complete(ty, "value"))
+                } else {
+                    format!("Some({})", complete(ty, &format!("value.{i}")))
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+        return format!("{{let value={value};({fields},)}}");
+    }
     match ty {
-        Ty::Tuple(children) => format!(
-            "{{let value={value};({},)}}",
-            children
-                .iter()
-                .enumerate()
-                .map(|(i, ty)| format!("Some({})", complete(ty, &format!("value.{i}"))))
-                .collect::<Vec<_>>()
-                .join(",")
-        ),
         Ty::List(child, _) => format!(
             "{{let source={value};let mut values=Vec::new();{}for value in source {{values.push((Some({}),));}}values}}",
             reserve("values", "source.len()"),
@@ -76,13 +102,13 @@ pub fn complete(ty: &Ty, value: &str) -> String {
             reserve("values", "source.len()"),
             complete(child, "value")
         ),
+        Ty::Tuple(_) | Ty::Struct(..) => unreachable!("positional children handled above"),
         Ty::Rolling(..)
         | Ty::Family(_)
         | Ty::Recursive(_)
         | Ty::Enum(_)
         | Ty::Atomic(_)
         | Ty::Delta(_)
-        | Ty::Struct(..)
         | Ty::I64
         | Ty::F64
         | Ty::Bool
@@ -101,64 +127,16 @@ pub fn complete(ty: &Ty, value: &str) -> String {
         | Ty::Void => value.into(),
     }
 }
-/// Publish the complete held value, using existing child invalidation semantics.
+/// Publish a complete native value through the structural publication owner.
 pub fn publish(ty: &Ty, output: &str, value: &str) -> String {
-    match ty {
-        Ty::Tuple(children) => {
-            let mut code = format!("{{let output={output};let value={value};");
-            for (i, ty) in children.iter().enumerate() {
-                write!(&mut code,
-                    "{{let output=output.field::<{i}>(_ctx.store().bindings());if let Some(value)=value.{i} {{{}}}}}",
-                    publish(ty, "output", "value")
-                ).unwrap_or_else(|_|unreachable!("String formatting"));
-            }
-            code + "}"
-        }
-        Ty::List(child, Some(_)) => format!(
-            "{{let output={output};for (index,(value,)) in ({value}).into_iter().enumerate() {{let output=output.index(_ctx.store().bindings(),index);if let Some(value)=value {{{}}}}}}}",
-            publish(child, "output", "value")
-        ),
-        Ty::Map(key, child) => keyed_publish(key, child, output, value),
-        Ty::List(child, None) => keyed_publish(&Ty::I64, child, output, value),
-        Ty::Rolling(..)
-        | Ty::Family(_)
-        | Ty::Recursive(_)
-        | Ty::Enum(_)
-        | Ty::Atomic(_)
-        | Ty::Delta(_)
-        | Ty::Struct(..)
-        | Ty::I64
-        | Ty::F64
-        | Ty::Bool
-        | Ty::Str
-        | Ty::Duration
-        | Ty::Date
-        | Ty::Time
-        | Ty::DateTime
-        | Ty::CivilDateTime
-        | Ty::TimeZone
-        | Ty::ZonedTime
-        | Ty::ZonedDateTime
-        | Ty::Ref(_)
-        | Ty::Set(_)
-        | Ty::Nullable(_)
-        | Ty::Void => {
-            if let Some(ty) = crate::layouts::whole_payload(ty) {
-                format!("_ctx.set_atomic::<{}>({output},{value})?;", global_type(ty))
-            } else {
-                format!("_ctx.set(hgl_store::Store::prepared_output({output}),{value});")
-            }
-        }
-    }
-}
-fn keyed_publish(key: &Ty, child: &Ty, output: &str, value: &str) -> String {
-    format!(
-        "{{let output={output};let values={value};for(key,(value,)) in values {{let key=<{} as hgl_store::Key>::id(&_ctx.store().keys,&key)?;_ctx.get_or_create_shaped(output.id(),key);let output=output.member(_ctx.store().bindings(),key).ok_or_else(||hgl_types::NodeError::new(\"missing created member\"))?;if let Some(value)=value {{{}}}}}}}",
-        global_type(key),
-        publish(child, "output", "value")
-    )
+    crate::structural_publication::native(ty, output, value)
 }
 fn original(ty: &Ty) -> Option<Ty> {
+    if let Ty::Struct(name, _, _) = ty
+        && name.origin == "\0snapshot-struct"
+    {
+        return name.arguments.first().cloned();
+    }
     if let Ty::Struct(name, fields, _) = ty
         && name.source_name().starts_with("\0snapshot<")
     {
@@ -193,8 +171,8 @@ pub fn bounds(
 ) -> Option<String> {
     fn build(ty: &Ty, scalar: &impl Fn(&Ty) -> String, domain: &impl Fn(&Ty) -> String) -> String {
         let marker = global_type(&storage(ty));
-        match ty {
-            Ty::Tuple(children) => format!(
+        if let Some(children) = children(ty) {
+            return format!(
                 "PreparedBounds{marker} {{{}}}",
                 children
                     .iter()
@@ -202,7 +180,9 @@ pub fn bounds(
                     .map(|(i, ty)| format!("field{i}:Some({})", build(ty, scalar, domain)))
                     .collect::<Vec<_>>()
                     .join(",")
-            ),
+            );
+        }
+        match ty {
             Ty::List(child, size) => format!(
                 "hgl_store::ListBounds {{len:{},element:PreparedBounds{} {{field0:Some({})}}}}",
                 size.map_or_else(|| domain(ty), |n| n.to_string()),
@@ -227,13 +207,13 @@ pub fn bounds(
                     build(child, scalar, domain)
                 )
             }
+            Ty::Tuple(_) | Ty::Struct(..) => unreachable!("positional children handled above"),
             Ty::Rolling(..)
             | Ty::Family(_)
             | Ty::Recursive(_)
             | Ty::Enum(_)
             | Ty::Atomic(_)
             | Ty::Delta(_)
-            | Ty::Struct(..)
             | Ty::I64
             | Ty::F64
             | Ty::Bool

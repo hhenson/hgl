@@ -36,3 +36,9 @@ for recording and duration-window storage before any source runs.
 The complete prepared adapter also requires an installation phase. A plan marked
 ordinary_instantiation always retains generic publication: finite source bounds
 alone do not imply that temporal destination slots have been reserved.
+
+Loop-free scalar-child i64 Map mutations with known literal keys are prepared
+when payload widths and schedules are proved. Insert/update/upsert/remove and
+invalidate effects contribute to finite membership bounds; contains is read-only.
+No dynamic key, growing payload, provider execution or opaque loop is added to
+this proof. Allocation-counted complete-publication fixtures exercise the path.
