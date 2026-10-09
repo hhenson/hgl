@@ -11,7 +11,7 @@ fn embedded_copy(value:tuple<i64,bool>)->tuple<tuple<i64,bool>,bool> {
  return (copy,false) }
 }
 fn nested_read(value:tuple<list<tuple<i64,bool>,2>,bool>)->i64 {
-    when valid(value)&&valid(value[0]) { let copy=value
+    when valid(value,value[0]) { let copy=value
  return copy[0][0][0] }
 }
 test tuple_ordinary_direct_results_and_embedding {
@@ -23,7 +23,7 @@ test tuple_ordinary_direct_results_and_embedding {
     assert eval(nested_read,[first,_]) == [7,_]
 }
 fn observed_growing_copy(value:tuple<list<tuple<i64,bool>>,bool>)->tuple<list<tuple<i64,bool>>,bool> {
-    when valid(value)&&valid(value[0])&&valid(value[1]) {let copy=value
+    when valid(value,value[0],value[1]) {let copy=value
     return copy}
 }
 test tuple_observation_retains_admitted_growing_list_children {
@@ -37,13 +37,13 @@ test tuple_observation_retains_admitted_growing_list_children {
 native const fn echo(value:i64)->i64
 native const fn echo(value:i64)->i64 {}
 fn copied_scalar(value:tuple<i64,bool>)->i64 {
-    when valid(value)&&valid(value[0]) {let copy=value
+    when valid(value,value[0]) {let copy=value
     let number=copy[0]
     let alias=number
     return echo(alias)}
 }
 fn copied_text(value:tuple<str,bool>)->str {
-    when valid(value)&&valid(value[0]) {let copy=value
+    when valid(value,value[0]) {let copy=value
     let text=copy[0]
     return text}
 }

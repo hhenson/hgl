@@ -8,7 +8,7 @@ struct PublicationPair {
 test {
 
     fn select_value(step: i64, a: PublicationPair, b: PublicationPair) -> PublicationPair {
-        when modified(step) && valid(step) && valid(a) && valid(b) {
+        when modified(step) && valid(step, a, b) {
             if step == 1 {
                 let copy = a
                 return copy
@@ -20,7 +20,7 @@ test {
     }
 
     fn select_delta(step: i64, a: PublicationPair, b: PublicationPair) -> PublicationPair {
-        when modified(step) && valid(step) && valid(a) && valid(b) {
+        when modified(step) && valid(step, a, b) {
             if step == 1 {
                 if modified(a) { return delta_value(a) }
             } else {
@@ -64,7 +64,7 @@ test {
         }
     }
     fn copy_map(step: i64, value: map<i64, i64>) -> map<i64, i64> {
-        when modified(step) && valid(step) && valid(value) {
+        when modified(step) && valid(step, value) {
             let copy = value
             return copy
         }
@@ -73,7 +73,7 @@ test {
         when { return delta_value(value) }
     }
     fn has_second(step: i64, watched: map<i64, i64>) -> bool {
-        when modified(step) && valid(step) && valid(watched) { return contains(watched, 8) }
+        when modified(step) && valid(step, watched) { return contains(watched, 8) }
     }
     fn map_validity(step: i64, watched: map<i64, i64>) -> bool {
         when modified(step) && valid(step) { return all_valid(watched) }
@@ -93,7 +93,7 @@ test {
     }
 
     fn select_tuple(step: i64, a: tuple<i64, bool>, b: tuple<i64, bool>) -> tuple<i64, bool> {
-        when modified(step) && valid(step) && valid(a) && valid(b) {
+        when modified(step) && valid(step, a, b) {
             if step == 1 {
                 let copy = a
                 return copy
@@ -115,7 +115,7 @@ test {
     }
 
     fn select_list(step: i64, a: list<i64, 2>, b: list<i64, 2>) -> list<i64, 2> {
-        when modified(step) && valid(step) && valid(a) && valid(b) {
+        when modified(step) && valid(step, a, b) {
             if step == 1 {
                 let copy = a
                 return copy
@@ -156,7 +156,7 @@ struct NestedPublication {
     book:map<str,i64>
 }
 fn nested_selected(step:i64,a:NestedPublication,b:NestedPublication)->NestedPublication {
-    when modified(step)&&valid(step)&&valid(a)&&valid(b) {
+    when modified(step)&&valid(step,a,b) {
         if step==1 {let copy=a
         return copy} else {let copy=b
         return copy}
@@ -176,7 +176,7 @@ test complete_nested_nominal_publication_reconciles_descendants {
 }
 fn assign_pair(step:i64,a:PublicationPair,b:PublicationPair)->PublicationPair {
     inject out
-    when modified(step)&&valid(step)&&valid(a)&&valid(b) {
+    when modified(step)&&valid(step,a,b) {
         if step==1 {out=a} else {let copy=b
         out=copy}
     }
