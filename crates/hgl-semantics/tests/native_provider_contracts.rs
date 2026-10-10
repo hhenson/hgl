@@ -144,7 +144,7 @@ fn authored_fixture_has_three_distinct_identities_and_exact_shared_capabilities(
 -> Result<(), String> {
     let source =
         include_str!("../../../external/hgraph_std/hgl/hgraph/native/atomic_values_fixture.hgl");
-    let descriptor = include_str!("../../../native/fixtures/atomic_values.hgl-native");
+    let descriptor = include_str!("../../../native/stdlib/atomic_values.hgl-native");
     let library = library::load(&[
         ("fixture.hgl".into(), source.into()),
         ("fixture.hgl-native".into(), descriptor.into()),

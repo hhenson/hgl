@@ -31,3 +31,7 @@ Scalar/helper record parsing is owned by hgl-source::native_descriptor. Its plai
 Function data retains exact parameter/result annotations, replacing synthetic
 callable tokens. Canonical comparison and source declaration validation share the
 same semantic path. No checker-time execution is introduced by the separation.
+
+The authored fixture sidecar resides in native/stdlib beside the default target
+interfaces. Ordinary library discovery selects it once; fixture-specific API tests
+use that same root, so shared Std declarations require no bespoke test injection.
