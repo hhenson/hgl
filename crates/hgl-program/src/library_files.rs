@@ -31,7 +31,10 @@ fn collect(path: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
             ) {
                 collect(&entry, out)?;
             }
-        } else if entry.extension().is_some_and(|s| s == "hgl") {
+        } else if entry
+            .extension()
+            .is_some_and(|s| s == "hgl" || s == "hgl-native")
+        {
             out.push(entry);
         }
     }

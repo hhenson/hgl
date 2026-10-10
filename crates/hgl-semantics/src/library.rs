@@ -6,6 +6,8 @@ use std::collections::{BTreeMap, BTreeSet};
 #[derive(Debug, Clone, PartialEq, Eq)]
 /// The declaration role before overload selection.
 pub enum Role {
+    /// Opaque nominal native scalar declaration.
+    NativeType,
     /// Nominal enum declaration.
     Enum,
     /// Ordinary nominal struct declaration.
@@ -83,6 +85,8 @@ pub use crate::struct_declarations::RequiredStruct;
 #[derive(Debug, Default, Clone)]
 /// Indexed source declarations, imports and explicit instances.
 pub struct Library {
+    /// Data-only selected native package contracts; never executable providers.
+    pub native_contracts: crate::native_contracts::Contracts,
     /// Declaration-owned bound literals, retaining exact count or duration kind.
     pub type_sizes: BTreeMap<(String, String), hgl_source::Literal>,
     /// All indexed declarations.
@@ -122,9 +126,31 @@ pub fn load_checked(sources: &[(String, String)]) -> Result<Library, Box<Diagnos
     let mut library = Library::default();
     let mut parts = BTreeSet::new();
     for (source, text) in sources {
-        load_source(&mut library, &mut parts, source, text)
-            .map_err(|e| Box::new(Diagnostic::new(source, text, e)))?;
+        let checked = if crate::native_contracts::sidecar(source) {
+            crate::native_contracts::parse(source, text).and_then(|descriptor| {
+                if library
+                    .native_contracts
+                    .insert(descriptor.module.clone(), descriptor)
+                    .is_some()
+                {
+                    Err("multiple selected native descriptors for one module".into())
+                } else {
+                    Ok(())
+                }
+            })
+        } else {
+            load_source(&mut library, &mut parts, source, text)
+        };
+        checked.map_err(|e| Box::new(Diagnostic::new(source, text, e)))?;
     }
+    crate::native_contracts::validate(&library).map_err(|issue| {
+        let (source, text) = sources
+            .iter()
+            .find(|(source, _)| issue.source.as_ref() == Some(source))
+            .or_else(|| sources.first())
+            .map_or(("", ""), |(source, text)| (source.as_str(), text.as_str()));
+        Box::new(Diagnostic::new(source, text, issue))
+    })?;
     Ok(library)
 }
 fn load_source(
@@ -243,9 +269,13 @@ fn load_items(
                 d.need("fn")?;
                 Role::Implementation
             } else if d.take("native") {
-                d.take("const");
-                d.need("fn")?;
-                Role::Native
+                if d.take("type") {
+                    Role::NativeType
+                } else {
+                    d.take("const");
+                    d.need("fn")?;
+                    Role::Native
+                }
             } else if d.take("const") {
                 d.need("fn")?;
                 Role::Function
@@ -295,6 +325,17 @@ fn add_import(
     Ok(())
 }
 impl Decl {
+    /// Validate the complete opaque declaration without exposing representation.
+    pub fn native_type(&self) -> Result<(), Issue> {
+        let mut c = Cursor::new(&self.tokens);
+        c.take("export");
+        c.need("native")?;
+        c.need("type")?;
+        c.name()?;
+        c.lines();
+        c.need("")?;
+        Ok(())
+    }
     /// Parse declaration-owned fields, defaults and single inheritance.
     pub fn required_struct(&self) -> Result<RequiredStruct, String> {
         crate::struct_declarations::parse(&self.tokens)

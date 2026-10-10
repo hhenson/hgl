@@ -22,6 +22,7 @@ pub mod ir;
 pub mod library;
 pub mod local_check;
 pub mod name_check;
+pub mod native_contracts;
 pub mod publication_trace;
 pub mod recursive_types;
 pub mod scalar_keys;
