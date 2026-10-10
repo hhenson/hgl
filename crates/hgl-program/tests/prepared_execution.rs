@@ -141,7 +141,7 @@ test rolling {assert eval(rolling,[bytes(),bytes([0,255]),_,bytes([0,255])])==[b
 fn byte_literals_in_sparse_publications_allocate_nothing() -> Result<(), Box<dyn std::error::Error>>
 {
     execute(
-        r#"module bytes_sparse_prepared
+        r"module bytes_sparse_prepared
 fn keyed(value:i64,const payload:bytes)->map<bytes,bytes> {when {
 if value>0 {return delta<map<bytes,bytes>>(upsert:[bytes([1]):payload])}
 else {return delta<map<bytes,bytes>>(remove:[bytes([1])])}}}
@@ -150,16 +150,16 @@ if value>0 {return delta<set<bytes>>(added:[bytes([128,255])])}
 else {return delta<set<bytes>>(removed:[bytes([128,255])])}}}
 test keyed {assert eval(keyed,[1,2,0,3],payload:bytes([0,255])) == [delta<map<bytes,bytes>>(upsert:[bytes([1]):bytes([0,255])]),delta<map<bytes,bytes>>(upsert:[bytes([1]):bytes([0,255])]),delta<map<bytes,bytes>>(remove:[bytes([1])]),delta<map<bytes,bytes>>(upsert:[bytes([1]):bytes([0,255])])]}
 test members {assert eval(members,[1,0,2]) == [delta<set<bytes>>(added:[bytes([128,255])]),delta<set<bytes>>(removed:[bytes([128,255])]),delta<set<bytes>>(added:[bytes([128,255])])]}
-"#.into(),
+".into(),
         RUNTIME,
         true,
     )?;
     execute(
-        r#"module bytes_sparse_fallback
+        r"module bytes_sparse_fallback
 fn keyed(value:i64)->map<bytes,bytes> {when {
 return delta<map<bytes,bytes>>(upsert:[bytes([1]):bytes([0,255])])}}
 test keyed {assert eval(keyed,[1,2]) == [delta<map<bytes,bytes>>(upsert:[bytes([1]):bytes([0,255])]),delta<map<bytes,bytes>>(upsert:[bytes([1]):bytes([0,255])])]}
-"#.into(),
+".into(),
         RUNTIME,
         false,
     )
