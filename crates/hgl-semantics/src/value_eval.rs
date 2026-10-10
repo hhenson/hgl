@@ -416,7 +416,7 @@ pub fn check_assertion(value: &Value) -> Result<(), String> {
 /// A readable complete atomic input supplies an ordinary helper's exact payload.
 pub fn atomic_argument(value: Value, expected: Option<&Ty>) -> Value {
     if let Ty::Atomic(payload) = &value.ty
-        && matches!(value.kind, Kind::Input(..))
+        && matches!(value.kind, Kind::Input(_, false))
         && expected.is_some_and(|expected| expected == payload.as_ref())
     {
         let ty = *payload.clone();

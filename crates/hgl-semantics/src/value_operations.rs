@@ -56,7 +56,10 @@ pub fn bytes(
         .map(|(_, expr)| check(expr, &list))
         .transpose()?
         .unwrap_or_else(|| Value::new(list, Kind::List(Vec::new())));
-    if !matches!(&argument.ty, Ty::Atomic(_)) {
+    if !matches!(
+        (&argument.ty, &argument.kind),
+        (Ty::Atomic(_), Kind::Input(_, false))
+    ) {
         crate::endpoint_check::require_payload(&argument)?;
     }
     if !matches!(&argument.ty, Ty::List(element, _) if **element == Ty::I64)

@@ -45,3 +45,21 @@ fn required_constant_byte_failure_rejects_before_execution() {
     let error = compile_tests(&sources("const fn size()->i64 {return len(bytes([256]))}\nfn bad(value:list<i64,size()>)->list<i64,size()> {when {return delta_value(value)}}\ntest bad {eval(bad,[])}")).unwrap_err();
     assert!(error.contains("byte octet"), "{error}");
 }
+
+#[test]
+fn byte_conversion_cannot_read_atomic_signal_payloads() {
+    for shape in ["list<i64>", "list<i64,2>"] {
+        for expression in ["bytes(value)", "convert(value)"] {
+            let readable = format!(
+                "const fn convert(value:{shape})->bytes {{return bytes(value)}}\nfn observe(value:atomic<{shape}>)->bytes {{when {{return {expression}}}}}\ntest accepted {{eval(observe,[[0,255]])}}"
+            );
+            compile_tests(&sources(&readable))
+                .unwrap_or_else(|error| panic!("{shape}, {expression}: {error}"));
+            let body = format!(
+                "const fn convert(value:{shape})->bytes {{return bytes(value)}}\nfn observe(value:signal)->bytes {{when {{return {expression}}}}}\nfn target(value:atomic<{shape}>)->bytes => observe(value)\ntest rejected {{eval(target,[[0,255]])}}"
+            );
+            let error = compile_tests(&sources(&body)).unwrap_err();
+            assert!(error.contains("signal"), "{shape}, {expression}: {error}");
+        }
+    }
+}

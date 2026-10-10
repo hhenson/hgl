@@ -11,4 +11,4 @@ No parsing, provider execution, scheduling or lexical scope ownership.
 
 EvalError implements From<String> as an operation failure. Exact ordinary set/map ==/!= delegates recursive unordered comparison to hgl-collection-values.
 
-bytes(source arguments, typed checker)->Result<Value,Issue> validates constructor arity/type and supplies list<i64> context for empty lists. Evaluation produces constructed bytes after ordered argument evaluation; EvalError::Coded carries value.byte_range. Exact byte equality/order follows unsigned contents. May use endpoint_check.
+bytes(source arguments, typed checker)->Result<Value,Issue> validates constructor arity/type and supplies list<i64> context for empty lists. Atomic input conversion preserves signal payload restrictions. Evaluation produces constructed bytes after ordered argument evaluation; EvalError::Coded carries value.byte_range. Exact byte equality/order follows unsigned contents. May use endpoint_check.
