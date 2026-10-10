@@ -5,7 +5,7 @@ type Aliases = BTreeMap<usize, Value>;
 fn retained(value: &Value) -> bool {
     matches!(
         value.ty,
-        Ty::Str | Ty::TimeZone | Ty::ZonedTime | Ty::ZonedDateTime
+        Ty::Str | Ty::Bytes | Ty::TimeZone | Ty::ZonedTime | Ty::ZonedDateTime
     )
 }
 /// Retain literal owning scalars once and reuse immutable configuration aliases.
