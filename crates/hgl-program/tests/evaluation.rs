@@ -258,8 +258,7 @@ fn actual_stdlib_and_harness_regressions_run_on_rust() -> Result<(), Box<dyn std
         .collect::<Result<Vec<_>, _>>()?;
     parts.retain(|p| p.extension().is_some_and(|e| e == "hgl"));
     parts.sort();
-    parts.push(root.join("native/stdlib/rust.hgl"));
-    parts.push(root.join("native/stdlib/interfaces.hgl"));
+
     parts.push(root.join("external/hgraph_spec/language/examples/contextual-local-bindings.hgl"));
     for fixture in [
         "graph_compound",
@@ -273,7 +272,8 @@ fn actual_stdlib_and_harness_regressions_run_on_rust() -> Result<(), Box<dyn std
         )));
     }
     parts.push(root.join("crates/hgl-program/tests/fixtures/contextual_locals.hgl"));
-    let sources = hgl_program::library_files::sources(&parts, &[library])?;
+    let sources =
+        hgl_program::library_files::sources(&parts, &[library, root.join("native/stdlib")])?;
     let summary = expected_summary(&sources)?;
     let dir = std::env::temp_dir().join(format!(
         "hgl-eval-{}-{}-{}",
