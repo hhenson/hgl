@@ -51,8 +51,17 @@ publish after the independent complete arrival copy succeeds.
 rolling_scalar<S>(In<S::Payload>,Output<S>) requires a scalar prepared payload
 whose GlobalValue value is itself. It validates the scalar input, borrows its
 column value and uses the existing rolling write preflight and publication.
-No temporary owning payload is constructed. rolling_from is implemented by
-prepared_globals, alongside the other independent prepared-source operations.
+No temporary owning payload is constructed. These rolling operations live in prepared_rolling, whose budget is 230 lines.
+The module uses columns, scalar_copy, global, observation, shapes, prepared_store,
+rolling, list and bindings.
+
+`scalar_from_rolling<S>(Input<S>,Out<S::Payload>)` copies the latest scalar
+arrival into an independent reserved scalar destination.
+`atomic_from_rolling<S>(Input<S>,Output<Atomic<S::Payload>>)` copies a complete
+arrival into an independent atomic destination.
+`pass_rolling_as<S,T>(Input<S>,Output<T>)` requires equal payload types and
+uses the destination window policy. All three preflight capacity before copying
+and publish only on success; they create no owning intermediary.
 
 Observation is reexported from hgl-observation, preserving its existing public
 surface. rolling_text<S> authorizes a String window output, measures pure scalar

@@ -98,6 +98,9 @@ pub fn forwarded(value: &Value, result: Option<&Ty>) -> Option<String> {
         return None;
     };
     let input = format!("self.input{id}");
+    if matches!(source.ty, Ty::Rolling(..)) {
+        return crate::windows::forward(&source.ty, result?, &input, "self._output");
+    }
     if source.ty == Ty::Bytes
         && let Some(ty @ Ty::Rolling(payload, _)) = result
         && **payload == Ty::Bytes

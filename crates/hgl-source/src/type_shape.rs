@@ -322,7 +322,8 @@ impl Ty {
         }
         self.scalar()
     }
-    fn scalar(&self) -> bool {
+    /// Whether this is an ordinary scalar leaf, including nominal enums.
+    pub fn scalar(&self) -> bool {
         matches!(
             self,
             Self::Enum(_)

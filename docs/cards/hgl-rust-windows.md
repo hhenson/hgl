@@ -18,3 +18,7 @@ Acceptance: six unchanged rolling shared cases execute in debug/release with
 complete Graph::evaluate allocation measurements, plus nested structural child
 and generic payload regressions. Finite cold capacity is the compiler's duty;
 these fragments contain no dynamic schema interpretation or fallback allocation.
+
+`forward(source,result,input,output)` selects prepared arrival transport from
+the checked result: scalar, complete atomic payload, or rolling with its own
+window policy. Unsupported representations return None for ordinary emission.

@@ -1,6 +1,6 @@
 //! Disjoint borrowed runtime access for independently prepared finite evaluation.
 use crate::bindings::{Bindings, InputId, OutputId, Wake};
-use crate::columns::{Column, Columns, Scalar};
+use crate::columns::{Columns, Scalar};
 use crate::global::{GlobalState, PreparedValue};
 pub use crate::observation::Observation;
 use crate::shapes::{Atomic, Input, Output};
@@ -83,84 +83,6 @@ impl<W: Wake> PreparedTick<'_, W> {
             self.publish(output);
         }
     }
-    /// Compose a complete text arrival into its prepared ring destination.
-    pub fn rolling_text<S: crate::rolling::WindowShape<Payload = String>>(
-        &mut self,
-        output: Output<S>,
-        measure: impl FnOnce(Observation<'_>) -> NodeResult<usize>,
-        compose: impl FnOnce(&mut String, Observation<'_>),
-    ) -> NodeResult {
-        self.authorize(output.id(), output.generation());
-        let bytes = measure(self.storage.observations().0)?;
-        let storage = &mut self.storage;
-        storage.rolling.text(
-            storage.bindings,
-            output,
-            bytes,
-            (self.now, self.wake),
-            |destination, bindings, rolling| {
-                compose(
-                    destination,
-                    Observation {
-                        columns: storage.columns,
-                        bindings,
-                        atomic: storage.atomic,
-                        rolling,
-                        keys: storage.keys,
-                    },
-                );
-            },
-        )
-    }
-    /// Publish one native arrival while reusing its output's reserved ring storage.
-    pub fn rolling<S: crate::rolling::WindowShape>(
-        &mut self,
-        output: Output<S>,
-        value: &<S::Payload as crate::global::GlobalValue>::Value,
-    ) -> NodeResult
-    where
-        S::Payload: PreparedValue,
-    {
-        self.authorize(output.id(), output.generation());
-        self.storage
-            .rolling
-            .write(self.storage.bindings, output, value, self.now, self.wake)
-    }
-    /// Copy a valid scalar input into an independently retained arrival.
-    pub fn rolling_scalar<S: crate::rolling::WindowShape>(
-        &mut self,
-        input: crate::In<S::Payload>,
-        output: Output<S>,
-    ) -> NodeResult
-    where
-        S::Payload: Scalar + PreparedValue + crate::global::GlobalValue<Value = S::Payload>,
-    {
-        self.authorize(output.id(), output.generation());
-        let storage = &mut self.storage;
-        if !storage.bindings.valid(input.id()) {
-            return Err(NodeError::new("prepared input is invalid"));
-        }
-        let from = storage.bindings.input(input.id()).slot as usize;
-        let value = &S::Payload::column(storage.columns)[from];
-        storage
-            .rolling
-            .write(storage.bindings, output, value, self.now, self.wake)
-    }
-    /// Forward the current arrival into an independently timed output window.
-    pub fn pass_rolling<S: crate::rolling::WindowShape>(
-        &mut self,
-        input: Input<S>,
-        output: Output<S>,
-    ) -> NodeResult
-    where
-        S::Payload: PreparedValue,
-    {
-        self.authorize(output.id(), output.generation());
-        self.storage
-            .rolling
-            .pass(self.storage.bindings, input, output, self.now, self.wake)
-    }
-
     /// Validate the complete ordinary list before changing or publishing byte storage.
     pub fn bytes_from_list<const N: i64>(
         &mut self,

@@ -282,11 +282,11 @@ impl Arena {
         Ok(())
     }
     /// Forward the current arrival into an independent output window at its new time.
-    pub fn pass<S: WindowShape, W: Wake>(
+    pub fn pass<S: WindowShape, T: WindowShape<Payload = S::Payload>, W: Wake>(
         &mut self,
         bindings: &mut Bindings,
         input: Input<S>,
-        output: Output<S>,
+        output: Output<T>,
         now: EngineTime,
         wake: &mut W,
     ) -> NodeResult

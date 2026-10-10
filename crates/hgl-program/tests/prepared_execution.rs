@@ -138,6 +138,77 @@ test rolling {assert eval(rolling,[bytes(),bytes([0,255]),_,bytes([0,255])])==[b
 }
 
 #[test]
+fn rolling_arrivals_publish_to_scalar_atomic_and_different_windows_without_allocating()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut source = String::from("module rolling_arrival_destinations\n");
+    for (name, ty, values) in [
+        (
+            "bytes",
+            "bytes",
+            "[bytes([0,255]),bytes(),_,bytes([1,2,3,4]),bytes([1,2,3,4])]",
+        ),
+        ("integer", "i64", "[1,1,_,2]"),
+        ("boolean", "bool", "[true,false,_,true]"),
+        ("floating", "f64", "[1.0,2.0,_,2.0]"),
+        ("text", "str", "[\"short\",\"\",_,\"longer text\"]"),
+    ] {
+        for (operation, input, output, publication) in [
+            (
+                "returned",
+                format!("rolling<{ty},2>"),
+                ty.to_owned(),
+                "return delta_value(value)",
+            ),
+            (
+                "assigned",
+                format!("rolling<{ty},2>"),
+                ty.to_owned(),
+                "out=delta_value(value)",
+            ),
+            (
+                "rewindow",
+                format!("rolling<{ty},2>"),
+                format!("rolling<{ty},3>"),
+                "return delta_value(value)",
+            ),
+            (
+                "timed",
+                format!("rolling<{ty},4ms>"),
+                format!("rolling<{ty},3,1>"),
+                "out=delta_value(value)",
+            ),
+        ] {
+            let function = format!("{name}_{operation}");
+            writeln!(
+                source,
+                "fn {function}(value:{input})->{output} {{inject out\nwhen {{{publication}}}}}"
+            )?;
+            writeln!(
+                source,
+                "test {function} {{assert eval({function},{values})=={values}}}"
+            )?;
+        }
+    }
+    source.push_str(r#"enum Kind {first=-7,second=11}
+fn enumeration(value:rolling<Kind,2>)->Kind {when {return delta_value(value)}}
+fn retained_enumeration(value:rolling<Kind,2>)->Kind {when {let held=delta_value(value)
+return held}}
+test enumeration {assert eval(enumeration,[Kind::first,Kind::second,_,Kind::first])==[Kind::first,Kind::second,_,Kind::first]
+assert eval(retained_enumeration,[Kind::first,Kind::second,_,Kind::first])==[Kind::first,Kind::second,_,Kind::first]}
+struct Packet {number:i64
+text:str}
+fn complete(value:rolling<Packet,2>)->atomic<Packet> {when {return delta_value(value)}}
+fn complete_assigned(value:rolling<list<i64>,2>)->atomic<list<i64>> {inject out
+when {out=delta_value(value)}}
+test complete_payloads {
+assert eval(complete,[Packet(number:1,text:"first"),Packet(number:2,text:""),_,Packet(number:3,text:"longer")])==[Packet(number:1,text:"first"),Packet(number:2,text:""),_,Packet(number:3,text:"longer")]
+assert eval(complete_assigned,[[1,2],[],_,[3,4,5]])==[[1,2],[],_,[3,4,5]]
+}
+"#);
+    execute(source, RUNTIME, true)
+}
+
+#[test]
 fn scalar_byte_returns_and_rolling_arrivals_allocate_nothing()
 -> Result<(), Box<dyn std::error::Error>> {
     execute(r"module bytes_return_shapes

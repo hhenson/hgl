@@ -15,8 +15,10 @@ duration windows reserve horizon slots. No defaults become visible.
 
 `borrow<S>` returns the latest arrival slot, `values` exposes its immutable
 columns, and `ready<S>` inspects current retained count/span without eviction.
-`write`, `from` and `pass` preflight the whole payload into a reserved destination,
-copy independently, then commit the arrival and publish. The prepared Store facade
+`write`, `from` and `pass<S,T,W>` preflight the whole payload into a reserved destination,
+copy independently, then commit the arrival and publish. For `pass`, S and T
+have the same Payload; retention and readiness follow T’s window policy.
+The prepared Store facade
 validates writer/time/scope/generation before calling these operations. Failed
 fits leave membership, readiness and publication metadata unchanged. Invalidation
 resets logical readiness; the next arrival starts a fresh window.
