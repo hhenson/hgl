@@ -7,3 +7,5 @@ Public surface: checked, retain, contents, capability, capable, binary, equal_da
 Capability selection is type based, including empty ordinary containers. Recursive actual box key validation requires contained Eq/hash and excludes NaN, even when comparisons could short circuit on differing identity. Executed failures retain value.capability; required constant checking maps that failure separately. Equality and partial ordering retain empty-box and differing-contained-type shortcuts from ANY-3. Timezone and zoned scalar ordering remains unavailable.
 
 Acceptance: shared any_values suite; independent retained recursive aggregates and structural delta payloads; exact nominal identity.
+
+Static capable, fields and contains_any metadata delegates to hgl-source ordinary_shape; evaluation and boxed capability failures remain owned here.

@@ -15,3 +15,5 @@ operand order, then their bytes
 are encoded directly into the reserved box frame. No intermediate String is
 constructed. Text bounds are widened before ordinary and constructor Any widths
 are calculated, including concatenations beneath boxing and family wrappers.
+Private canonical constructor owners contribute their checked recursive bounds
+to width planning.

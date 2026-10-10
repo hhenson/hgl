@@ -51,6 +51,7 @@ pub use hgl_semantics::ir::{DeltaEntry, Kind, Native, Node, Plan, Statement, Val
 /// Ordered prepared hooks preserve source evaluation and storage ownership.
 pub mod prepared_hooks;
 
+mod constructor_owners;
 mod identifiers;
 
 /// Append generated code to an infallible String sink.

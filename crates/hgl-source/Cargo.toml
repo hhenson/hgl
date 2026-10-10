@@ -10,6 +10,7 @@ line-budget = 2090
 
 # Budgets of the modules that were crates of their own (docs/decisions/0004).
 [package.metadata.hgl.modules]
+ordinary_shape = { budget = 120, uses = ["type_shape"] }
 scalar_shape = { budget = 80, uses = [] }
 diagnostics = { budget = 200, uses = [] }
 lex = { budget = 180, uses = [] }

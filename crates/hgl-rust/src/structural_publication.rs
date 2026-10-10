@@ -57,41 +57,13 @@ pub fn native(ty: &Ty, output: &str, value: &str) -> String {
         }
         return code + "}";
     }
-    match ty {
-        Ty::Tuple(_) | Ty::Struct(..) => unreachable!("positional children handled above"),
-        Ty::List(..) | Ty::Map(..) => {
-            unreachable!("native collection publication requires prepared observations")
-        }
-        Ty::Rolling(..)
-        | Ty::Family(_)
-        | Ty::Recursive(_)
-        | Ty::Enum(_)
-        | Ty::Atomic(_)
-        | Ty::Delta(_)
-        | Ty::I64
-        | Ty::F64
-        | Ty::Bool
-        | Ty::Str
-        | Ty::Bytes
-        | Ty::Any
-        | Ty::Duration
-        | Ty::Date
-        | Ty::Time
-        | Ty::DateTime
-        | Ty::CivilDateTime
-        | Ty::TimeZone
-        | Ty::ZonedTime
-        | Ty::ZonedDateTime
-        | Ty::Ref(_)
-        | Ty::Set(_)
-        | Ty::Nullable(_)
-        | Ty::Void => {
-            if let Some(ty) = crate::layouts::whole_payload(ty) {
-                format!("_ctx.set_atomic::<{}>({output},{value})?;", global_type(ty))
-            } else {
-                format!("_ctx.set(hgl_store::Store::prepared_output({output}),{value});")
-            }
-        }
+    if matches!(ty, Ty::List(..) | Ty::Map(..)) {
+        unreachable!("native collection publication requires prepared observations");
+    }
+    if let Some(ty) = crate::layouts::whole_payload(ty) {
+        format!("_ctx.set_atomic::<{}>({output},{value})?;", global_type(ty))
+    } else {
+        format!("_ctx.set(hgl_store::Store::prepared_output({output}),{value});")
     }
 }
 /// Apply complete retained children directly from prepared ordinary storage.

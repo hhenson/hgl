@@ -13,6 +13,7 @@ line-budget = 9590
 [package.metadata.hgl.modules]
 snapshot_locals = { budget = 150, uses = ["ir", "ir_visit", "call_locals"] }
 call_locals = { budget = 100, uses = ["ir", "ir_visit"] }
+constructor_owners = { budget = 100, uses = ["ir", "ir_visit"] }
 boxed_uses = { budget = 80, uses = ["ir", "ir_visit"] }
 any_values = { budget = 420, uses = ["ir", "value_eval", "endpoint_check", "value_access", "family_values", "scalar_keys"] }
 ir_visit = { budget = 320, uses = ["ir", "harness_ir"] }

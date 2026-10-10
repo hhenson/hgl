@@ -23,6 +23,9 @@ size and enforces the "may use" list from the crate's
 
 | Card | Now | Of |
 |---|---|---|
+| [hgl-ordinary-shape](hgl-ordinary-shape.md) | module `ordinary_shape` | `hgl-source` |
+| [hgl-constructor-owners](hgl-constructor-owners.md) | module `constructor_owners` | `hgl-semantics` |
+| [hgl-rust-constructor-owners](hgl-rust-constructor-owners.md) | module `constructor_owners` | `hgl-rust` |
 | `hgl-bench-twin` | binary `twin` | `hgl-bench` |
 | [hgl-atomic](hgl-atomic.md) | module `atomic` | `hgl-store` |
 | [hgl-binding-build](hgl-binding-build.md) | module `binding_build` | `hgl-store` |

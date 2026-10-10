@@ -50,7 +50,7 @@ pub(crate) fn publication(plan: &Plan, value: &Value, result: Option<&Ty>) -> Op
     crate::observed::forwarded(value, result)
 }
 fn write(plan: &Plan, v: &Value, slot: &str, prelude: &mut Vec<String>) -> String {
-    if (!v.snapshot || v.ty == Ty::Any)
+    if (!v.snapshot || v.ty.owning_scalar())
         && let Some((arena, source)) = crate::source_slots::source(plan, v)
     {
         let marker = global_type(&v.ty);

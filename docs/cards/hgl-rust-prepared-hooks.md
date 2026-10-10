@@ -7,3 +7,5 @@ Private surface: publication, append, replace and set, consumed by the values em
 Acceptance: generated successful-evaluation allocation probes for Any scalar, nested struct-field, flattened box and complete atomic-list appends; existing finite ordinary global hook behavior remains unchanged.
 
 Prepared lexical replacement checks and copies complete typed source slots into existing reserved owners. It preserves capacity through sparse or empty replacements so later larger observations cannot lose provisioned child storage. Growth bounds include one start publication plus the finite evaluation horizon.
+
+Constructor field publication delegates optional and recursive slot selection to constructor_owners. Ordinary owning scalar sources copy directly from retained typed slots.

@@ -18,6 +18,7 @@ fn generated_any_evaluation_uses_reserved_owning_buffers() -> Result<(), Box<dyn
         root.join("crates/hgl-compiler/tests/fixtures/any_generator_bindings.hgl"),
         root.join("crates/hgl-compiler/tests/fixtures/any_stage67_order.hgl"),
         root.join("crates/hgl-compiler/tests/fixtures/any_stage67_comparisons.hgl"),
+        root.join("crates/hgl-compiler/tests/fixtures/any_constructor_owners.hgl"),
     ];
     let libraries = vec![
         root.join("external/hgraph_std/hgl"),
@@ -61,11 +62,11 @@ fn generated_any_evaluation_uses_reserved_owning_buffers() -> Result<(), Box<dyn
         writeln!(manifest, "{name}={{path=\"{path}\"}}")?;
     }
     fs::write(directory.join("Cargo.toml"), manifest)?;
-    let provider = include_str!("fixtures/any_helper_provider.rs");
+    let provider = native_provider();
     fs::write(
         directory.join("src/main.rs"),
         format!(
-            "#[global_allocator] static ALLOCATOR:hgl_alloc_count::CountingAllocator=hgl_alloc_count::CountingAllocator;struct Provider;mod native{{pub use hgl_stdlib::std_native::*;{provider}}}\n{source}"
+            "#[global_allocator] static ALLOCATOR:hgl_alloc_count::CountingAllocator=hgl_alloc_count::CountingAllocator;{provider}\n{source}"
         ),
     )?;
     let output = Command::new(env!("CARGO"))
@@ -87,4 +88,14 @@ fn generated_any_evaluation_uses_reserved_owning_buffers() -> Result<(), Box<dyn
     );
     fs::remove_dir_all(&directory)?;
     Ok(())
+}
+
+fn native_provider() -> String {
+    include_str!("fixtures/any_owner_provider.rs").replace(
+        "pub use hgl_stdlib::std_native::*;",
+        &format!(
+            "pub use hgl_stdlib::std_native::*;mod helper {{{}}}pub use helper::*;",
+            include_str!("fixtures/any_helper_provider.rs")
+        ),
+    )
 }

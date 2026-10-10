@@ -621,7 +621,11 @@ fn capacities(plan: &Plan) -> String {
         for (key, ty) in &node.globals {
             append(
                 &mut code,
-                format_args!("{{let mut bounds={};", capacity.bounds(ty)),
+                format_args!(
+                    "{{let mut bounds={};",
+                    crate::constructor_owners::global_bounds(plan, key, |ty| capacity.bounds(ty))
+                        .unwrap_or_else(|| capacity.bounds(ty))
+                ),
             );
             code += &crate::pure_bounds::global_growth(plan, key, ty, appends);
             append(
