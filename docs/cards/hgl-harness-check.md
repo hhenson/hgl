@@ -21,3 +21,7 @@ Expected values retain their existing after-run execution boundary. No provider
 execution, runtime graph selection or replacement scheduling is introduced.
 
 Raises checks its body in an ordinary lexical scope, without executing it; locals cannot escape.
+
+`eval_declarations` selects target-owned eval signatures with existing lexical test-helper visibility before prepared argument binding. It performs no source execution.
+
+Eval declaration selection honors explicit const(value_function) role selection before temporal lifting. The target selector remains metadata rather than a runtime callable value.

@@ -13,7 +13,10 @@ pub struct Program(hgl_rust::Plan);
 /// Resolve an entry against explicitly supplied modules and implementation parts.
 /// Only reachable implementation bodies are admitted by this compiler slice.
 pub fn compile(sources: &[(String, String)], entry: &str) -> Result<Program, String> {
-    hgl_semantics::source_check::ensure_sources(sources)?;
+    hgl_source::diagnostics::ensure(hgl_semantics::source_check::with_semantics(
+        sources,
+        |library, decl| resolve::validate_defaults(library.clone(), decl),
+    ))?;
     let library = index::load(sources)?;
     hgl_semantics::enums::validate(&library)?;
     let module = library.root.clone();

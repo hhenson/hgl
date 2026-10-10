@@ -24,3 +24,5 @@ ordinary checked constant-size normalization in the ancestor's module.
 
 Rolling field patterns likewise retain Max/Min expression spelling beside the
 single payload type pattern; field resolution never resolves a bound as a type.
+
+RequiredStruct::default_origins retains each effective expression's declaring module and source file through inherited field offsets. Required evaluation never resolves an inherited generic field default in the child's module.

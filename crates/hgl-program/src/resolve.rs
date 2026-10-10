@@ -26,6 +26,7 @@ struct Checker {
     harness_values: Env,
     static_values: hgl_semantics::value_access::StaticValues,
     result_hint: Option<Ty>,
+    selected_value: Option<bool>,
     requirements: Requirements,
     phase: Phase,
     types: BTreeMap<String, Ty>,
@@ -229,7 +230,7 @@ impl Checker {
         let value = self
             .wiring
             .value(&value)
-            .map_err(|e| format!("constant list size: {e}"))?;
+            .map_err(|e| hgl_semantics::default_values::error(e, &expr))?;
         let Kind::Literal(value) = value.kind else {
             return Err("list size requires a constant scalar".into());
         };
@@ -252,30 +253,11 @@ impl Checker {
         args: &[(Option<String>, Value)],
         source: &str,
     ) -> Result<Signature, Issue> {
-        let names = signature
-            .parameters
-            .iter()
-            .map(|p| p.name.as_str())
-            .collect::<Vec<_>>();
+        let names = signature.parameter_names();
         let supplied = order_arguments(&names, args)?;
-        let env = signature
-            .parameters
-            .iter()
-            .enumerate()
-            .filter(|(_, p)| p.constant)
-            .filter_map(|(id, p)| {
-                supplied
-                    .get(&id)
-                    .cloned()
-                    .or_else(|| {
-                        p.default
-                            .as_ref()?
-                            .fixed()
-                            .map(|v| Value::new(v.ty(), Kind::Literal(v)))
-                    })
-                    .map(|v| (p.name.clone(), v))
-            })
-            .collect::<Env>();
+        let env = hgl_semantics::default_values::size_environment(&signature, &supplied, |v| {
+            self.static_values.resolve(v).clone()
+        });
         for parameter in &mut signature.parameters {
             parameter.ty = self.type_sizes(module, &parameter.ty, &env).map_err(|e| {
                 hgl_semantics::library::locate_type_issue(e, &parameter.type_tokens, source)
@@ -286,6 +268,12 @@ impl Checker {
             .map_err(|e| {
                 hgl_semantics::library::locate_type_issue(e, &signature.result_tokens, source)
             })?;
+        hgl_semantics::default_values::parameters(
+            &self.library.clone(),
+            module,
+            &mut signature,
+            |module, expr, ty| self.expected_expression(module, expr, &Env::new(), false, Some(ty)),
+        )?;
         Ok(signature)
     }
     fn direct_call(
@@ -371,6 +359,7 @@ impl Checker {
         args: &[(Option<String>, Value)],
         runtime: bool,
     ) -> Result<Selection, Issue> {
+        let selected = self.selected_value.take();
         let mut candidates = Vec::new();
         let mut errors = Vec::new();
         for (id, decl) in self.library.declarations.clone().iter().enumerate() {
@@ -393,7 +382,9 @@ impl Checker {
                     continue;
                 }
             };
-            if decl.role == Role::Native && !signature.body.is_empty() {
+            if selected.is_some_and(|value| value != signature.value_function)
+                || (decl.role == Role::Native && !signature.body.is_empty())
+            {
                 continue;
             }
             let declared = match hgl_semantics::value_bind::signature_types(
@@ -1726,7 +1717,13 @@ impl Checker {
             require_payload(&value)?;
             check.checked(&self.library, index, value)?;
         }
-        let value = check.finish(&self.library)?;
+        let value = check.finish_checked(&self.library.clone(), |module, source, expr, ty| {
+            let value = self
+                .expected_expression(module, expr, &Env::new(), false, Some(ty))
+                .map_err(|e| e.in_source(source))?;
+            hgl_semantics::default_values::required(value, expr, ty)
+                .map_err(|e| e.in_source(source))
+        })?;
         if (self.value_context != ValueContext::Preparation || self.preparing_graph)
             && let Kind::Construct(fields) = &value.kind
             && fields
@@ -1895,27 +1892,14 @@ fn select_eval(
     checker: &Checker,
     module: &str,
     name: &str,
+    value_only: bool,
     args: &[(Option<String>, Expr)],
 ) -> Result<(Checker, EvalInputs, Arguments), Issue> {
-    let (owner, item) = hgl_semantics::value_types::identity(&checker.library, module, name);
-    let helpers =
-        checker.library.declarations.iter().any(|d| {
-            d.module == owner && d.name == item && d.test_only && d.role == Role::Function
-        });
+    let (owner, item, declarations) =
+        hgl_semantics::harness_check::eval_declarations(&checker.library, module, name, value_only);
     let mut candidates = Vec::new();
     let mut errors = Vec::new();
-    for decl in checker.library.declarations.clone() {
-        if decl.module != owner
-            || decl.name != item
-            || matches!(
-                decl.role,
-                Role::Implementation | Role::Test | Role::Native | Role::Struct | Role::Enum
-            )
-            || (decl.test_only && owner != module)
-            || (helpers && owner == module && !decl.test_only)
-        {
-            continue;
-        }
+    for decl in declarations {
         let signature = decl.signature()?;
         let mut candidate = test_checker(
             checker.library.clone(),
@@ -1935,7 +1919,10 @@ fn select_eval(
             args,
             &decl.source,
         ) {
-            Ok((plan, values)) => candidates.push((candidate, plan, values)),
+            Ok((plan, values)) => {
+                candidate.selected_value = Some(signature.value_function);
+                candidates.push((candidate, plan, values));
+            }
             Err(error) => errors.push(error),
         }
     }
@@ -1955,11 +1942,13 @@ pub(crate) fn prepare_evaluation(
     library: Library,
     module: &str,
     name: &str,
+    value_only: bool,
     args: &[(Option<String>, Expr)],
     scope: &PreparedLexicalScope,
 ) -> Result<(Plan, Vec<hgl_semantics::harness_ir::Argument>), Issue> {
     let checker = test_checker(library, module, scope);
-    let (mut checker, plan, mut values) = select_eval(&checker, module, name, args)?;
+    let (mut checker, plan, mut values) = select_eval(&checker, module, name, value_only, args)?;
+    let selected = checker.selected_value.take();
     let mut prepared = Vec::new();
     checker.static_values.prepared = values.iter().map(|(_, value)| value.clone()).collect();
     for (binding, (name, value)) in values.iter_mut().enumerate() {
@@ -1988,6 +1977,7 @@ pub(crate) fn prepare_evaluation(
         }
     }
     checker.result_hint = None;
+    checker.selected_value = selected;
     let output = checker.call(module, name, &values, false)?;
     if matches!(output.kind, Kind::Wire(_)) {
         if !output.ty.publication() {
@@ -2029,25 +2019,12 @@ fn checked_eval(
     expr: &Expr,
     expected: Option<&Ty>,
 ) -> Result<Value, Issue> {
-    let mut value = if let Some(expected) = expected {
+    let value = if let Some(expected) = expected {
         checker.harness_expression(module, expr, expected)?
     } else {
         checker.expression(module, expr, &checker.harness_values.clone(), false)?
     };
-    if expected == Some(&Ty::F64) && value.ty == Ty::I64 {
-        value = Value::new(Ty::F64, Kind::Unary("float".into(), Box::new(value)));
-    }
-    if let Some(ty) = expected
-        && value.ty != *ty
-    {
-        return Err(Issue::coded(
-            "type",
-            "delta.type_mismatch",
-            expr.span(),
-            format!("expected {}, got {}", ty.name(), value.ty.name()),
-        ));
-    }
-    Ok(value)
+    hgl_semantics::value_check::expected_value(value, expected, expr.span())
 }
 
 pub(crate) fn prepared_expected(
@@ -2074,7 +2051,9 @@ fn eval_configuration(
     let mut values = Vec::new();
     for (index, (label, expr)) in args.iter().enumerate() {
         let parameter = hgl_semantics::eval_data::parameter(signature, index, label.as_deref())?;
-        if !parameter.constant {
+        if !parameter.constant
+            && (!signature.value_function || matches!(expr.syntax(), Expr::Sequence(_)))
+        {
             continue;
         }
         let name = checker.type_sizes(owner, &parameter.ty, &Env::new())?;
@@ -2130,7 +2109,7 @@ fn eval_arguments(
             plan.push((slots, None));
             Value::new(ty, Kind::Wire(index))
         } else {
-            if !parameter.constant {
+            if !parameter.constant && !signature.value_function {
                 let value = checked_eval(checker, module, expr, None)?;
                 let Ty::List(child, _) = &value.ty else {
                     return Err("temporal eval argument requires a sequence".into());
@@ -2208,6 +2187,7 @@ impl hgl_semantics::harness_check::Check for TestChecker {
             self.library.clone(),
             &self.module,
             &call.function,
+            call.value_only,
             &call.arguments,
             scope,
         )
@@ -2235,13 +2215,14 @@ pub(crate) fn validate_declaration(library: Library, decl: &Decl) -> Result<(), 
         )
         .map(|_| ());
     }
-    let Some(signature) = hgl_semantics::source_check::concrete_signature(decl)? else {
-        return Ok(());
-    };
     let mut checker = Checker {
         library,
         test_scope: decl.test_only.then(|| decl.module.clone()),
         ..Checker::default()
+    };
+    validate_defaults(checker.library.clone(), decl)?;
+    let Some(signature) = hgl_semantics::source_check::concrete_signature(decl)? else {
+        return Ok(());
     };
     let signature = checker.signature_sizes(&decl.module, signature, &[], &decl.source)?;
     for (name, tokens) in signature
@@ -2275,4 +2256,18 @@ pub(crate) fn validate_declaration(library: Library, decl: &Decl) -> Result<(), 
         checker.call(&decl.module, &decl.name, &[], false)?;
     }
     Ok(())
+}
+
+pub(crate) fn validate_defaults(library: Library, decl: &Decl) -> Result<(), Issue> {
+    let mut checker = Checker {
+        library,
+        value_context: ValueContext::Preparation,
+        test_scope: decl.test_only.then(|| decl.module.clone()),
+        ..Checker::default()
+    };
+    hgl_semantics::default_values::declaration(
+        &checker.library.clone(),
+        decl,
+        |module, expr, ty| checker.expected_expression(module, expr, &Env::new(), false, Some(ty)),
+    )
 }

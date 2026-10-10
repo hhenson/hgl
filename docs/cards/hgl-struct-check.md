@@ -6,7 +6,7 @@ Check ordinary finite-field constructors and infer their type parameters.
 Uses hgl-source, hgl-library, hgl-value-types, hgl-value-access and hgl-rust-ir;
 budget 450 source lines. No runtime or third-party dependency.
 
-Public surface: `Constructor::{new,next,checked,finish}`. A session accepts
+Public surface: `Constructor::{new,next,checked,finish,finish_checked}`. A session accepts
 library/module, constructor name, source fields, optional expected type and
 ambient function type bindings.
 The frontend supplies each checked field value in response to the next request.
@@ -16,9 +16,10 @@ parameters, then validate the specialization and field types. Every supplied
 field must be named, unique and declared; all fields without defaults must be
 present.
 Checked Construct IR preserves written argument order and declared field indices;
-omitted non-null fixed scalar defaults follow supplied arguments in declaration
-order. Checking never executes supplied field values; defaults are already
-constant literals and are retained only at construction. Delta construction
+omitted non-null ordinary defaults follow supplied arguments in declaration
+order. finish_checked obtains them from the authoritative ordinary checker in
+the retained declaration module/source; the compatibility finish path retains
+fixed literals and contextual recipes. Checking never executes supplied field values. Delta construction
 uses a separate checker and never fills omitted fields from defaults.
 Context-dependent fields are checked only once their concrete expected types
 are available.

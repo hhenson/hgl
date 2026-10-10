@@ -227,6 +227,16 @@ impl Constructor {
     }
     /// Validate complete inference and assemble source-order constructor IR.
     pub fn finish(self, library: &Library) -> Result<Value, String> {
+        self.finish_checked(library, |module, _, expr, _| {
+            crate::default_values::literal(library, module, expr)
+        })
+    }
+    /// Assemble already type-checked owning defaults through the caller's ordinary checker.
+    pub fn finish_checked<E: From<String>>(
+        self,
+        library: &Library,
+        mut check: impl FnMut(&str, &str, &Expr, &Ty) -> Result<Value, E>,
+    ) -> Result<Value, E> {
         let arguments = self
             .schema
             .generics
@@ -255,13 +265,15 @@ impl Constructor {
                 continue;
             }
             if !fields.iter().any(|(field, _)| *field == index) {
-                let default = crate::enums::default(library, &self.declaration.module, &default)?;
-                let ty = default.ty();
-                let kind = match default {
-                    hgl_source::ParsedLiteral::Value(v) => Kind::Literal(v),
-                    hgl_source::ParsedLiteral::Contextual(v) => Kind::TemporalLiteral(v),
-                };
-                fields.push((index, Value::new(ty, kind)));
+                let (_, declared, _) = ty.structure().map_err(E::from)?;
+                let (module, source) = &self.schema.default_origins[&index];
+                let value = check(
+                    module,
+                    source,
+                    &default,
+                    &crate::value_access::project(&declared[index].1),
+                )?;
+                fields.push((index, value));
             }
         }
         Ok(Value::new(

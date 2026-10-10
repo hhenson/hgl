@@ -104,6 +104,11 @@ fn flatten(
         return Err("cyclic struct inheritance".into());
     }
     let mut own = decl.required_struct()?;
+    own.default_origins = own
+        .defaults
+        .iter()
+        .map(|(i, _)| (*i, (decl.module.clone(), decl.source.clone())))
+        .collect();
     crate::struct_names::exported_fields(library, decl)?;
     for (_, value) in &mut own.defaults {
         if matches!(value.syntax(), hgl_source::Expr::Name(_)) {
@@ -153,10 +158,16 @@ fn flatten(
                 .into_iter()
                 .map(|(index, value)| (index + offset, value)),
         );
+        inherited.default_origins.extend(
+            own.default_origins
+                .into_iter()
+                .map(|(i, origin)| (i + offset, origin)),
+        );
         inherited_patterns.append(&mut patterns);
         own.fields = inherited.fields;
         own.optional = inherited.optional;
         own.defaults = inherited.defaults;
+        own.default_origins = inherited.default_origins;
         patterns = inherited_patterns;
     }
     active.remove(&id);

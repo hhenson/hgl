@@ -55,3 +55,6 @@ pub mod ir_visit;
 
 /// Checked ordinary operator type algebra.
 pub mod value_operators;
+
+/// Required ordinary defaults share checking-time retention and capability identity.
+pub mod default_values;
