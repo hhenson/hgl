@@ -25,6 +25,10 @@ fn native_byte_children_require_prepared_structural_ownership() {
         "fn bad(value:bytes)->tuple<bytes,i64> {inject out\nwhen {out=(value,1)}}",
         "fn bad(value:bytes)->Packet {when {return Packet(data:value)}}",
         "fn bad(value:bytes)->Packet {inject out\nwhen {out=Packet(data:value)}}",
+        "fn bad(value:bytes)->atomic<Packet> {when {return Packet(data:value)}}",
+        "fn bad(value:bytes)->atomic<Packet> {inject out\nwhen {out=Packet(data:value)}}",
+        "fn bad(value:bytes)->rolling<Packet,2> {when {return Packet(data:value)}}",
+        "fn bad(value:bytes)->rolling<Packet,2> {inject out\nwhen {out=Packet(data:value)}}",
         "struct Envelope {packet:Packet}\nfn bad(value:bytes)->Envelope {when {return Envelope(packet:Packet(data:value))}}",
         "fn bad(value:bytes)->Packet {when {let packet=Packet(data:value)\nreturn packet}}",
     ] {
@@ -36,6 +40,29 @@ fn native_byte_children_require_prepared_structural_ownership() {
             "{source}\n{error}"
         );
     }
+}
+
+#[test]
+fn native_byte_struct_aliases_require_prepared_result_ownership() {
+    for shape in ["atomic<Packet>", "rolling<Packet,2>"] {
+        for binding in ["let", "var"] {
+            for publication in ["return packet", "out=packet"] {
+                let source = format!(
+                    "fn bad(value:bytes)->{shape} {{inject out\nwhen {{{binding} packet=Packet(data:value)\n{publication}}}}}\ntest bad {{eval(bad,[bytes([0,255])])}}"
+                );
+                let error = compile_tests(&sources(&source))
+                    .expect_err("native owning alias has no prepared result transport");
+                assert!(
+                    error.contains("prepared retained observations"),
+                    "{source}\n{error}"
+                );
+            }
+        }
+    }
+    let error = compile_tests(&sources(
+        "fn bad(value:rolling<Packet,2>)->rolling<Packet,2> {when {let packet=delta_value(value)\nreturn packet}}\ntest bad {eval(bad,[Packet(data:bytes([0,255]))])}",
+    )).expect_err("native rolling arrival alias has no prepared result transport");
+    assert!(error.contains("prepared retained observations"), "{error}");
 }
 
 #[test]
@@ -65,6 +92,8 @@ fn ordinary_byte_construction_and_retained_structural_values_remain_admitted() {
 const fn pair(value:bytes)->tuple<bytes,i64> {return (value,1)}
 fn packet_copy(value:Packet)->Packet {when {return value}}
 fn pair_copy(value:tuple<bytes,i64>)->tuple<bytes,i64> {when {return value}}
+fn atomic_observation(value:atomic<Packet>)->atomic<Packet> {when {let packet=delta_value(value)
+return packet}}
 fn sparse(value:bytes)->Packet {when {return delta<Packet>(data:value)}}
 test values {let value=bytes([0,255])
 let retained_packet=packet(value)
@@ -74,6 +103,7 @@ assert retained_pair[0]==value
 assert retained_pair[1]==1}
 test packet_copy {assert eval(packet_copy,[delta<Packet>(data:bytes([0,255]))])==[delta<Packet>(data:bytes([0,255]))]}
 test pair_copy {assert eval(pair_copy,[(bytes([0,255]),1)])==[(bytes([0,255]),1)]}
+test atomic_observation {assert eval(atomic_observation,[Packet(data:bytes([0,255]))])==[Packet(data:bytes([0,255]))]}
 test sparse {assert eval(sparse,[bytes(),bytes([0,255])])==[delta<Packet>(data:bytes()),delta<Packet>(data:bytes([0,255]))]}
 ",
     ));

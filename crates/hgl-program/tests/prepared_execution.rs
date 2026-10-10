@@ -166,6 +166,22 @@ test keyed {assert eval(keyed,[1,2]) == [delta<map<bytes,bytes>>(upsert:[bytes([
 }
 
 #[test]
+fn retained_atomic_and_rolling_byte_structs_allocate_nothing()
+-> Result<(), Box<dyn std::error::Error>> {
+    execute(r"module retained_byte_structs
+struct Packet {data:bytes}
+fn atomic_copy(value:atomic<Packet>)->atomic<Packet> {when {return delta_value(value)}}
+fn rolling_copy(value:rolling<Packet,2>)->rolling<Packet,2> {when {return delta_value(value)}}
+fn atomic_config(value:i64,const packet:Packet)->atomic<Packet> {when {return packet}}
+fn rolling_config(value:i64,const packet:Packet)->rolling<Packet,2> {when {return packet}}
+test atomic_copy {assert eval(atomic_copy,[Packet(data:bytes([0,255])),Packet(data:bytes()),_,Packet(data:bytes([128]))])==[Packet(data:bytes([0,255])),Packet(data:bytes()),_,Packet(data:bytes([128]))]}
+test rolling_copy {assert eval(rolling_copy,[Packet(data:bytes([0,255])),Packet(data:bytes()),_,Packet(data:bytes([128]))])==[Packet(data:bytes([0,255])),Packet(data:bytes()),_,Packet(data:bytes([128]))]}
+test atomic_config {assert eval(atomic_config,[1,2],packet:Packet(data:bytes([0,255])))==[Packet(data:bytes([0,255])),Packet(data:bytes([0,255]))]}
+test rolling_config {assert eval(rolling_config,[1,2],packet:Packet(data:bytes([0,255])))==[Packet(data:bytes([0,255])),Packet(data:bytes([0,255]))]}
+".into(), RUNTIME, true)
+}
+
+#[test]
 fn finite_owning_publications_use_prepared_storage() -> Result<(), Box<dyn std::error::Error>> {
     execute(
         format!("{SOURCE}{}{}", scaling_source(), branch_source()),

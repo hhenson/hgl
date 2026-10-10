@@ -1,5 +1,5 @@
 //! Complete ordinary structural return and own-output source admission.
-use crate::ir::{Statement, Value};
+use crate::ir::{Kind, Statement, Value};
 use hgl_source::Ty;
 /// Whether a native ordinary aggregate contains collection storage.
 pub fn collection(ty: &Ty) -> bool {
@@ -20,7 +20,7 @@ pub fn result(value: Value, result: &Ty, expected: &Ty, node: bool) -> Result<Va
         && !matches!(result, Ty::Atomic(_) | Ty::Rolling(..))
         && crate::tuple_values::ordinary_result(&value.ty)
         && (!nonempty(&value.ty)
-            || matches!(&value.kind,crate::ir::Kind::Construct(fields) if fields.is_empty()))
+            || matches!(&value.kind,Kind::Construct(fields) if fields.is_empty()))
     {
         return Err(
             "complete ordinary publication requires a nonempty value retaining a valid child"
@@ -34,10 +34,13 @@ pub fn result(value: Value, result: &Ty, expected: &Ty, node: bool) -> Result<Va
         return Err("node return type mismatch".into());
     }
     if node
-        && !matches!(result, Ty::Atomic(_) | Ty::Rolling(..))
+        && (!matches!(result, Ty::Atomic(_) | Ty::Rolling(..))
+            || matches!(
+                value.kind,
+                Kind::Construct(_) | Kind::Local(_) | Kind::MutableLocal(_)
+            ))
         && (crate::tuple_values::ordinary_result(&value.ty)
-            || (crate::tuple_values::endpoint(&value)
-                && matches!(value.kind, crate::ir::Kind::Field(..))))
+            || (crate::tuple_values::endpoint(&value) && matches!(value.kind, Kind::Field(..))))
         && !value.snapshot
         && (collection(&value.ty) || variable(&value.ty))
     {

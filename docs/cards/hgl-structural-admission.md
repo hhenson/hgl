@@ -25,6 +25,12 @@ previous Tuple growing-List retention path remains separate. Retained shapes
 exclude Set, enum, family, recursive and atomic children until their prepared
 ordinary transport exists. Native collection or variable-width structural result
 children reject before emission; ordinary constant identity remains unchanged.
+This also rejects native owning aggregate constructors and ordinary owning locals
+returned or assigned to atomic and rolling outputs, including a native local
+holding a rolling arrival. These values have no prepared result transport in this
+backend profile. Prepared snapshots, observed locals, direct whole-value
+observations and retained configuration remain separate; ordinary constant
+function construction is unchanged.
 Variable-width child reads require prepared ownership or the admitted native
 text borrow, never an unprepared clone. No absent-child default or new error code
 is supplied. Runtime excluded cases retain existing uncatalogued failures.
