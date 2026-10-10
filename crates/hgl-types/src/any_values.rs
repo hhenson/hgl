@@ -29,6 +29,15 @@ pub struct AnyField {
 /// Storage operations selected during compilation, never inferred from payload tags.
 #[derive(Debug)]
 pub enum AnyOperation {
+    /// Operations supplied by one checked provider over its opaque owning encoding.
+    Native {
+        /// Provider equality.
+        equal: fn(&[u8], &[u8]) -> NodeResult<bool>,
+        /// Provider hash.
+        hash: fn(&[u8]) -> NodeResult<u64>,
+        /// Provider partial order.
+        compare: fn(&[u8], &[u8]) -> NodeResult<Option<Ordering>>,
+    },
     /// Signed integer or enum member.
     Integer,
     /// IEEE floating-point value, preserving NaN and signed-zero semantics.
@@ -171,6 +180,7 @@ impl AnyPlan {
             return capability();
         }
         match &self.operation {
+            AnyOperation::Native { equal, .. } => equal(a, b),
             AnyOperation::Float => Ok(f64::from_bits(number(a))
                 .partial_cmp(&f64::from_bits(number(b)))
                 == Some(Ordering::Equal)),
@@ -233,6 +243,7 @@ impl AnyPlan {
             return capability();
         }
         match &self.operation {
+            AnyOperation::Native { compare, .. } => compare(a, b),
             AnyOperation::Integer => Ok(Some(
                 i64::from_le_bytes(number(a).to_le_bytes())
                     .cmp(&i64::from_le_bytes(number(b).to_le_bytes())),
@@ -287,6 +298,7 @@ impl AnyPlan {
         }
         let mut hash = std::collections::hash_map::DefaultHasher::new();
         match &self.operation {
+            AnyOperation::Native { hash, .. } => return hash(data),
             AnyOperation::Float => {
                 let value = f64::from_bits(number(data));
                 if value.is_nan() {

@@ -150,6 +150,12 @@ pub fn allocate(
     slots: &mut Vec<usize>,
 ) -> hgl_types::NodeResult {
     match ty {
+        OrdinaryType::Native(_) => {
+            let mut capacity = Capacity::default();
+            capacity.native();
+            columns.reserve(&capacity)?;
+            slots.push(columns.natives.insert(Vec::new()));
+        }
         OrdinaryType::Any => {
             let mut capacity = Capacity::default();
             capacity.any();

@@ -6,37 +6,16 @@ use hgl_types::{AnyValue, NodeError, NodeResult, OrdinaryType};
 #[derive(Debug)]
 pub struct Any;
 impl ValueColumns {
-    pub(crate) fn reserve_any(&mut self, count: usize) -> NodeResult {
-        let extra = count.saturating_sub(self.free_anys.len());
-        self.anys
-            .try_reserve(extra)
-            .map_err(|error| NodeError::new(error.to_string()))?;
-        self.free_anys
-            .try_reserve(
-                self.anys
-                    .len()
-                    .saturating_add(extra)
-                    .saturating_sub(self.free_anys.len()),
-            )
-            .map_err(|error| NodeError::new(error.to_string()))
-    }
     /// Observe the complete held box through a typed ordinary slot.
     pub fn any(&self, slot: usize) -> &AnyValue {
-        &self.anys[slot]
+        self.anys.get(slot)
     }
     /// Mutate only an authorized owning destination.
     pub fn any_mut(&mut self, slot: usize) -> &mut AnyValue {
-        &mut self.anys[slot]
+        self.anys.get_mut(slot)
     }
     pub(crate) fn insert_any(&mut self, value: AnyValue) -> usize {
-        if let Some(slot) = self.free_anys.pop() {
-            self.anys[slot] = value;
-            slot
-        } else {
-            let slot = self.anys.len();
-            self.anys.push(value);
-            slot
-        }
+        self.anys.insert(value)
     }
 }
 impl GlobalValue for Any {
@@ -52,8 +31,7 @@ impl GlobalValue for Any {
         columns.insert_any(value)
     }
     fn release(columns: &mut ValueColumns, slot: usize) {
-        columns.anys[slot] = AnyValue::default();
-        columns.free_anys.push(slot);
+        columns.anys.release(slot);
     }
     fn flatten(slot: usize, layout: &mut [usize]) {
         layout[0] = slot;
@@ -73,7 +51,7 @@ impl GlobalValue for Any {
         columns.any(slot).retain()
     }
     fn commit(columns: &mut ValueColumns, slot: usize, value: AnyValue, _: &mut Layouts) {
-        columns.anys[slot] = value;
+        *columns.any_mut(slot) = value;
     }
 }
 impl PreparedValue for Any {
@@ -116,13 +94,9 @@ impl PreparedValue for Any {
     }
     fn copy_within(columns: &mut ValueColumns, from: ValueSlot<Self>, to: ValueSlot<Self>) {
         let (from, to) = (from.fields(), to.fields());
-        if from < to {
-            let (left, right) = columns.anys.split_at_mut(to);
-            right[0].copy_prepared(&left[from]);
-        } else if from > to {
-            let (left, right) = columns.anys.split_at_mut(from);
-            left[to].copy_prepared(&right[0]);
-        }
+        columns.anys.copy(from, to, |source, destination| {
+            destination.copy_prepared(source);
+        });
     }
 }
 

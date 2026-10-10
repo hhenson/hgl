@@ -202,6 +202,8 @@ impl TsType {
 /// An exact ordinary entry type, including nominal identity and required fields.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum OrdinaryType {
+    /// Canonical provider-defined opaque scalar identity.
+    Native(&'static str),
     /// One owning typed box, independent of its contained shape.
     Any,
     /// Internal field presence and its ordinary payload; not a source type.

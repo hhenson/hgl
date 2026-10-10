@@ -9,3 +9,8 @@ Capability selection is type based, including empty ordinary containers. Recursi
 Acceptance: shared any_values, any_bool_values and any_capability_edges suites; independent retained recursive aggregates and structural delta payloads; nested constant selectors and exact nominal identity.
 
 Static capable, fields and contains_any metadata delegates to hgl-source ordinary_shape; evaluation and boxed capability failures remain owned here.
+
+Opaque contained native values use statically selected provider equality/hash/order
+callbacks. Checked capability masks are tested before those callbacks, so physical
+provider operations cannot widen HGL capabilities. Encoded native data is never
+compared by engine byte or address equality.

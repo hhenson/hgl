@@ -59,7 +59,8 @@ impl<K: crate::keys::Key> Shape for Set<K> {
     fn shape() -> TsType {
         match K::schema() {
             hgl_types::OrdinaryType::Scalar(t) => TsType::Set(t),
-            identity @ (hgl_types::OrdinaryType::Any
+            identity @ (hgl_types::OrdinaryType::Native(_)
+            | hgl_types::OrdinaryType::Any
             | hgl_types::OrdinaryType::RecursiveReference(_)
             | hgl_types::OrdinaryType::OptionalField(_)
             | hgl_types::OrdinaryType::Enum(_)
