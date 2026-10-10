@@ -95,10 +95,21 @@ impl<T: NativeType> Clone for NativeView<'_, T> {
         *self
     }
 }
-impl<T: NativeType> NativeView<'_, T> {
+impl<'a, T: NativeType> NativeView<'a, T> {
+    /// Introduce a readonly provider encoding at a statically selected ABI boundary.
+    pub fn from_provider(data: &'a [u8]) -> Self {
+        Self {
+            data,
+            marker: PhantomData,
+        }
+    }
     /// Provider-private encoded data; no HGL field or representation access is introduced.
-    pub fn data(&self) -> &[u8] {
+    pub fn data(&self) -> &'a [u8] {
         self.data
+    }
+    /// Materialize an owning result in an executed cold context.
+    pub fn retain(self) -> NodeResult<NativeValue<T>> {
+        retain::<T>(self.data)
     }
 }
 fn retain<T: NativeType>(data: &[u8]) -> NodeResult<NativeValue<T>> {
@@ -113,6 +124,20 @@ fn retain<T: NativeType>(data: &[u8]) -> NodeResult<NativeValue<T>> {
 /// An exact marker whose opaque buffer positions are selected before execution.
 #[derive(Debug)]
 pub struct Native<T: NativeType>(PhantomData<T>);
+impl<T: NativeType> Native<T> {
+    /// Preflight an owning result supplied through an explicit borrowed provider ABI.
+    pub fn check_view(
+        columns: &ValueColumns,
+        to: ValueSlot<Self>,
+        view: NativeView<'_, T>,
+    ) -> NodeResult {
+        T::preflight(view.data, columns.natives.get(to.fields()).capacity())
+    }
+    /// Copy a preflighted provider result into its independently owning destination.
+    pub fn copy_view(columns: &mut ValueColumns, to: ValueSlot<Self>, view: NativeView<'_, T>) {
+        T::copy(view.data, columns.natives.get_mut(to.fields()));
+    }
+}
 impl ValueColumns {
     /// Read a statically selected native slot without checking a per-value runtime tag.
     pub fn native<T: NativeType>(&self, slot: ValueSlot<Native<T>>) -> NativeView<'_, T> {
