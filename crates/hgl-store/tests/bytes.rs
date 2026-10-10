@@ -134,6 +134,67 @@ fn constructor_failure_changes_neither_held_output_nor_publication_stamp() -> No
 }
 
 #[test]
+fn rolling_constructor_preflight_preserves_the_previous_arrival() -> NodeResult {
+    type Window = hgl_store::Rolling<Vec<u8>, false, 1, 1>;
+    let mut store = Store::new();
+    let list = store.add_atomic_output::<List<i64>>(NodeId(0));
+    let list_output = Output::<Atomic<List<i64>>>::bind(store.bindings(), list)
+        .map_err(|e| NodeError::new(format!("{e:?}")))?;
+    let input_id = store.add_shaped_input(NodeId(1), Atomic::<List<i64>>::shape(), true);
+    store
+        .bind(input_id, list)
+        .map_err(|e| NodeError::new(format!("{e:?}")))?;
+    let input = Input::<Atomic<List<i64>>>::bind(store.bindings(), input_id)
+        .map_err(|e| NodeError::new(format!("{e:?}")))?;
+    let output_id = store.add_shaped_output(NodeId(1), Window::shape());
+    let observer_id = store.add_shaped_input(NodeId(2), Window::shape(), true);
+    store
+        .bind(observer_id, output_id)
+        .map_err(|e| NodeError::new(format!("{e:?}")))?;
+    let output = Output::<Window>::bind(store.bindings(), output_id)
+        .map_err(|e| NodeError::new(format!("{e:?}")))?;
+    let observer = Input::<Window>::bind(store.bindings(), observer_id)
+        .map_err(|e| NodeError::new(format!("{e:?}")))?;
+    let storage = store.prepared();
+    storage
+        .rolling
+        .prepare_output::<Window>(storage.bindings, output_id, &2, 3)?;
+    let mut wakes = Wakes::default();
+    store.set_atomic(list_output, vec![0, 255], at(1), &mut wakes)?;
+    let (result, allocations) = count_in(|| {
+        store
+            .prepared()
+            .tick(at(1), NodeId(1), &mut wakes)
+            .rolling_bytes_from_list(input, output)
+    });
+    result?;
+    assert_eq!(allocations, 0);
+    for (time, values, code) in [
+        (2, vec![0, -1], Some("value.byte_range")),
+        (3, vec![0; 1000], None),
+    ] {
+        store.begin_cycle(at(time));
+        store.set_atomic(list_output, values, at(time), &mut wakes)?;
+        let error = store
+            .prepared()
+            .tick(at(time), NodeId(1), &mut wakes)
+            .rolling_bytes_from_list(input, output)
+            .unwrap_err();
+        assert_eq!(error.code, code);
+        assert_eq!(store.bindings().output(output_id).modified_at, at(1));
+        assert!(store.rolling.ready(store.bindings(), observer));
+        assert_eq!(
+            store
+                .rolling
+                .borrow(store.bindings(), observer)?
+                .read(store.rolling.values())?,
+            [0, 255]
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn ordinary_constructor_owns_storage_and_requires_the_generic_adapter() -> NodeResult {
     let source = [1, 2];
     let (result, allocations) = count_in(|| hgl_types::bytes(&source));

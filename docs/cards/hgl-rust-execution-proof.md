@@ -10,6 +10,10 @@ iteration bounds and owning growth in loops are unproved. Opaque owning-return
 calls are unproved except the bounded built-in scalar formatter. Nonclosed sparse
 constructors require the supported direct-return lowering and complete key-path
 and payload bounds; arbitrary owning locals do not acquire that proof.
+Prepared bytes-from-list return recognition requires a scalar bytes result or
+a rolling bytes arrival result, selecting the matching reserved destination.
+Recursive statement checks retain the node result, while ordinary call bodies
+use their own result. Signal inputs never establish this source proof.
 
 The current replay schedule proof recognizes a single increasing index traversal
 of one retained configuration list, with at most one yield per row. Unproved source

@@ -138,6 +138,38 @@ test rolling {assert eval(rolling,[bytes(),bytes([0,255]),_,bytes([0,255])])==[b
 }
 
 #[test]
+fn scalar_byte_returns_and_rolling_arrivals_allocate_nothing()
+-> Result<(), Box<dyn std::error::Error>> {
+    execute(r"module bytes_return_shapes
+fn copy(value:bytes)->bytes {when {return value}}
+fn arrival(value:bytes)->rolling<bytes,2> {when {return value}}
+fn observed_arrival(value:bytes)->rolling<bytes,2> {when {return delta_value(value)}}
+test copy {assert eval(copy,[bytes([0,255]),bytes(),_,bytes([0,255]),bytes([1,2,3,4]),bytes([0,255])])==[bytes([0,255]),bytes(),_,bytes([0,255]),bytes([1,2,3,4]),bytes([0,255])]}
+test arrival {assert eval(arrival,[bytes([0,255]),bytes(),_,bytes([0,255]),bytes([1,2,3,4]),bytes([0,255])])==[bytes([0,255]),bytes(),_,bytes([0,255]),bytes([1,2,3,4]),bytes([0,255])]}
+test observed_arrival {assert eval(observed_arrival,[bytes([0,255]),bytes(),_,bytes([0,255])])==[bytes([0,255]),bytes(),_,bytes([0,255])]}
+".into(), RUNTIME, true)
+}
+
+#[test]
+fn rolling_byte_conversion_uses_prepared_execution() -> Result<(), Box<dyn std::error::Error>> {
+    execute(
+        r#"module rolling_bytes_constructor
+const fn convert(value:list<i64>)->bytes {return bytes(value)}
+fn direct(value:atomic<list<i64>>)->rolling<bytes,2> {when {return bytes(value)}}
+fn helper(value:atomic<list<i64>>)->rolling<bytes,2> {when {if true {return convert(value)}}}
+fn fixed(value:atomic<list<i64,2>>)->rolling<bytes,2> {when {return bytes(value)}}
+test direct {assert eval(direct,[[0,255],[],_,[0,255]])==[bytes([0,255]),bytes(),_,bytes([0,255])]}
+test helper {assert eval(helper,[[0,255],[],_,[0,255]])==[bytes([0,255]),bytes(),_,bytes([0,255])]}
+test fixed {assert eval(fixed,[[0,255],_,[128,255]])==[bytes([0,255]),_,bytes([128,255])]}
+test invalid {assert raises("value.byte_range") {eval(direct,[[256]])}}
+"#
+        .into(),
+        RUNTIME,
+        true,
+    )
+}
+
+#[test]
 fn byte_literals_in_sparse_publications_allocate_nothing() -> Result<(), Box<dyn std::error::Error>>
 {
     execute(

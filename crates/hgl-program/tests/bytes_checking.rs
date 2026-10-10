@@ -50,16 +50,18 @@ fn required_constant_byte_failure_rejects_before_execution() {
 fn byte_conversion_cannot_read_atomic_signal_payloads() {
     for shape in ["list<i64>", "list<i64,2>"] {
         for expression in ["bytes(value)", "convert(value)"] {
-            let readable = format!(
-                "const fn convert(value:{shape})->bytes {{return bytes(value)}}\nfn observe(value:atomic<{shape}>)->bytes {{when {{return {expression}}}}}\ntest accepted {{eval(observe,[[0,255]])}}"
-            );
-            compile_tests(&sources(&readable))
-                .unwrap_or_else(|error| panic!("{shape}, {expression}: {error}"));
-            let body = format!(
-                "const fn convert(value:{shape})->bytes {{return bytes(value)}}\nfn observe(value:signal)->bytes {{when {{return {expression}}}}}\nfn target(value:atomic<{shape}>)->bytes => observe(value)\ntest rejected {{eval(target,[[0,255]])}}"
-            );
-            let error = compile_tests(&sources(&body)).unwrap_err();
-            assert!(error.contains("signal"), "{shape}, {expression}: {error}");
+            for result in ["bytes", "rolling<bytes,2>"] {
+                let readable = format!(
+                    "const fn convert(value:{shape})->bytes {{return bytes(value)}}\nfn observe(value:atomic<{shape}>)->{result} {{when {{return {expression}}}}}\ntest accepted {{eval(observe,[[0,255]])}}"
+                );
+                compile_tests(&sources(&readable))
+                    .unwrap_or_else(|error| panic!("{shape}, {expression}: {error}"));
+                let body = format!(
+                    "const fn convert(value:{shape})->bytes {{return bytes(value)}}\nfn observe(value:signal)->{result} {{when {{return {expression}}}}}\nfn target(value:atomic<{shape}>)->{result} => observe(value)\ntest rejected {{eval(target,[[0,255]])}}"
+                );
+                let error = compile_tests(&sources(&body)).unwrap_err();
+                assert!(error.contains("signal"), "{shape}, {expression}: {error}");
+            }
         }
     }
 }

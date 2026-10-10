@@ -232,6 +232,19 @@ impl Arena {
         self.commit(bindings, output, now, wake, (head, count));
         Ok(())
     }
+    /// Convert into a reserved arrival; the callback must preflight before mutation.
+    pub fn bytes<S: WindowShape<Payload = Vec<u8>>, W: Wake>(
+        &mut self,
+        bindings: &mut Bindings,
+        output: Output<S>,
+        (now, wake): (EngineTime, &mut W),
+        copy: impl FnOnce(&Bindings, &mut Vec<u8>) -> NodeResult,
+    ) -> NodeResult {
+        let (to, head, count) = self.destination(bindings, output, now)?;
+        copy(bindings, self.values.scalar_mut::<Vec<u8>>(to.fields()))?;
+        self.commit(bindings, output, now, wake, (head, count));
+        Ok(())
+    }
     /// Copy an independently owned source slot, then publish and apply arrival eviction.
     pub fn from<S: WindowShape, W: Wake>(
         &mut self,

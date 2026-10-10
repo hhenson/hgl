@@ -1,7 +1,7 @@
 //! Disjoint borrowed runtime access for independently prepared finite evaluation.
 use crate::bindings::{Bindings, InputId, OutputId, Wake};
-use crate::columns::{Columns, Scalar};
-use crate::global::{GlobalState, PreparedValue, ValueColumns, ValueSlot};
+use crate::columns::{Column, Columns, Scalar};
+use crate::global::{GlobalState, PreparedValue};
 pub use crate::observation::Observation;
 use crate::shapes::{Atomic, Input, Output};
 use hgl_types::{EngineTime, NodeError, NodeId, NodeResult};
@@ -83,25 +83,6 @@ impl<W: Wake> PreparedTick<'_, W> {
             self.publish(output);
         }
     }
-    /// Publish one independently retained arrival from a prepared source slot.
-    pub fn rolling_from<S: crate::rolling::WindowShape>(
-        &mut self,
-        source: &ValueColumns,
-        from: ValueSlot<S::Payload>,
-        output: Output<S>,
-    ) -> NodeResult
-    where
-        S::Payload: PreparedValue,
-    {
-        self.authorize(output.id(), output.generation());
-        self.storage.rolling.from(
-            self.storage.bindings,
-            output,
-            source,
-            from,
-            (self.now, self.wake),
-        )
-    }
     /// Compose a complete text arrival into its prepared ring destination.
     pub fn rolling_text<S: crate::rolling::WindowShape<Payload = String>>(
         &mut self,
@@ -144,6 +125,26 @@ impl<W: Wake> PreparedTick<'_, W> {
         self.storage
             .rolling
             .write(self.storage.bindings, output, value, self.now, self.wake)
+    }
+    /// Copy a valid scalar input into an independently retained arrival.
+    pub fn rolling_scalar<S: crate::rolling::WindowShape>(
+        &mut self,
+        input: crate::In<S::Payload>,
+        output: Output<S>,
+    ) -> NodeResult
+    where
+        S::Payload: Scalar + PreparedValue + crate::global::GlobalValue<Value = S::Payload>,
+    {
+        self.authorize(output.id(), output.generation());
+        let storage = &mut self.storage;
+        if !storage.bindings.valid(input.id()) {
+            return Err(NodeError::new("prepared input is invalid"));
+        }
+        let from = storage.bindings.input(input.id()).slot as usize;
+        let value = &S::Payload::column(storage.columns)[from];
+        storage
+            .rolling
+            .write(storage.bindings, output, value, self.now, self.wake)
     }
     /// Forward the current arrival into an independently timed output window.
     pub fn pass_rolling<S: crate::rolling::WindowShape>(

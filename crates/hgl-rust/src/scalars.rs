@@ -135,7 +135,7 @@ pub fn bytes_input(value: &hgl_semantics::ir::Value) -> Option<usize> {
     } else {
         argument
     };
-    if let Kind::Input(id, _) = argument.kind
+    if let Kind::Input(id, false) = argument.kind
         && let Ty::Atomic(payload) = &argument.ty
         && matches!(payload.as_ref(),Ty::List(child,_) if **child==Ty::I64)
     {

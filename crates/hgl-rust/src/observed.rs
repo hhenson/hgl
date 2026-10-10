@@ -77,6 +77,35 @@ pub fn capture(ty: &Ty, input: &str, slot: &str) -> String {
         "{{let value=observation.scalar::<{marker}>({input}.id())?;<{marker} as hgl_store::PreparedValue>::check_native(columns,{slot},value)?;<{marker} as hgl_store::PreparedValue>::copy_native(columns,{slot},value);}}"
     )
 }
+/// Match a checked return source to scalar or rolling prepared transport.
+pub fn forwarded(value: &Value, result: Option<&Ty>) -> Option<String> {
+    let source = if matches!(value.kind, Kind::Input(_, false)) && value.ty == Ty::Bytes {
+        value
+    } else if let Kind::Query(op, args) = &value.kind {
+        if op != "delta_value" {
+            return None;
+        }
+        args.first()?
+    } else if let Kind::ObservedLocal(id) = value.kind {
+        let Ty::Delta(origin) = &value.ty else {
+            return None;
+        };
+        return Some(pass(origin, &format!("local{id}"), "self._output"));
+    } else {
+        return None;
+    };
+    let Kind::Input(id, false) = source.kind else {
+        return None;
+    };
+    let input = format!("self.input{id}");
+    if source.ty == Ty::Bytes
+        && let Some(ty @ Ty::Rolling(payload, _)) = result
+        && **payload == Ty::Bytes
+    {
+        return Some(crate::windows::scalar(ty, &input, "self._output"));
+    }
+    Some(pass(&source.ty, &input, "self._output"))
+}
 /// Forward exact changed publications directly between prepared temporal endpoints.
 pub fn pass(ty: &Ty, input: &str, output: &str) -> String {
     if matches!(ty, Ty::Rolling(..)) {

@@ -57,7 +57,7 @@ fn value(plan: &Plan, input: &Value, looping: bool) -> bool {
         Kind::ValueCall(args, body) => {
             !owning(&input.ty)
                 && args.iter().all(|arg| value(plan, arg, looping))
-                && statements(plan, body, looping)
+                && statements(plan, body, looping, &input.ty)
         }
         Kind::Push(parent, item) => {
             !looping && value(plan, parent, looping) && value(plan, item, looping)
@@ -119,7 +119,7 @@ fn value(plan: &Plan, input: &Value, looping: bool) -> bool {
         | Kind::Void => true,
     }
 }
-fn statements(plan: &Plan, body: &[Statement], looping: bool) -> bool {
+fn statements(plan: &Plan, body: &[Statement], looping: bool, result: &Ty) -> bool {
     body.iter().all(|statement| match statement {
         Statement::Assign(target, source) => {
             !(looping && owning(&target.ty))
@@ -129,14 +129,19 @@ fn statements(plan: &Plan, body: &[Statement], looping: bool) -> bool {
         Statement::While(condition, body)
         | Statement::ForItems(_, _, _, condition, body)
         | Statement::For(_, condition, body) => {
-            value(plan, condition, looping) && statements(plan, body, true)
+            value(plan, condition, looping) && statements(plan, body, true, result)
         }
         Statement::If(condition, yes, no) => {
             value(plan, condition, looping)
-                && statements(plan, yes, looping)
-                && statements(plan, no, looping)
+                && statements(plan, yes, looping, result)
+                && statements(plan, no, looping, result)
         }
-        Statement::Return(source) if crate::scalars::bytes_input(source).is_some() => true,
+        Statement::Return(source)
+            if crate::scalars::bytes_input(source).is_some()
+                && result.clone().delta().is_ok_and(|ty| ty == Ty::Bytes) =>
+        {
+            true
+        }
         Statement::Return(source) if crate::direct_deltas::supported(source) => true,
         Statement::Let(_, source)
         | Statement::Var(_, source)
@@ -152,15 +157,13 @@ fn statements(plan: &Plan, body: &[Statement], looping: bool) -> bool {
 }
 pub(super) fn finite(plan: &Plan) -> bool {
     plan.nodes.iter().all(|node| {
-        statements(plan, &node.start, false)
-            && statements(plan, &node.stop, false)
-            && node
-                .generator
-                .as_ref()
-                .is_none_or(|body| statements(plan, body, false))
-            && node.handlers.iter().all(|(guard, body)| {
-                guard.as_ref().is_none_or(|guard| value(plan, guard, false))
-                    && statements(plan, body, false)
-            })
+        node.handlers
+            .iter()
+            .all(|(guard, _)| guard.as_ref().is_none_or(|guard| value(plan, guard, false)))
+            && [&node.start, &node.stop]
+                .into_iter()
+                .chain(node.generator.iter())
+                .chain(node.handlers.iter().map(|(_, body)| body))
+                .all(|body| statements(plan, body, false, &node.result))
     })
 }

@@ -25,7 +25,7 @@ list_storage = { budget = 300, uses = ["global_value", "prepared_value"] }
 member_table = { budget = 220, uses = [] }
 observation = { budget = 100, uses = ["atomic", "bindings", "columns", "keys", "rolling"] }
 optional = { budget = 160, uses = ["global_value", "list_storage", "prepared_value"] }
-prepared_globals = { budget = 80, uses = ["global", "shapes", "columns", "prepared_store"] }
+prepared_globals = { budget = 80, uses = ["global", "shapes", "columns", "prepared_store", "rolling", "list"] }
 prepared_store = { budget = 280, uses = [ "list", "atomic", "bindings", "columns", "global", "keys", "observation", "rolling", "shapes"] }
 prepared_value = { budget = 160, uses = ["columns", "global_value"] }
 recursive_value = { budget = 220, uses = ["global_value", "prepared_value"] }

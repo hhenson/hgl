@@ -92,7 +92,26 @@ fn ordinary_constructor_fallbacks_never_claim_the_prepared_adapter() {
     );
     node.handlers = vec![(None, vec![Statement::Return(construction)])];
     assert!(hgl_rust::execution_proof::prepared(&Plan {
-        nodes: vec![node],
+        nodes: vec![node.clone()],
         ..Plan::default()
     }));
+    node.result = Ty::Rolling(
+        Box::new(Ty::Bytes),
+        hgl_source::Window::new(hgl_source::WindowKind::Ticks, 2, 2).unwrap(),
+    );
+    let return_body = node.handlers[0].1.clone();
+    for body in [
+        return_body.clone(),
+        vec![Statement::If(
+            Value::new(Ty::Bool, Kind::Literal(Literal::Bool(true))),
+            return_body,
+            vec![],
+        )],
+    ] {
+        node.handlers[0].1 = body;
+        assert!(hgl_rust::execution_proof::prepared(&Plan {
+            nodes: vec![node.clone()],
+            ..Plan::default()
+        }));
+    }
 }

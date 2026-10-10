@@ -28,6 +28,13 @@ pub fn apply(ty: &Ty, output: &str, payload: &str) -> String {
         marker(ty)
     )
 }
+/// Borrow a scalar source into an independently retained rolling arrival.
+pub fn scalar(ty: &Ty, input: &str, output: &str) -> String {
+    format!(
+        "_ctx.prepared().rolling_scalar::<{}>({input},{output})?;",
+        marker(ty)
+    )
+}
 /// Prepared source-to-output arrival copy.
 pub fn from(ty: &Ty, output: &str, source: &str, slot: &str) -> String {
     format!(
