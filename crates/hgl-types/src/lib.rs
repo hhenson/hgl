@@ -22,6 +22,8 @@ pub enum ScalarType {
     F64,
     /// An immutable store-owned string.
     Text,
+    /// Uninterpreted octets.
+    Bytes,
     /// A calendar date.
     Date,
     /// A time of day.
@@ -52,6 +54,8 @@ pub enum ScalarValue {
     F64(f64),
     /// An owned string payload.
     Text(String),
+    /// Independently owned octets.
+    Bytes(Vec<u8>),
     /// A calendar date.
     Date(Date),
     /// A time of day.
@@ -78,6 +82,7 @@ impl ScalarValue {
             Self::I64(_) => ScalarType::I64,
             Self::F64(_) => ScalarType::F64,
             Self::Text(_) => ScalarType::Text,
+            Self::Bytes(_) => ScalarType::Bytes,
             Self::Date(_) => ScalarType::Date,
             Self::Time(_) => ScalarType::Time,
             Self::DateTime(_) => ScalarType::DateTime,
@@ -326,3 +331,21 @@ pub mod growing_range;
 pub mod node_error;
 pub mod time_values;
 pub mod window_types;
+
+/// Independently retain validated ordinary octets in their evaluation phase.
+pub fn bytes(octets: &[i64]) -> NodeResult<Vec<u8>> {
+    if octets.iter().any(|value| !(0..=255).contains(value)) {
+        return Err(NodeError::coded(
+            "byte octet must be between 0 and 255",
+            "value.byte_range",
+        ));
+    }
+    let mut bytes = Vec::new();
+    bytes
+        .try_reserve(octets.len())
+        .map_err(|error| NodeError::new(error.to_string()))?;
+    for &octet in octets {
+        bytes.push(u8::try_from(octet).unwrap_or_else(|_| unreachable!("validated byte octet")));
+    }
+    Ok(bytes)
+}

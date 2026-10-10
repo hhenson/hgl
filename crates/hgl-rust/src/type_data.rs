@@ -76,6 +76,7 @@ pub fn ty(t: &Ty) -> String {
         | Ty::F64
         | Ty::Bool
         | Ty::Str
+        | Ty::Bytes
         | Ty::Date
         | Ty::Time
         | Ty::DateTime

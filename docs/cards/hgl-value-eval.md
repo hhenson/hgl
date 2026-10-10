@@ -78,3 +78,5 @@ still fails. scoped(body) releases new bindings on success or error while
 preserving outer variable writes and provider execution order.
 
 List IR with exact Set/Map type executes through hgl-collection-values: every key is independently retained and checked before its map value. Captures retain complete owned descendants, and duplicate failure returns no partial container.
+
+check_assertion(&Value)->Result<(),String> preserves coded execution failures during optional assertion evaluation while retaining unsupported-operation diagnostics. atomic_argument(Value, Option<&Ty>)->Value projects a readable non-signal atomic input to an exact ordinary helper argument, retaining a typed atomic_value read in IR. May use value_constant. Byte length and construction execute in ordinary phase.

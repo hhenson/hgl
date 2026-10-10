@@ -57,3 +57,5 @@ widths. Concrete recursive payload operations remain compiler-selected typed
 GlobalValue/PreparedValue implementations with exact nominal schemas.
 
 Complete Set/Map schemas have one descriptor root; typed owning/prepared marker operations retain all descendants before whole publication.
+
+copy_bytes<const N>(&Bindings, Input<Atomic<List<i64,N>>>, &mut Vec<u8>)->NodeResult borrows the current complete ordinary octet list and preflights range/capacity before independent byte copying. May use list and scalar_copy. Publication remains the prepared owner operation.

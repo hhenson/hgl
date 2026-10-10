@@ -17,7 +17,7 @@ composite_keys = { budget = 250, uses = [] }
 deltas = { budget = 700, uses = ["keyed", "layouts", "observed", "windows"] }
 direct_deltas = { budget = 400, uses = ["layouts", "observed"] }
 enums = { budget = 180, uses = ["prepared_values"] }
-execution_proof = { budget = 250, uses = ["value_calls", "direct_deltas", "mutation_bounds"] }
+execution_proof = { budget = 250, uses = ["scalars", "value_calls", "direct_deltas", "mutation_bounds"] }
 families = { budget = 200, uses = ["type_data"] }
 finite_domains = { budget = 250, uses = ["execution_proof", "layouts", "mutation_bounds"] }
 generators = { budget = 500, uses = ["deltas", "finite_domains", "source_slots", "values", "windows"] }
@@ -32,19 +32,19 @@ pure_bounds = { budget = 300, uses = [] }
 recursive_convert = { budget = 160, uses = ["checked_data", "layouts"] }
 scalars = { budget = 150, uses = [] }
 snapshot_slots = { budget = 350, uses = ["snapshot_views", "structural_publication", "layouts", "observed", "snapshots"] }
-snapshot_views = { budget = 160, uses = ["layouts", "snapshots"] }
+snapshot_views = { budget = 160, uses = ["observed", "layouts", "snapshots"] }
 snapshots = { budget = 300, uses = ["layouts", "structural_publication"] }
 source_slots = { budget = 100, uses = ["layouts"] }
 structs = { budget = 230, uses = ["collections", "prepared_values"] }
 type_data = { budget = 120, uses = ["enums"] }
 value_convert = { budget = 320, uses = ["checked_data", "collections", "families", "layouts"] }
 tuple_adapter = { budget = 60, uses = ["value_calls", "execution_proof"] }
-values = { budget = 800, uses = ["execution_proof", "keyed", "snapshot_views", "value_calls", "structural_publication", "snapshot_slots", "snapshots", "collections", "deltas", "direct_deltas", "finite_domains", "layouts", "observed", "windows"] }
+values = { budget = 800, uses = ["scalars", "execution_proof", "keyed", "snapshot_views", "value_calls", "structural_publication", "snapshot_slots", "snapshots", "collections", "deltas", "direct_deltas", "finite_domains", "layouts", "observed", "windows"] }
 windows = { budget = 100, uses = ["layouts"] }
 
 structural_publication = { budget = 220, uses = ["snapshot_views", "layouts", "snapshot_slots", "snapshots"] }
 
-value_calls = { budget = 100, uses = ["execution_proof"] }
+value_calls = { budget = 100, uses = ["scalars", "execution_proof"] }
 
 [dependencies]
 hgl-semantics = { path = "../hgl-semantics" }

@@ -114,6 +114,241 @@ fn growing_list_publications_use_prepared_storage() -> Result<(), Box<dyn std::e
     )
 }
 #[test]
+fn bytes_construction_publication_and_recording_allocate_nothing()
+-> Result<(), Box<dyn std::error::Error>> {
+    execute(r#"module bytes_prepared
+const fn convert(value:list<i64>)->bytes {return bytes(value)}
+fn direct(value:atomic<list<i64>>)->bytes {when {return bytes(value)}}
+fn helper(value:atomic<list<i64>>)->bytes {when {return convert(value)}}
+fn fixed(value:atomic<list<i64,2>>)->bytes {when {return bytes(value)}}
+fn invalid(value:i64)->bytes {when {return bytes([256])}}
+fn forward(value:bytes)->bytes {when {return delta_value(value)}}
+fn members(value:map<bytes,bytes>)->map<bytes,bytes> {when {return delta_value(value)}}
+fn rolling(value:rolling<bytes,2>)->rolling<bytes,2> {when {return delta_value(value)}}
+fn compare(value:bytes,other:bytes)->bool {when {return len(value)>=0 && value==other}}
+test compare {assert eval(compare,[bytes(),bytes([0,255]),_,bytes([128])],[bytes(),bytes([0,255]),_,bytes([127])])==[true,true,_,false]}
+test direct {assert eval(direct,[[],[0,128,255],_,[0],[]])==[bytes(),bytes([0,128,255]),_,bytes([0]),bytes()]}
+test helper {assert eval(helper,[[255,0],[],_,[255,0]])==[bytes([255,0]),bytes(),_,bytes([255,0])]}
+test fixed {assert eval(fixed,[[0,255],_,[255,0]])==[bytes([0,255]),_,bytes([255,0])]}
+test invalid {assert raises("value.byte_range") {eval(invalid,[1])}}
+test forward {assert eval(forward,[bytes(),bytes(),_,bytes([0,255])])==[bytes(),bytes(),_,bytes([0,255])]}
+test members {assert eval(members,[delta<map<bytes,bytes>>(upsert:[bytes():bytes([255])]),delta<map<bytes,bytes>>(remove:[bytes()])])==[delta<map<bytes,bytes>>(upsert:[bytes():bytes([255])]),delta<map<bytes,bytes>>(remove:[bytes()])]}
+test rolling {assert eval(rolling,[bytes(),bytes([0,255]),_,bytes([0,255])])==[bytes(),bytes([0,255]),_,bytes([0,255])]}
+"#.into(), RUNTIME, true)
+}
+
+#[test]
+fn rolling_arrivals_publish_to_scalar_atomic_and_different_windows_without_allocating()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut source = String::from("module rolling_arrival_destinations\n");
+    for (name, ty, values) in [
+        (
+            "bytes",
+            "bytes",
+            "[bytes([0,255]),bytes(),_,bytes([1,2,3,4]),bytes([1,2,3,4])]",
+        ),
+        ("integer", "i64", "[1,1,_,2]"),
+        ("boolean", "bool", "[true,false,_,true]"),
+        ("floating", "f64", "[1.0,2.0,_,2.0]"),
+        ("text", "str", "[\"short\",\"\",_,\"longer text\"]"),
+    ] {
+        for (operation, input, output, publication) in [
+            (
+                "returned",
+                format!("rolling<{ty},2>"),
+                ty.to_owned(),
+                "return delta_value(value)",
+            ),
+            (
+                "assigned",
+                format!("rolling<{ty},2>"),
+                ty.to_owned(),
+                "out=delta_value(value)",
+            ),
+            (
+                "rewindow",
+                format!("rolling<{ty},2>"),
+                format!("rolling<{ty},3>"),
+                "return delta_value(value)",
+            ),
+            (
+                "timed",
+                format!("rolling<{ty},4ms>"),
+                format!("rolling<{ty},3,1>"),
+                "out=delta_value(value)",
+            ),
+        ] {
+            let function = format!("{name}_{operation}");
+            writeln!(
+                source,
+                "fn {function}(value:{input})->{output} {{inject out\nwhen {{{publication}}}}}"
+            )?;
+            writeln!(
+                source,
+                "test {function} {{assert eval({function},{values})=={values}}}"
+            )?;
+        }
+    }
+    source.push_str(r#"enum Kind {first=-7,second=11}
+fn enumeration(value:rolling<Kind,2>)->Kind {when {return delta_value(value)}}
+fn retained_enumeration(value:rolling<Kind,2>)->Kind {when {let held=delta_value(value)
+return held}}
+test enumeration {assert eval(enumeration,[Kind::first,Kind::second,_,Kind::first])==[Kind::first,Kind::second,_,Kind::first]
+assert eval(retained_enumeration,[Kind::first,Kind::second,_,Kind::first])==[Kind::first,Kind::second,_,Kind::first]}
+struct Packet {number:i64
+text:str}
+fn complete(value:rolling<Packet,2>)->atomic<Packet> {when {return delta_value(value)}}
+fn complete_assigned(value:rolling<list<i64>,2>)->atomic<list<i64>> {inject out
+when {out=delta_value(value)}}
+test complete_payloads {
+assert eval(complete,[Packet(number:1,text:"first"),Packet(number:2,text:""),_,Packet(number:3,text:"longer")])==[Packet(number:1,text:"first"),Packet(number:2,text:""),_,Packet(number:3,text:"longer")]
+assert eval(complete_assigned,[[1,2],[],_,[3,4,5]])==[[1,2],[],_,[3,4,5]]
+}
+"#);
+    execute(source, RUNTIME, true)
+}
+
+#[test]
+fn scalar_byte_returns_and_rolling_arrivals_allocate_nothing()
+-> Result<(), Box<dyn std::error::Error>> {
+    execute(r"module bytes_return_shapes
+fn copy(value:bytes)->bytes {when {return value}}
+fn arrival(value:bytes)->rolling<bytes,2> {when {return value}}
+fn observed_arrival(value:bytes)->rolling<bytes,2> {when {return delta_value(value)}}
+test copy {assert eval(copy,[bytes([0,255]),bytes(),_,bytes([0,255]),bytes([1,2,3,4]),bytes([0,255])])==[bytes([0,255]),bytes(),_,bytes([0,255]),bytes([1,2,3,4]),bytes([0,255])]}
+test arrival {assert eval(arrival,[bytes([0,255]),bytes(),_,bytes([0,255]),bytes([1,2,3,4]),bytes([0,255])])==[bytes([0,255]),bytes(),_,bytes([0,255]),bytes([1,2,3,4]),bytes([0,255])]}
+test observed_arrival {assert eval(observed_arrival,[bytes([0,255]),bytes(),_,bytes([0,255])])==[bytes([0,255]),bytes(),_,bytes([0,255])]}
+".into(), RUNTIME, true)
+}
+
+#[test]
+fn retained_byte_locals_publish_without_allocating() -> Result<(), Box<dyn std::error::Error>> {
+    let mut source = String::from("module retained_byte_locals\n");
+    for (input, initializer) in [("direct", "value"), ("observed", "delta_value(value)")] {
+        for (output, result) in [("scalar", "bytes"), ("rolling", "rolling<bytes,2>")] {
+            for (copy, binding) in [("local", "held"), ("alias", "alias")] {
+                let name = format!("{input}_{output}_{copy}");
+                writeln!(
+                    source,
+                    "fn {name}(value:bytes)->{result} {{when {{let held={initializer}\nlet alias=held\nif len(alias)==len(value) && alias==value {{return {binding}}}}}}}"
+                )?;
+                writeln!(
+                    source,
+                    "test {name} {{assert eval({name},[bytes([0,255]),bytes(),_,bytes([0,255]),bytes([1,2,3,4]),bytes([0,255])])==[bytes([0,255]),bytes(),_,bytes([0,255]),bytes([1,2,3,4]),bytes([0,255])]}}"
+                )?;
+            }
+        }
+    }
+    source.push_str(r"fn scalar_assignment(value:bytes)->bytes {inject out
+when {let held=value
+out=held}}
+fn rolling_assignment(value:bytes)->rolling<bytes,2> {inject out
+when {let held=delta_value(value)
+out=held}}
+test scalar_assignment {assert eval(scalar_assignment,[bytes([0,255]),bytes(),_,bytes([1,2,3,4])])==[bytes([0,255]),bytes(),_,bytes([1,2,3,4])]}
+test rolling_assignment {assert eval(rolling_assignment,[bytes([0,255]),bytes(),_,bytes([1,2,3,4])])==[bytes([0,255]),bytes(),_,bytes([1,2,3,4])]}
+fn independent(value:bytes,other:bytes)->rolling<bytes,2> {when {let held=value
+let alias=held
+let later=other
+if alias!=later {return alias}}}
+test independent {assert eval(independent,[bytes([0,255]),bytes(),bytes([1,2,3,4])],[bytes([1]),bytes([2]),bytes()])==[bytes([0,255]),bytes(),bytes([1,2,3,4])]}
+fn pair(value:bytes)->tuple<bytes,i64> {when {let held=value
+return (held,len(held))}}
+test pair {assert eval(pair,[bytes([0,255]),bytes(),_,bytes([1,2,3,4])])==[(bytes([0,255]),2),(bytes(),0),_,(bytes([1,2,3,4]),4)]}
+test ordinary_locals {let original=bytes([0,255])
+var owned=original
+owned=bytes()
+assert original==bytes([0,255])
+assert owned==bytes()}
+
+");
+    execute(source, RUNTIME, true)
+}
+
+#[test]
+fn retained_rolling_byte_arrivals_publish_without_allocating()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut source = String::from("module retained_rolling_byte_arrivals\n");
+    for (output, result) in [("scalar", "bytes"), ("rolling", "rolling<bytes,2>")] {
+        for (operation, publication) in [("returned", "return alias"), ("assigned", "out=alias")] {
+            let name = format!("{output}_{operation}");
+            writeln!(
+                source,
+                "fn {name}(value:rolling<bytes,2>)->{result} {{inject out\nwhen {{let held=delta_value(value)\nlet alias=held\n{publication}}}}}"
+            )?;
+            writeln!(
+                source,
+                "test {name} {{assert eval({name},[bytes([0,255]),bytes(),_,bytes([0,255]),bytes([1,2,3,4])])==[bytes([0,255]),bytes(),_,bytes([0,255]),bytes([1,2,3,4])]}}"
+            )?;
+        }
+    }
+    execute(source, RUNTIME, true)
+}
+
+#[test]
+fn rolling_byte_conversion_uses_prepared_execution() -> Result<(), Box<dyn std::error::Error>> {
+    execute(
+        r#"module rolling_bytes_constructor
+const fn convert(value:list<i64>)->bytes {return bytes(value)}
+fn direct(value:atomic<list<i64>>)->rolling<bytes,2> {when {return bytes(value)}}
+fn helper(value:atomic<list<i64>>)->rolling<bytes,2> {when {if true {return convert(value)}}}
+fn fixed(value:atomic<list<i64,2>>)->rolling<bytes,2> {when {return bytes(value)}}
+test direct {assert eval(direct,[[0,255],[],_,[0,255]])==[bytes([0,255]),bytes(),_,bytes([0,255])]}
+test helper {assert eval(helper,[[0,255],[],_,[0,255]])==[bytes([0,255]),bytes(),_,bytes([0,255])]}
+test fixed {assert eval(fixed,[[0,255],_,[128,255]])==[bytes([0,255]),_,bytes([128,255])]}
+test invalid {assert raises("value.byte_range") {eval(direct,[[256]])}}
+"#
+        .into(),
+        RUNTIME,
+        true,
+    )
+}
+
+#[test]
+fn byte_literals_in_sparse_publications_allocate_nothing() -> Result<(), Box<dyn std::error::Error>>
+{
+    execute(
+        r"module bytes_sparse_prepared
+fn keyed(value:i64,const payload:bytes)->map<bytes,bytes> {when {
+if value>0 {return delta<map<bytes,bytes>>(upsert:[bytes([1]):payload])}
+else {return delta<map<bytes,bytes>>(remove:[bytes([1])])}}}
+fn members(value:i64)->set<bytes> {when {
+if value>0 {return delta<set<bytes>>(added:[bytes([128,255])])}
+else {return delta<set<bytes>>(removed:[bytes([128,255])])}}}
+test keyed {assert eval(keyed,[1,2,0,3],payload:bytes([0,255])) == [delta<map<bytes,bytes>>(upsert:[bytes([1]):bytes([0,255])]),delta<map<bytes,bytes>>(upsert:[bytes([1]):bytes([0,255])]),delta<map<bytes,bytes>>(remove:[bytes([1])]),delta<map<bytes,bytes>>(upsert:[bytes([1]):bytes([0,255])])]}
+test members {assert eval(members,[1,0,2]) == [delta<set<bytes>>(added:[bytes([128,255])]),delta<set<bytes>>(removed:[bytes([128,255])]),delta<set<bytes>>(added:[bytes([128,255])])]}
+".into(),
+        RUNTIME,
+        true,
+    )?;
+    execute(
+        r"module bytes_sparse_fallback
+fn keyed(value:i64)->map<bytes,bytes> {when {
+return delta<map<bytes,bytes>>(upsert:[bytes([1]):bytes([0,255])])}}
+test keyed {assert eval(keyed,[1,2]) == [delta<map<bytes,bytes>>(upsert:[bytes([1]):bytes([0,255])]),delta<map<bytes,bytes>>(upsert:[bytes([1]):bytes([0,255])])]}
+".into(),
+        RUNTIME,
+        false,
+    )
+}
+
+#[test]
+fn retained_atomic_and_rolling_byte_structs_allocate_nothing()
+-> Result<(), Box<dyn std::error::Error>> {
+    execute(r"module retained_byte_structs
+struct Packet {data:bytes}
+fn atomic_copy(value:atomic<Packet>)->atomic<Packet> {when {return delta_value(value)}}
+fn rolling_copy(value:rolling<Packet,2>)->rolling<Packet,2> {when {return delta_value(value)}}
+fn atomic_config(value:i64,const packet:Packet)->atomic<Packet> {when {return packet}}
+fn rolling_config(value:i64,const packet:Packet)->rolling<Packet,2> {when {return packet}}
+test atomic_copy {assert eval(atomic_copy,[Packet(data:bytes([0,255])),Packet(data:bytes()),_,Packet(data:bytes([128]))])==[Packet(data:bytes([0,255])),Packet(data:bytes()),_,Packet(data:bytes([128]))]}
+test rolling_copy {assert eval(rolling_copy,[Packet(data:bytes([0,255])),Packet(data:bytes()),_,Packet(data:bytes([128]))])==[Packet(data:bytes([0,255])),Packet(data:bytes()),_,Packet(data:bytes([128]))]}
+test atomic_config {assert eval(atomic_config,[1,2],packet:Packet(data:bytes([0,255])))==[Packet(data:bytes([0,255])),Packet(data:bytes([0,255]))]}
+test rolling_config {assert eval(rolling_config,[1,2],packet:Packet(data:bytes([0,255])))==[Packet(data:bytes([0,255])),Packet(data:bytes([0,255]))]}
+".into(), RUNTIME, true)
+}
+
+#[test]
 fn finite_owning_publications_use_prepared_storage() -> Result<(), Box<dyn std::error::Error>> {
     execute(
         format!("{SOURCE}{}{}", scaling_source(), branch_source()),

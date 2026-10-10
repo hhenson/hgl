@@ -156,7 +156,7 @@ pub fn retained(source: &str, ty: &Ty, global_type: fn(&Ty) -> String) -> String
     }
     if matches!(
         ty,
-        Ty::Str | Ty::TimeZone | Ty::Enum(_) | Ty::ZonedTime | Ty::ZonedDateTime
+        Ty::Str | Ty::Bytes | Ty::TimeZone | Ty::Enum(_) | Ty::ZonedTime | Ty::ZonedDateTime
     ) {
         format!("hgl_store::Scalar::try_clone(&({source}))?")
     } else {

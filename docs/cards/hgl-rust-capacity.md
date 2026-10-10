@@ -58,3 +58,5 @@ ring slot before start. FiniteCapacity.arrivals carries the finite input/replay
 horizon plus proved direct generator arrivals; duration windows use it directly
 and tick windows cap it by Max. Nested structural child preparation recursively installs the same static window storage.
 Growing outputs reserve only reachable per-parent index paths and independent descendant capacities. Sparse recording reserves all three delta fields from finite recipe widths.
+
+Byte constructor destinations are bounded by cold i64-list length capacities, including fixed sizes. Scalar copy capacity is retained across replay, publication and recording; no constructor executes while collecting bounds. Repeated struct/tuple child preparation shares one indexed field traversal.

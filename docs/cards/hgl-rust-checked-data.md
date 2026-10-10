@@ -30,3 +30,5 @@ Serialize BindEval and recursive If steps, presence tests/extractions and closed
 sparse Captured data without evaluating any branch or expression.
 
 Serialize Step::Raises with its exact code and recursive lexical block.
+
+Constructed Literal::Bytes data serializes exact octets. Constructor expressions remain checked IR so executed range failures retain their phase.

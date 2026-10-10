@@ -38,3 +38,5 @@ the graph, and preserves the primary error plus cleanup failures.
 
 List indexing still requires the parent payload and existing bounds checks before
 retaining the selected child; this extension supplies no absent-List indexing rule.
+
+May use observed. byte_slice(&Value, Option<(&str,String)>, &str)->String borrows bytes from selected typed storage or a live scalar endpoint, preserving required child validity and avoiding owning copies.

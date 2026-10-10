@@ -14,6 +14,8 @@ pub enum Literal {
     Bool(bool),
     /// UTF-8 text.
     Str(String),
+    /// Constructed octets, without a source literal token.
+    Bytes(Vec<u8>),
     /// Microsecond interval.
     Duration(i64),
     /// Calendar date.
@@ -40,6 +42,7 @@ impl Literal {
             Self::Float(_) => Ty::F64,
             Self::Bool(_) => Ty::Bool,
             Self::Str(_) => Ty::Str,
+            Self::Bytes(_) => Ty::Bytes,
             Self::Duration(_) => Ty::Duration,
             Self::Date(_) => Ty::Date,
             Self::Time(_) => Ty::Time,

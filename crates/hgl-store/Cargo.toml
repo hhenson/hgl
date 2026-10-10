@@ -11,7 +11,7 @@ line-budget = 6860
 
 # Budgets of the modules that were crates of their own (docs/decisions/0004).
 [package.metadata.hgl.modules]
-atomic = { budget = 180, uses = ["bindings", "global_value", "prepared_value", "shapes"] }
+atomic = { budget = 180, uses = ["list", "scalar_copy", "bindings", "global_value", "prepared_value", "shapes"] }
 binding_build = { budget = 160, uses = ["endpoints"] }
 bindings = { budget = 1100, uses = ["binding_build", "endpoints"] }
 columns = { budget = 350, uses = ["scalar_copy"] }
@@ -25,8 +25,9 @@ list_storage = { budget = 300, uses = ["global_value", "prepared_value"] }
 member_table = { budget = 220, uses = [] }
 observation = { budget = 100, uses = ["atomic", "bindings", "columns", "keys", "rolling"] }
 optional = { budget = 160, uses = ["global_value", "list_storage", "prepared_value"] }
-prepared_globals = { budget = 80, uses = ["columns", "prepared_store"] }
-prepared_store = { budget = 280, uses = ["atomic", "bindings", "columns", "global", "keys", "observation", "rolling", "shapes"] }
+prepared_globals = { budget = 80, uses = ["global", "shapes", "columns", "prepared_store"] }
+prepared_rolling = { budget = 230, uses = ["scalar_copy", "columns", "global", "observation", "shapes", "prepared_store", "rolling", "list", "bindings"] }
+prepared_store = { budget = 280, uses = [ "list", "atomic", "bindings", "columns", "global", "keys", "observation", "rolling", "shapes"] }
 prepared_value = { budget = 160, uses = ["columns", "global_value"] }
 recursive_value = { budget = 220, uses = ["global_value", "prepared_value"] }
 rolling = { budget = 350, uses = ["bindings", "global_value", "prepared_value", "shapes"] }

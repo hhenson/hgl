@@ -25,6 +25,12 @@ previous Tuple growing-List retention path remains separate. Retained shapes
 exclude Set, enum, family, recursive and atomic children until their prepared
 ordinary transport exists. Native collection or variable-width structural result
 children reject before emission; ordinary constant identity remains unchanged.
+This also rejects native owning aggregate constructors and ordinary owning locals
+returned or assigned to atomic and rolling outputs, including a native local
+holding a rolling arrival. These values have no prepared result transport in this
+backend profile. Prepared snapshots, observed locals, direct whole-value
+observations and retained configuration remain separate; ordinary constant
+function construction is unchanged.
 Variable-width child reads require prepared ownership or the admitted native
 text borrow, never an unprepared clone. No absent-child default or new error code
 is supplied. Runtime excluded cases retain existing uncatalogued failures.
@@ -34,3 +40,8 @@ have distinct validity; removal, existing invalid membership, idle persistence,
 nested fields and own-output assignment execute with zero per-cycle allocations.
 Reverse-order native collection publication rejects with its specific ordinary
 profile diagnostic; scalar ordinary and explicit delta matrices remain intact.
+
+Prepared Tuple/Struct/List/Map snapshots retain optional descendant storage and
+cannot cross whole atomic or rolling aggregate result boundaries. This profile
+rejection covers returns and own-output assignments; scalar byte snapshots retain
+their exact representation and can publish scalar or rolling byte arrivals.

@@ -4,6 +4,18 @@ pub(super) fn publication(plan: &Plan, value: &Value, result: Option<&Ty>) -> Op
     if !crate::finite_domains::prepared(plan) || plan.recording.is_none() {
         return None;
     }
+    if let Some(id) = crate::scalars::bytes_input(value) {
+        let method = if result == Some(&Ty::Bytes) {
+            "bytes_from_list"
+        } else if matches!(result, Some(Ty::Rolling(payload, _)) if **payload == Ty::Bytes) {
+            "rolling_bytes_from_list"
+        } else {
+            return None;
+        };
+        return Some(format!(
+            "_ctx.prepared().{method}(self.input{id},self._output)?;"
+        ));
+    }
     if let Kind::Configuration(id) = value.kind
         && (value.ty.atomic_payload() || matches!(value.ty, Ty::Delta(_)))
     {
@@ -29,24 +41,7 @@ pub(super) fn publication(plan: &Plan, value: &Value, result: Option<&Ty>) -> Op
     if let Some(code) = crate::observed::text(value, result) {
         return Some(code);
     }
-    let (ty, input) = if let Kind::Query(op, args) = &value.kind {
-        if op != "delta_value" {
-            return None;
-        }
-        let arg = args.first()?;
-        let Kind::Input(id, _) = arg.kind else {
-            return None;
-        };
-        (&arg.ty, format!("self.input{id}"))
-    } else if let Kind::ObservedLocal(id) = value.kind {
-        let Ty::Delta(origin) = &value.ty else {
-            return None;
-        };
-        (origin.as_ref(), format!("local{id}"))
-    } else {
-        return None;
-    };
-    Some(crate::observed::pass(ty, &input, "self._output"))
+    crate::observed::forwarded(value, result)
 }
 fn write(plan: &Plan, v: &Value, slot: &str, prelude: &mut Vec<String>) -> String {
     if let Kind::Construct(fields) = &v.kind {

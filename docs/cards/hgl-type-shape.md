@@ -93,3 +93,5 @@ ordinary payloads and keys. Its delta is V. Equivalent duration spellings and
 omitted Min normalize before identity. Structural children may be rolling;
 ordinary V alone cannot infer a rolling context. Uses hgl-window-types.
 Unbounded list<S> is an admitted structural publication shape whenever S is admitted. Its exact delta origin remains distinct from fixed lists and complete atomic ordinary lists.
+
+Ty::Bytes is a built-in scalar leaf. Its canonical spelling is bytes; atomic<bytes> and delta<bytes> reduce to it. Publication, atomic payload, rolling and exact collection-key admission include bytes recursively under BYTE-1–6.

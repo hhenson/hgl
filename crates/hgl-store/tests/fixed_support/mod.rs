@@ -203,6 +203,7 @@ pub(crate) fn snapshot(
             | Kind::KeyedSet(_)
             | Kind::Ts(
                 ScalarType::Text
+                | ScalarType::Bytes
                 | ScalarType::Date
                 | ScalarType::Time
                 | ScalarType::DateTime

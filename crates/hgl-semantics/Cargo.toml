@@ -24,11 +24,11 @@ family_values = { budget = 100, uses = ["ir"] }
 flow_check = { budget = 150, uses = ["ir"] }
 harness = { budget = 250, uses = ["collection_values", "eval_data", "family_values", "harness_ir", "ir", "value_eval"] }
 harness_check = { budget = 180, uses = ["eval_data", "flow_check", "harness_ir", "ir", "static_values"] }
-harness_ir = { budget = 200, uses = ["ir"] }
+harness_ir = { budget = 200, uses = ["ir", "value_eval"] }
 inheritance = { budget = 300, uses = ["enums", "library", "struct_names"] }
 ir = { budget = 180, uses = [] }
 library = { budget = 500, uses = ["struct_declarations"] }
-local_check = { budget = 220, uses = ["endpoint_check", "ir", "structural_admission", "tuple_values", "value_check"] }
+local_check = { budget = 220, uses = ["endpoint_check", "ir", "structural_admission", "tuple_admission", "value_check"] }
 name_check = { budget = 250, uses = ["tuple_flow", "tuple_phase", "enums", "library", "struct_names", "type_sizes"] }
 publication_trace = { budget = 150, uses = ["composite_keys", "delta_check", "ir"] }
 recursive_types = { budget = 350, uses = ["enums", "library", "shape_obligations", "struct_names", "value_access"] }
@@ -49,8 +49,8 @@ value_access = { budget = 200, uses = ["ir", "library", "static_values"] }
 value_bind = { budget = 500, uses = ["ir", "library", "source_check", "value_access", "value_types"] }
 value_check = { budget = 400, uses = ["tuple_admission", "tuple_values", "ir", "library", "value_access", "value_constant"] }
 value_constant = { budget = 100, uses = ["ir"] }
-value_eval = { budget = 500, uses = ["collection_values", "delta_check", "family_values", "ir", "value_operations"] }
-value_operations = { budget = 250, uses = ["collection_values", "family_values", "ir"] }
+value_eval = { budget = 500, uses = ["value_constant", "collection_values", "delta_check", "family_values", "ir", "value_operations"] }
+value_operations = { budget = 250, uses = ["endpoint_check", "collection_values", "family_values", "ir"] }
 value_types = { budget = 350, uses = ["enums", "family_types", "inheritance", "library", "recursive_types", "shape_obligations", "struct_names", "type_sizes", "value_access", "value_check"] }
 wiring_locals = { budget = 300, uses = ["ir", "local_check", "value_access", "value_check", "value_eval"] }
 

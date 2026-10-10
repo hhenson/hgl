@@ -7,3 +7,5 @@ Uses hgl-source and hgl-rust-enums; budget 120 source lines. Retain nominal
 arguments, optional positions, recursive batches, declared enum identity and
 publication origins. No expression evaluation or type inference occurs here.
 hgl-rust-checked-data re-exports this function for existing emission callers.
+
+Cold checked metadata includes Ty::Bytes with exact scalar identity through nested nominal and delta shapes.

@@ -149,3 +149,13 @@ impl Suite {
         Ok(())
     }
 }
+
+impl From<crate::value_eval::EvalError> for Failure {
+    fn from(error: crate::value_eval::EvalError) -> Self {
+        if let crate::value_eval::EvalError::Coded(code, message) = error {
+            Self::Execution(hgl_types::NodeError::coded(message, code))
+        } else {
+            Self::Other(error.to_string())
+        }
+    }
+}

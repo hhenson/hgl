@@ -61,7 +61,7 @@ ordinary constructors, configuration and explicit atomic observations retain
 their existing value category.
 
 Supported current Tuple inputs initialize independently retained ordinary locals,
-using tuple_values classification. Mutable snapshot locals and snapshot aggregate
+using tuple_admission retention classification, including readable byte input locals. Mutable snapshot locals and snapshot aggregate
 comparisons are explicitly outside this implementation profile. Complete native
 ordinary tuples retain the existing writable ordinary value behavior.
 

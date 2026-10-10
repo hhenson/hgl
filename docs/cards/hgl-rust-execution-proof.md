@@ -10,6 +10,10 @@ iteration bounds and owning growth in loops are unproved. Opaque owning-return
 calls are unproved except the bounded built-in scalar formatter. Nonclosed sparse
 constructors require the supported direct-return lowering and complete key-path
 and payload bounds; arbitrary owning locals do not acquire that proof.
+Prepared bytes-from-list return recognition requires a scalar bytes result or
+a rolling bytes arrival result, selecting the matching reserved destination.
+Recursive statement checks retain the node result, while ordinary call bodies
+use their own result. Signal inputs never establish this source proof.
 
 The current replay schedule proof recognizes a single increasing index traversal
 of one retained configuration list, with at most one yield per row. Unproved source
@@ -55,3 +59,5 @@ return/mutation proof. value_calls combines it with structured literal-use proof
 
 Invalidating a constant-key map child retains no child payload, including a
 structural child; it uses the same finite membership domain as scalar invalidation.
+
+May use scalars. Direct and pure-helper byte conversion can use finite prepared transport; owning constructor locals and unknown helper shapes do not claim this proof.

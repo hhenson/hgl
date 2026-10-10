@@ -181,3 +181,21 @@ pub fn native_limits(plan: &Plan, index: impl Fn() -> usize) -> String {
         String::new()
     }
 }
+
+/// Byte constructor widths are bounded by the cold complete ordinary octet-list capacities.
+pub fn byte_limits<'a>(
+    types: impl Iterator<Item = &'a Ty> + Clone,
+    index: impl Fn(&Ty) -> usize,
+) -> String {
+    if !types.clone().any(|ty| *ty == Ty::Bytes) {
+        return String::new();
+    }
+    let bytes = index(&Ty::Bytes);
+    types.filter_map(|ty| {
+        if let Ty::List(child, size) = ty && **child == Ty::I64 {
+            let list = index(ty);
+            let length = size.unwrap_or(0);
+            Some(format!("capacity.limit{bytes}=capacity.limit{bytes}.max(capacity.limit{list}).max({length});"))
+        } else { None }
+    }).collect()
+}

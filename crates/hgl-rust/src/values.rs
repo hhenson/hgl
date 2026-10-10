@@ -6,37 +6,7 @@ pub use crate::layouts::{
 use hgl_semantics::ir::{Kind, Plan, Statement, Value};
 use hgl_source::{Literal, Ty};
 
-/// Emit the checked literal form.
-pub fn literal(value: &Literal) -> String {
-    match value {
-        Literal::Int(i) => format!("{i}_i64"),
-        Literal::Duration(i) => format!("hgl_types::EngineDelta::from_micros({i})"),
-        Literal::Date(i) => format!("hgl_types::Date({i})"),
-        Literal::Time(i) => format!("hgl_types::Time({i})"),
-        Literal::DateTime(i) => format!("hgl_types::EngineTime::from_micros({i})"),
-        Literal::CivilDateTime(i) => format!("hgl_types::CivilDateTime::from_micros({i})"),
-        Literal::TimeZone(zone) => format!(
-            "hgl_types::ZoneId::from_validated_name({:?}.to_owned())",
-            zone.as_str()
-        ),
-        Literal::Enum(_, number) => format!("{number}_i64"),
-        Literal::ZonedTime(value) => format!(
-            "hgl_types::ZonedTime::from_validated_parts(hgl_types::Time({}), hgl_types::ZoneId::from_validated_name({:?}.to_owned()))",
-            value.time().0,
-            value.zone().as_str()
-        ),
-        Literal::ZonedDateTime(value) => format!(
-            "hgl_types::ZonedDateTime::from_validated_parts(hgl_types::EngineTime::from_micros({}), hgl_types::ZoneId::from_validated_name({:?}.to_owned()), {})",
-            value.instant().micros(),
-            value.zone().as_str(),
-            value.offset_seconds()
-        ),
-        Literal::Bool(b) => b.to_string(),
-        Literal::Float(f) if !f.is_finite() => format!("f64::from_bits({})", f.to_bits()),
-        Literal::Float(f) => format!("{f:?}_f64"),
-        Literal::Str(s) => format!("{s:?}.to_owned()"),
-    }
-}
+pub use crate::scalars::literal;
 fn value(plan: &Plan, v: &Value) -> String {
     if let Some(slot) = atomic_place(plan, v) {
         return format!("({slot}).read(_ctx.store().atomic_values())?");
@@ -135,6 +105,10 @@ fn unary(plan: &Plan, op: &str, operand: &Value) -> String {
         format!(
             "hgl_types::EngineDelta::from_micros(({value}).micros().checked_neg().ok_or_else(|| hgl_types::NodeError::new(\"time arithmetic overflow\"))?)"
         )
+    } else if op == "atomic_value" {
+        value
+    } else if op == "bytes" {
+        format!("hgl_types::bytes(&({value}))?")
     } else if op == "float" {
         format!("({value} as f64)")
     } else {
@@ -190,12 +164,16 @@ fn binary(plan: &Plan, result: &Ty, op: &str, a: &Value, b: &Value) -> String {
             op == "=="
         );
     }
-    let a = if a.ty == Ty::Str {
+    let a = if a.ty == Ty::Bytes {
+        byte_view(plan, a)
+    } else if a.ty == Ty::Str {
         native_argument(plan, a)
     } else {
         value(plan, a)
     };
-    let b = if b.ty == Ty::Str {
+    let b = if b.ty == Ty::Bytes {
+        byte_view(plan, b)
+    } else if b.ty == Ty::Str {
         native_argument(plan, b)
     } else {
         value(plan, b)
@@ -212,7 +190,7 @@ fn binary(plan: &Plan, result: &Ty, op: &str, a: &Value, b: &Value) -> String {
         );
     }
     if *result == Ty::I64 && matches!(op, "+" | "-" | "*" | "%") {
-        integer_binary(op, &a, &b)
+        crate::scalars::integer_binary(op, &a, &b)
     } else if op == "/" {
         format!(
             "{{ let lhs = ({a}) as f64; let rhs = ({b}) as f64; if rhs == 0.0 {{ return Err(hgl_kernel::NodeError::new(\"division by zero\")); }} lhs / rhs }}"
@@ -235,18 +213,6 @@ fn presence(plan: &Plan, value: &Value) -> String {
     };
     format!("({option}).is_some()")
 }
-fn integer_binary(op: &str, a: &str, b: &str) -> String {
-    match op {
-        "+" => format!("(({a}).wrapping_add({b}))"),
-        "-" => format!("(({a}).wrapping_sub({b}))"),
-        "*" => format!("(({a}).wrapping_mul({b}))"),
-        "%" => format!(
-            "{{ let lhs = {a}; let rhs = {b}; if rhs == -1 {{ 0_i64 }} else {{ let rem = lhs.checked_rem(rhs).ok_or_else(|| hgl_kernel::NodeError::new(\"modulo by zero\"))?; if rem != 0 && (rem < 0) != (rhs < 0) {{ rem + rhs }} else {{ rem }} }} }}"
-        ),
-        _ => unreachable!("checked integer operation"),
-    }
-}
-
 /// Emit the checked statements form.
 pub fn statements(plan: &Plan, body: &[Statement], out: &mut Vec<String>, result: Option<&Ty>) {
     for statement in body {
@@ -308,7 +274,8 @@ pub fn statements(plan: &Plan, body: &[Statement], out: &mut Vec<String>, result
 }
 fn assignment(plan: &Plan, target: &Value, v: &Value) -> String {
     if matches!(target.kind, Kind::Output)
-        && let Some(code) = crate::structural_publication::assignment(v, |v| value(plan, v))
+        && let Some(code) =
+            crate::structural_publication::assignment(v, &target.ty, |v| value(plan, v))
     {
         return code;
     }
@@ -453,6 +420,25 @@ fn set_query(plan: &Plan, op: &str, args: &[Value]) -> String {
     crate::keyed::set_operation(op, &endpoint, &key)
 }
 
+fn byte_view(plan: &Plan, value: &Value) -> String {
+    if let Kind::Query(op, args) = &value.kind
+        && op == "delta_value"
+    {
+        return byte_view(plan, &args[0]);
+    }
+    let source = if value.snapshot {
+        Some((
+            "global_values",
+            crate::snapshot_slots::projection(value, |v| self::value(plan, v)),
+        ))
+    } else {
+        atomic_place(plan, value)
+            .map(|slot| ("atomic_values", slot))
+            .or_else(|| borrowed_place(plan, value).map(|slot| ("global_values", slot)))
+    };
+    crate::snapshot_views::byte_slice(value, source, &place(plan, value))
+}
+
 fn native_argument(plan: &Plan, v: &Value) -> String {
     if v.ty != Ty::Str {
         return condition_code(plan, v);
@@ -527,7 +513,7 @@ fn borrowed_place(plan: &Plan, value: &Value) -> Option<String> {
         return Some(format!("local{id}"));
     }
     if let Kind::Index(parent, index) = &value.kind {
-        return borrowed_place(plan, parent).map(|parent| format!("{{ let parent = {parent}; let index = {}; _ctx.global_state().list_index(parent, index)? }}", self::value(plan, index)));
+        return borrowed_place(plan, parent).map(|parent| format!("{{ let parent = {parent}; let index = {}; hgl_store::list::global_index(_ctx.store().global_values(), parent, index)? }}", self::value(plan, index)));
     }
     if let Kind::Field(parent, field) = &value.kind {
         return borrowed_place(plan, parent).map(|parent| format!("({parent}).fields().{field}"));
@@ -638,6 +624,9 @@ fn prepare_place(plan: &Plan, target: &Value, setup: &mut Vec<String>) -> String
 }
 
 fn length(plan: &Plan, parent: &Value) -> String {
+    if parent.ty == Ty::Bytes {
+        return format!("hgl_store::list_len({})?", byte_view(plan, parent));
+    }
     if parent.snapshot {
         return crate::snapshot_views::length(parent, |v| value(plan, v));
     }
@@ -672,6 +661,14 @@ fn observation(v: &Value) -> Option<String> {
 }
 
 fn atomic_place(plan: &Plan, value: &Value) -> Option<String> {
+    if let Kind::Input(id, _) = value.kind
+        && let Ty::Atomic(payload) = &value.ty
+    {
+        return Some(format!(
+            "_ctx.store().atomic_borrow::<{}>(self.input{id})?",
+            global_type(payload)
+        ));
+    }
     if matches!(value.ty, Ty::Delta(_)) {
         return None;
     }

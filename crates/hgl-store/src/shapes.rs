@@ -88,6 +88,11 @@ impl Shape for f64 {
         TsType::Ts(ScalarType::F64)
     }
 }
+impl Shape for Vec<u8> {
+    fn shape() -> TsType {
+        TsType::Ts(ScalarType::Bytes)
+    }
+}
 impl Shape for String {
     fn shape() -> TsType {
         TsType::Ts(ScalarType::Text)

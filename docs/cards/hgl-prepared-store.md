@@ -44,10 +44,24 @@ byte length before an infallible append closure writes the independent destinati
 The destination is temporarily moved out of its column to permit safe disjoint
 source borrowing, then restored before its single publication.
 Rolling storage is a disjoint Arena field in PreparedStorage and Observation.
-PreparedTick adds rolling<S>(Output<S>,&Payload), rolling_from<S>(columns,slot,
+PreparedTick adds rolling<S>(Output<S>,&Payload), rolling_from<S>(Option<columns>,slot,
 Output<S>) and pass_rolling<S>(Input<S>,Output<S>) for WindowShape markers with
 PreparedValue payloads. They share the existing write authority check and only
 publish after the independent complete arrival copy succeeds.
+rolling_scalar<S>(In<S::Payload>,Output<S>) requires a scalar prepared payload
+whose GlobalValue value is itself. It validates the scalar input, borrows its
+column value and uses the existing rolling write preflight and publication.
+No temporary owning payload is constructed. These rolling operations live in prepared_rolling, whose budget is 230 lines.
+The module uses columns, scalar_copy, global, observation, shapes, prepared_store,
+rolling, list and bindings.
+
+`scalar_from_rolling<S>(Input<S>,Out<S::Payload>)` copies the latest scalar
+arrival into an independent reserved scalar destination.
+`atomic_from_rolling<S>(Input<S>,Output<Atomic<S::Payload>>)` copies a complete
+arrival into an independent atomic destination.
+`pass_rolling_as<S,T>(Input<S>,Output<T>)` requires equal payload types and
+uses the destination window policy. All three preflight capacity before copying
+and publish only on success; they create no owning intermediary.
 
 Observation is reexported from hgl-observation, preserving its existing public
 surface. rolling_text<S> authorizes a String window output, measures pure scalar
@@ -58,3 +72,5 @@ read inputs and append exactly the measured bytes, with no fallible side effects
 `initialize_sparse(output,generation)` authorizes the destination and establishes
 parent validity only when invalid. It preserves children, repeated applications
 and any publication already made this cycle (EMPTY-1).
+
+PreparedTick::bytes_from_list<const N>(Input<Atomic<List<i64,N>>>, Out<Vec<u8>>)->NodeResult validates writing authority, copies the complete ordinary list through atomic preflight, then publishes. Empty and equal values tick; failure changes neither payload nor stamp. May use list. Typed independent-source atomic_from now lives with prepared_globals.
