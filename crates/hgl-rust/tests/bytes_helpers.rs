@@ -44,3 +44,55 @@ fn only_the_single_input_effect_free_helper_uses_prepared_constructor_transport(
         None
     );
 }
+
+#[test]
+fn ordinary_constructor_fallbacks_never_claim_the_prepared_adapter() {
+    use hgl_semantics::ir::{Node, Plan};
+    let list = Ty::List(Box::new(Ty::I64), None);
+    let mut node = Node {
+        name: "bytes-proof".into(),
+        inputs: vec![],
+        result: Ty::Bytes,
+        alarm: false,
+        generator: None,
+        start: vec![],
+        global_state: false,
+        globals: vec![],
+        configuration: vec![],
+        stop: vec![],
+        caches: vec![],
+        handlers: vec![],
+    };
+    for kind in [
+        Kind::List(vec![Value::new(Ty::I64, Kind::Literal(Literal::Int(1)))]),
+        Kind::Local(0),
+        Kind::GlobalGet(0),
+    ] {
+        let construction = Value::new(
+            Ty::Bytes,
+            Kind::Unary("bytes".into(), Box::new(Value::new(list.clone(), kind))),
+        );
+        assert_eq!(hgl_rust::scalars::bytes_input(&construction), None);
+        node.handlers = vec![(None, vec![Statement::Return(construction)])];
+        assert!(!hgl_rust::execution_proof::prepared(&Plan {
+            nodes: vec![node.clone()],
+            ..Plan::default()
+        }));
+    }
+    let input = Value::new(Ty::Atomic(Box::new(list.clone())), Kind::Input(0, false));
+    let construction = Value::new(
+        Ty::Bytes,
+        Kind::Unary(
+            "bytes".into(),
+            Box::new(Value::new(
+                list,
+                Kind::Unary("atomic_value".into(), Box::new(input)),
+            )),
+        ),
+    );
+    node.handlers = vec![(None, vec![Statement::Return(construction)])];
+    assert!(hgl_rust::execution_proof::prepared(&Plan {
+        nodes: vec![node],
+        ..Plan::default()
+    }));
+}

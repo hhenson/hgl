@@ -132,3 +132,15 @@ fn constructor_failure_changes_neither_held_output_nor_publication_stamp() -> No
     assert_eq!(store.last_modified(observer), stamp);
     Ok(())
 }
+
+#[test]
+fn ordinary_constructor_owns_storage_and_requires_the_generic_adapter() -> NodeResult {
+    let source = [1, 2];
+    let (result, allocations) = count_in(|| hgl_types::bytes(&source));
+    assert_eq!(result?, [1, 2]);
+    assert!(
+        allocations > 0,
+        "owning fallback must not claim prepared transport"
+    );
+    Ok(())
+}
