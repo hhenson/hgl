@@ -21,8 +21,9 @@ pub fn capable(ty: &Ty, operation: usize) -> bool {
                 .iter()
                 .all(|(_, ty)| capable(ty, operation))
         }),
-        Ty::Bool | Ty::TimeZone | Ty::ZonedTime | Ty::ZonedDateTime => operation != 2,
-        Ty::Any
+        Ty::TimeZone | Ty::ZonedTime | Ty::ZonedDateTime => operation != 2,
+        Ty::Bool
+        | Ty::Any
         | Ty::I64
         | Ty::F64
         | Ty::Str

@@ -29,6 +29,7 @@ pub fn binary_type(op: &str, a: &Ty, b: &Ty) -> Result<Ty, String> {
                     | Ty::Time
                     | Ty::Duration
                     | Ty::Bytes
+                    | Ty::Bool
                     | Ty::Any
             ) =>
         {

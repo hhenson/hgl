@@ -13,6 +13,6 @@ EvalError implements From<String> as an operation failure. Exact ordinary set/ma
 
 bytes(source arguments, typed checker)->Result<Value,Issue> validates constructor arity/type and supplies list<i64> context for empty lists. Evaluation produces constructed bytes after ordered argument evaluation; EvalError::Coded carries value.byte_range. Exact byte equality/order follows unsigned contents. May use endpoint_check.
 
-Explicit constructor checking delegates to hgl-value-constructors, preserving the existing constructor/bytes public paths. Any binary execution delegates to hgl-any-values.
+Explicit constructor checking delegates to hgl-value-constructors, preserving the existing constructor/bytes public paths. Any binary execution delegates to hgl-any-values. BOOL-1 supplies false-before-true order and exact Boolean equality/hash.
 
 Complete atomic payload conversion preserves signal-only input authority.

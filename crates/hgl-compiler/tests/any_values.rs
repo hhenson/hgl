@@ -14,6 +14,7 @@ fn generated_any_evaluation_uses_reserved_owning_buffers() -> Result<(), Box<dyn
         .canonicalize()?;
     let files = vec![
         root.join("external/hgraph_std/hgl/hgraph/tests/any_values.hgl"),
+        root.join("external/hgraph_std/hgl/hgraph/tests/any_bool_values.hgl"),
         root.join("crates/hgl-compiler/tests/fixtures/any_prepared.hgl"),
         root.join("crates/hgl-compiler/tests/fixtures/any_generator_bindings.hgl"),
         root.join("crates/hgl-compiler/tests/fixtures/any_stage67_order.hgl"),
