@@ -50,9 +50,6 @@ impl State {
         let Kind::Delta(parts) = &value.kind else {
             return Ok(());
         };
-        if parts.is_empty() {
-            return Err("empty structural publication".into());
-        }
         crate::delta_check::materialized(parts)?;
         if matches!(shape, Ty::List(_, None)) {
             self.growing(parts)?;

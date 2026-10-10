@@ -1,17 +1,26 @@
 use super::{Kind, Plan, Value, global_type, value};
 use hgl_source::Ty;
-pub(super) fn forward(plan: &Plan, value: &Value, result: Option<&Ty>) -> Option<String> {
+pub(super) fn publication(plan: &Plan, value: &Value, result: Option<&Ty>) -> Option<String> {
+    if !crate::finite_domains::prepared(plan) || plan.recording.is_none() {
+        return None;
+    }
     if let Kind::Configuration(id) = value.kind
-        && value.ty.atomic_payload()
+        && (value.ty.atomic_payload() || matches!(value.ty, Ty::Delta(_)))
+    {
+        return Some(crate::observed::apply(
+            result?,
+            "self._output",
+            "&self.configuration_columns",
+            &format!("self.configuration_slot{id}"),
+        ));
+    }
+    if matches!(result, Some(Ty::Atomic(_)))
+        && !value.snapshot
+        && !crate::execution_proof::owning_argument(&value.ty)
     {
         return Some(format!(
-            "{}return Ok(());\n",
-            crate::observed::apply(
-                result.unwrap_or(&value.ty.clone().atomic()),
-                "self._output",
-                "&self.configuration_columns",
-                &format!("self.configuration_slot{id}")
-            )
+            "let publication={};_ctx.prepared().atomic(self._output,&publication)?;",
+            super::value(plan, value)
         ));
     }
     if let Some(code) = crate::direct_deltas::publish(value, |v| super::value(plan, v)) {
@@ -37,10 +46,7 @@ pub(super) fn forward(plan: &Plan, value: &Value, result: Option<&Ty>) -> Option
     } else {
         return None;
     };
-    Some(format!(
-        "{}return Ok(());\n",
-        crate::observed::pass(ty, &input, "self._output")
-    ))
+    Some(crate::observed::pass(ty, &input, "self._output"))
 }
 fn write(plan: &Plan, v: &Value, slot: &str, prelude: &mut Vec<String>) -> String {
     if let Kind::Construct(fields) = &v.kind {

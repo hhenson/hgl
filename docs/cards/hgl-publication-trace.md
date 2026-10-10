@@ -8,7 +8,8 @@ Cold validation of a closed publication sequence before graph start.
 membership and reports the first invalid input slot. It checks canonical set
 membership, exact complete map keys, sparse child updates, and contiguous growing
 list appends and tail removals. Removing a parent discards its descendant state.
-Silent slots make no change; empty structural publications remain invalid.
+Silent slots make no change. Explicit empty sparse deltas are admitted; canonical
+membership and index checks still apply to every nonempty instruction.
 
 Uses hgl-delta-check for materialized duplicate checks, hgl-composite-keys for
 complete identities, and hgl-growing-range for dense index rules. The evaluator

@@ -25,3 +25,6 @@ Acceptance includes all fixed-list/map/tuple/nominal shapes for these boundaries
 plus the existing scalar operation and structural input observation paths.
 
 inject_capability binds declared capabilities to the lexical environment. arguments evaluates capability operands in source order through a typed Issue callback and checks payload access.
+
+Set insert/remove are strict output operations, distinct from tolerant
+upsert/discard. They retain scalar key checks and evaluation ownership.

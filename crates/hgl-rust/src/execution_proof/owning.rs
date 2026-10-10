@@ -73,7 +73,7 @@ fn value(plan: &Plan, input: &Value, looping: bool) -> bool {
                         | "collection_contains"
                 )
                 && args.first().is_some_and(
-                    |v| matches!(&v.ty,Ty::Map(key,child) if **key==Ty::I64 && !owning(child)),
+                    |v| matches!(&v.ty,Ty::Map(key,child) if **key==Ty::I64 && (op=="collection_invalidate" || !owning(child))),
                 )
                 && args
                     .get(1)

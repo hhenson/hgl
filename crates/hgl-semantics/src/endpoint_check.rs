@@ -24,7 +24,9 @@ pub fn set_call(
     if !matches!(element.as_ref(), Ty::I64 | Ty::Bool) {
         return Err("set keys currently require bool or i64".into());
     }
-    if matches!(op, "upsert" | "discard") && !matches!(first.kind, Kind::Output) {
+    if matches!(op, "upsert" | "discard" | "insert" | "remove")
+        && !matches!(first.kind, Kind::Output)
+    {
         return Err("set mutation requires out".into());
     }
     if matches!(op, "bound" | "len" | "contains") && !matches!(first.kind, Kind::Input(..)) {

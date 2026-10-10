@@ -98,8 +98,9 @@ pub fn operation(name: &str, args: Vec<Value>) -> Result<Value, String> {
     {
         return Err("collection effect requires injected out".into());
     }
-    if child.clone().delta()? != *child
-        || matches!(child, Ty::List(..) | Ty::Tuple(_) | Ty::Struct(..))
+    if !matches!(name, "invalidate" | "remove" | "contains" | "pop")
+        && (child.clone().delta()? != *child
+            || matches!(child, Ty::List(..) | Ty::Tuple(_) | Ty::Struct(..)))
     {
         return Err("collection effect requires a scalar child".into());
     }

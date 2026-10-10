@@ -56,38 +56,37 @@ pub fn indexed(parent: Value, index: Value) -> Result<Value, String> {
     if matches!(parent.kind, Kind::Input(_, true)) {
         return Err("signal has no ordinary scalar value".into());
     }
-    if let Ty::List(element, _) = &parent.ty {
-        if endpoint(&parent) || matches!(parent.kind, Kind::Wire(_) | Kind::Output) {
-            return Err(
-                "temporal child indexing is outside the admitted publication-delta profile".into(),
-            );
-        }
-        if index.ty != Ty::I64 {
-            return Err("ordinary list index requires i64".into());
-        }
-        let mut result = Value::new(
-            *element.clone(),
-            Kind::Index(Box::new(parent.clone()), Box::new(index)),
-        );
-        result.snapshot = parent.snapshot;
-        return Ok(result);
-    }
-    let Kind::Literal(Literal::Int(position)) = index.kind else {
-        return Err("tuple index requires a constant integer position".into());
-    };
-    let Ty::Tuple(children) = &parent.ty else {
-        return Err("indexing requires an ordinary list or tuple".into());
-    };
-    let position = usize::try_from(position).map_err(|_error| "tuple index out of bounds")?;
-    let ty = children
-        .get(position)
-        .ok_or("tuple index out of bounds")?
-        .clone();
     if matches!(parent.kind, Kind::Wire(_) | Kind::Output) {
         return Err("tuple indexing requires an ordinary value or runtime input".into());
     }
     let snapshot = parent.snapshot;
-    let mut value = Value::new(ty, Kind::Field(Box::new(parent), position));
+    let (ty, kind) = if let Ty::List(element, _) = &parent.ty
+        && !endpoint(&parent)
+    {
+        if index.ty != Ty::I64 {
+            return Err("ordinary list index requires i64".into());
+        }
+        let ty = *element.clone();
+        (ty, Kind::Index(Box::new(parent), Box::new(index)))
+    } else {
+        let Kind::Literal(Literal::Int(position)) = index.kind else {
+            return Err("tuple index requires a constant integer position".into());
+        };
+        let position = usize::try_from(position).map_err(|_error| "tuple index out of bounds")?;
+        let ty = if let Ty::Tuple(children) = &parent.ty {
+            let child = children.get(position).ok_or("tuple index out of bounds")?;
+            child.clone()
+        } else if let Ty::List(child, Some(size)) = &parent.ty {
+            if position >= *size {
+                return Err("temporal list index out of bounds".into());
+            }
+            *child.clone()
+        } else {
+            return Err("indexing requires an ordinary list, fixed temporal list or tuple".into());
+        };
+        (ty, Kind::Field(Box::new(parent), position))
+    };
+    let mut value = Value::new(ty, kind);
     value.snapshot = snapshot;
     Ok(value)
 }

@@ -78,6 +78,6 @@ pub fn text(value: &Value, result: Option<&Ty>) -> Option<String> {
         return None;
     };
     Some(format!(
-        "_ctx.prepared().{target},|observation|{{let mut bytes=0usize;{measure}Ok(bytes)}},|destination,observation|{{{compose}}})?;return Ok(());"
+        "_ctx.prepared().{target},|observation|{{let mut bytes=0usize;{measure}Ok(bytes)}},|destination,observation|{{{compose}}})?;"
     ))
 }

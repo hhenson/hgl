@@ -81,7 +81,12 @@ fn structural_values_and_nested_generator_effects_execute_in_both_profiles()
 fn failure_images(dir: &Path) -> Result<String, Box<dyn std::error::Error>> {
     let mut calls = String::new();
     for (index, shape, slots, position) in [
-        (11, "list<i64,0>", "[delta<list<i64,0>>() ]", 0),
+        (
+            11,
+            "set<i64>",
+            "[delta<set<i64>>(),delta<set<i64>>(removed:[1])]",
+            1,
+        ),
         (
             0,
             "set<i64>",
@@ -93,13 +98,13 @@ fn failure_images(dir: &Path) -> Result<String, Box<dyn std::error::Error>> {
         (
             3,
             "list<set<i64>,2>",
-            "[delta<list<set<i64>,2>>(items:[0:delta<set<i64>>()])]",
+            "[delta<list<set<i64>,2>>(items:[0:delta<set<i64>>(removed:[1])])]",
             0,
         ),
         (
             4,
-            "map<i64,list<i64,2>>",
-            "[delta<map<i64,list<i64,2>>>(upsert:[7:delta<list<i64,2>>()])]",
+            "map<i64,list<i64>>",
+            "[delta<map<i64,list<i64>>>(upsert:[7:delta<list<i64>>(items:[1:7])])]",
             0,
         ),
         (
@@ -114,14 +119,8 @@ fn failure_images(dir: &Path) -> Result<String, Box<dyn std::error::Error>> {
         );
         let suite = compile_tests(&with_std(source))?;
         let mut code = emit_tests(&suite);
-        let diagnostic = format!(
-            "eval: input delta outside publication profile: value at position {position}:{}",
-            if index == 11 {
-                " empty structural publication"
-            } else {
-                ""
-            }
-        );
+        let diagnostic =
+            format!("eval: input delta outside publication profile: value at position {position}:");
         writeln!(
             code,
             "pub fn verify() {{crate::STARTS.store(0,std::sync::atomic::Ordering::SeqCst); let error=test0::test().unwrap_err(); assert!(error.contains({diagnostic:?}),\"{{error}}\"); assert_eq!(crate::STARTS.load(std::sync::atomic::Ordering::SeqCst),0);}}"

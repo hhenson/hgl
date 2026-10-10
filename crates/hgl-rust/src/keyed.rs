@@ -120,3 +120,31 @@ pub fn collection_operation(
     };
     format!("{{{staged}{effect}}}")
 }
+
+/// Emit strict and tolerant scalar set membership operations.
+pub fn set_operation(op: &str, endpoint: &str, key: &str) -> String {
+    if op == "set_bound" {
+        return format!("_ctx.store().bindings().has_peer({endpoint})");
+    }
+    if op == "set_len" {
+        return format!(
+            "i64::try_from(_ctx.store().bindings().input({endpoint}).members.live.len()).map_err(|e|hgl_kernel::NodeError::new(e.to_string()))?"
+        );
+    }
+    match op {
+        "set_contains" => {
+            format!("_ctx.store().bindings().child_input({endpoint},{key}).is_some()")
+        }
+        "set_remove" => format!(
+            "{{let key={key};if _ctx.store().bindings().child_output({endpoint},key).is_none() {{return Err(hgl_types::NodeError::new(\"set removal requires presence\"));}}_ctx.remove_shaped({endpoint},key)}}"
+        ),
+        "set_insert" => format!(
+            "{{let key={key};if _ctx.store().bindings().child_output({endpoint},key).is_some() {{return Err(hgl_types::NodeError::new(\"set insert requires absence\"));}}_ctx.get_or_create_with({endpoint},key,|store,owner|store.add_output::<bool>(owner).id());let child=self._output.member(_ctx.store().bindings(),key).expect(\"created member\");_ctx.set(hgl_store::Store::prepared_output(child),true);}}"
+        ),
+        "set_discard" => format!("_ctx.remove_shaped({endpoint},{key})"),
+        "set_upsert" => format!(
+            "{{let key={key}; if _ctx.store().bindings().child_output({endpoint},key).is_none() {{_ctx.get_or_create_with({endpoint},key,|store,owner|store.add_output::<bool>(owner).id());let child=self._output.member(_ctx.store().bindings(),key).ok_or_else(||hgl_kernel::NodeError::new(\"missing created set member\"))?;_ctx.set(hgl_store::Store::prepared_output(child),true);}}}}"
+        ),
+        _ => unreachable!("checked set operation"),
+    }
+}

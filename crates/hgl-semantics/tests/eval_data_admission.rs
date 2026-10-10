@@ -65,13 +65,16 @@ fn recursive_memberships_survive_sparse_gaps_and_reset_on_reinsertion() {
     assert_eq!(stale_child, (2, "set removal is absent".into()));
 }
 #[test]
-fn nested_empty_data_is_not_a_publication_and_silence_stays_silent() {
+fn nested_empty_data_is_admitted_without_skipping_canonical_checks() {
     let set = Ty::Set(Box::new(Ty::I64));
     let tuple = Ty::Tuple(vec![set.clone(), Ty::Str]);
     let empty_child = patch(&tuple, vec![DeltaEntry::Child(0, patch(&set, vec![]))]);
-    assert_eq!(
-        validate(&tuple, &[None, Some(empty_child)]).unwrap_err(),
-        (1, "empty structural publication".into())
+    assert!(
+        validate(
+            &tuple,
+            &[None, Some(empty_child.clone()), Some(empty_child)]
+        )
+        .is_ok()
     );
     assert!(validate(&tuple, &[None, None]).is_ok());
     let equal = patch(

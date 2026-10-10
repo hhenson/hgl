@@ -88,7 +88,7 @@ Prepared eval transport is selected as one complete path by
 publication and recording behavior; no per-insertion fallback or hook replay is
 introduced. Prepared allocation evidence applies only to the selected finite path.
 
-Supported returned sparse constructors use hgl-rust-direct-deltas to evaluate
+Supported sparse output constructors use hgl-rust-direct-deltas to evaluate
 scalar operands once, retain constant key aliases cold, and publish directly
 into prepared child endpoints. No intermediate delta vectors are constructed.
 statements additionally receives Option<&Ty> for the declared temporal result,
@@ -119,3 +119,12 @@ no iteration selection or metadata query and holds in debug and release.
 May use snapshot_views for retained ordinary observation presence and List length.
 Required scalar/Boolean payload reads preserve value.unset_read; let retention and
 Tuple constructor copying preserve absence without consuming payloads.
+
+Prepared publication lowering consults execution_proof owning-argument classification
+for atomic scalar aggregates. These stack payloads publish directly through the
+reserved atomic destination, including first metadata observations; owning and
+snapshot expressions retain their dedicated transport paths. Scalar set query
+emission delegates membership semantics to keyed.
+
+Prepared output assignments reuse return publication transport without returning
+from the handler; subsequent assignments and mutations retain source order.
