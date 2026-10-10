@@ -70,3 +70,23 @@ fn block(body: &[Statement], inherited: &BTreeSet<usize>) -> bool {
         | Statement::Return(_) => false,
     })
 }
+
+impl Value {
+    /// Whether an expression is already closed independently owning ordinary data.
+    pub fn closed(&self) -> bool {
+        let mut closed = true;
+        crate::ir_visit::value(self, &mut |value| {
+            closed &= matches!(
+                value.kind,
+                Kind::Delta(_)
+                    | Kind::Literal(_)
+                    | Kind::Void
+                    | Kind::List(_)
+                    | Kind::Captured(..)
+                    | Kind::Construct(_)
+            );
+            closed
+        });
+        closed
+    }
+}

@@ -3,7 +3,7 @@
 Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `value_constant` module of `hgl-semantics` (`crates/hgl-semantics/src/value_constant.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
 
 Pure classification of checked ordinary expressions eligible for constant
-checking. Uses hgl-rust-ir; initial budget 100 source lines. Public
+checking. Uses hgl-rust-ir and the shared ir_visit traversal; initial budget 100 source lines. Value::closed lives here alongside context_free and recognizes only independently owning literal/void/list/constructor/captured/delta forms whose descendants are also closed. Native/provider recipes remain deferred. Public
 `context_free(&Value) -> bool` recognizes evaluator-supported closed expressions
 and lexical ValueCall argument/local scopes. It rejects external locals,
 contextual recipes, prepared configuration, native/capability/global/endpoint
