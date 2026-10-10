@@ -34,3 +34,7 @@ independent prepared snapshot locals, delegating all other values to tuple_value
 Alias lets independently copy existing slots; mutable retained locals remain
 outside the writable-place profile. Signal reads never become snapshots. Ordinary
 constant locals keep their existing representation and mutation rules.
+
+Endpoint-backed byte fields use owned snapshot capture. The endpoint guard keeps
+ordinary fields on their existing representation; signal and static-selector
+checks remain unchanged.

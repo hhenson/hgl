@@ -32,22 +32,20 @@ pub fn value_arguments(args: &[Value]) -> Result<(), String> {
 
 /// Retain readable byte initializers in independently owned prepared local slots.
 pub fn retain_local(value: Value) -> Value {
-    let source = if value.ty != Ty::Bytes {
-        None
-    } else if matches!(value.kind, Kind::Input(_, false)) {
-        Some(&value)
-    } else if let Kind::Query(op, args) = &value.kind
+    let source = if let Kind::Query(op, args) = &value.kind
         && op == "delta_value"
     {
-        args.first().filter(|source| {
-            (source.ty == Ty::Bytes
-                || matches!(&source.ty, Ty::Rolling(child, _) if **child == Ty::Bytes))
-                && matches!(source.kind, Kind::Input(_, false))
-        })
+        args.first()
     } else {
-        None
+        Some(&value)
     };
-    if let Some(source) = source {
+    if value.ty == Ty::Bytes
+        && let Some(source) = source
+        && (source.ty == Ty::Bytes
+            || matches!(&source.ty, Ty::Rolling(child, _) if **child == Ty::Bytes))
+        && matches!(source.kind, Kind::Input(_, false) | Kind::Field(..))
+        && crate::tuple_values::endpoint(source)
+    {
         let mut retained = Value::new(
             Ty::Bytes,
             Kind::Unary("snapshot".into(), Box::new(source.clone())),
