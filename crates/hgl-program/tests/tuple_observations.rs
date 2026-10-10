@@ -792,3 +792,65 @@ fn empty_sparse_metadata_observation_uses_reserved_storage()
     )?;
     Ok(())
 }
+
+#[test]
+fn byte_child_aliases_preserve_unset_and_temporal_validity_boundaries()
+-> Result<(), Box<dyn std::error::Error>> {
+    let source = r#"module byte_child_presence
+struct Packet {keep:i64
+data:bytes}
+fn unused(value:Packet)->i64 {when {let whole=value
+let held=whole.data
+let alias=held
+return 1}}
+fn partial(value:Packet)->tuple<i64,bytes> {when {let whole=value
+let held=whole.data
+let alias=held
+return (whole.keep,alias)}}
+fn required(value:Packet)->bytes {when {let whole=value
+let held=whole.data
+let alias=held
+return alias}}
+fn arrival(value:Packet)->rolling<bytes,2> {inject out
+when {let whole=value
+let held=whole.data
+let alias=held
+out=alias}}
+fn size(value:Packet)->i64 {when {let whole=value
+let held=whole.data
+return len(held)}}
+fn equal(value:Packet)->bool {when {let whole=value
+let held=whole.data
+return held==held}}
+test required_byte_field_alias_reads {
+assert eval(unused,[delta<Packet>(keep:1)])==[1]
+assert eval(partial,[delta<Packet>(keep:1),delta<Packet>(data:bytes()),delta<Packet>(data:bytes([0,255]))])==[(1,_),(1,bytes()),(1,bytes([0,255]))]
+assert raises("value.unset_read") {eval(required,[delta<Packet>(keep:1)])}
+assert raises("value.unset_read") {eval(arrival,[delta<Packet>(keep:1)])}
+assert raises("value.unset_read") {eval(size,[delta<Packet>(keep:1)])}
+assert raises("value.unset_read") {eval(equal,[delta<Packet>(keep:1)])}
+}
+fn direct(value:Packet)->bytes {when {let held=value.data
+return held}}
+test direct_invalid {eval(direct,[delta<Packet>(keep:1)])}
+"#;
+    run_selected(
+        source,
+        true,
+        false,
+        &["required_byte_field_alias_reads"],
+        None,
+    )?;
+    let error = run_selected(
+        source,
+        true,
+        true,
+        &["direct_invalid"],
+        Some("ordinary tuple input is invalid"),
+    )?;
+    assert!(
+        !error.contains("code: Some(\"value.unset_read\")"),
+        "{error}"
+    );
+    Ok(())
+}

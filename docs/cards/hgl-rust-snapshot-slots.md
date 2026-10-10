@@ -73,3 +73,7 @@ Byte locals initialized by delta_value on a readable rolling input capture the
 latest arrival through observed's existing rolling source transport. The snapshot
 owns the Bytes payload, never a whole window or a borrowed endpoint. Returns and
 assignments then use the same scalar/rolling byte destination selection.
+
+Endpoint-backed byte fields use owned snapshot capture. An invalid direct temporal
+child retains its validity failure; a retained absent child raises value.unset_read
+only when its payload is consumed.
