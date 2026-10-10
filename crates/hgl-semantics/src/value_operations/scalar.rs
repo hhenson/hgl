@@ -92,7 +92,7 @@ pub fn binary(op: &str, a: &Value, b: &Value) -> Result<Value, EvalError> {
             "||" => *a || *b,
             "==" => a == b,
             "!=" => a != b,
-            _ => return Err(unsupported("unsupported ordinary bool operation")),
+            _ => return comparison(op, Some(a.cmp(b))).map(value),
         }),
         (Literal::Bytes(a), Literal::Bytes(b)) => comparison(op, Some(a.cmp(b)))?,
         (Literal::Str(a), Literal::Str(b)) if op == "+" => Literal::Str(format!("{a}{b}")),
