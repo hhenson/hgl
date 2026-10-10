@@ -29,12 +29,13 @@ mode/phase/signal rejection and image fingerprint comparison. This foundation
 does not yet form or execute native nominal scalar source values.
 
 A selected ordinary scalar helper with an image record binds its explicit symbol
-and node lifecycle phase, without reading or executing image code while checking.
+and exact setup/cold/node lifecycle phase, without reading or executing image code while checking.
 Generated code validates every selected descriptor against the statically linked
 image before configuration or graph construction. Missing image contracts and
 forbidden phases reject binding; missing target files or incompatible callback
 prototypes reject the generated target build. No Provider injection is used for
-these checked image calls. Setup/cold helper execution remains outstanding.
+these checked image calls. Executed setup and cold configuration use statically
+generated typed callbacks; required constant contexts remain unavailable.
 
 Library sets Decl::ordinary_native only after contract validation. This preserves
 legacy native input-view declarations while treating checked ordinary native const

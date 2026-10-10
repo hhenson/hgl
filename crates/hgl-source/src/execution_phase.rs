@@ -20,3 +20,20 @@ impl ExecutionPhase {
         }
     }
 }
+
+/// Typed operations supplied only by an executed host, never source checking.
+pub trait ExecutionContext<V, N, E> {
+    /// Materialize one temporal recipe in written execution order.
+    fn temporal(&mut self, recipe: &crate::TemporalLiteral) -> Result<crate::Literal, E>;
+    /// Execute a checked native binding; absent hosts leave the call deferred.
+    fn native(&mut self, _: &N, _: &[V]) -> Option<Result<V, E>> {
+        None
+    }
+}
+impl<V, N, E, F: FnMut(&crate::TemporalLiteral) -> Result<crate::Literal, E>>
+    ExecutionContext<V, N, E> for F
+{
+    fn temporal(&mut self, recipe: &crate::TemporalLiteral) -> Result<crate::Literal, E> {
+        self(recipe)
+    }
+}

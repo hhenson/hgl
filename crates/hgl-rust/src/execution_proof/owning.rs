@@ -19,21 +19,21 @@ pub fn owning_argument(ty: &Ty) -> bool {
     owning(ty)
 }
 
-fn value(plan: &Plan, input: &Value, looping: bool) -> bool {
+fn value(input: &Value, looping: bool) -> bool {
     match &input.kind {
         Kind::Captured(..) => false,
         Kind::Unary(op, _) if op == "bytes" => false,
-        Kind::Native(index, args) => {
-            (!owning(&input.ty) || plan.natives[*index].name == "hgraph.native::as_str")
-                && args.iter().all(|arg| value(plan, arg, looping))
+        Kind::Native(binding, args) => {
+            (!owning(&input.ty) || binding.name == "hgraph.native::as_str")
+                && args.iter().all(|arg| value(arg, looping))
         }
         Kind::ValueCall(args, body) => {
             !owning(&input.ty)
-                && args.iter().all(|arg| value(plan, arg, looping))
-                && statements(plan, body, looping, &input.ty)
+                && args.iter().all(|arg| value(arg, looping))
+                && statements(body, looping, &input.ty)
         }
         Kind::Push(parent, item) => {
-            !looping && value(plan, parent, looping) && value(plan, item, looping)
+            !looping && value(parent, looping) && value(item, looping)
         }
         Kind::List(_) if !input.closed() => false,
         Kind::Query(op, args) if op.starts_with("collection_") => {
@@ -53,25 +53,25 @@ fn value(plan: &Plan, input: &Value, looping: bool) -> bool {
                 && args
                     .get(1)
                     .is_some_and(|v| matches!(v.kind, Kind::Literal(hgl_source::Literal::Int(_))))
-                && args.iter().all(|arg| value(plan, arg, looping))
+                && args.iter().all(|arg| value(arg, looping))
         }
-        Kind::List(args) | Kind::Query(_, args) => args.iter().all(|arg| value(plan, arg, looping)),
-        Kind::Construct(fields) => fields.iter().all(|(_, child)| value(plan, child, looping)),
+        Kind::List(args) | Kind::Query(_, args) => args.iter().all(|arg| value(arg, looping)),
+        Kind::Construct(fields) => fields.iter().all(|(_, child)| value(child, looping)),
         Kind::Delta(parts) => {
             input.closed()
                 && parts
                     .iter()
-                    .all(|part| part.operands().all(|child| value(plan, child, looping)))
+                    .all(|part| part.operands().all(|child| value(child, looping)))
         }
         Kind::Index(left, right) | Kind::Binary(_, left, right) => {
-            value(plan, left, looping) && value(plan, right, looping)
+            value(left, looping) && value(right, looping)
         }
         Kind::Field(child, _)
         | Kind::Length(child)
         | Kind::GlobalSet(_, child)
         | Kind::IsPresent(child)
         | Kind::Present(child)
-        | Kind::Unary(_, child) => value(plan, child, looping),
+        | Kind::Unary(_, child) => value(child, looping),
         Kind::ObservedLocal(_)
         | Kind::WiringFailure(_)
         | Kind::Configuration(_)
@@ -92,22 +92,20 @@ fn value(plan: &Plan, input: &Value, looping: bool) -> bool {
         | Kind::Void => true,
     }
 }
-fn statements(plan: &Plan, body: &[Statement], looping: bool, result: &Ty) -> bool {
+fn statements(body: &[Statement], looping: bool, result: &Ty) -> bool {
     body.iter().all(|statement| match statement {
         Statement::Assign(target, source) => {
-            !(looping && owning(&target.ty))
-                && value(plan, target, looping)
-                && value(plan, source, looping)
+            !(looping && owning(&target.ty)) && value(target, looping) && value(source, looping)
         }
         Statement::While(condition, body)
         | Statement::ForItems(_, _, _, condition, body)
         | Statement::For(_, condition, body) => {
-            value(plan, condition, looping) && statements(plan, body, true, result)
+            value(condition, looping) && statements(body, true, result)
         }
         Statement::If(condition, yes, no) => {
-            value(plan, condition, looping)
-                && statements(plan, yes, looping, result)
-                && statements(plan, no, looping, result)
+            value(condition, looping)
+                && statements(yes, looping, result)
+                && statements(no, looping, result)
         }
         Statement::Return(source)
             if crate::scalars::bytes_input(source).is_some()
@@ -121,10 +119,8 @@ fn statements(plan: &Plan, body: &[Statement], looping: bool, result: &Ty) -> bo
         | Statement::Borrow(_, source, _)
         | Statement::Return(source)
         | Statement::Yield(source)
-        | Statement::Call(source) => value(plan, source, looping),
-        Statement::TimedYield(time, payload) => {
-            value(plan, time, looping) && value(plan, payload, looping)
-        }
+        | Statement::Call(source) => value(source, looping),
+        Statement::TimedYield(time, payload) => value(time, looping) && value(payload, looping),
         Statement::Exit => true,
     })
 }
@@ -132,11 +128,11 @@ pub(super) fn finite(plan: &Plan) -> bool {
     plan.nodes.iter().all(|node| {
         node.handlers
             .iter()
-            .all(|(guard, _)| guard.as_ref().is_none_or(|guard| value(plan, guard, false)))
+            .all(|(guard, _)| guard.as_ref().is_none_or(|guard| value(guard, false)))
             && [&node.start, &node.stop]
                 .into_iter()
                 .chain(node.generator.iter())
                 .chain(node.handlers.iter().map(|(_, body)| body))
-                .all(|body| statements(plan, body, false, &node.result))
+                .all(|body| statements(body, false, &node.result))
     })
 }

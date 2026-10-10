@@ -13,5 +13,9 @@ The evaluator retains short-circuit and branch execution semantics.
 Acceptance: constant bounds diagnostics, deferred mixed contextual expressions,
 external setup locals, and skipped invalid branches in hgl-program regressions.
 
+context_free also shares ir_visit traversal while pruning ordinary calls into
+their own lexical argument/local scope. Its admitted forms remain unchanged;
+provider calls are rejected as required constants without execution.
+
 Delta traversal includes typed Add/Remove keys and both Keyed map operands;
 retained keys obey the same constant/provenance checks as child expressions.

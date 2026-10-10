@@ -108,6 +108,13 @@ pub(crate) fn compile(library: Library, module: &str, entry: &str) -> Result<Pla
     hgl_rust::tuple_adapter::standalone(checker.plan)
 }
 impl Checker {
+    fn native_phase(&self, runtime: bool) -> &'static str {
+        match (runtime, self.value_context) {
+            (_, ValueContext::Preparation) if !self.preparing_graph => "setup",
+            (true, _) => self.phase.name(),
+            (false, _) => "cold",
+        }
+    }
     fn call(
         &mut self,
         module: &str,
@@ -115,11 +122,10 @@ impl Checker {
         args: &[(Option<String>, Value)],
         runtime: bool,
     ) -> Result<Value, Issue> {
-        let values = self.call_values(args, runtime)?;
-        let args = values.as_slice();
+        let args = self.call_values(args, runtime)?;
         let (module, name) = hgl_semantics::value_types::identity(&self.library, module, name);
         let (mut id, mut signature, values, mut types, result) =
-            self.select(&module, &name, args, runtime)?;
+            self.select(&module, &name, &args, runtime)?;
         if self.preparing_graph
             && values
                 .iter()
@@ -144,14 +150,14 @@ impl Checker {
                 &decl,
                 &signature,
                 (values, result),
-                (runtime, self.phase.name()),
+                (runtime, self.native_phase(runtime)),
                 &mut self.plan.natives,
             )?);
         }
         let runtime_body = runtime_body(&signature)?;
         if signature.value_function && values.iter().all(|v| !matches!(v.kind, Kind::Wire(_))) {
             return self
-                .direct_call(id, &signature, (values, types, result), runtime, args)
+                .direct_call(id, &signature, (values, types, result), runtime, &args)
                 .map_err(|e| e.in_source(&decl.source));
         }
         if runtime {
@@ -1820,7 +1826,7 @@ impl Checker {
                 throws: false,
             });
         }
-        Ok(Value::new(Ty::Void, Kind::Native(id, values)))
+        Ok(self.plan.natives[id].invocation(values, Ty::Void))
     }
     fn binary(
         &mut self,

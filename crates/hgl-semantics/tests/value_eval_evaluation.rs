@@ -271,7 +271,20 @@ fn scalar_operators_obey_floor_modulo_short_circuit_and_failure_boundaries() {
         evaluator.value(&overflow),
         Err(EvalError::Unsupported(_))
     ));
-    let impossible = Value::new(Ty::Bool, Kind::Native(0, vec![]));
+    let impossible = Value::new(
+        Ty::Bool,
+        Kind::Native(
+            Box::new(hgl_semantics::ir::Native {
+                name: "unused".into(),
+                method: "unused".into(),
+                provider: None,
+                throws: false,
+                args: vec![],
+                result: Ty::Bool,
+            }),
+            vec![],
+        ),
+    );
     let short = binary("&&", bool_value(false), impossible, Ty::Bool);
     assert!(matches!(
         evaluator.value(&short).unwrap().kind,

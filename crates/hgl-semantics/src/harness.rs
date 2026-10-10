@@ -4,10 +4,18 @@ use crate::ir::{Kind, Statement, Value};
 use crate::value_eval::{EvalError, Evaluator};
 use hgl_source::{Literal, TemporalLiteral};
 
-/// Execute a lexical test once, retaining owning locals across fresh evals.
+/// Execute with the existing temporal-only materialization callback.
 pub fn execute(
     test: &Test,
-    mut materialize: impl FnMut(&TemporalLiteral) -> Result<Literal, EvalError>,
+    materialize: impl FnMut(&TemporalLiteral) -> Result<Literal, EvalError>,
+    eval: impl FnMut(usize, PreparedEval) -> Result<CapturedEval, Failure>,
+) -> Result<usize, String> {
+    execute_in_context(test, materialize, eval)
+}
+/// Execute a lexical test once, retaining owning locals across fresh evals.
+pub fn execute_in_context(
+    test: &Test,
+    mut materialize: impl crate::value_eval::ExecutionContext<Value, crate::ir::Native, EvalError>,
     mut eval: impl FnMut(usize, PreparedEval) -> Result<CapturedEval, Failure>,
 ) -> Result<usize, String> {
     steps(
@@ -21,7 +29,7 @@ pub fn execute(
 fn steps(
     body: &[Step],
     evaluator: &mut Evaluator,
-    materialize: &mut impl FnMut(&TemporalLiteral) -> Result<Literal, EvalError>,
+    materialize: &mut impl crate::value_eval::ExecutionContext<Value, crate::ir::Native, EvalError>,
     eval: &mut impl FnMut(usize, PreparedEval) -> Result<CapturedEval, Failure>,
 ) -> Result<usize, Failure> {
     let mut count = 0;
@@ -40,7 +48,7 @@ fn steps(
             }
             Step::Ordinary(statement) => {
                 if evaluator
-                    .statement_with(statement, materialize)
+                    .statement_in_context(statement, materialize)
                     .map_err(Failure::from)?
                     .is_some()
                 {
@@ -49,7 +57,7 @@ fn steps(
             }
             Step::Assert(value) => {
                 let value = evaluator
-                    .value_with(value, materialize)
+                    .value_in_context(value, materialize)
                     .map_err(Failure::from)?;
                 if !matches!(value.kind, Kind::Literal(Literal::Bool(true))) {
                     return Err("ordinary assertion failed".into());
@@ -58,7 +66,7 @@ fn steps(
             }
             Step::If(condition, yes, no) => {
                 let value = evaluator
-                    .value_with(condition, materialize)
+                    .value_in_context(condition, materialize)
                     .map_err(Failure::from)?;
                 let Kind::Literal(Literal::Bool(condition)) = value.kind else {
                     return Err("test condition requires bool".into());
@@ -80,7 +88,7 @@ fn steps(
                         .iter()
                         .map(|slot| {
                             slot.as_ref()
-                                .map(|value| evaluator.value_with(value, materialize))
+                                .map(|value| evaluator.value_in_context(value, materialize))
                                 .transpose()
                         })
                         .collect::<Result<Vec<_>, _>>()
@@ -91,7 +99,7 @@ fn steps(
                     let retained =
                         Value::new(ty.clone(), Kind::Captured(actual.length, actual.ticks));
                     evaluator
-                        .statement_with(&Statement::Let(*id, retained), materialize)
+                        .statement_in_context(&Statement::Let(*id, retained), materialize)
                         .map_err(Failure::from)?;
                 }
                 count += 1;
@@ -103,7 +111,7 @@ fn steps(
 fn prepare(
     evaluator: &mut Evaluator,
     arguments: &[Argument],
-    materialize: &mut impl FnMut(&TemporalLiteral) -> Result<Literal, EvalError>,
+    materialize: &mut impl crate::value_eval::ExecutionContext<Value, crate::ir::Native, EvalError>,
 ) -> Result<PreparedEval, Failure> {
     let mut values = vec![None; arguments.len()];
     let mut dense = Vec::new();
@@ -113,7 +121,7 @@ fn prepare(
             Argument::Constant { binding, value } => (
                 *binding,
                 evaluator
-                    .value_with(value, materialize)
+                    .value_in_context(value, materialize)
                     .map_err(Failure::from)?,
             ),
             Argument::Dense {
@@ -126,7 +134,7 @@ fn prepare(
             } => {
                 let slots = if let Some(sequence) = sequence {
                     let value = evaluator
-                        .value_with(sequence, materialize)
+                        .value_in_context(sequence, materialize)
                         .map_err(Failure::from)?;
                     let Kind::List(values) = value.kind else {
                         return Err("ordinary publication sequence requires a list".into());
@@ -137,7 +145,7 @@ fn prepare(
                         .iter()
                         .map(|slot| {
                             slot.as_ref()
-                                .map(|value| evaluator.value_with(value, materialize))
+                                .map(|value| evaluator.value_in_context(value, materialize))
                                 .transpose()
                         })
                         .collect::<Result<Vec<_>, _>>()

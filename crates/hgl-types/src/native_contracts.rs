@@ -1,5 +1,15 @@
 //! Inert portable native scalar and readonly helper contract data.
 use std::collections::BTreeSet;
+/// Executable image location projected from a completely validated package contract.
+#[derive(Debug, Clone)]
+pub struct Image {
+    /// Checked provider identity.
+    pub provider: String,
+    /// Checked semantic interface fingerprint.
+    pub fingerprint: String,
+    /// Resolved statically compiled target source location.
+    pub path: String,
+}
 /// Owning scalar operations advertised by the portable package contract.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Scalar {

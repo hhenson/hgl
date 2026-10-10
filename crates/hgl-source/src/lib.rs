@@ -6,6 +6,26 @@ pub use type_shape::{
     EnumType, FamilyType, Nominal, NominalDefinition, RecursiveType, Ty, Window, WindowKind,
     application, delta_argument,
 };
+#[derive(Debug, Clone, PartialEq, Eq)]
+/// The declaration role before overload selection.
+pub enum DeclarationRole {
+    /// Opaque nominal native scalar declaration.
+    NativeType,
+    /// Nominal enum declaration.
+    Enum,
+    /// Ordinary nominal struct declaration.
+    Struct,
+    /// Ordinary or const function.
+    Function,
+    /// Operator implementation.
+    Implementation,
+    /// Operator contract.
+    Operator,
+    /// Native interface or selected target part.
+    Native,
+    /// Named test case.
+    Test,
+}
 #[derive(Debug, Clone)]
 /// An expression before name and type resolution.
 pub enum Expr {

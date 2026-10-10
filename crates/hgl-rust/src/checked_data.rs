@@ -11,21 +11,9 @@ fn literal(l: &Literal) -> String {
         Literal::Str(s) => format!("Str({s:?}.into())"),
         Literal::Bytes(bytes) => format!("Bytes(vec!{bytes:?})"),
         Literal::Float(v) => format!("Float(f64::from_bits({}))", v.to_bits()),
-        Literal::TimeZone(zone) => format!(
-            "TimeZone(hgl_types::ZoneId::from_validated_name({:?}.into()))",
-            zone.as_str()
-        ),
-        Literal::ZonedTime(zoned) => format!(
-            "ZonedTime(hgl_types::ZonedTime::from_validated_parts(hgl_types::Time({}), hgl_types::ZoneId::from_validated_name({:?}.into())))",
-            zoned.time().0,
-            zoned.zone().as_str()
-        ),
-        Literal::ZonedDateTime(zoned) => format!(
-            "ZonedDateTime(hgl_types::ZonedDateTime::from_validated_parts(hgl_types::EngineTime::from_micros({}),hgl_types::ZoneId::from_validated_name({:?}.into()),{}))",
-            zoned.instant().micros(),
-            zoned.zone().as_str(),
-            zoned.offset_seconds()
-        ),
+        Literal::TimeZone(_) => format!("TimeZone({})", crate::scalars::literal(l)),
+        Literal::ZonedTime(_) => format!("ZonedTime({})", crate::scalars::literal(l)),
+        Literal::ZonedDateTime(_) => format!("ZonedDateTime({})", crate::scalars::literal(l)),
         Literal::Int(_)
         | Literal::Bool(_)
         | Literal::Duration(_)
@@ -65,6 +53,11 @@ fn part(p: &DeltaEntry) -> String {
 /// Emit one exact checked expression for cold preparation.
 pub fn value(v: &Value) -> String {
     let kind = match &v.kind {
+        Kind::Native(binding, args) => format!(
+            "Native(Box::new({}),{})",
+            native(binding),
+            list(args, value)
+        ),
         Kind::Captured(n, vs) => format!(
             "Captured({n},{})",
             list(vs, |(i, v)| format!("({i},{})", value(v)))
@@ -107,7 +100,6 @@ pub fn value(v: &Value) -> String {
         | Kind::IterationInput(_)
         | Kind::Input(..)
         | Kind::Cache(_)
-        | Kind::Native(..)
         | Kind::Query(..)
         | Kind::Output
         | Kind::Capability => unreachable!("checked ordinary harness expression"),
@@ -115,6 +107,17 @@ pub fn value(v: &Value) -> String {
     format!(
         "hgl_semantics::ir::Value::new({},hgl_semantics::ir::Kind::{kind})",
         ty(&v.ty)
+    )
+}
+fn native(n: &hgl_semantics::ir::Native) -> String {
+    let provider=n.provider.as_ref().map_or_else(||"None".into(),|p|format!("Some(hgl_types::native_contracts::Image {{provider:{:?}.into(),fingerprint:{:?}.into(),path:{:?}.into()}})",p.provider,p.fingerprint,p.path));
+    format!(
+        "hgl_semantics::ir::Native {{name:{:?}.into(),method:{:?}.into(),provider:{provider},throws:{},args:{},result:{}}}",
+        n.name,
+        n.method,
+        n.throws,
+        list(&n.args, ty),
+        ty(&n.result)
     )
 }
 fn statement(s: &Statement) -> String {

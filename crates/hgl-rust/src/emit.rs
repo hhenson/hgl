@@ -256,9 +256,12 @@ pub fn shared_test_layouts(plans: &[Plan], tests: &[hgl_semantics::harness_ir::T
     let types = Plan {
         nodes,
         ordinary_types: crate::layouts::harness_types(tests).into_values().collect(),
+        natives: crate::preparation::native_bindings(plans, tests),
         ..Plan::default()
     };
-    global_markers(&types)
+    native_images(&types)
+        + &crate::preparation::native_context(&types)
+        + &global_markers(&types)
         + &crate::preparation::recursive_markers(&types)
         + &crate::deltas::markers(&types)
         + &crate::any_values::layouts(&types)
@@ -274,7 +277,9 @@ fn emit_inner(plan: &Plan, layouts: bool) -> String {
         }
     }
     out.push(native_interfaces(plan, false));
-    out.push(native_images(plan));
+    if layouts {
+        out.push(native_images(plan));
+    }
     if let Some(error) = &plan.construction_error {
         out.push(format!("pub fn register(_: &mut hgl_describe::Registry) -> Result<(), hgl_describe::BuildError> {{ Ok(()) }}\npub fn main(_: &hgl_describe::Registry) -> Result<hgl_describe::GraphDescription, hgl_describe::BuildError> {{ Err(hgl_describe::BuildError::InvalidNodeType {{ node: \"hgl.program\", what: {error:?}.into() }}) }}\n"));
         return out.concat();
@@ -432,10 +437,7 @@ fn native_images(plan: &Plan) -> String {
     for provider in providers.values() {
         code.push(format!(
             "#[path={:?}] mod {};\n",
-            provider
-                .image
-                .as_ref()
-                .unwrap_or_else(|| unreachable!("checked image")),
+            provider.path,
             image_module(&provider.provider)
         ));
     }

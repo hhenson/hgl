@@ -4,7 +4,9 @@ Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-
 
 Generate ordinary concrete struct ownership and field-presence operations.
 Depends on hgl-source and hgl-rust-prepared-values; budget 230 source lines. Type collection and spelling
-remain in hgl-rust-layouts.
+remain in hgl-rust-layouts. Canonical field markers are prepared once and reused
+by value/slot representations, retention, installation, preparation and copying;
+the shared positional tuple formatter belongs to layouts.
 
 Public `marker(&Ty, fn(&Ty)->String, fn(&Ty)->String) -> String` receives a
 checked concrete struct plus marker-name and schema emitters. Emit its complete

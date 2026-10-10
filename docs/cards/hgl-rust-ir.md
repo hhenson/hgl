@@ -111,5 +111,9 @@ Plan::ordinary_types retains closed harness payload layouts hidden behind Any be
 
 Finite capacity planning keeps recording rows at the existing cycles-plus-start bound; ordinary global lists preserve initial rows before reserved appends.
 
-Native.provider optionally retains the exact inert selected package Descriptor;
-image paths and signatures are checked metadata, never executable checker callbacks.
+Native.provider optionally retains the immutable Image projection of the one
+validated Library Descriptor. Kind::Native owns its exact checked binding and
+argument expressions, preserving selected symbols/types through temporary cold
+checking scopes. Native::invocation assembles that checked call with its frontend
+result type; legacy logger result authority stays unchanged. Image paths and
+signatures remain data, never executable checker callbacks.

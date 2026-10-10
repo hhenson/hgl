@@ -1,6 +1,7 @@
 # Card: hgl-source
 
 Finite list bounds reuse the balanced type_syntax::application grammar. Nested generic and parenthesized argument separators have one parser; a list carries one element and at most one nonnegative concrete or unbounded size.
+DeclarationRole is inert grammar metadata; Semantic Library reexports it as Role.
 
 Lexer and body syntax shared by library indexing and graph checking. Uses only
 `hgl-calendar`, `hgl-type-shape` and `hgl-lex`; budget 700 lines. No runtime dependency.

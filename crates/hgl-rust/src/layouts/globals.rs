@@ -175,7 +175,7 @@ fn collect(ty: &Ty, types: &mut BTreeMap<String, Ty>) {
         }
     }
 }
-pub(super) fn tuple(fields: impl Iterator<Item = String>) -> String {
+pub(crate) fn tuple(fields: impl Iterator<Item = String>) -> String {
     match fields.collect::<Vec<_>>().as_slice() {
         [] => "()".into(),
         fields => format!("({},)", fields.join(",")),

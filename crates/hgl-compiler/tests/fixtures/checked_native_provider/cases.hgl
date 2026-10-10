@@ -2,3 +2,10 @@ module native_image_cases
 use checked_lengths::{size}
 fn count(value:str)->i64 {when {return size(value)}}
 test counts {assert eval(count,value:["first","",_,"tail"]) == [5,0,_,4]}
+fn add_length(value:str,const extra:i64)->i64 {when {return size(value)+extra}}
+fn cold_count(value:str)->i64 {return add_length(value,extra:size("cold"))}
+test setup_and_cold {
+    let initial = size("setup")
+    assert initial == 5
+    assert eval(cold_count,value:["a",_,"last"]) == [5,_,8]
+}

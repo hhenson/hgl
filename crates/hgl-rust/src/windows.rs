@@ -23,31 +23,26 @@ pub fn read(ty: &Ty, input: &str) -> String {
 }
 /// Native arrival publication into independent reserved output storage.
 pub fn apply(ty: &Ty, output: &str, payload: &str) -> String {
-    format!(
-        "_ctx.prepared().rolling::<{}>({output},&({payload}))?;",
-        marker(ty)
-    )
+    prepared(ty, "rolling", &format!("{output},&({payload})"))
 }
 /// Borrow a scalar source into an independently retained rolling arrival.
 pub fn scalar(ty: &Ty, input: &str, output: &str) -> String {
-    format!(
-        "_ctx.prepared().rolling_scalar::<{}>({input},{output})?;",
-        marker(ty)
-    )
+    prepared(ty, "rolling_scalar", &format!("{input},{output}"))
 }
 /// Prepared source-to-output arrival copy.
 pub fn from(ty: &Ty, output: &str, source: &str, slot: &str) -> String {
-    format!(
-        "_ctx.prepared().rolling_from::<{}>(Some({source}),{slot},{output})?;",
-        marker(ty)
+    prepared(
+        ty,
+        "rolling_from",
+        &format!("Some({source}),{slot},{output}"),
     )
 }
 /// Direct independently retained arrival forwarding.
 pub fn pass(ty: &Ty, input: &str, output: &str) -> String {
-    format!(
-        "_ctx.prepared().pass_rolling::<{}>({input},{output})?;",
-        marker(ty)
-    )
+    prepared(ty, "pass_rolling", &format!("{input},{output}"))
+}
+fn prepared(ty: &Ty, method: &str, arguments: &str) -> String {
+    format!("_ctx.prepared().{method}::<{}>({arguments})?;", marker(ty))
 }
 /// Capture the latest arrival into an independent prepared ordinary recording slot.
 pub fn capture(ty: &Ty, input: &str, slot: &str) -> String {

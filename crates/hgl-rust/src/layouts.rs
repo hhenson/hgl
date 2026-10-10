@@ -4,6 +4,7 @@ mod delta;
 mod globals;
 pub use crate::families::{family_coerce, family_member, family_storage};
 pub use delta::{delta_storage, delta_type};
+pub(crate) use globals::tuple;
 pub use globals::{global_markers, global_schema, global_type, global_types, harness_types};
 
 pub use crate::scalars::{rust_type, scalar_type};
@@ -20,7 +21,7 @@ pub fn owned_type(ty: &Ty) -> String {
         return format!("Vec<{}>", owned_type(&element));
     }
     if let Ty::Struct(_, fields, optional) = ty {
-        return globals::tuple(fields.iter().enumerate().map(|(i, (_, ty))| {
+        return tuple(fields.iter().enumerate().map(|(i, (_, ty))| {
             let ty = owned_type(ty);
             if optional.contains(&i) {
                 format!("Option<{ty}>")

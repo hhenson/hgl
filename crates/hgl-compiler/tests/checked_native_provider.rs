@@ -28,7 +28,11 @@ fn checked_helper_phases_and_missing_images_reject_before_execution() -> Result<
             "",
             "missing native helper executable image contract",
         ),
-        ("{evaluation}", "{start}", "unavailable in evaluation"),
+        (
+            "{setup,cold,evaluation}",
+            "{start}",
+            "unavailable in evaluation",
+        ),
     ] {
         let mut sources = sources()?;
         let (_, descriptor) = sources
@@ -41,6 +45,36 @@ fn checked_helper_phases_and_missing_images_reject_before_execution() -> Result<
             .ok_or("unexpected admitted provider")?;
         assert!(error.contains(expected), "{error}");
     }
+    for (body, phases, expected) in [
+        (
+            "module phase_case\nuse checked_lengths::{size}\ntest setup {\nlet count=size(\"setup\")\nassert count==5\n}\n",
+            "{evaluation}",
+            "unavailable in setup",
+        ),
+        (
+            "module phase_case\nuse checked_lengths::{size}\nfn plus(value:i64,const extra:i64)->i64 {when {return value+extra}}\nfn cold(value:i64)->i64 {return plus(value,extra:size(\"cold\"))}\ntest cold_phase {assert eval(cold,value:[1])==[5]}\n",
+            "{setup,evaluation}",
+            "unavailable in cold",
+        ),
+    ] {
+        let mut sources = sources()?;
+        sources[0].1 = body.into();
+        let (_, descriptor) = sources
+            .iter_mut()
+            .find(|(name, _)| name.ends_with(".hgl-native"))
+            .ok_or("descriptor missing")?;
+        *descriptor = descriptor.replace("{setup,cold,evaluation}", phases);
+        let error = hgl_program::compile_module_suite(&sources)
+            .err()
+            .ok_or_else(|| format!("unexpected admitted phase: {expected}"))?;
+        assert!(error.contains(expected), "{error}");
+    }
+    let mut constant = sources()?;
+    constant[0].1 = "module required_constant\nuse checked_lengths::{size}\nfn bounded(value:list<i64,(size(\"checking\"))>)->i64 {when {return 1}}\ntest no_execution {assert eval(bounded,value:[[1]])==[1]}\n".into();
+    let error = hgl_program::compile_module_suite(&constant)
+        .err()
+        .ok_or("native helper admitted as required constant")?;
+    assert!(error.contains("constant"), "{error}");
     let mut sources = sources()?;
     let (name, descriptor) = sources
         .iter_mut()

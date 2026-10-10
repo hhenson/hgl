@@ -7,44 +7,34 @@ pub fn context_free(value: &Value) -> bool {
     expression(value, &BTreeSet::new())
 }
 fn expression(value: &Value, locals: &BTreeSet<usize>) -> bool {
-    match &value.kind {
-        Kind::Literal(_) | Kind::Void => true,
-        Kind::Local(id) | Kind::MutableLocal(id) => locals.contains(id),
-        Kind::List(values) => values.iter().all(|v| expression(v, locals)),
-        Kind::Construct(fields) => fields.iter().all(|(_, v)| expression(v, locals)),
-        Kind::Delta(parts) => parts
-            .iter()
-            .all(|part| part.operands().all(|value| expression(value, locals))),
-        Kind::Field(value, _) | Kind::Length(value) | Kind::Unary(_, value) => {
-            expression(value, locals)
+    let mut closed = true;
+    crate::ir_visit::value(value, &mut |value| {
+        if let Kind::Local(id) | Kind::MutableLocal(id) = &value.kind {
+            closed &= locals.contains(id);
+            return false;
         }
-        Kind::Binary(_, a, b) | Kind::Index(a, b) | Kind::Push(a, b) => {
-            expression(a, locals) && expression(b, locals)
+        if let Kind::ValueCall(args, body) = &value.kind {
+            closed &= args.iter().all(|v| expression(v, locals))
+                && block(body, &(0..args.len()).collect());
+            return false;
         }
-        Kind::ValueCall(args, body) => {
-            args.iter().all(|v| expression(v, locals)) && block(body, &(0..args.len()).collect())
-        }
-        Kind::TemporalLiteral(_)
-        | Kind::Captured(..)
-        | Kind::Prepared(_)
-        | Kind::Configuration(_)
-        | Kind::GlobalGet(_)
-        | Kind::BorrowedLocal(..)
-        | Kind::GlobalSet(..)
-        | Kind::IsPresent(_)
-        | Kind::Present(_)
-        | Kind::ObservedLocal(_)
-        | Kind::GeneratorLocal(_)
-        | Kind::Wire(_)
-        | Kind::IterationInput(_)
-        | Kind::Input(..)
-        | Kind::Cache(_)
-        | Kind::Native(..)
-        | Kind::Query(..)
-        | Kind::Output
-        | Kind::Capability
-        | Kind::WiringFailure(_) => false,
-    }
+        closed &= matches!(
+            value.kind,
+            Kind::Literal(_)
+                | Kind::Void
+                | Kind::List(_)
+                | Kind::Construct(_)
+                | Kind::Delta(_)
+                | Kind::Field(..)
+                | Kind::Length(_)
+                | Kind::Unary(..)
+                | Kind::Binary(..)
+                | Kind::Index(..)
+                | Kind::Push(..)
+        );
+        closed
+    });
+    closed
 }
 fn block(body: &[Statement], inherited: &BTreeSet<usize>) -> bool {
     let mut locals = inherited.clone();

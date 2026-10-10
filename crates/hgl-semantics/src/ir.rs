@@ -81,8 +81,8 @@ pub enum Kind {
     Local(usize),
     /// Writable owned scalar local binding index.
     MutableLocal(usize),
-    /// Selected native signature index and checked arguments.
-    Native(usize, Vec<Value>),
+    /// Checked native binding and arguments, retained across cold and graph phases.
+    Native(Box<Native>, Vec<Value>),
     /// Checked binary operator and operands.
     Binary(String, Box<Value>, Box<Value>),
     /// Checked unary operator or scalar conversion and operand.
@@ -202,13 +202,20 @@ pub struct Native {
     /// Rust provider method name.
     pub method: String,
     /// Data-only image contract selected through the ordinary library package.
-    pub provider: Option<hgl_source::native_package::Descriptor>,
+    pub provider: Option<hgl_types::native_contracts::Image>,
     /// Whether the provider returns a fallible result.
     pub throws: bool,
     /// Resolved argument types in declaration order.
     pub args: Vec<Ty>,
     /// Resolved result type.
     pub result: Ty,
+}
+impl Native {
+    /// Preserve the exact selected binding and its owning result across execution phases.
+    pub fn invocation(&self, values: Vec<Value>, result: Ty) -> Value {
+        let binding = Box::new(self.clone());
+        Value::new(result, Kind::Native(binding, values))
+    }
 }
 /// A closed graph with all source checks and eval wiring complete.
 #[derive(Debug, Default, Clone)]

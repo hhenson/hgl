@@ -1,5 +1,5 @@
 //! Generated concrete nominal ownership and field-presence operations.
-use hgl_source::Ty;
+use {crate::layouts::tuple, hgl_source::Ty};
 /// Emit owning storage and exact field presence for one concrete checked struct.
 pub fn marker(ty: &Ty, global_type: fn(&Ty) -> String, global_schema: fn(&Ty) -> String) -> String {
     let (identity, fields, optional) = ty
@@ -7,26 +7,27 @@ pub fn marker(ty: &Ty, global_type: fn(&Ty) -> String, global_schema: fn(&Ty) ->
         .unwrap_or_else(|_| unreachable!("collected complete nominal roots"));
     let identity = identity.source_name();
     let name = global_type(ty);
-    let (value, prefix, declaration) = representation(ty, global_type);
-    let slots = tuple(fields.iter().enumerate().map(|(i, (_, ty))| {
-        format!(
-            "hgl_store::ValueSlot<{}>",
-            field_marker(ty, optional.contains(&i), global_type)
-        )
-    }));
+    let markers = fields
+        .iter()
+        .enumerate()
+        .map(|(i, (_, ty))| field_marker(ty, optional.contains(&i), global_type))
+        .collect::<Vec<_>>();
+    let (value, prefix, declaration) = representation(ty, global_type, &markers);
+    let slots = tuple(
+        markers
+            .iter()
+            .map(|marker| format!("hgl_store::ValueSlot<{marker}>")),
+    );
     let schema = marker_schema(&identity, fields, optional, global_schema);
-    let bind = tuple(fields.iter().enumerate().map(|(i, (_, ty))| {
-        format!(
-            "hgl_store::ValueSlot::<{}>::bind(layout)",
-            field_marker(ty, optional.contains(&i), global_type)
-        )
-    }));
-    let retain = tuple(fields.iter().enumerate().map(|(i, (_, ty))| {
-        format!(
-            "<{} as hgl_store::GlobalValue>::retain(&value.{i})?",
-            field_marker(ty, optional.contains(&i), global_type)
-        )
-    }));
+    let bind = tuple(
+        markers
+            .iter()
+            .map(|marker| format!("hgl_store::ValueSlot::<{marker}>::bind(layout)")),
+    );
+    let retain =
+        tuple(markers.iter().enumerate().map(|(i, marker)| {
+            format!("<{marker} as hgl_store::GlobalValue>::retain(&value.{i})?")
+        }));
     let read = tuple(
         fields
             .iter()
@@ -39,23 +40,19 @@ pub fn marker(ty: &Ty, global_type: fn(&Ty) -> String, global_schema: fn(&Ty) ->
         .map(|(i, _)| format!("slots.{i}.commit(columns, value.{i}, layouts);"))
         .collect::<Vec<_>>()
         .concat();
-    let (width, flatten) = positions(fields, optional, global_type);
-    let prepare = fields
+    let (width, flatten) = positions(&markers);
+    let prepare = markers
         .iter()
         .enumerate()
-        .map(|(i, (_, ty))| {
+        .map(|(i, marker)| {
             format!(
-                "<{} as hgl_store::GlobalValue>::prepare(&value.{i}, capacity, layouts)?;",
-                field_marker(ty, optional.contains(&i), global_type)
+                "<{marker} as hgl_store::GlobalValue>::prepare(&value.{i}, capacity, layouts)?;"
             )
         })
         .collect::<Vec<_>>()
         .concat();
-    let install = tuple(fields.iter().enumerate().map(|(i, (_, ty))| {
-        format!(
-            "hgl_store::ValueSlot::<{}>::install(columns,value.{i},layouts)",
-            field_marker(ty, optional.contains(&i), global_type)
-        )
+    let install = tuple(markers.iter().enumerate().map(|(i, marker)| {
+        format!("hgl_store::ValueSlot::<{marker}>::install(columns,value.{i},layouts)")
     }));
     let release = fields
         .iter()
@@ -66,14 +63,8 @@ pub fn marker(ty: &Ty, global_type: fn(&Ty) -> String, global_schema: fn(&Ty) ->
 
     format!(
         "{declaration}#[derive(Debug)]\nstruct {name};\nimpl hgl_store::GlobalValue for {name} {{\ntype Value = {value};\ntype Slots = {slots};\nconst WIDTH: usize = {width};\nfn prepare(value: &Self::Value, capacity: &mut hgl_store::Capacity, layouts: &mut hgl_store::Layouts) -> hgl_types::NodeResult {{ {prepare} Ok(()) }}\nfn install(columns: &mut hgl_store::ValueColumns, value: Self::Value, layouts: &mut hgl_store::Layouts) -> Self::Slots {{ {install} }}\nfn release(columns: &mut hgl_store::ValueColumns, slots: Self::Slots) {{ {release} }}\nfn flatten(slots: Self::Slots, layout: &mut [usize]) {{ {flatten} }}\nfn schema() -> hgl_types::OrdinaryType {{ {schema} }}\nfn slots(layout: &mut &[usize]) -> Self::Slots {{ {bind} }}\nfn retain(value: &Self::Value) -> Result<Self::Value, Box<hgl_types::NodeError>> {{ Ok({prefix}{retain}) }}\nfn read(columns: &hgl_store::ValueColumns, slots: Self::Slots) -> Result<Self::Value, Box<hgl_types::NodeError>> {{ Ok({prefix}{read}) }}\nfn commit(columns: &mut hgl_store::ValueColumns, slots: Self::Slots, value: Self::Value, layouts: &mut hgl_store::Layouts) {{ {commit} }}\n}}\n"
-    ) + &crate::prepared_values::structure_fields(
-        &name,
-        &fields
-            .iter()
-            .enumerate()
-            .map(|(i, (_, ty))| field_marker(ty, optional.contains(&i), global_type))
-            .collect::<Vec<_>>(),
-    ) + &recursive_equality(ty, global_type)
+    ) + &crate::prepared_values::structure_fields(&name, &markers)
+        + &recursive_equality(ty, global_type)
 }
 
 fn marker_schema(
@@ -124,20 +115,10 @@ fn field_marker(ty: &Ty, optional: bool, global_type: fn(&Ty) -> String) -> Stri
     }
 }
 
-fn positions(
-    fields: &[(String, Ty)],
-    optional: &[usize],
-    global_type: fn(&Ty) -> String,
-) -> (String, String) {
-    let widths = fields
+fn positions(markers: &[String]) -> (String, String) {
+    let widths = markers
         .iter()
-        .enumerate()
-        .map(|(i, (_, ty))| {
-            format!(
-                "<{} as hgl_store::GlobalValue>::WIDTH",
-                field_marker(ty, optional.contains(&i), global_type)
-            )
-        })
+        .map(|marker| format!("<{marker} as hgl_store::GlobalValue>::WIDTH"))
         .collect::<Vec<_>>();
     let width = if widths.is_empty() {
         "0".into()
@@ -147,25 +128,21 @@ fn positions(
     let flatten = widths.iter().enumerate().map(|(i,width)| format!("let (field, rest) = layout.split_at_mut({width}); slots.{i}.flatten(field); let layout = rest;")).collect::<Vec<_>>().concat();
     (width, flatten)
 }
-fn tuple(fields: impl Iterator<Item = String>) -> String {
-    match fields.collect::<Vec<_>>().as_slice() {
-        [] => "()".into(),
-        fields => format!("({},)", fields.join(",")),
-    }
-}
-
-fn representation(ty: &Ty, global_type: fn(&Ty) -> String) -> (String, String, String) {
-    let (identity, fields, optional) = ty
+fn representation(
+    ty: &Ty,
+    global_type: fn(&Ty) -> String,
+    markers: &[String],
+) -> (String, String, String) {
+    let (identity, _, _) = ty
         .structure()
         .unwrap_or_else(|_| unreachable!("complete nominal root"));
     let identity = identity.source_name();
     let name = global_type(ty);
-    let value = tuple(fields.iter().enumerate().map(|(i, (_, ty))| {
-        format!(
-            "<{} as hgl_store::GlobalValue>::Value",
-            field_marker(ty, optional.contains(&i), global_type)
-        )
-    }));
+    let value = tuple(
+        markers
+            .iter()
+            .map(|marker| format!("<{marker} as hgl_store::GlobalValue>::Value")),
+    );
     let recursive = matches!(ty, Ty::Recursive(_) | Ty::Family(_));
     let equality = if crate::any_values::contains(ty) {
         ""

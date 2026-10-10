@@ -68,7 +68,7 @@ fn value(plan: &Plan, v: &Value) -> String {
         Kind::GlobalSet(i, v) => prepared::set(plan, *i, v),
         Kind::GeneratorLocal(_) => retained(&place(plan, v), &v.ty),
         Kind::Local(i) | Kind::MutableLocal(i) => retained(&format!("local{i}"), &v.ty),
-        Kind::Native(i, args) => native_call(plan, *i, args),
+        Kind::Native(binding, args) => native_call(plan, binding, args),
         Kind::Binary(op, a, b) => binary(plan, &v.ty, op, a, b),
         Kind::Unary(op, operand) if op == "family" => {
             crate::layouts::family_coerce(&v.ty, &operand.ty, &value(plan, operand))
@@ -486,12 +486,13 @@ fn native_argument(plan: &Plan, v: &Value) -> String {
     if let Kind::Cache(i) = v.kind {
         return format!("self.cache{i}.as_str()");
     }
-    if let Kind::Local(i) | Kind::MutableLocal(i) = v.kind {
-        return format!("local{i}.as_str()");
-    }
     if matches!(
         v.kind,
-        Kind::Field(..) | Kind::Index(..) | Kind::GeneratorLocal(_)
+        Kind::Local(_)
+            | Kind::MutableLocal(_)
+            | Kind::Field(..)
+            | Kind::Index(..)
+            | Kind::GeneratorLocal(_)
     ) {
         return format!("({}).as_str()", place(plan, v));
     }
@@ -704,20 +705,20 @@ fn retained(source: &str, ty: &Ty) -> String {
     crate::collections::retained(source, ty, global_type)
 }
 
-fn native_call(plan: &Plan, i: usize, args: &[Value]) -> String {
+fn native_call(plan: &Plan, binding: &hgl_semantics::ir::Native, args: &[Value]) -> String {
     format!(
         "{}::{}({}){}",
-        plan.natives[i]
+        binding
             .provider
             .as_ref()
             .map_or("<crate::Provider as Native>".into(), |p| {
                 crate::emit::image_module(&p.provider)
             }),
-        plan.natives[i].method,
+        binding.method,
         args.iter()
             .map(|v| native_argument(plan, v))
             .collect::<Vec<_>>()
             .join(", "),
-        if plan.natives[i].throws { "?" } else { "" }
+        if binding.throws { "?" } else { "" }
     )
 }

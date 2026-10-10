@@ -1,5 +1,5 @@
 //! Descriptor-only native scalar and exact ordinary helper contracts.
-use crate::ir::{Kind, Value};
+use crate::ir::Value;
 use crate::library::{Decl, Library, Role, Signature};
 use hgl_source::{Cursor, Issue, Ty};
 use std::collections::BTreeMap;
@@ -157,34 +157,40 @@ pub fn bind(
     (runtime, phase): (bool, &str),
     natives: &mut Vec<crate::ir::Native>,
 ) -> Result<Value, String> {
-    let module = declaration.module.as_str();
-    let name = declaration.name.as_str();
-    if !runtime {
-        return Err("native value calls in composition are not yet supported".into());
-    }
-    let provider =
+    let (module, name) = (declaration.module.as_str(), declaration.name.as_str());
+    let args = values.iter().map(|v| v.ty.clone()).collect::<Vec<_>>();
+    let (provider, method) =
         if let Some(contract) = function(library, declaration, signature).map_err(String::from)? {
             if !contract.phases.contains(phase) {
                 return Err(format!("native helper is unavailable in {phase}"));
             }
             let descriptor = &library.native_contracts[module];
-            if descriptor.image.is_none() {
-                return Err("missing native helper executable image contract".into());
-            }
-            Some(descriptor.clone())
+            let path = descriptor
+                .image
+                .as_ref()
+                .ok_or("missing native helper executable image contract")?;
+            (
+                Some(hgl_types::native_contracts::Image {
+                    provider: descriptor.provider.clone(),
+                    fingerprint: descriptor.fingerprint.clone(),
+                    path: path.clone(),
+                }),
+                contract.symbol.clone(),
+            )
         } else {
+            if !runtime {
+                return Err("native value calls in composition are not yet supported".into());
+            }
             legacy(library, declaration, signature)?;
-            None
+            (
+                None,
+                format!(
+                    "{}_{}",
+                    name,
+                    args.iter().map(Ty::name).collect::<Vec<_>>().join("_")
+                ),
+            )
         };
-    let args = values.iter().map(|v| v.ty.clone()).collect::<Vec<_>>();
-    let method = format!(
-        "{}_{}",
-        name,
-        args.iter().map(Ty::name).collect::<Vec<_>>().join("_")
-    );
-    let method = provider.as_ref().map_or(method, |descriptor| {
-        descriptor.functions[name].symbol.clone()
-    });
     let full_name = format!("{module}::{name}");
     let native = intern(
         crate::ir::Native {
@@ -197,7 +203,7 @@ pub fn bind(
         },
         natives,
     )?;
-    Ok(Value::new(result, Kind::Native(native, values)))
+    Ok(natives[native].invocation(values, result))
 }
 
 fn legacy(library: &Library, declaration: &Decl, signature: &Signature) -> Result<(), String> {

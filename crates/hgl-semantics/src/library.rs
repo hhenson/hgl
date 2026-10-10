@@ -3,26 +3,7 @@ use hgl_source::diagnostics::Diagnostic;
 use hgl_source::{Cursor, Expr, Issue, Token, lex};
 use std::collections::{BTreeMap, BTreeSet};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-/// The declaration role before overload selection.
-pub enum Role {
-    /// Opaque nominal native scalar declaration.
-    NativeType,
-    /// Nominal enum declaration.
-    Enum,
-    /// Ordinary nominal struct declaration.
-    Struct,
-    /// Ordinary or const function.
-    Function,
-    /// Operator implementation.
-    Implementation,
-    /// Operator contract.
-    Operator,
-    /// Native interface or selected target part.
-    Native,
-    /// Named test case.
-    Test,
-}
+pub use hgl_source::DeclarationRole as Role;
 #[derive(Debug, Clone)]
 /// A declaration with its owning module and source tokens.
 pub struct Decl {
