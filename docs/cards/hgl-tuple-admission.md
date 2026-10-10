@@ -11,7 +11,7 @@ ordinary result context. Results retain
 canonical type compatibility and existing payload-access checks. Implicit Tuple
 outputs admit complete ordinary values; explicit delta requirements stay exact.
 
-Runtime native collection or text children require prepared retained observation
+Runtime native collection, text or bytes children require prepared retained observation
 storage before Tuple assembly. Unsupported native collection-child construction
 and publication reject before emission, using ordinary uncatalogued diagnostics.
 Constant ordinary construction remains admitted, including the published

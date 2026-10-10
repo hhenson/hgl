@@ -64,7 +64,7 @@ pub fn expected(result: &Ty, node: bool) -> Result<Ty, hgl_source::Issue> {
 fn variable(ty: &Ty) -> bool {
     if matches!(
         ty,
-        Ty::Set(_) | Ty::Str | Ty::TimeZone | Ty::ZonedTime | Ty::ZonedDateTime
+        Ty::Set(_) | Ty::Str | Ty::Bytes | Ty::TimeZone | Ty::ZonedTime | Ty::ZonedDateTime
     ) {
         true
     } else if let Ty::Atomic(child) = ty {
