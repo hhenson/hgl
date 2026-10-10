@@ -68,10 +68,7 @@ pub fn expected(result: &Ty, node: bool) -> Result<Ty, hgl_source::Issue> {
 }
 
 fn variable(ty: &Ty) -> bool {
-    if matches!(
-        ty,
-        Ty::Set(_) | Ty::Str | Ty::Bytes | Ty::TimeZone | Ty::ZonedTime | Ty::ZonedDateTime
-    ) {
+    if matches!(ty, Ty::Set(_)) || ty.owning_scalar() {
         true
     } else if let Ty::Atomic(child) = ty {
         collection(child) || variable(child)

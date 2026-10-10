@@ -1,6 +1,8 @@
 //! HGL semantics: the program model, its checks and the IR the backend reads.
 
+pub mod any_values;
 pub mod body_check;
+pub mod boxed_uses;
 pub mod collection_check;
 pub mod collection_values;
 pub mod composite_keys;
@@ -43,3 +45,12 @@ pub mod value_eval;
 pub mod value_operations;
 pub mod value_types;
 pub mod wiring_locals;
+
+/// Checked explicit ordinary constructor boundaries.
+pub mod value_constructors;
+
+/// Shared read-only checked source traversal.
+pub mod ir_visit;
+
+/// Checked ordinary operator type algebra.
+pub mod value_operators;

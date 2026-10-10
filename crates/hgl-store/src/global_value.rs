@@ -150,6 +150,12 @@ pub fn allocate(
     slots: &mut Vec<usize>,
 ) -> hgl_types::NodeResult {
     match ty {
+        OrdinaryType::Any => {
+            let mut capacity = Capacity::default();
+            capacity.any();
+            columns.reserve(&capacity)?;
+            slots.push(columns.insert_any(hgl_types::AnyValue::default()));
+        }
         OrdinaryType::RecursiveReference(_) => {
             return Err(NodeError::new("unresolved recursive schema edge"));
         }

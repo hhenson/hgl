@@ -1597,9 +1597,9 @@ impl Checker {
         env: &Env,
         runtime: bool,
     ) -> Result<Value, Issue> {
-        if name == "bytes" {
-            return hgl_semantics::value_operations::bytes(args, |expr, hint| {
-                self.expected_expression(module, expr, env, runtime, Some(hint))
+        if matches!(name, "bytes" | "any") {
+            return hgl_semantics::value_operations::constructor(name, args, |expr, hint| {
+                self.expected_expression(module, expr, env, runtime, hint)
             });
         }
         if name == "delta_value" {

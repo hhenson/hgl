@@ -35,55 +35,34 @@ impl Text {
     }
 }
 fn text(value: &Value, locals: &BTreeMap<usize, Text>) -> Text {
-    match &value.kind {
-        Kind::Local(id) | Kind::MutableLocal(id) | Kind::GeneratorLocal(id) => {
-            locals.get(id).cloned().unwrap_or(Text::Width(1))
-        }
-        Kind::Construct(fields) => Text::Fields(
+    if let Kind::Local(id) | Kind::MutableLocal(id) | Kind::GeneratorLocal(id) = &value.kind {
+        return locals.get(id).cloned().unwrap_or(Text::Width(1));
+    }
+    if let Kind::Construct(fields) = &value.kind {
+        return Text::Fields(
             fields
                 .iter()
                 .map(|(id, value)| (*id, text(value, locals)))
                 .collect(),
-        ),
-        Kind::Field(value, id) => match text(value, locals) {
+        );
+    }
+    if let Kind::Field(value, id) = &value.kind {
+        return match text(value, locals) {
             Text::Fields(fields) => fields.get(id).cloned().unwrap_or(Text::Width(1)),
             other @ Text::Width(_) => other,
-        },
-        Kind::Binary(op, a, b) if value.ty == Ty::Str && op == "+" => Text::Width(
+        };
+    }
+    if let Kind::Binary(op, a, b) = &value.kind
+        && value.ty == Ty::Str
+        && op == "+"
+    {
+        return Text::Width(
             text(a, locals)
                 .width()
                 .saturating_add(text(b, locals).width()),
-        ),
-        Kind::Delta(_)
-        | Kind::ObservedLocal(_)
-        | Kind::WiringFailure(_)
-        | Kind::List(_)
-        | Kind::Index(..)
-        | Kind::Length(_)
-        | Kind::Push(..)
-        | Kind::ValueCall(..)
-        | Kind::Configuration(_)
-        | Kind::GlobalGet(_)
-        | Kind::BorrowedLocal(..)
-        | Kind::GlobalSet(..)
-        | Kind::IsPresent(_)
-        | Kind::Present(_)
-        | Kind::Literal(_)
-        | Kind::TemporalLiteral(_)
-        | Kind::Prepared(_)
-        | Kind::Wire(_)
-        | Kind::IterationInput(_)
-        | Kind::Input(..)
-        | Kind::Cache(_)
-        | Kind::Native(..)
-        | Kind::Binary(..)
-        | Kind::Unary(..)
-        | Kind::Query(..)
-        | Kind::Output
-        | Kind::Capability
-        | Kind::Captured(..)
-        | Kind::Void => Text::Width(1),
+        );
     }
+    Text::Width(1)
 }
 fn assign(target: &Value, value: Text, locals: &mut BTreeMap<usize, Text>) {
     if let Kind::MutableLocal(id) | Kind::GeneratorLocal(id) = target.kind {
@@ -198,4 +177,21 @@ pub fn byte_limits<'a>(
             Some(format!("capacity.limit{bytes}=capacity.limit{bytes}.max(capacity.limit{list}).max({length});"))
         } else { None }
     }).collect()
+}
+
+/// The recorder starts empty; ordinary globals retain configured rows before bounded appends.
+pub fn global_growth(plan: &Plan, key: &str, ty: &Ty, appends: usize) -> String {
+    if plan
+        .recording
+        .as_ref()
+        .is_some_and(|(record, _)| record == key)
+    {
+        "bounds.len=cycles.saturating_add(1);".into()
+    } else if matches!(ty, Ty::List(..)) {
+        format!(
+            "bounds.len=bounds.len.saturating_add(cycles.saturating_add(1).saturating_mul({appends}usize));"
+        )
+    } else {
+        String::new()
+    }
 }

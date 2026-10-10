@@ -3,11 +3,9 @@ use hgl_source::Ty;
 use std::collections::BTreeMap;
 type Aliases = BTreeMap<usize, Value>;
 fn retained(value: &Value) -> bool {
-    matches!(
-        value.ty,
-        Ty::Str | Ty::Bytes | Ty::TimeZone | Ty::ZonedTime | Ty::ZonedDateTime
-    )
+    value.ty.owning_scalar() && value.ty != Ty::Any
 }
+
 /// Retain literal owning scalars once and reuse immutable configuration aliases.
 /// No provider, ordinary call, mutable local or hook is executed during this pass.
 pub fn prepare(plan: &Plan) -> Plan {
@@ -68,64 +66,45 @@ fn statements(body: &mut Vec<Statement>, config: &mut Vec<Value>, aliases: &mut 
     });
 }
 fn rewrite(value: &mut Value, config: &mut Vec<Value>, aliases: &Aliases) {
-    if let Kind::Local(id) = value.kind
-        && let Some(origin) = aliases.get(&id)
-    {
-        *value = origin.clone();
-        return;
-    }
-    match &mut value.kind {
-        Kind::Delta(parts) => {
+    hgl_semantics::ir_visit::value_mut(value, &mut |value| {
+        if let Kind::Unary(op, child) = &mut value.kind
+            && op == "any"
+        {
+            retain_tree(child, config);
+        }
+        if let Kind::Push(_, child) = &mut value.kind {
+            retain_tree(child, config);
+        }
+        if let Kind::Local(id) = value.kind
+            && let Some(origin) = aliases.get(&id)
+        {
+            *value = origin.clone();
+            return false;
+        }
+        if let Kind::Delta(parts) = &mut value.kind {
             for part in parts {
                 for value in part.operands_mut() {
                     rewrite(value, config, aliases);
                     retain(value, config);
                 }
             }
+            return false;
         }
-        Kind::List(items)
-        | Kind::Query(_, items)
-        | Kind::Native(_, items)
-        | Kind::ValueCall(items, _) => {
-            for value in items {
-                rewrite(value, config, aliases);
+        if let Kind::ValueCall(args, _) = &mut value.kind {
+            for argument in args {
+                rewrite(argument, config, aliases);
             }
+            return false;
         }
-        Kind::Construct(fields) => {
-            for (_, value) in fields {
-                rewrite(value, config, aliases);
-            }
-        }
-        Kind::Field(v, _)
-        | Kind::Length(v)
-        | Kind::GlobalSet(_, v)
-        | Kind::IsPresent(v)
-        | Kind::Present(v)
-        | Kind::Unary(_, v) => rewrite(v, config, aliases),
-        Kind::Index(a, b) | Kind::Push(a, b) | Kind::Binary(_, a, b) => {
-            rewrite(a, config, aliases);
-            rewrite(b, config, aliases);
-        }
-        Kind::ObservedLocal(_)
-        | Kind::WiringFailure(_)
-        | Kind::Configuration(_)
-        | Kind::GlobalGet(_)
-        | Kind::BorrowedLocal(..)
-        | Kind::Literal(_)
-        | Kind::TemporalLiteral(_)
-        | Kind::Prepared(_)
-        | Kind::Wire(_)
-        | Kind::IterationInput(_)
-        | Kind::Input(..)
-        | Kind::Cache(_)
-        | Kind::GeneratorLocal(_)
-        | Kind::Local(_)
-        | Kind::MutableLocal(_)
-        | Kind::Output
-        | Kind::Capability
-        | Kind::Captured(..)
-        | Kind::Void => {}
-    }
+        !matches!(value.kind, Kind::Captured(..))
+    });
+}
+
+fn retain_tree(value: &mut Value, config: &mut Vec<Value>) {
+    hgl_semantics::ir_visit::value_mut(value, &mut |v| {
+        retain(v, config);
+        !matches!(v.kind, Kind::Captured(..) | Kind::ValueCall(..))
+    });
 }
 
 fn retain(value: &mut Value, config: &mut Vec<Value>) {
@@ -137,31 +116,13 @@ fn retain(value: &mut Value, config: &mut Vec<Value>) {
 }
 
 fn generator_payloads(body: &mut [Statement], config: &mut Vec<Value>) {
-    for statement in body {
-        match statement {
-            Statement::Yield(value) | Statement::TimedYield(_, value) if value.closed() => {
-                let id = config.len();
-                config.push(value.clone());
-                value.kind = Kind::Configuration(id);
-            }
-            Statement::If(_, yes, no) => {
-                generator_payloads(yes, config);
-                generator_payloads(no, config);
-            }
-            Statement::While(_, body)
-            | Statement::ForItems(_, _, _, _, body)
-            | Statement::For(_, _, body) => {
-                generator_payloads(body, config);
-            }
-            Statement::Let(..)
-            | Statement::Var(..)
-            | Statement::Borrow(..)
-            | Statement::Return(_)
-            | Statement::Call(_)
-            | Statement::Assign(..)
-            | Statement::Exit
-            | Statement::Yield(_)
-            | Statement::TimedYield(..) => {}
+    hgl_semantics::ir_visit::nodes_mut(body, &mut |statement| {
+        if let Statement::Yield(value) | Statement::TimedYield(_, value) = statement
+            && value.closed()
+        {
+            let id = config.len();
+            config.push(value.clone());
+            value.kind = Kind::Configuration(id);
         }
-    }
+    });
 }

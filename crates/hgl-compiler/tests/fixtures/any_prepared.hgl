@@ -1,0 +1,178 @@
+module hgraph.std part any_prepared_regressions
+
+abstract struct Choice { value: i64 }
+struct First: Choice { }
+struct BoxField { box: any }
+struct Boxes { items: list<any> }
+struct Fields { items: list<BoxField> }
+
+test {
+    fn box_family(value: i64) -> any {
+        when {
+            let choice: Choice = First(value: value)
+            return any(choice)
+        }
+    }
+    test family_local_boxes_the_actual_concrete_member {
+        assert eval(box_family, [1, _, 2]) == [any(First(value: 1)), _, any(First(value: 2))]
+    }
+
+    fn append_box(value: i64) -> any {
+        inject global_state
+        start { set(global_state, "boxes", Boxes(items: []).items) }
+        when {
+            var boxes: list<any> = get(global_state, "boxes")
+            push(boxes, any(value))
+            return any(boxes[len(boxes) - 1])
+        }
+    }
+    fn append_field(value: i64) -> any {
+        inject global_state
+        start { set(global_state, "fields", Fields(items: []).items) }
+        when {
+            var fields: list<BoxField> = get(global_state, "fields")
+            push(fields, BoxField(box: any(value)))
+            return any(fields[len(fields) - 1].box)
+        }
+    }
+    test inline_boxes_and_nested_fields_use_prepared_append_storage {
+        assert eval(append_box, [1, _, 2]) == [any(1), _, any(2)]
+        assert eval(append_field, [1, _, 2]) == [any(1), _, any(2)]
+    }
+    fn append_flattened_box(value: any) -> any {
+        inject global_state
+        start { set(global_state, "boxes", Boxes(items: []).items) }
+        when {
+            var boxes: list<any> = get(global_state, "boxes")
+            push(boxes, any(value))
+            return any(boxes[len(boxes) - 1])
+        }
+    }
+    fn append_complete_list(value: atomic<list<i64>>) -> any {
+        inject global_state
+        start { set(global_state, "boxes", Boxes(items: []).items) }
+        when {
+            var boxes: list<any> = get(global_state, "boxes")
+            push(boxes, any(value))
+            return any(boxes[len(boxes) - 1])
+        }
+    }
+    const fn empty_integers() -> list<i64> { return [] }
+    const fn pair() -> list<i64> { return [1, 2] }
+    test inline_boxing_borrows_complete_aggregate_and_flattened_inputs {
+        assert eval(append_flattened_box, [any(), _, any(1)]) == [any(), _, any(1)]
+        assert eval(append_complete_list, [[1, 2], _, []]) == [any(pair()), _, any(empty_integers())]
+    }
+}
+
+struct DynamicChain {
+    value: i64
+    items: list<i64>
+    next: atomic<DynamicChain> = null
+}
+struct Replacement { current: any
+    previous: any
+}
+struct DeepFields { items: list<DeepField> }
+struct DeepField { first: any
+    second: any
+    text: str
+}
+test {
+    fn roll_box(value: i64) -> rolling<any, 2> { when { return any(value) } }
+    fn roll_local(value: i64) -> rolling<any, 2> {
+        when { let box = any(value)
+            return box
+        }
+    }
+    test rolling_boxes_are_prepared_arrivals {
+        assert eval(roll_box, [1, 2]) == [any(1), any(2)]
+        assert eval(roll_local, [1, 2]) == [any(1), any(2)]
+    }
+    fn box_dynamic_recursive(value: i64) -> any {
+        when { return any(DynamicChain(value: value, items: [1, 2],
+            next: DynamicChain(value: value, items: []))) }
+    }
+    test recursive_constructor_box_is_prepared {
+        assert eval(box_dynamic_recursive, [1, 2]) == [
+            any(DynamicChain(value: 1, items: [1, 2], next: DynamicChain(value: 1, items: []))),
+            any(DynamicChain(value: 2, items: [1, 2], next: DynamicChain(value: 2, items: [])))]
+    }
+    fn box_local_recursive(value: i64) -> any {
+        when {
+            let chain=DynamicChain(value:value,items:[1,2],next:DynamicChain(value:value,items:[]))
+            return any(chain)
+        }
+    }
+    test recursive_local_box_is_prepared {
+        assert eval(box_local_recursive,[1,2])==[
+            any(DynamicChain(value:1,items:[1,2],next:DynamicChain(value:1,items:[]))),
+            any(DynamicChain(value:2,items:[1,2],next:DynamicChain(value:2,items:[])))]
+    }
+    fn replace_with_nested_box(value: i64) -> any {
+        when {
+            var box = any(value)
+            let retained = box
+            box = any(BoxField(box: box))
+            return any(Replacement(current: box, previous: retained))
+        }
+    }
+    test compound_box_replacement_retains_its_source {
+        assert eval(replace_with_nested_box, [1, 2]) == [
+            any(Replacement(current: any(BoxField(box: any(1))), previous: any(1))),
+            any(Replacement(current: any(BoxField(box: any(2))), previous: any(2)))]
+    }
+    fn append_deep_fields(value: i64) -> any {
+        inject global_state
+        start { set(global_state, "deep", DeepFields(items: []).items) }
+        when {
+            var fields: list<DeepField> = get(global_state, "deep")
+            push(fields, DeepField(first: any(DynamicChain(value: value, items: [1, 2])),
+                second: any(BoxField(box: any(value + 1))), text: "retained"))
+            return any(fields[len(fields) - 1])
+        }
+    }
+    test appended_constructors_keep_distinct_leaf_operands {
+        assert eval(append_deep_fields, [1, 2]) == [
+            any(DeepField(first: any(DynamicChain(value: 1, items: [1, 2])),
+                second: any(BoxField(box: any(2))), text: "retained")),
+            any(DeepField(first: any(DynamicChain(value: 2, items: [1, 2])),
+                second: any(BoxField(box: any(3))), text: "retained"))]
+    }
+}
+
+test {
+    fn retain_box_input(value: any) -> any {
+        when { let retained = value
+            return retained
+        }
+    }
+    fn roll_box_input(value: any) -> rolling<any, 2> { when { return value } }
+    fn retain_rolling_box(value: rolling<any, 2>) -> any {
+        when { let retained = delta_value(value)
+            return retained
+        }
+    }
+    test readable_box_inputs_and_rolling_captures_use_independent_prepared_slots {
+        assert eval(retain_box_input, [any(1), _, any(2)]) == [any(1), _, any(2)]
+        assert eval(roll_box_input, [any(1), _, any(2)]) == [any(1), _, any(2)]
+        assert eval(retain_rolling_box, [any(1), _, any(2)]) == [any(1), _, any(2)]
+    }
+}
+
+test {
+    fn retain_box_field(value: atomic<BoxField>) -> any {
+        when { let retained = delta_value(value).box
+            return retained
+        }
+    }
+    fn retain_rolling_arrival(value: rolling<any, 2>) -> rolling<any, 2> {
+        when { let retained = delta_value(value)
+            return retained
+        }
+    }
+    test selected_boxes_and_retained_arrivals_keep_prepared_ownership {
+        assert eval(retain_box_field, [BoxField(box: any(1)), _, BoxField(box: any(2))]) == [any(1), _, any(2)]
+        assert eval(retain_rolling_arrival, [any(1), _, any(2)]) == [any(1), _, any(2)]
+    }
+}

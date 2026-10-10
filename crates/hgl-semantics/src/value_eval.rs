@@ -290,6 +290,14 @@ impl Execution<'_, '_> {
             .iter()
             .map(|part| part.try_map(|value| self.value(value)))
             .collect::<Result<Vec<_>, _>>()?;
+        for part in &parts {
+            match part {
+                DeltaEntry::Add(v) | DeltaEntry::Remove(v) | DeltaEntry::Keyed(v, _) => {
+                    crate::any_values::validate_key(v)?;
+                }
+                DeltaEntry::Child(..) => {}
+            }
+        }
         crate::delta_check::materialized(&parts).map_err(EvalError::Operation)?;
         Ok(Kind::Delta(parts))
     }

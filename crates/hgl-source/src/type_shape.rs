@@ -31,7 +31,11 @@ impl Nominal {
         if self.arguments.is_empty() {
             return self.origin.clone();
         }
-        format!("{}<{}>", self.origin, type_names(&self.arguments))
+        format!(
+            "{}<{}>",
+            self.origin,
+            crate::type_syntax::type_names(self.arguments.iter().map(Ty::source_name))
+        )
     }
 }
 impl From<String> for Nominal {
@@ -85,6 +89,8 @@ pub enum Ty {
     Str,
     /// Uninterpreted octets.
     Bytes,
+    /// Independently owned typed contents or nil.
+    Any,
     /// Microsecond interval.
     Duration,
     /// Calendar date.
@@ -134,6 +140,7 @@ impl Ty {
             Self::Bool => "bool",
             Self::Str => "str",
             Self::Bytes => "bytes",
+            Self::Any => "any",
             Self::Duration => "duration",
             Self::Date => "date",
             Self::Time => "time",
@@ -199,6 +206,7 @@ impl Ty {
             "bool" => Some(Self::Bool),
             "str" => Some(Self::Str),
             "bytes" => Some(Self::Bytes),
+            "any" => Some(Self::Any),
             "duration" => Some(Self::Duration),
             "date" => Some(Self::Date),
             "time" => Some(Self::Time),
@@ -225,7 +233,10 @@ impl Ty {
             Self::Struct(identity, _, _) => identity.source_name(),
             Self::Recursive(batch) => batch.identity().source_name(),
             Self::Family(family) => family.identity().source_name(),
-            Self::Tuple(children) => format!("tuple<{}>", type_names(children)),
+            Self::Tuple(children) => format!(
+                "tuple<{}>",
+                crate::type_syntax::type_names(children.iter().map(Ty::source_name))
+            ),
             Self::Map(key, child) => format!("map<{},{}>", key.source_name(), child.source_name()),
             Self::List(element, size) => match size {
                 Some(size) => format!("list<{},{}>", element.source_name(), size),
@@ -240,6 +251,7 @@ impl Ty {
             | Self::Bool
             | Self::Str
             | Self::Bytes
+            | Self::Any
             | Self::Duration
             | Self::Date
             | Self::Time
@@ -322,32 +334,8 @@ impl Ty {
         }
         self.scalar()
     }
-    /// Whether this is an ordinary scalar leaf, including nominal enums.
+    /// Whether this is an ordinary scalar leaf, including nominal enums and boxes.
     pub fn scalar(&self) -> bool {
-        matches!(
-            self,
-            Self::Enum(_)
-                | Self::Bool
-                | Self::I64
-                | Self::F64
-                | Self::Str
-                | Self::Bytes
-                | Self::Date
-                | Self::Time
-                | Self::DateTime
-                | Self::CivilDateTime
-                | Self::TimeZone
-                | Self::ZonedTime
-                | Self::ZonedDateTime
-                | Self::Duration
-        )
+        matches!(self, Self::Enum(_) | Self::Any) || self.scalar_kind().is_some()
     }
-}
-
-fn type_names(types: &[Ty]) -> String {
-    types
-        .iter()
-        .map(Ty::source_name)
-        .collect::<Vec<_>>()
-        .join(",")
 }

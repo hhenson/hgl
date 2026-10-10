@@ -254,7 +254,8 @@ fn slot_publication(ty: &Ty, slot: &str, result: &Ty) -> String {
         format!("{marker}::apply_slot(self._output,&self.configuration_columns,{slot},_ctx)?;")
     } else if matches!(
         ty,
-        Ty::Recursive(_)
+        Ty::Any
+            | Ty::Recursive(_)
             | Ty::Family(_)
             | Ty::Enum(_)
             | Ty::List(..)

@@ -1,6 +1,6 @@
 //! Execute checked ordinary setup before and between independent graph runs.
 use crate::harness_ir::{Argument, CapturedEval, Failure, PreparedEval, Step, Test};
-use crate::ir::{DeltaEntry, Kind, Statement, Value};
+use crate::ir::{Kind, Statement, Value};
 use crate::value_eval::{EvalError, Evaluator};
 use hgl_source::{Literal, TemporalLiteral};
 
@@ -171,7 +171,7 @@ fn prepare(
         input_length,
     })
 }
-fn compare(expected: &[Option<Value>], actual: &CapturedEval) -> Result<(), String> {
+fn compare(expected: &[Option<Value>], actual: &CapturedEval) -> Result<(), Failure> {
     let mut ticks = actual.ticks.iter().peekable();
     for (index, wanted) in expected.iter().take(actual.length).enumerate() {
         let found = if ticks.peek().is_some_and(|(cycle, _)| *cycle == index) {
@@ -180,13 +180,13 @@ fn compare(expected: &[Option<Value>], actual: &CapturedEval) -> Result<(), Stri
             None
         };
         if !match (wanted.as_ref(), found) {
-            (Some(a), Some(b)) => equal(a, b),
+            (Some(a), Some(b)) => crate::any_values::equal_data(a, b).map_err(Failure::from)?,
             (None, None) => true,
             _ => false,
         } {
             return Err(format!(
                 "cycle {index}: payload or presence differs; expected {wanted:?}, observed {found:?}"
-            ));
+            ).into());
         }
     }
     if expected.len() != actual.length {
@@ -195,45 +195,8 @@ fn compare(expected: &[Option<Value>], actual: &CapturedEval) -> Result<(), Stri
             expected.len().min(actual.length),
             expected.len(),
             actual.length
-        ));
+        )
+        .into());
     }
     Ok(())
-}
-fn equal(a: &Value, b: &Value) -> bool {
-    let (a, b) = (
-        crate::family_values::concrete(a),
-        crate::family_values::concrete(b),
-    );
-    if a.ty != b.ty {
-        return false;
-    }
-    if matches!(a.ty, hgl_source::Ty::Set(_) | hgl_source::Ty::Map(..)) {
-        return crate::collection_values::equal(a, b);
-    }
-    match (&a.kind, &b.kind) {
-        (Kind::Literal(a), Kind::Literal(b)) => a == b,
-        (Kind::List(a), Kind::List(b)) => {
-            a.len() == b.len() && a.iter().zip(b).all(|(a, b)| equal(a, b))
-        }
-        (Kind::Construct(a), Kind::Construct(b)) => {
-            a.len() == b.len()
-                && a.iter()
-                    .all(|(id, a)| b.iter().any(|(other, b)| id == other && equal(a, b)))
-        }
-        (Kind::Delta(a), Kind::Delta(b)) => {
-            a.len() == b.len()
-                && a.iter().all(|a| {
-                    b.iter().any(|b| match (a, b) {
-                        (DeltaEntry::Add(a), DeltaEntry::Add(b))
-                        | (DeltaEntry::Remove(a), DeltaEntry::Remove(b)) => equal(a, b),
-                        (DeltaEntry::Keyed(i, a), DeltaEntry::Keyed(j, b)) => {
-                            equal(i, j) && equal(a, b)
-                        }
-                        (DeltaEntry::Child(i, a), DeltaEntry::Child(j, b)) => i == j && equal(a, b),
-                        _ => false,
-                    })
-                })
-        }
-        _ => false,
-    }
 }

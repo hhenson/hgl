@@ -95,3 +95,5 @@ ordinary V alone cannot infer a rolling context. Uses hgl-window-types.
 Unbounded list<S> is an admitted structural publication shape whenever S is admitted. Its exact delta origin remains distinct from fixed lists and complete atomic ordinary lists.
 
 Ty::Bytes is a built-in scalar leaf. Its canonical spelling is bytes; atomic<bytes> and delta<bytes> reduce to it. Publication, atomic payload, rolling and exact collection-key admission include bytes recursively under BYTE-1–6.
+
+Ty::Any is an ordinary whole-value leaf, normalizing atomic<any> and delta<any> to the same type. Ty::scalar_kind is specified by hgl-scalar-shape; nominal enums and Any retain separate exact markers.

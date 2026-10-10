@@ -16,6 +16,7 @@ pub fn rust_type(ty: &Ty) -> &'static str {
         Ty::F64 => "f64",
         Ty::Str => "String",
         Ty::Bytes => "Vec<u8>",
+        Ty::Any => "hgl_types::AnyValue",
         Ty::Void => "()",
         Ty::Atomic(_)
         | Ty::Rolling(..)
@@ -35,36 +36,23 @@ pub fn rust_type(ty: &Ty) -> &'static str {
 }
 /// Emit the checked scalar type form.
 pub fn scalar_type(ty: &Ty) -> &'static str {
-    match ty {
-        Ty::Enum(_) => unreachable!("enum metadata retains nominal identity"),
-        Ty::Bool => "Bool",
-        Ty::F64 => "F64",
-        Ty::I64 => "I64",
-        Ty::Str => "Text",
-        Ty::Bytes => "Bytes",
-        Ty::Duration => "Duration",
-        Ty::Date => "Date",
-        Ty::Time => "Time",
-        Ty::DateTime => "DateTime",
-        Ty::CivilDateTime => "CivilDateTime",
-        Ty::TimeZone => "TimeZone",
-        Ty::ZonedTime => "ZonedTime",
-        Ty::ZonedDateTime => "ZonedDateTime",
-        Ty::Atomic(_)
-        | Ty::Rolling(..)
-        | Ty::Map(..)
-        | Ty::Tuple(_)
-        | Ty::Delta(_)
-        | Ty::Ref(_)
-        | Ty::Set(_)
-        | Ty::Nullable(_)
-        | Ty::Recursive(_)
-        | Ty::Family(_)
-        | Ty::Struct(..)
-        | Ty::List(..)
-        | Ty::Void => {
-            unreachable!("checked endpoint type")
-        }
+    match ty
+        .scalar_kind()
+        .unwrap_or_else(|| unreachable!("checked scalar endpoint type"))
+    {
+        hgl_types::ScalarType::Bool => "Bool",
+        hgl_types::ScalarType::F64 => "F64",
+        hgl_types::ScalarType::I64 => "I64",
+        hgl_types::ScalarType::Text => "Text",
+        hgl_types::ScalarType::Bytes => "Bytes",
+        hgl_types::ScalarType::Duration => "Duration",
+        hgl_types::ScalarType::Date => "Date",
+        hgl_types::ScalarType::Time => "Time",
+        hgl_types::ScalarType::DateTime => "DateTime",
+        hgl_types::ScalarType::CivilDateTime => "CivilDateTime",
+        hgl_types::ScalarType::TimeZone => "TimeZone",
+        hgl_types::ScalarType::ZonedTime => "ZonedTime",
+        hgl_types::ScalarType::ZonedDateTime => "ZonedDateTime",
     }
 }
 

@@ -34,3 +34,5 @@ constructor copying do not consume payloads; other read failures keep their
 existing identities.
 
 The execution catalogue includes value.byte_range for constructor octets outside 0 through 255. Constant-required failure remains source rejection; executed constructors retain their phase and execution identifier.
+
+The execution catalogue admits value.capability for an executed boxed operation or key missing its actual contained capability.

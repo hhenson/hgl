@@ -24,24 +24,7 @@ pub fn ordinary(ty: &Ty) -> bool {
     if let Ty::List(element, _) = ty {
         return ordinary(element);
     }
-    matches!(
-        ty,
-        Ty::Bool
-            | Ty::I64
-            | Ty::F64
-            | Ty::Str
-            | Ty::Bytes
-            | Ty::Date
-            | Ty::Time
-            | Ty::DateTime
-            | Ty::CivilDateTime
-            | Ty::TimeZone
-            | Ty::Enum(_)
-            | Ty::ZonedTime
-            | Ty::ZonedDateTime
-            | Ty::Duration
-            | Ty::Delta(_)
-    )
+    ty.atomic_payload() || matches!(ty, Ty::Delta(_))
 }
 /// Whether a checked place carries recursive write authority.
 pub fn writable(value: &Value) -> bool {
@@ -197,10 +180,12 @@ pub fn project(ty: &Ty) -> Ty {
 
 pub use crate::static_values::StaticValues;
 
-fn aggregate(ty: &Ty) -> bool {
+/// Whether the ordinary type carries independently retained aggregate storage.
+pub fn aggregate(ty: &Ty) -> bool {
     matches!(
         ty,
-        Ty::Family(_)
+        Ty::Any
+            | Ty::Family(_)
             | Ty::Set(_)
             | Ty::Map(..)
             | Ty::Recursive(_)

@@ -1,10 +1,7 @@
 //! Exact composite key identities and prepared transport without owning intermediaries.
+use crate::append;
 use hgl_source::Ty;
-use std::fmt::Write as _;
-fn append(out: &mut String, args: std::fmt::Arguments<'_>) {
-    out.write_fmt(args)
-        .unwrap_or_else(|_| unreachable!("String formatting"));
-}
+
 /// Whether an ordinary marker needs complete composite key operations.
 pub fn composite(ty: &Ty) -> bool {
     matches!(ty, Ty::Tuple(_) | Ty::Struct(..)) && ty.collection_key()
@@ -12,6 +9,11 @@ pub fn composite(ty: &Ty) -> bool {
 /// Resolve an exact key directly from prepared typed field storage.
 pub fn slot_id(ty: &Ty, slot: &str, marker: fn(&Ty) -> String) -> String {
     let name = marker(ty);
+    if *ty == Ty::Any {
+        return format!(
+            "<hgl_store::Any as hgl_store::Key>::id(keys,source.any(({slot}).fields()))?"
+        );
+    }
     if composite(ty) {
         format!("{name}::key_slot_id(keys,source,{slot})?")
     } else {

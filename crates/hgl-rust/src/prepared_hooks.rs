@@ -1,8 +1,14 @@
-use super::{Kind, Plan, Value, global_type, value};
+//! Prepared publication and ordered global hook writes share typed source slots.
+use crate::layouts::global_type;
+use crate::values::condition_code as emit;
+use hgl_semantics::ir::{Kind, Plan, Value};
 use hgl_source::Ty;
-pub(super) fn publication(plan: &Plan, value: &Value, result: Option<&Ty>) -> Option<String> {
+pub(crate) fn publication(plan: &Plan, value: &Value, result: Option<&Ty>) -> Option<String> {
     if !crate::finite_domains::prepared(plan) || plan.recording.is_none() {
         return None;
+    }
+    if let Some(code) = crate::any_values::publication(value) {
+        return Some(code);
     }
     if let Some(id) = crate::scalars::bytes_input(value) {
         let method = if result == Some(&Ty::Bytes) {
@@ -32,10 +38,10 @@ pub(super) fn publication(plan: &Plan, value: &Value, result: Option<&Ty>) -> Op
     {
         return Some(format!(
             "let publication={};_ctx.prepared().atomic(self._output,&publication)?;",
-            super::value(plan, value)
+            emit(plan, value)
         ));
     }
-    if let Some(code) = crate::direct_deltas::publish(value, |v| super::value(plan, v)) {
+    if let Some(code) = crate::direct_deltas::publish(value, |v| emit(plan, v)) {
         return Some(code);
     }
     if let Some(code) = crate::observed::text(value, result) {
@@ -44,11 +50,57 @@ pub(super) fn publication(plan: &Plan, value: &Value, result: Option<&Ty>) -> Op
     crate::observed::forwarded(value, result)
 }
 fn write(plan: &Plan, v: &Value, slot: &str, prelude: &mut Vec<String>) -> String {
+    if (!v.snapshot || v.ty == Ty::Any)
+        && let Some((arena, source)) = crate::source_slots::source(plan, v)
+    {
+        let marker = global_type(&v.ty);
+        let id = prelude.len();
+        prelude.push(format!("let prepared_source{id}={source};"));
+        let source = crate::source_slots::columns(arena);
+        return if arena == "global_values" {
+            format!(
+                "<{marker} as hgl_store::PreparedValue>::check_slots(columns,prepared_source{id},columns,{slot})?;<{marker} as hgl_store::PreparedValue>::copy_within(columns,prepared_source{id},{slot});"
+            )
+        } else {
+            format!(
+                "<{marker} as hgl_store::PreparedValue>::check_slots({source},prepared_source{id},columns,{slot})?;<{marker} as hgl_store::PreparedValue>::copy_between({source},prepared_source{id},columns,{slot});"
+            )
+        };
+    }
     if let Kind::Construct(fields) = &v.kind {
         return fields
             .iter()
             .map(|(i, value)| write(plan, value, &format!("({slot}).fields().{i}"), prelude))
             .collect();
+    }
+    if let Kind::Unary(op, argument) = &v.kind
+        && op == "any"
+    {
+        if argument.ty == Ty::Any {
+            return write(plan, argument, slot, prelude);
+        }
+        let id = prelude.len();
+        if let Some((arena, source)) = crate::source_slots::source(plan, argument) {
+            prelude.push(format!("let prepared_source{id}={source};"));
+            let columns = crate::source_slots::columns(arena);
+            return crate::any_values::prepared_source(
+                &argument.ty,
+                columns,
+                &format!("prepared_source{id}"),
+                slot,
+            );
+        }
+        if let Some(code) =
+            crate::any_expression::encoding(plan, argument, &|v| emit(plan, v), prelude)
+        {
+            return crate::any_expression::compose(&code, slot);
+        }
+        prelude.push(format!("let prepared_item{id}={};", emit(plan, argument)));
+        return crate::any_values::prepared_native(
+            &argument.ty,
+            &format!("prepared_item{id}"),
+            slot,
+        );
     }
     if let Kind::Query(op, args) = &v.kind
         && op == "delta_value"
@@ -66,13 +118,13 @@ fn write(plan: &Plan, v: &Value, slot: &str, prelude: &mut Vec<String>) -> Strin
     }
     let marker = global_type(&v.ty);
     let id = prelude.len();
-    prelude.push(format!("let prepared_item{id}={};", value(plan, v)));
+    prelude.push(format!("let prepared_item{id}={};", emit(plan, v)));
     format!(
         "<{marker} as hgl_store::PreparedValue>::check_native(columns,{slot},&prepared_item{id})?;<{marker} as hgl_store::PreparedValue>::copy_native(columns,{slot},&prepared_item{id});"
     )
 }
 
-pub(super) fn append(plan: &Plan, item: &Value, list: &str) -> String {
+pub(crate) fn append(plan: &Plan, item: &Value, list: &str) -> String {
     let marker = global_type(&item.ty);
     let mut prelude = Vec::new();
     let write = write(plan, item, "destination", &mut prelude);
@@ -82,26 +134,38 @@ pub(super) fn append(plan: &Plan, item: &Value, list: &str) -> String {
         write
     )
 }
+pub(crate) fn replace(plan: &Plan, item: &Value, slot: &str) -> String {
+    let mut prelude = Vec::new();
+    let write = write(plan, item, "destination", &mut prelude);
+    format!(
+        "{{{}let destination={slot};let now=_ctx.evaluation_time();let mut prepared=_ctx.prepared();let(observation,globals)=prepared.storage.observations();let columns=globals.values_mut();{write}}}",
+        prelude.concat()
+    )
+}
 
-pub(super) fn set(plan: &Plan, id: usize, v: &Value) -> String {
+pub(crate) fn set(plan: &Plan, id: usize, v: &Value) -> String {
+    if v.ty == Ty::Any && crate::finite_domains::prepared(plan) {
+        return format!(
+            "{{let destination=_ctx.global_state().destination(self.global{id});{}_ctx.global_state().mark_present(self.global{id});}}",
+            crate::any_prepared::write(plan, v, "destination", |v| emit(plan, v))
+        );
+    }
     if v.snapshot {
         let marker = global_type(&v.ty);
-        let source = crate::snapshot_slots::projection(v, |v| value(plan, v));
+        let source = crate::snapshot_slots::projection(v, |v| emit(plan, v));
         return format!(
             "{{let source={source};let globals=_ctx.global_state();let destination=globals.destination(self.global{id});<{marker} as hgl_store::PreparedValue>::check_slots(globals.values(),source,globals.values(),destination)?;<{marker} as hgl_store::PreparedValue>::copy_within(globals.values_mut(),source,destination);globals.mark_present(self.global{id});}}"
         );
     }
-    if !crate::finite_domains::prepared(plan)
-        || plan.recording.as_ref().is_none_or(|(_, ty)| ty != &v.ty)
-    {
+    if !crate::finite_domains::prepared(plan) {
         return format!(
             "{{let value={};_ctx.global_state().set(self.global{id},&value)?;}}",
-            value(plan, v)
+            emit(plan, v)
         );
     }
     let marker = global_type(&v.ty);
     format!(
         "{{let value={};let globals=_ctx.global_state();let slot=globals.destination(self.global{id});<{marker} as hgl_store::PreparedValue>::check_native(globals.values(),slot,&value)?;<{marker} as hgl_store::PreparedValue>::copy_native(globals.values_mut(),slot,&value);globals.mark_present(self.global{id});}}",
-        value(plan, v)
+        emit(plan, v)
     )
 }

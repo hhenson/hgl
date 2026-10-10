@@ -5,8 +5,11 @@ use std::collections::BTreeMap;
 
 /// Rust marker identifying an exact prepared entry type.
 pub fn global_type(ty: &Ty) -> String {
-    if let Ty::Family(family) = ty {
-        return global_type(&crate::layouts::family_storage(family));
+    if *ty == Ty::Any {
+        return "hgl_store::Any".into();
+    }
+    if let Some(storage) = crate::layouts::ordinary_storage(ty) {
+        return global_type(&storage);
     }
     if matches!(ty, Ty::Set(_) | Ty::Map(..)) {
         return nominal_marker(&format!("\0{}", ty.source_name()).into());
@@ -14,12 +17,7 @@ pub fn global_type(ty: &Ty) -> String {
     if let Ty::Enum(identity) = ty {
         return crate::enums::marker_type(identity);
     }
-    if let Ty::Tuple(children) = ty {
-        return global_type(&crate::layouts::tuple_storage(children));
-    }
-    if let Ty::Delta(origin) = ty {
-        return global_type(&delta_storage(origin));
-    }
+
     if let Ty::List(element, size) = ty {
         return format!(
             "hgl_store::List<{}, {}>",
@@ -37,13 +35,10 @@ pub fn global_type(ty: &Ty) -> String {
     }
 }
 fn nominal_marker(name: &hgl_source::Nominal) -> String {
-    let identity = name
-        .source_name()
-        .bytes()
-        .map(|byte| format!("{byte:02x}"))
-        .collect::<Vec<_>>()
-        .concat();
-    format!("GlobalStruct{identity}")
+    format!(
+        "GlobalStruct{}",
+        crate::layouts::identifier(&name.source_name())
+    )
 }
 /// Construction-only exact ordinary type descriptor.
 pub fn global_schema(ty: &Ty) -> String {
@@ -55,26 +50,18 @@ pub fn global_schema(ty: &Ty) -> String {
             batch.identity().source_name()
         );
     }
-    if matches!(
-        ty,
-        Ty::Recursive(_)
-            | Ty::Family(_)
-            | Ty::Enum(_)
-            | Ty::Tuple(_)
-            | Ty::Delta(_)
-            | Ty::Struct(..)
-            | Ty::List(..)
-            | Ty::Set(_)
-            | Ty::Map(..)
-    ) {
-        format!("<{} as hgl_store::GlobalValue>::schema()", global_type(ty))
-    } else {
+    if ty.scalar_kind().is_some() {
         format!("hgl_types::ScalarType::{}.into()", scalar_type(ty))
+    } else {
+        format!("<{} as hgl_store::GlobalValue>::schema()", global_type(ty))
     }
 }
 /// Collect complete nominal definitions reached by this plan's prepared entries.
 pub fn global_types(plan: &Plan) -> BTreeMap<String, Ty> {
     let mut types = BTreeMap::new();
+    for ty in &plan.ordinary_types {
+        collect(ty, &mut types);
+    }
     for node in &plan.nodes {
         for ty in std::iter::once(&node.result).chain(node.inputs.iter().map(|(_, _, ty)| ty)) {
             if ty.publication() {
@@ -84,17 +71,7 @@ pub fn global_types(plan: &Plan) -> BTreeMap<String, Ty> {
         for value in &node.configuration {
             value_types(value, &mut types);
         }
-        if let Some(body) = &node.generator {
-            statement_types(body, &mut types);
-        }
-        statement_types(&node.start, &mut types);
-        statement_types(&node.stop, &mut types);
-        for (guard, body) in &node.handlers {
-            if let Some(guard) = guard {
-                value_types(guard, &mut types);
-            }
-            statement_types(body, &mut types);
-        }
+        hgl_semantics::ir_visit::hooks(node, &mut |v| value_type(v, &mut types));
         for (_, ty) in &node.globals {
             collect(ty, &mut types);
         }
@@ -103,8 +80,21 @@ pub fn global_types(plan: &Plan) -> BTreeMap<String, Ty> {
 }
 /// Emit nominal value layouts reached by this plan's prepared entries.
 pub fn global_markers(plan: &Plan) -> String {
+    let mut emitted = std::collections::BTreeSet::new();
     global_types(plan)
         .values()
+        .filter(|ty| {
+            matches!(
+                ty,
+                Ty::Struct(..)
+                    | Ty::Recursive(_)
+                    | Ty::Family(_)
+                    | Ty::Enum(_)
+                    | Ty::Set(_)
+                    | Ty::Map(..)
+            )
+        })
+        .filter(|ty| emitted.insert(global_type(ty)))
         .enumerate()
         .map(|(domain, ty)| {
             if let Ty::Family(family) = ty {
@@ -129,11 +119,24 @@ pub fn global_markers(plan: &Plan) -> String {
         .collect()
 }
 fn collect(ty: &Ty, types: &mut BTreeMap<String, Ty>) {
+    if !matches!(
+        ty,
+        Ty::Recursive(_)
+            | Ty::Family(_)
+            | Ty::Atomic(_)
+            | Ty::Rolling(..)
+            | Ty::Ref(_)
+            | Ty::Void
+            | Ty::Nullable(_)
+    ) {
+        types.insert(ty.source_name(), ty.clone());
+    }
     if let Ty::Family(family) = ty {
         if types
             .insert(family.identity().source_name(), ty.clone())
             .is_none()
         {
+            collect(&crate::layouts::family_storage(family), types);
             for (_, member) in family.members() {
                 collect(member, types);
             }
@@ -167,9 +170,6 @@ fn collect(ty: &Ty, types: &mut BTreeMap<String, Ty>) {
     if let Ty::Delta(origin) = ty {
         collect(&delta_storage(origin), types);
     }
-    if matches!(ty, Ty::Set(_) | Ty::Map(..)) {
-        types.insert(ty.source_name(), ty.clone());
-    }
     if let Some(element) = crate::collections::element(ty) {
         collect(&element, types);
     }
@@ -187,36 +187,7 @@ pub(super) fn tuple(fields: impl Iterator<Item = String>) -> String {
     }
 }
 
-fn statement_types(statements: &[hgl_semantics::ir::Statement], types: &mut BTreeMap<String, Ty>) {
-    use hgl_semantics::ir::Statement;
-    for statement in statements {
-        match statement {
-            Statement::Let(_, value)
-            | Statement::Var(_, value)
-            | Statement::Borrow(_, value, _)
-            | Statement::Return(value)
-            | Statement::Yield(value)
-            | Statement::Call(value) => value_types(value, types),
-            Statement::TimedYield(target, value) | Statement::Assign(target, value) => {
-                value_types(target, types);
-                value_types(value, types);
-            }
-            Statement::While(value, body)
-            | Statement::ForItems(_, _, _, value, body)
-            | Statement::For(_, value, body) => {
-                value_types(value, types);
-                statement_types(body, types);
-            }
-            Statement::If(value, yes, no) => {
-                value_types(value, types);
-                statement_types(yes, types);
-                statement_types(no, types);
-            }
-            Statement::Exit => {}
-        }
-    }
-}
-fn value_types(value: &hgl_semantics::ir::Value, types: &mut BTreeMap<String, Ty>) {
+fn value_type(value: &hgl_semantics::ir::Value, types: &mut BTreeMap<String, Ty>) -> bool {
     use hgl_semantics::ir::Kind;
     if !matches!(
         value.kind,
@@ -227,58 +198,15 @@ fn value_types(value: &hgl_semantics::ir::Value, types: &mut BTreeMap<String, Ty
     if value.snapshot {
         collect(&crate::snapshots::storage(&value.ty), types);
     }
-    match &value.kind {
-        Kind::List(values) | Kind::Native(_, values) | Kind::Query(_, values) => {
-            for value in values {
-                value_types(value, types);
-            }
-        }
-        Kind::Delta(entries) => {
-            for entry in entries {
-                for v in entry.operands() {
-                    value_types(v, types);
-                }
-            }
-        }
-        Kind::Construct(fields) => {
-            for (_, value) in fields {
-                value_types(value, types);
-            }
-        }
-        Kind::ValueCall(args, body) => {
-            for value in args {
-                value_types(value, types);
-            }
-            statement_types(body, types);
-        }
-        Kind::Index(a, b) | Kind::Push(a, b) | Kind::Binary(_, a, b) => {
-            value_types(a, types);
-            value_types(b, types);
-        }
-        Kind::Length(v)
-        | Kind::Field(v, _)
-        | Kind::GlobalSet(_, v)
-        | Kind::IsPresent(v)
-        | Kind::Present(v)
-        | Kind::Unary(_, v) => value_types(v, types),
-        Kind::WiringFailure(_)
-        | Kind::GlobalGet(_)
-        | Kind::BorrowedLocal(..)
-        | Kind::Configuration(_)
-        | Kind::Literal(_)
-        | Kind::Wire(_)
-        | Kind::IterationInput(_)
-        | Kind::Input(..)
-        | Kind::Cache(_)
-        | Kind::GeneratorLocal(_)
-        | Kind::ObservedLocal(_)
-        | Kind::Local(_)
-        | Kind::MutableLocal(_)
-        | Kind::Output
-        | Kind::Capability
-        | Kind::TemporalLiteral(_)
-        | Kind::Captured(..)
-        | Kind::Prepared(_)
-        | Kind::Void => {}
-    }
+    true
+}
+fn value_types(value: &hgl_semantics::ir::Value, types: &mut BTreeMap<String, Ty>) {
+    hgl_semantics::ir_visit::value(value, &mut |value| value_type(value, types));
+}
+
+/// Collect payload layouts hidden behind prepared harness box types before graph startup.
+pub fn harness_types(tests: &[hgl_semantics::harness_ir::Test]) -> BTreeMap<String, Ty> {
+    let mut types = BTreeMap::new();
+    hgl_semantics::ir_visit::harness(tests, &mut |v| value_type(v, &mut types));
+    types
 }

@@ -5,23 +5,9 @@ use hgl_semantics::ir::{DeltaEntry, Kind, Value};
 use hgl_source::Ty;
 pub use normalize::prepare;
 fn scalar(ty: &Ty) -> bool {
-    matches!(
-        ty,
-        Ty::I64
-            | Ty::F64
-            | Ty::Bool
-            | Ty::Str
-            | Ty::Bytes
-            | Ty::Duration
-            | Ty::Date
-            | Ty::Time
-            | Ty::DateTime
-            | Ty::CivilDateTime
-            | Ty::TimeZone
-            | Ty::ZonedTime
-            | Ty::ZonedDateTime
-    )
+    ty.scalar_kind().is_some() || *ty == Ty::Any
 }
+
 fn key(value: &Value) -> bool {
     scalar(&value.ty) && matches!(value.kind, Kind::Literal(_) | Kind::Configuration(_))
 }

@@ -6,7 +6,7 @@ pub fn key(value: &Value) -> Result<crate::composite_keys::Key, String> {
     crate::composite_keys::key(value)
 }
 /// Retain each key before checking duplicates, and each map value only afterwards.
-pub fn evaluate<E: From<String>>(
+pub fn evaluate<E: From<String> + From<crate::value_eval::EvalError>>(
     ty: &Ty,
     items: &[Value],
     mut evaluate: impl FnMut(&Value) -> Result<Value, E>,
@@ -23,9 +23,10 @@ pub fn evaluate<E: From<String>>(
             (item, None)
         };
         let retained = evaluate(source)?;
+        crate::any_values::validate_key(&retained).map_err(E::from)?;
         if !keys.insert(key(&retained).map_err(E::from)?) {
             return Err(E::from(
-                "duplicate ordinary collection key or member".into(),
+                "duplicate ordinary collection key or member".to_owned(),
             ));
         }
         result.push(if let Some(child) = child {

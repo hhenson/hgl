@@ -38,6 +38,7 @@ pub fn delta_storage(origin: &Ty) -> Ty {
         | Ty::Bool
         | Ty::Str
         | Ty::Bytes
+        | Ty::Any
         | Ty::CivilDateTime
         | Ty::TimeZone
         | Ty::Enum(_)

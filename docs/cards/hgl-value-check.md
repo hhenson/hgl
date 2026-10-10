@@ -82,3 +82,5 @@ child-check callbacks. String callers use the same generic entry point.
 Runtime Tuple children delegate prepared ownership admission to tuple_admission.
 
 Ordinary len admits bytes and returns its octet count. Bytes equality and unsigned lexicographic ordering are admitted; indexing, mutation and encoding remain excluded. Existing runtime list-literal admission is unchanged.
+
+binary_type is owned by hgl-value-operators and remains reexported here. Ordinary authority includes Any as an aggregate owning box; extraction and explicit retention preserve global lexical borrow rules.

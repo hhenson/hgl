@@ -167,9 +167,14 @@ fn representation(ty: &Ty, global_type: fn(&Ty) -> String) -> (String, String, S
         )
     }));
     let recursive = matches!(ty, Ty::Recursive(_) | Ty::Family(_));
+    let equality = if crate::any_values::contains(ty) {
+        ""
+    } else {
+        ",PartialEq"
+    };
     let declaration = if recursive {
         format!(
-            "#[derive(Debug,Clone,PartialEq)] struct Owned{name}{value};\nimpl hgl_store::RecursiveTarget for {name} {{ const IDENTITY:&'static str={identity:?}; }}\n"
+            "#[derive(Debug,Clone{equality})] struct Owned{name}{value};\nimpl hgl_store::RecursiveTarget for {name} {{ const IDENTITY:&'static str={identity:?}; }}\n"
         )
     } else {
         String::new()
@@ -198,6 +203,6 @@ fn recursive_equality(ty: &Ty, marker: fn(&Ty) -> String) -> String {
     let name = marker(ty);
     let comparison = crate::collections::equal(&schema, "left", "right", marker);
     format!(
-        "impl {name} {{ fn ordinary_equal(left:&Owned{name},right:&Owned{name})->bool {{{comparison}}} }}"
+        "impl {name} {{ fn ordinary_equal(left:&Owned{name},right:&Owned{name})->hgl_types::NodeResult<bool> {{Ok({comparison})}} }}"
     )
 }

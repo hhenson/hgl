@@ -106,3 +106,7 @@ Value.delta_required records an explicitly written reduced publication requireme
 does not alter canonical `Value.ty`, source identity or explicit delta requirements.
 Projection and aliases preserve this emission provenance; private typed optional
 slots retain descendant validity independently.
+
+Plan::ordinary_types retains closed harness payload layouts hidden behind Any before startup. It supplies cold descriptor preparation, never runtime type-name discovery.
+
+Finite capacity planning keeps recording rows at the existing cycles-plus-start bound; ordinary global lists preserve initial rows before reserved appends.

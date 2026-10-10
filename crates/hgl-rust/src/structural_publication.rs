@@ -1,12 +1,9 @@
 //! Complete ordinary publication, separate from sparse delta application.
+use crate::append;
 use crate::layouts::{global_type, rust_type};
 use hgl_semantics::ir::Value;
 use hgl_source::Ty;
-use std::fmt::Write as _;
-fn append(code: &mut String, args: std::fmt::Arguments<'_>) {
-    code.write_fmt(args)
-        .unwrap_or_else(|_| unreachable!("String formatting"));
-}
+
 fn slot(ty: &Ty, fields: &str, columns: &str) -> String {
     format!(
         "hgl_store::ValueSlot::<{}>::bind(&mut {columns}.prepared_list(({fields}).fields()).first().ok_or_else(||hgl_types::NodeError::new(\"unprepared snapshot child\"))?.as_slice())",
@@ -76,6 +73,7 @@ pub fn native(ty: &Ty, output: &str, value: &str) -> String {
         | Ty::Bool
         | Ty::Str
         | Ty::Bytes
+        | Ty::Any
         | Ty::Duration
         | Ty::Date
         | Ty::Time

@@ -130,3 +130,7 @@ Prepared output assignments reuse return publication transport without returning
 from the handler; subsequent assignments and mutations retain source order.
 
 May use scalars. Byte comparisons and lengths borrow typed scalar slices, including atomic/global/snapshot projections, instead of retaining owning copies. Prepared byte constructors use a single authorized destination and complete preflight. Ordinary fallback construction retains phase and errors. Borrowed ordinary List indexing uses the existing immutable list::global_index transport, allowing retained byte comparisons without a mutable context borrow.
+
+Prepared publication and ordered global writes delegate to hgl-rust-prepared-hooks. Independently retained Any locals and returns delegate to hgl-rust-any-prepared. Compiled box comparison borrows typed sources, preserving fallible contained capabilities.
+
+Generated-code formatting shares the crate's append sink across emitter modules; the helper performs the same infallible String formatting and introduces no runtime behavior.

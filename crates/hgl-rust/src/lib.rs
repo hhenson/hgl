@@ -2,6 +2,9 @@
 //!
 //! The frontend must validate types, indices, method names and execution phases
 //! before constructing this IR. Emission performs no source-language checking.
+mod any_expression;
+pub mod any_prepared;
+pub mod any_values;
 pub mod capacity;
 pub mod checked_data;
 pub mod collections;
@@ -38,5 +41,19 @@ pub mod values;
 pub mod windows;
 use hgl_semantics::ir;
 
-pub use emit::{emit, emit_prepared_test_body, emit_shared, emit_test_body, shared_layouts};
+pub use emit::{
+    emit, emit_prepared_test_body, emit_shared, emit_test_body, shared_layouts, shared_test_layouts,
+};
 pub use hgl_semantics::ir::{DeltaEntry, Kind, Native, Node, Plan, Statement, Value};
+
+/// Ordered prepared hooks preserve source evaluation and storage ownership.
+pub mod prepared_hooks;
+
+mod identifiers;
+
+/// Append generated code to an infallible String sink.
+pub(crate) fn append(code: &mut String, text: std::fmt::Arguments<'_>) {
+    use std::fmt::Write as _;
+    code.write_fmt(text)
+        .unwrap_or_else(|_| unreachable!("String formatting"));
+}

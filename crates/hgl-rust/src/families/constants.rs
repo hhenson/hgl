@@ -17,35 +17,28 @@ pub fn prepare(plan: &Plan) -> Plan {
     plan
 }
 fn statements(body: &mut [Statement], configuration: &mut Vec<Value>) {
-    for statement in body {
-        match statement {
-            Statement::Return(value)
-            | Statement::Yield(value)
-            | Statement::TimedYield(_, value) => {
-                if family(&value.ty) && literal(value) {
-                    let id = configuration.len();
-                    configuration.push(value.clone());
-                    value.kind = Kind::Configuration(id);
-                }
-            }
-            Statement::If(_, yes, no) => {
-                statements(yes, configuration);
-                statements(no, configuration);
-            }
-            Statement::While(_, body)
-            | Statement::ForItems(_, _, _, _, body)
-            | Statement::For(_, _, body) => {
-                statements(body, configuration);
-            }
-            Statement::Let(..)
-            | Statement::Var(..)
-            | Statement::Borrow(..)
-            | Statement::Assign(..)
-            | Statement::Call(_)
-            | Statement::Exit => {}
+    hgl_semantics::ir_visit::statements_mut(body, &mut |value| {
+        if value.ty == Ty::Any && literal(value) {
+            let id = configuration.len();
+            configuration.push(value.clone());
+            value.kind = Kind::Configuration(id);
+            return false;
         }
-    }
+        true
+    });
+    hgl_semantics::ir_visit::nodes_mut(body, &mut |statement| {
+        if let Statement::Return(value) | Statement::Yield(value) | Statement::TimedYield(_, value) =
+            statement
+            && family(&value.ty)
+            && literal(value)
+        {
+            let id = configuration.len();
+            configuration.push(value.clone());
+            value.kind = Kind::Configuration(id);
+        }
+    });
 }
+
 fn literal(value: &Value) -> bool {
     if matches!(value.kind, Kind::Literal(_)) {
         return true;
@@ -57,7 +50,7 @@ fn literal(value: &Value) -> bool {
         return values.iter().all(literal);
     }
     if let Kind::Unary(op, value) = &value.kind {
-        return op == "family" && literal(value);
+        return matches!(op.as_str(), "family" | "any") && literal(value);
     }
     false
 }

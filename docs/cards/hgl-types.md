@@ -204,3 +204,5 @@ TsType::Growing(Box<TsType>) has exact growing-list identity and a repeated memb
 NodeId, Phase, NodeError and NodeResult are reexported from hgl-node-error. The structured error preserves its stable execution code and cleanup failures.
 
 ScalarType::Bytes and ScalarValue::Bytes(Vec<u8>) describe exact independently owned octets. bytes(&[i64])->NodeResult<Vec<u8>> validates the complete range before retention and preserves value.byte_range. No source byte literal or encoding is added.
+
+OrdinaryType::Any denotes a complete owning box leaf. Compiled Any vocabulary and fallible comparison contracts are specified in hgl-types-any-values; it is not a ScalarType builtin variant.

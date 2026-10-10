@@ -2,14 +2,7 @@
 use hgl_source::EnumType;
 /// Exact canonical enum marker name, independent of source import aliases.
 pub fn marker_type(ty: &EnumType) -> String {
-    format!(
-        "GlobalEnum{}",
-        ty.origin
-            .bytes()
-            .map(|byte| format!("{byte:02x}"))
-            .collect::<Vec<_>>()
-            .concat()
-    )
+    format!("GlobalEnum{}", crate::identifiers::identifier(&ty.origin))
 }
 /// Emit a nominal enum marker delegating physical operations to typed i64 slots.
 pub fn marker(ty: &EnumType) -> String {

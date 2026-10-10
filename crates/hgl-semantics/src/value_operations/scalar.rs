@@ -18,6 +18,9 @@ fn overflow() -> EvalError {
 }
 /// Evaluate a checked ordinary scalar unary operation.
 pub fn unary(op: &str, operand: &Value) -> Result<Value, EvalError> {
+    if op == "any" {
+        return Ok(crate::any_values::retain(operand.clone()));
+    }
     if op == "bytes" {
         let Kind::List(items) = &operand.kind else {
             return Err(unsupported("bytes requires an ordinary list"));
@@ -62,6 +65,9 @@ fn as_float(value: i64) -> f64 {
 }
 /// Evaluate a checked ordinary scalar or family equality operation.
 pub fn binary(op: &str, a: &Value, b: &Value) -> Result<Value, EvalError> {
+    if a.ty == hgl_source::Ty::Any {
+        return crate::any_values::binary(op, a, b);
+    }
     if matches!(
         a.ty,
         hgl_source::Ty::Set(_)
@@ -71,7 +77,7 @@ pub fn binary(op: &str, a: &Value, b: &Value) -> Result<Value, EvalError> {
     ) && matches!(op, "==" | "!=")
     {
         return Ok(value(Literal::Bool(
-            crate::collection_values::equal(a, b) == (op == "=="),
+            crate::any_values::equal_data(a, b)? == (op == "=="),
         )));
     }
     let (a, b) = (scalar(a)?, scalar(b)?);

@@ -250,3 +250,5 @@ own-output source compatibility.
 [hgl-rust-structural-publication](hgl-rust-structural-publication.md) owns prepared
 complete publication, fixed child validity and exact Map membership reconciliation.
 Snapshot layouts and cold capacities remain with their existing owners.
+
+Additional ordinary value contracts: [Any semantics](hgl-any-values.md), [compiled box vocabulary](hgl-types-any-values.md), [Any storage](hgl-store-any-values.md), [Any emission](hgl-rust-any-values.md), [prepared box owners](hgl-rust-any-prepared.md), [constructor frame encoding](hgl-rust-any-expression.md), [exclusive boxing uses](hgl-boxed-uses.md), [prepared hook writes](hgl-rust-prepared-hooks.md), [private identifiers](hgl-rust-identifiers.md), [checked IR traversal](hgl-ir-visit.md), [constructor checking](hgl-value-constructors.md), [operator typing](hgl-value-operators.md), and [builtin scalar metadata](hgl-scalar-shape.md).

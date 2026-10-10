@@ -136,13 +136,11 @@ impl Diagnostic {
     /// Resolve a primary byte range against the original source text.
     pub fn new(source: &str, text: &str, issue: Issue) -> Self {
         let offset = issue.span.start.min(text.len());
+        let prefix = &text[..offset];
         Self {
             source: source.into(),
-            line: text[..offset].split('\n').count(),
-            column: text[..offset]
-                .rsplit('\n')
-                .next()
-                .map_or(1, |line| line.chars().count() + 1),
+            line: prefix.split('\n').count(),
+            column: prefix.chars().rev().take_while(|c| *c != '\n').count() + 1,
             issue,
         }
     }
@@ -196,6 +194,7 @@ pub const SOURCE_CODES: &[(&str, &str)] = &[
 pub const EXECUTION_CODES: &[&str] = &[
     "value.unset_read",
     "value.byte_range",
+    "value.capability",
     "yield.negative_duration",
     "yield.non_increasing_time",
     "eval.input_delta_profile",
@@ -203,11 +202,11 @@ pub const EXECUTION_CODES: &[&str] = &[
 
 /// Render a typed failure against its original source, retaining physical lines.
 pub fn render_issue(sources: &[(String, String)], issue: Issue) -> String {
-    let source = issue.source.clone().unwrap_or_else(|| {
-        sources
-            .first()
-            .map_or_else(String::new, |(name, _)| name.clone())
-    });
+    let source = issue
+        .source
+        .clone()
+        .or_else(|| sources.first().map(|(name, _)| name.clone()))
+        .unwrap_or_default();
     let text = sources
         .iter()
         .find(|(name, _)| *name == source)

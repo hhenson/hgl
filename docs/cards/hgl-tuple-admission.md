@@ -28,6 +28,8 @@ Retained or directly projected Tuple text arguments to ordinary value functions
 reject their unprepared owning ABI; native helpers retain prepared read-only
 scalar borrows. Fixed scalar helper arguments continue through their native ABI.
 
+Constructed runtime Any children also require prepared retained observations; ordinary constant construction and sparse or retained complete publication remain admitted.
+
 retain_local captures readable byte inputs, their scalar delta_value reads and rolling byte
 arrival observations in
 independent prepared snapshot locals, delegating all other values to tuple_values.

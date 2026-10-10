@@ -8,16 +8,11 @@ fn fields(ty: &Ty) -> Vec<Ty> {
     if let Ty::Family(family) = ty {
         return fields(&crate::layouts::family_storage(family));
     }
-    if let Ty::Struct(_, fields, _) = ty {
-        return fields.iter().map(|(_, ty)| ty.clone()).collect();
-    }
-    if let Ty::Tuple(fields) = ty {
-        return fields.clone();
-    }
     if let Ty::Delta(origin) = ty {
         return fields(&delta_storage(origin));
     }
-    Vec::new()
+    crate::snapshots::children(ty)
+        .map_or_else(Vec::new, |fields| fields.into_iter().cloned().collect())
 }
 
 fn collect(ty: &Ty, types: &mut BTreeMap<String, Ty>) {
@@ -45,6 +40,14 @@ impl Capacity {
             for value in &node.configuration {
                 collect(&value.ty, &mut types);
             }
+            hgl_semantics::ir_visit::hooks(node, &mut |value| {
+                if let hgl_semantics::ir::Kind::Unary(op, child) = &value.kind
+                    && op == "any"
+                {
+                    collect(&child.ty, &mut types);
+                }
+                true
+            });
             for (_, ty) in &node.globals {
                 collect(ty, &mut types);
             }
@@ -184,6 +187,16 @@ impl Capacity {
     pub fn native_limits(&self, plan: &Plan) -> String {
         crate::pure_bounds::native_limits(plan, || self.index(&Ty::Str))
             + &crate::pure_bounds::byte_limits(self.types.values(), |ty| self.index(ty))
+            + &if self.types.contains_key(&global_type(&Ty::Any)) {
+                crate::any_expression::limits(plan, |ty| self.bounds(ty), self.index(&Ty::Any))
+                    + &crate::any_values::limits(
+                        self.types.values(),
+                        |ty| self.bounds(ty),
+                        self.index(&Ty::Any),
+                    )
+            } else {
+                String::new()
+            }
     }
     /// Widen retained text for checked pure concatenation expressions.
     pub fn text_limits(&self, plan: &Plan) -> String {
@@ -369,6 +382,7 @@ impl Capacity {
             | Ty::Bool
             | Ty::Str
             | Ty::Bytes
+            | Ty::Any
             | Ty::Duration
             | Ty::Date
             | Ty::Time

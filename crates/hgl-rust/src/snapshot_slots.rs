@@ -1,12 +1,9 @@
 //! Independent typed tuple locals in prepared ordinary slots.
+use crate::append;
 use crate::layouts::{global_type, rust_type};
 use hgl_semantics::ir::{Kind, Plan, Statement, Value};
 use hgl_source::Ty;
-use std::fmt::Write as _;
-fn append(code: &mut String, args: std::fmt::Arguments<'_>) {
-    code.write_fmt(args)
-        .unwrap_or_else(|_| unreachable!("String formatting"));
-}
+
 fn scan(
     body: &mut Vec<Statement>,
     locals: &mut std::collections::BTreeMap<usize, Ty>,
@@ -15,16 +12,15 @@ fn scan(
     let mut result = Vec::new();
     for mut statement in std::mem::take(body) {
         match &mut statement {
-            Statement::Let(id, v) if v.snapshot => {
+            Statement::Let(id, v) | Statement::Var(id, v) if v.snapshot => {
                 locals.insert(*id, v.ty.clone());
             }
-            Statement::Return(value)
-            | Statement::Assign(
-                Value {
-                    kind: Kind::Output, ..
-                },
-                value,
-            ) if value.snapshot && matches!(value.kind, Kind::Unary(..) | Kind::Construct(_)) => {
+            Statement::Return(value) | Statement::Assign(_, value)
+                if value.snapshot
+                    && (matches!(value.kind, Kind::Unary(..) | Kind::Construct(_))
+                        || value.ty == Ty::Any
+                            && !matches!(value.kind, Kind::Local(_) | Kind::MutableLocal(_))) =>
+            {
                 let id = *next;
                 *next += 1;
                 locals.insert(id, value.ty.clone());
@@ -75,7 +71,7 @@ fn maximum(body: &[Statement]) -> usize {
 
 /// Reserve private local destinations in the emission plan; no source type is changed.
 pub fn prepare(plan: &Plan) -> Plan {
-    let mut plan = plan.clone();
+    let mut plan = crate::any_prepared::prepare(plan);
     for (node_id, node) in plan.nodes.iter_mut().enumerate() {
         let mut locals = std::collections::BTreeMap::new();
         let mut next = maximum(&node.start).max(maximum(&node.stop)).max(
@@ -242,10 +238,12 @@ pub fn publication(value: &Value, expression: &str, result: Option<&Ty>) -> Opti
         crate::snapshots::complete(&value.ty, expression)
     };
     let publish = if value.snapshot
-        && value.ty == Ty::Bytes
-        && result.is_some_and(|ty| matches!(ty, Ty::Rolling(child, _) if **child == Ty::Bytes))
+        && matches!(value.ty, Ty::Any | Ty::Bytes)
+        && result.is_some_and(|ty| matches!(ty, Ty::Rolling(..)))
     {
         "_ctx.prepared().rolling_from(None,publication,self._output)?;".into()
+    } else if value.snapshot && value.ty == Ty::Any {
+        "_ctx.prepared().any_from_global(self._output,publication)?;".into()
     } else if value.snapshot
         && !matches!(
             value.ty,

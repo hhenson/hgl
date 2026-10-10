@@ -1,10 +1,6 @@
 //! Typed prepared-copy implementations for generated nominal ordinary layouts.
+use crate::append;
 use hgl_source::Ty;
-use std::fmt::Write as _;
-fn append(code: &mut String, text: std::fmt::Arguments<'_>) {
-    code.write_fmt(text)
-        .unwrap_or_else(|_| unreachable!("String formatting"));
-}
 
 /// Emit independent bounds and copies for the existing tuple-backed nominal marker.
 pub fn structure(name: &str, fields: &[(String, Ty)], marker: impl Fn(&Ty) -> String) -> String {

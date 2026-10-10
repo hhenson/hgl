@@ -1,15 +1,15 @@
 //! Checked hook expression and statement emission.
-mod prepared;
 pub use crate::layouts::{
     global_markers, global_schema, global_type, owned_type, rust_type, scalar_type, whole_payload,
 };
+use crate::prepared_hooks as prepared;
 use hgl_semantics::ir::{Kind, Plan, Statement, Value};
 use hgl_source::{Literal, Ty};
 
 pub use crate::scalars::literal;
 fn value(plan: &Plan, v: &Value) -> String {
-    if let Some(slot) = atomic_place(plan, v) {
-        return format!("({slot}).read(_ctx.store().atomic_values())?");
+    if let Some(read) = crate::source_slots::read(plan, v, |v| value(plan, v)) {
+        return read;
     }
     if v.snapshot {
         return crate::snapshot_slots::read(v, |v| value(plan, v));
@@ -30,6 +30,9 @@ fn value(plan: &Plan, v: &Value) -> String {
         Kind::Push(parent, item) => push(plan, parent, item),
         Kind::ValueCall(args, body) => direct_call(plan, &v.ty, args, body),
         Kind::Configuration(id) => retained(&format!("self.configuration{id}"), &v.ty),
+        Kind::Construct(fields) if v.ty == Ty::Any => {
+            crate::any_values::constructor(fields, |v| value(plan, v))
+        }
         Kind::Construct(fields) => crate::snapshots::ordinary(&v.ty, fields, |v| value(plan, v)),
         Kind::Field(..) if hgl_semantics::tuple_values::endpoint(v) => {
             crate::snapshot_slots::endpoint_read(v)
@@ -49,7 +52,7 @@ fn value(plan: &Plan, v: &Value) -> String {
         Kind::Literal(l) => literal(l),
         Kind::IterationInput(_) => crate::snapshot_slots::endpoint_read(v),
         Kind::Input(i, _) => {
-            if matches!(v.ty, Ty::Enum(_)) {
+            if matches!(v.ty, Ty::Enum(_) | Ty::Any) {
                 format!(
                     "_ctx.store().atomic_get::<{}>(self.input{i})?",
                     global_type(&v.ty)
@@ -98,6 +101,9 @@ fn query_value(plan: &Plan, op: &str, args: &[Value]) -> String {
     }
 }
 fn unary(plan: &Plan, op: &str, operand: &Value) -> String {
+    if op == "any" {
+        return crate::any_values::construct(&operand.ty, &value(plan, operand));
+    }
     let value = value(plan, operand);
     if op == "-" && operand.ty == Ty::I64 {
         format!("(({value}).wrapping_neg())")
@@ -116,7 +122,7 @@ fn unary(plan: &Plan, op: &str, operand: &Value) -> String {
     }
 }
 
-fn place(plan: &Plan, v: &Value) -> String {
+pub(crate) fn place(plan: &Plan, v: &Value) -> String {
     if let Kind::GeneratorLocal(id) = v.kind {
         return format!(
             "(*self.generator_local{id}.as_ref().expect(\"initialized generator local\"))"
@@ -151,6 +157,13 @@ fn place(plan: &Plan, v: &Value) -> String {
 }
 
 fn binary(plan: &Plan, result: &Ty, op: &str, a: &Value, b: &Value) -> String {
+    if a.ty == Ty::Any {
+        return crate::any_values::comparison(
+            op,
+            &crate::any_prepared::view(plan, a),
+            &crate::any_prepared::view(plan, b),
+        );
+    }
     if matches!(
         a.ty,
         Ty::Set(_) | Ty::Map(..) | Ty::Family(_) | Ty::Tuple(_)
@@ -226,6 +239,7 @@ pub fn statements(plan: &Plan, body: &[Statement], out: &mut Vec<String>, result
             }
             Statement::Yield(v) => format!("return Ok({});\n", value(plan, v)),
             Statement::Exit => "return Ok(());\n".into(),
+            Statement::Let(i,v) | Statement::Var(i,v) if v.snapshot && v.ty==Ty::Any => crate::any_prepared::local(plan,*i,v,|v|value(plan,v)),
             Statement::Let(i,v) if v.snapshot => crate::snapshot_slots::local(*i,v, |v| value(plan,v)),
             Statement::Let(i,v) => {
                 let init = atomic_place(plan,v).or_else(||observation(v)).unwrap_or_else(||condition_code(plan,v));
@@ -273,6 +287,22 @@ pub fn statements(plan: &Plan, body: &[Statement], out: &mut Vec<String>, result
     }
 }
 fn assignment(plan: &Plan, target: &Value, v: &Value) -> String {
+    if target.ty == Ty::Any
+        && crate::finite_domains::prepared(plan)
+        && let Some(slot) = borrowed_place(plan, target)
+    {
+        return format!(
+            "{{let destination={slot};{}}}",
+            crate::any_prepared::write(plan, v, "destination", |v| value(plan, v))
+        );
+    }
+    if target.ty == Ty::Any && target.snapshot {
+        let destination = crate::snapshot_slots::projection(target, |v| value(plan, v));
+        return format!(
+            "{{let destination={destination};{}}}",
+            crate::any_prepared::write(plan, v, "destination", |v| value(plan, v))
+        );
+    }
     if matches!(target.kind, Kind::Output)
         && let Some(code) =
             crate::structural_publication::assignment(v, &target.ty, |v| value(plan, v))
@@ -285,6 +315,11 @@ fn assignment(plan: &Plan, target: &Value, v: &Value) -> String {
         return format!("{{{code}}}");
     }
     let publish = crate::deltas::publish(&v.ty, "publication");
+    if crate::finite_domains::prepared(plan)
+        && let Some(slot) = borrowed_place(plan, target)
+    {
+        return prepared::replace(plan, v, &slot);
+    }
     let v = condition_code(plan, v);
     if let Some(slot) = borrowed_place(plan, target) {
         return format!(
@@ -426,16 +461,8 @@ fn byte_view(plan: &Plan, value: &Value) -> String {
     {
         return byte_view(plan, &args[0]);
     }
-    let source = if value.snapshot {
-        Some((
-            "global_values",
-            crate::snapshot_slots::projection(value, |v| self::value(plan, v)),
-        ))
-    } else {
-        atomic_place(plan, value)
-            .map(|slot| ("atomic_values", slot))
-            .or_else(|| borrowed_place(plan, value).map(|slot| ("global_values", slot)))
-    };
+    let source = crate::source_slots::source(plan, value)
+        .filter(|(columns, _)| *columns != "configuration_columns");
     crate::snapshot_views::byte_slice(value, source, &place(plan, value))
 }
 
@@ -455,43 +482,28 @@ fn native_argument(plan: &Plan, v: &Value) -> String {
     if borrowed_place(plan, v).is_some() {
         return format!("&({})", value(plan, v));
     }
-    match &v.kind {
-        Kind::IterationInput(_) | Kind::Input(..) => crate::snapshot_slots::native_text(v),
-        Kind::Literal(Literal::Str(s)) => format!("{s:?}"),
-        Kind::Cache(i) => format!("self.cache{i}.as_str()"),
-        Kind::Local(i) | Kind::MutableLocal(i) => format!("local{i}.as_str()"),
-        Kind::Field(..) | Kind::Index(..) | Kind::GeneratorLocal(_) => {
-            format!("({}).as_str()", place(plan, v))
-        }
-        Kind::Output => {
-            "_ctx.store().output_ref(self._output).expect(\"valid output\").as_str()".into()
-        }
-        Kind::TemporalLiteral(_)
-        | Kind::Captured(..)
-        | Kind::Prepared(_)
-        | Kind::Delta(_)
-        | Kind::ObservedLocal(_)
-        | Kind::WiringFailure(_)
-        | Kind::List(_)
-        | Kind::Length(_)
-        | Kind::Push(..)
-        | Kind::ValueCall(..)
-        | Kind::Configuration(_)
-        | Kind::Construct(_)
-        | Kind::BorrowedLocal(..)
-        | Kind::GlobalGet(_)
-        | Kind::GlobalSet(..)
-        | Kind::IsPresent(_)
-        | Kind::Present(_)
-        | Kind::Literal(_)
-        | Kind::Wire(_)
-        | Kind::Native(..)
-        | Kind::Binary(..)
-        | Kind::Unary(..)
-        | Kind::Query(..)
-        | Kind::Capability
-        | Kind::Void => format!("&({})", value(plan, v)),
+    if matches!(v.kind, Kind::IterationInput(_) | Kind::Input(..)) {
+        return crate::snapshot_slots::native_text(v);
     }
+    if let Kind::Literal(Literal::Str(s)) = &v.kind {
+        return format!("{s:?}");
+    }
+    if let Kind::Cache(i) = v.kind {
+        return format!("self.cache{i}.as_str()");
+    }
+    if let Kind::Local(i) | Kind::MutableLocal(i) = v.kind {
+        return format!("local{i}.as_str()");
+    }
+    if matches!(
+        v.kind,
+        Kind::Field(..) | Kind::Index(..) | Kind::GeneratorLocal(_)
+    ) {
+        return format!("({}).as_str()", place(plan, v));
+    }
+    if matches!(v.kind, Kind::Output) {
+        return "_ctx.store().output_ref(self._output).expect(\"valid output\").as_str()".into();
+    }
+    format!("&({})", value(plan, v))
 }
 
 fn capability_call(plan: &Plan, op: &str, args: &[Value]) -> String {
@@ -508,7 +520,7 @@ fn capability_call(plan: &Plan, op: &str, args: &[Value]) -> String {
     }
 }
 
-fn borrowed_place(plan: &Plan, value: &Value) -> Option<String> {
+pub(crate) fn borrowed_place(plan: &Plan, value: &Value) -> Option<String> {
     if let Kind::BorrowedLocal(id, _, _) = value.kind {
         return Some(format!("local{id}"));
     }
@@ -559,10 +571,6 @@ fn list_value(plan: &Plan, ty: &Ty, values: &[Value]) -> String {
 }
 fn push(plan: &Plan, parent: &Value, item: &Value) -> String {
     if crate::finite_domains::prepared(plan)
-        && plan
-            .recording
-            .as_ref()
-            .is_some_and(|(_, ty)| ty == &parent.ty)
         && let Some(slot) = borrowed_place(plan, parent)
     {
         return prepared::append(plan, item, &slot);
@@ -660,9 +668,9 @@ fn observation(v: &Value) -> Option<String> {
     None
 }
 
-fn atomic_place(plan: &Plan, value: &Value) -> Option<String> {
+pub(crate) fn atomic_place(plan: &Plan, value: &Value) -> Option<String> {
     if let Kind::Input(id, _) = value.kind
-        && let Ty::Atomic(payload) = &value.ty
+        && let Some(payload) = whole_payload(&value.ty)
     {
         return Some(format!(
             "_ctx.store().atomic_borrow::<{}>(self.input{id})?",
@@ -679,9 +687,7 @@ fn atomic_place(plan: &Plan, value: &Value) -> Option<String> {
         && name == "delta_value"
     {
         let input = args.first()?;
-        let Ty::Atomic(payload) = &input.ty else {
-            return None;
-        };
+        let payload = whole_payload(&input.ty)?;
         let Kind::Input(id, _) = input.kind else {
             return None;
         };

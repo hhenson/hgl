@@ -21,6 +21,7 @@ pub fn preparation(plan: &Plan) -> String {
         "fn prepare_static(keys:&mut hgl_store::Keys)->Result<(),String> {{{constants} Ok(())}}\n"
     );
     code += "fn prepare_key(keys:&mut hgl_store::Keys,value:&hgl_semantics::ir::Value)->Result<(),String> {";
+    code += &crate::any_values::key_preparation(plan);
     for ty in crate::layouts::global_types(plan).values() {
         if let hgl_source::Ty::Struct(name, fields, _) = ty
             && ty.collection_key()

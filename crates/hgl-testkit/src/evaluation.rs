@@ -48,9 +48,12 @@ pub fn compare<T: PartialEq + std::fmt::Debug>(
     expected: &[Option<T>],
     observed: &Observation<T>,
 ) -> Result<(), String> {
-    compare_values(expected, observed, PartialEq::eq, |wanted, actual| {
-        format!("expected {wanted:?}, observed {actual:?}")
-    })
+    compare_values(
+        expected,
+        observed,
+        |a, b| Ok(PartialEq::eq(a, b)),
+        |wanted, actual| format!("expected {wanted:?}, observed {actual:?}"),
+    )
 }
 
 /// Compare sparse payloads using the statically selected publication shape.
@@ -59,19 +62,24 @@ pub fn compare_by<T>(
     observed: &Observation<T>,
     equivalent: impl Fn(&T, &T) -> bool,
 ) -> Result<(), String> {
-    compare_values(expected, observed, equivalent, |wanted, actual| {
-        format!(
-            "expected presence {}, observed presence {}: payload or presence differs",
-            wanted.is_some(),
-            actual.is_some()
-        )
-    })
+    compare_values(
+        expected,
+        observed,
+        |a, b| Ok(equivalent(a, b)),
+        |wanted, actual| {
+            format!(
+                "expected presence {}, observed presence {}: payload or presence differs",
+                wanted.is_some(),
+                actual.is_some()
+            )
+        },
+    )
 }
 
 fn compare_values<T>(
     expected: &[Option<T>],
     observed: &Observation<T>,
-    equivalent: impl Fn(&T, &T) -> bool,
+    equivalent: impl Fn(&T, &T) -> Result<bool, String>,
     describe: impl Fn(Option<&T>, Option<&T>) -> String,
 ) -> Result<(), String> {
     let mut ticks = observed.ticks.iter().peekable();
@@ -82,7 +90,7 @@ fn compare_values<T>(
             None
         };
         if !match (wanted.as_ref(), actual) {
-            (Some(a), Some(b)) => equivalent(a, b),
+            (Some(a), Some(b)) => equivalent(a, b)?,
             (None, None) => true,
             _ => false,
         } {
@@ -101,4 +109,24 @@ fn compare_values<T>(
         ));
     }
     Ok(())
+}
+
+/// Compare fallible contained capabilities at the owning post-run capture boundary.
+pub fn try_compare_by<T, E: std::fmt::Display>(
+    expected: &[Option<T>],
+    observed: &Observation<T>,
+    equivalent: impl Fn(&T, &T) -> Result<bool, E>,
+) -> Result<(), String> {
+    compare_values(
+        expected,
+        observed,
+        |a, b| equivalent(a, b).map_err(|e| e.to_string()),
+        |a, b| {
+            format!(
+                "expected presence {}, observed presence {}",
+                a.is_some(),
+                b.is_some()
+            )
+        },
+    )
 }

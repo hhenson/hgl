@@ -227,6 +227,8 @@ pub struct Plan {
     pub recording: Option<(String, Ty)>,
     /// Dense eval input length, independent of expected output.
     pub input_length: usize,
+    /// Cold payload schemas reached by a surrounding lexical test harness.
+    pub ordinary_types: Vec<Ty>,
 }
 
 impl Value {

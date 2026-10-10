@@ -7,10 +7,10 @@ pub fn constructor_child(value: &Value, constant_context: bool) -> Result<(), &'
     if !constant_context
         && !value.snapshot
         && (crate::structural_admission::collection(&value.ty)
-            || matches!(value.ty, Ty::Str | Ty::Bytes))
+            || matches!(value.ty, Ty::Str | Ty::Bytes | Ty::Any))
     {
         return Err(
-            "runtime ordinary tuple collection, text or bytes children require prepared retained observations",
+            "runtime ordinary tuple collection, text, bytes or any children require prepared retained observations",
         );
     }
     Ok(())

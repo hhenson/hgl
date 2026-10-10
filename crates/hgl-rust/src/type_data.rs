@@ -1,7 +1,7 @@
 //! Exact checked type metadata for cold Rust source serialization.
 use crate::enums::metadata as enum_data;
 use hgl_source::Ty;
-fn list<T>(items: &[T], f: impl Fn(&T) -> String) -> String {
+pub(crate) fn list<T>(items: &[T], f: impl Fn(&T) -> String) -> String {
     format!(
         "vec![{}]",
         items.iter().map(f).collect::<Vec<_>>().join(",")
@@ -77,6 +77,7 @@ pub fn ty(t: &Ty) -> String {
         | Ty::Bool
         | Ty::Str
         | Ty::Bytes
+        | Ty::Any
         | Ty::Date
         | Ty::Time
         | Ty::DateTime

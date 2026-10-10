@@ -1,15 +1,11 @@
 //! Statically specialized sparse delta construction, observation and publication.
+use crate::append;
 use crate::layouts::{
     delta_storage, delta_type, global_type, owned_type, rust_type, whole_payload,
 };
 use hgl_semantics::ir::{DeltaEntry, Kind, Plan, Statement, Value};
 use hgl_source::Ty;
 use std::collections::BTreeSet;
-use std::fmt::Write as _;
-fn append(code: &mut String, args: std::fmt::Arguments<'_>) {
-    code.write_fmt(args)
-        .unwrap_or_else(|_| unreachable!("String formatting"));
-}
 
 /// Whether a temporal shape uses structural publication data.
 pub fn structural(ty: &Ty) -> bool {
@@ -29,7 +25,7 @@ fn identity(ty: &Ty) -> String {
 pub fn shape_marker(ty: &Ty) -> String {
     match ty {
         Ty::Rolling(..) => crate::windows::marker(ty),
-        Ty::Enum(_) => format!("hgl_store::shapes::Atomic<{}>", global_type(ty)),
+        Ty::Enum(_) | Ty::Any => format!("hgl_store::shapes::Atomic<{}>", global_type(ty)),
         Ty::Atomic(payload) => format!("hgl_store::shapes::Atomic<{}>", global_type(payload)),
         Ty::List(child, None) => format!("hgl_store::shapes::Growing<{}>", shape_marker(child)),
         Ty::List(child, Some(n)) => {
@@ -70,7 +66,8 @@ fn operations(ty: &Ty) -> String {
 pub fn publish(ty: &Ty, payload: &str) -> String {
     if matches!(
         ty,
-        Ty::Enum(_)
+        Ty::Any
+            | Ty::Enum(_)
             | Ty::Recursive(_)
             | Ty::Family(_)
             | Ty::List(..)
@@ -289,6 +286,7 @@ fn collect(ty: &Ty, types: &mut BTreeSet<Ty>) {
         | Ty::Bool
         | Ty::Str
         | Ty::Bytes
+        | Ty::Any
         | Ty::CivilDateTime
         | Ty::TimeZone
         | Ty::Enum(_)
@@ -306,91 +304,19 @@ fn collect(ty: &Ty, types: &mut BTreeSet<Ty>) {
         | Ty::Void => {}
     }
 }
-fn statements(body: &[Statement], types: &mut BTreeSet<Ty>) {
-    for stmt in body {
-        match stmt {
-            Statement::Let(_, v)
-            | Statement::Var(_, v)
-            | Statement::Borrow(_, v, _)
-            | Statement::Return(v)
-            | Statement::Yield(v)
-            | Statement::Call(v) => values(v, types),
-            Statement::TimedYield(a, b) | Statement::Assign(a, b) => {
-                values(a, types);
-                values(b, types);
-            }
-            Statement::While(v, body)
-            | Statement::ForItems(_, _, _, v, body)
-            | Statement::For(_, v, body) => {
-                values(v, types);
-                statements(body, types);
-            }
-            Statement::If(v, a, b) => {
-                values(v, types);
-                statements(a, types);
-                statements(b, types);
-            }
-            Statement::Exit => {}
-        }
-    }
-}
 fn values(value: &Value, types: &mut BTreeSet<Ty>) {
-    collect(&value.ty, types);
-    match &value.kind {
-        Kind::Delta(entries) => {
-            for entry in entries {
-                for v in entry.operands() {
-                    values(v, types);
-                }
-            }
-        }
-        Kind::Construct(fields) => {
-            for (_, v) in fields {
-                values(v, types);
-            }
-        }
-        Kind::List(items) | Kind::Native(_, items) | Kind::Query(_, items) => {
-            for v in items {
-                values(v, types);
-            }
-        }
-        Kind::ValueCall(args, body) => {
-            for v in args {
-                values(v, types);
-            }
-            statements(body, types);
-        }
-        Kind::Index(a, b) | Kind::Push(a, b) | Kind::Binary(_, a, b) => {
-            values(a, types);
-            values(b, types);
-        }
-        Kind::Length(v)
-        | Kind::Field(v, _)
-        | Kind::GlobalSet(_, v)
-        | Kind::IsPresent(v)
-        | Kind::Present(v)
-        | Kind::Unary(_, v) => values(v, types),
-        Kind::ObservedLocal(_)
-        | Kind::WiringFailure(_)
-        | Kind::Configuration(_)
-        | Kind::GlobalGet(_)
-        | Kind::BorrowedLocal(..)
-        | Kind::Literal(_)
-        | Kind::Wire(_)
-        | Kind::IterationInput(_)
-        | Kind::Input(..)
-        | Kind::Cache(_)
-        | Kind::GeneratorLocal(_)
-        | Kind::Local(_)
-        | Kind::MutableLocal(_)
-        | Kind::Output
-        | Kind::Capability
-        | Kind::TemporalLiteral(_)
-        | Kind::Captured(..)
-        | Kind::Prepared(_)
-        | Kind::Void => {}
-    }
+    hgl_semantics::ir_visit::value(value, &mut |value| {
+        collect(&value.ty, types);
+        !matches!(value.kind, Kind::Captured(..))
+    });
 }
+fn statements(body: &[Statement], types: &mut BTreeSet<Ty>) {
+    hgl_semantics::ir_visit::statements(body, &mut |value| {
+        collect(&value.ty, types);
+        !matches!(value.kind, Kind::Captured(..))
+    });
+}
+
 mod emit;
 use emit::marker;
 

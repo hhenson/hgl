@@ -1,51 +1,24 @@
 use hgl_semantics::ir::{Kind, Plan, Statement, Value};
 use hgl_source::Ty;
 fn owning(ty: &Ty) -> bool {
-    !matches!(
-        ty,
-        Ty::I64
-            | Ty::F64
-            | Ty::Bool
-            | Ty::Duration
-            | Ty::Date
-            | Ty::Time
-            | Ty::DateTime
-            | Ty::CivilDateTime
-            | Ty::Enum(_)
-            | Ty::Void
-    )
+    !(ty.scalar_kind().is_some() && !ty.owning_scalar() || matches!(ty, Ty::Enum(_) | Ty::Void))
 }
+
 /// Whether ordinary helper argument retention can allocate native owning storage.
 pub fn owning_argument(ty: &Ty) -> bool {
-    match ty {
-        Ty::Tuple(children) => children.iter().any(owning_argument),
-        Ty::Struct(_, fields, _) => fields.iter().any(|(_, child)| owning_argument(child)),
-        Ty::Nullable(child) | Ty::Atomic(child) => owning_argument(child),
-        Ty::Rolling(..)
-        | Ty::Family(_)
-        | Ty::Recursive(_)
-        | Ty::Enum(_)
-        | Ty::Map(..)
-        | Ty::Delta(_)
-        | Ty::List(..)
-        | Ty::I64
-        | Ty::F64
-        | Ty::Bool
-        | Ty::Str
-        | Ty::Bytes
-        | Ty::Duration
-        | Ty::Date
-        | Ty::Time
-        | Ty::DateTime
-        | Ty::CivilDateTime
-        | Ty::TimeZone
-        | Ty::ZonedTime
-        | Ty::ZonedDateTime
-        | Ty::Ref(_)
-        | Ty::Set(_)
-        | Ty::Void => owning(ty),
+    if let Ty::Tuple(children) = ty {
+        return children.iter().any(owning_argument);
     }
+    if let Ty::Struct(_, fields, _) = ty {
+        return fields.iter().any(|(_, child)| owning_argument(child));
+    }
+    if let Ty::Nullable(child) | Ty::Atomic(child) = ty {
+        return owning_argument(child);
+    }
+    // Other layouts keep the conservative owning boundary; builtin metadata supplies fixed leaves.
+    owning(ty)
 }
+
 fn value(plan: &Plan, input: &Value, looping: bool) -> bool {
     match &input.kind {
         Kind::Captured(..) => false,
