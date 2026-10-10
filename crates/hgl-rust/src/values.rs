@@ -68,15 +68,7 @@ fn value(plan: &Plan, v: &Value) -> String {
         Kind::GlobalSet(i, v) => prepared::set(plan, *i, v),
         Kind::GeneratorLocal(_) => retained(&place(plan, v), &v.ty),
         Kind::Local(i) | Kind::MutableLocal(i) => retained(&format!("local{i}"), &v.ty),
-        Kind::Native(i, args) => format!(
-            "<crate::Provider as Native>::{}({}){}",
-            plan.natives[*i].method,
-            args.iter()
-                .map(|v| native_argument(plan, v))
-                .collect::<Vec<_>>()
-                .join(", "),
-            if plan.natives[*i].throws { "?" } else { "" }
-        ),
+        Kind::Native(i, args) => native_call(plan, *i, args),
         Kind::Binary(op, a, b) => binary(plan, &v.ty, op, a, b),
         Kind::Unary(op, operand) if op == "family" => {
             crate::layouts::family_coerce(&v.ty, &operand.ty, &value(plan, operand))
@@ -710,4 +702,22 @@ pub(crate) fn atomic_place(plan: &Plan, value: &Value) -> Option<String> {
 
 fn retained(source: &str, ty: &Ty) -> String {
     crate::collections::retained(source, ty, global_type)
+}
+
+fn native_call(plan: &Plan, i: usize, args: &[Value]) -> String {
+    format!(
+        "{}::{}({}){}",
+        plan.natives[i]
+            .provider
+            .as_ref()
+            .map_or("<crate::Provider as Native>".into(), |p| {
+                crate::emit::image_module(&p.provider)
+            }),
+        plan.natives[i].method,
+        args.iter()
+            .map(|v| native_argument(plan, v))
+            .collect::<Vec<_>>()
+            .join(", "),
+        if plan.natives[i].throws { "?" } else { "" }
+    )
 }

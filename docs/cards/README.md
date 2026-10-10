@@ -260,3 +260,6 @@ Additional ordinary value contracts: [Any semantics](hgl-any-values.md), [compil
 - [Reusable owning columns](hgl-owned-columns.md)
 
 - [Inert native contract data](hgl-native-contract-data.md)
+
+- [Native package metadata](hgl-native-package.md)
+- [Node execution phases](hgl-execution-phase.md)

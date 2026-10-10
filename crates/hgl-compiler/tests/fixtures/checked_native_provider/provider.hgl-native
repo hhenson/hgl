@@ -1,0 +1,4 @@
+native_descriptor 1 target "hgl-rust-1"
+module checked_lengths
+provider "hgl.test.checked_lengths" fingerprint "checked-lengths-v1" image "provider.rs"
+value size(value:str)->i64 symbol "length" ownership owned phases {evaluation} effects {}

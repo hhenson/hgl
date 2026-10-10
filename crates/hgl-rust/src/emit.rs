@@ -273,27 +273,8 @@ fn emit_inner(plan: &Plan, layouts: bool) -> String {
             out.push(format!("// {}\n", comment(line)));
         }
     }
-    if !plan.natives.is_empty() {
-        out.push("/// Selected native scalar interfaces.\npub trait Native {\n".to_owned());
-    }
-    for native in &plan.natives {
-        out.push(format!(
-            "/// HGL `{}`.\nfn {}({}) -> {};\n",
-            native.name,
-            native.method,
-            native
-                .args
-                .iter()
-                .enumerate()
-                .map(|(i, ty)| format!("arg{i}: {}", native_arg_type(ty)))
-                .collect::<Vec<_>>()
-                .join(", "),
-            native_result(native)
-        ));
-    }
-    if !plan.natives.is_empty() {
-        out.push("}\n".to_owned());
-    }
+    out.push(native_interfaces(plan, false));
+    out.push(native_images(plan));
     if let Some(error) = &plan.construction_error {
         out.push(format!("pub fn register(_: &mut hgl_describe::Registry) -> Result<(), hgl_describe::BuildError> {{ Ok(()) }}\npub fn main(_: &hgl_describe::Registry) -> Result<hgl_describe::GraphDescription, hgl_describe::BuildError> {{ Err(hgl_describe::BuildError::InvalidNodeType {{ node: \"hgl.program\", what: {error:?}.into() }}) }}\n"));
         return out.concat();
@@ -312,7 +293,7 @@ fn emit_inner(plan: &Plan, layouts: bool) -> String {
         out.push(format!("registry.register::<Node{i}>()?;\n"));
     }
     out.push("Ok(())\n}\n".into());
-    out.push("/// Construct the checked entry graph without executing it.\npub fn main(registry: &hgl_describe::Registry) -> Result<hgl_describe::GraphDescription,hgl_describe::BuildError> {\nlet mut builder = hgl_describe::Builder::new(\"hgl.program\",registry);\n" .to_owned());
+    out.push("/// Construct the checked entry graph without executing it.\npub fn main(registry: &hgl_describe::Registry) -> Result<hgl_describe::GraphDescription,hgl_describe::BuildError> {\nvalidate_native_images().map_err(|what|hgl_describe::BuildError::InvalidNodeType {node:\"hgl.program\",what})?;let mut builder = hgl_describe::Builder::new(\"hgl.program\",registry);\n" .to_owned());
     for (i, n) in plan.nodes.iter().enumerate() {
         out.push(format!(
             "let _wire{i} = builder.node({:?}, &[])?;\n",
@@ -328,32 +309,33 @@ fn emit_inner(plan: &Plan, layouts: bool) -> String {
     out.concat()
 }
 
-fn test_native_adapters(plan: &Plan, out: &mut Vec<String>) {
-    if !plan.natives.is_empty() {
-        out.push("impl Native for crate::Provider {\n".into());
+fn native_interfaces(plan: &Plan, adapters: bool) -> String {
+    let mut methods = Vec::new();
+    for native in plan
+        .natives
+        .iter()
+        .filter(|native| native.provider.is_none())
+    {
+        let signature = native_signature(native);
+        methods.push(if adapters {
+            let call = (0..native.args.len())
+                .map(|i| format!("arg{i}"))
+                .collect::<Vec<_>>()
+                .join(",");
+            format!("{signature} {{crate::native::{}({call})}}", native.method)
+        } else {
+            format!("/// HGL `{}`.\n{signature};", native.name)
+        });
     }
-    for native in &plan.natives {
-        let args = native
-            .args
-            .iter()
-            .enumerate()
-            .map(|(i, t)| format!("arg{i}: {}", native_arg_type(t)))
-            .collect::<Vec<_>>()
-            .join(",");
-        let call = (0..native.args.len())
-            .map(|i| format!("arg{i}"))
-            .collect::<Vec<_>>()
-            .join(",");
-        out.push(format!(
-            "fn {}({args})->{} {{ crate::native::{}({call}) }}\n",
-            native.method,
-            native_result(native),
-            native.method
-        ));
+    if methods.is_empty() {
+        return String::new();
     }
-    if !plan.natives.is_empty() {
-        out.push("}\n".into());
-    }
+    let header = if adapters {
+        "impl Native for crate::Provider"
+    } else {
+        "pub trait Native"
+    };
+    format!("{header} {{{}}}\n", methods.concat())
 }
 /// Emit execution and observation of one checked eval plan.
 pub fn emit_test_body(plan: &Plan, expected: Option<&[Option<Value>]>) -> String {
@@ -362,7 +344,7 @@ pub fn emit_test_body(plan: &Plan, expected: Option<&[Option<Value>]>) -> String
     let plan = &normalized;
     let mut out = vec![crate::keyed::preparation(plan), capacities(plan)];
     register_prepared(plan, &mut out);
-    test_native_adapters(plan, &mut out);
+    out.push(native_interfaces(plan, true));
     out.push("pub fn test()->Result<(),String> {\nlet mut registry=hgl_describe::Registry::new();\nlet configurations=prepare_configurations(&[])?;register_prepared(&mut registry,&configurations)?;\nlet graph=main(&registry).map_err(|e|format!(\"{e:?}\"))?;\n".into());
     if plan.construction_error.is_some() {
         out.push("Ok(())\n}\n".into());
@@ -418,15 +400,56 @@ pub fn emit_test_body(plan: &Plan, expected: Option<&[Option<Value>]>) -> String
     out.concat()
 }
 
-fn native_result(native: &crate::ir::Native) -> String {
-    if native.throws {
+fn native_signature(native: &crate::ir::Native) -> String {
+    let args = native
+        .args
+        .iter()
+        .enumerate()
+        .map(|(i, ty)| format!("arg{i}:{}", native_arg_type(ty)))
+        .collect::<Vec<_>>()
+        .join(",");
+    let result = if native.throws {
         format!(
             "Result<{},Box<hgl_kernel::NodeError>>",
             rust_type(&native.result)
         )
     } else {
-        rust_type(&native.result).to_owned()
+        rust_type(&native.result).into()
+    };
+    format!("fn {}({args})->{result}", native.method)
+}
+pub(crate) fn image_module(provider: &str) -> String {
+    format!("native_image{}", crate::identifiers::identifier(provider))
+}
+fn native_images(plan: &Plan) -> String {
+    let providers = plan
+        .natives
+        .iter()
+        .filter_map(|n| n.provider.as_ref())
+        .map(|p| (&p.provider, p))
+        .collect::<std::collections::BTreeMap<_, _>>();
+    let mut code = Vec::new();
+    for provider in providers.values() {
+        code.push(format!(
+            "#[path={:?}] mod {};\n",
+            provider
+                .image
+                .as_ref()
+                .unwrap_or_else(|| unreachable!("checked image")),
+            image_module(&provider.provider)
+        ));
     }
+    code.push("fn validate_native_images()->Result<(),String>{".into());
+    for provider in plan
+        .natives
+        .iter()
+        .filter_map(|native| native.provider.as_ref())
+    {
+        let module = image_module(&provider.provider);
+        code.push(format!("if {module}::PROVIDER!={:?} || {module}::FINGERPRINT!={:?} {{return Err(\"native descriptor/provider identity or fingerprint mismatch\".into());}}",provider.provider,provider.fingerprint));
+    }
+    code.push("Ok(())}\n".into());
+    code.concat()
 }
 
 fn shape(ty: &Ty) -> String {
@@ -502,7 +525,7 @@ fn register_prepared(plan: &Plan, out: &mut Vec<String>) {
         })
         .collect::<Vec<_>>()
         .concat();
-    out.push(format!("struct Configurations {{{fields}}}fn prepare_configurations(values:&[hgl_semantics::ir::Value])->Result<Configurations,String>{{"));
+    out.push(format!("struct Configurations {{{fields}}}fn prepare_configurations(values:&[hgl_semantics::ir::Value])->Result<Configurations,String>{{validate_native_images()?;"));
     let mut bindings = std::collections::BTreeMap::new();
     for node in &plan.nodes {
         for value in &node.configuration {

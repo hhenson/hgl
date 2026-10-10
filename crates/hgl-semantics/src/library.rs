@@ -26,6 +26,8 @@ pub enum Role {
 #[derive(Debug, Clone)]
 /// A declaration with its owning module and source tokens.
 pub struct Decl {
+    /// Ordinary value mode established only by a validated package contract.
+    pub ordinary_native: bool,
     /// Owning module name.
     pub module: String,
     /// Source identifier.
@@ -151,6 +153,13 @@ pub fn load_checked(sources: &[(String, String)]) -> Result<Library, Box<Diagnos
             .map_or(("", ""), |(source, text)| (source.as_str(), text.as_str()));
         Box::new(Diagnostic::new(source, text, issue))
     })?;
+    for declaration in &mut library.declarations {
+        declaration.ordinary_native = declaration.role == Role::Native
+            && library
+                .native_contracts
+                .get(&declaration.module)
+                .is_some_and(|contract| contract.functions.contains_key(&declaration.name));
+    }
     Ok(library)
 }
 fn load_source(
@@ -294,6 +303,7 @@ fn load_items(
             };
             let name = d.name()?;
             library.declarations.push(Decl {
+                ordinary_native: false,
                 module: module.into(),
                 name,
                 role,
@@ -362,7 +372,7 @@ impl Decl {
         if c.take("native") {
             c.need("const")?;
         }
-        let value_function = c.take("const");
+        let value_function = c.take("const") || self.ordinary_native;
         if !c.take("fn") {
             c.need("operator")?;
         }

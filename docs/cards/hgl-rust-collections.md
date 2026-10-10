@@ -28,3 +28,7 @@ family_field maps only declared family/common field identities through each reta
 Fixed-list items traversal selects declared dense child projections independently
 of keyed membership. Its modified filter reads each child's endpoint modification
 metadata; full traversal includes unset children for metadata inspection.
+
+Cold field equality and key validation share canonical ordinary fields/optional
+metadata with box planning. Scalar retention uses the shared owning_scalar profile
+while preserving the existing Any ownership boundary.

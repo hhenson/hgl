@@ -1,0 +1,4 @@
+module native_image_cases
+use checked_lengths::{size}
+fn count(value:str)->i64 {when {return size(value)}}
+test counts {assert eval(count,value:["first","",_,"tail"]) == [5,0,_,4]}

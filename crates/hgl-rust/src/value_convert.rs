@@ -1,26 +1,16 @@
 //! Exact owning conversions at cold preparation and capture boundaries.
 use crate::checked_data::ty;
 use hgl_source::Ty;
-fn fields(t: &Ty) -> Vec<Ty> {
-    hgl_semantics::any_values::fields(t)
-        .unwrap_or_else(|| unreachable!("checked aggregate root"))
-        .0
+fn fields(t: &Ty) -> (Vec<Ty>, Vec<usize>) {
+    hgl_semantics::any_values::fields(t).unwrap_or_else(|| unreachable!("checked aggregate root"))
 }
 /// Decode a constructed checked value into its exact native owning representation.
 pub fn decode(t: &Ty, expression: &str) -> String {
     if *t == Ty::Any {
         return format!("{{let value=&({expression});decode_any(value)?}}");
     }
-    if matches!(t, Ty::Set(_) | Ty::Map(..)) {
-        return decode(
-            &Ty::List(
-                Box::new(
-                    crate::collections::element(t).unwrap_or_else(|| unreachable!("collection")),
-                ),
-                None,
-            ),
-            expression,
-        );
+    if let Some(storage) = collection_storage(t) {
+        return decode(&storage, expression);
     }
     if let Ty::Family(family) = t {
         return crate::families::decode(family, expression, decode);
@@ -39,8 +29,8 @@ pub fn decode(t: &Ty, expression: &str) -> String {
             decode(child, "item")
         ),
         Ty::Tuple(_) | Ty::Struct(..) => {
-            let optional = if let Ty::Struct(_, _, optional) = t { optional.as_slice() } else { &[] };
-            let values=fields(t).iter().enumerate().map(|(i,t)| {
+            let (fields, optional) = fields(t);
+            let values=fields.iter().enumerate().map(|(i,t)| {
                 let found=format!("items.iter().find(|(id,_)|*id=={i}).map(|(_,v)|v)");
                 if optional.contains(&i) { format!("{found}.map(|field|Ok::<_,String>({})).transpose()?,",decode(t,"field")) }
                 else {format!("{},",decode(t,&format!("{found}.ok_or(\"prepared field missing\")?")))}
@@ -58,19 +48,10 @@ pub fn encode(t: &Ty, expression: &str) -> String {
     if *t == Ty::Any {
         return format!("encode_any({expression})");
     }
-    if matches!(t, Ty::Set(_) | Ty::Map(..)) {
+    if let Some(storage) = collection_storage(t) {
         return format!(
             "{{let mut value={};value.ty={};value}}",
-            encode(
-                &Ty::List(
-                    Box::new(
-                        crate::collections::element(t)
-                            .unwrap_or_else(|| unreachable!("collection"))
-                    ),
-                    None
-                ),
-                expression
-            ),
+            encode(&storage, expression),
             ty(t)
         );
     }
@@ -117,7 +98,7 @@ fn delta_decode(origin: &Ty, expression: &str) -> String {
             let child=child.clone().delta().unwrap_or_else(|_|unreachable!("checked child delta"));
             format!("parts.iter().filter_map(|p|if let hgl_semantics::ir::DeltaEntry::Keyed(k,_)=p {{Some(k)}} else {{None}}).map(|k|Ok({})).collect::<Result<Vec<_>,String>>()?,parts.iter().filter_map(|p|if let hgl_semantics::ir::DeltaEntry::Keyed(_,v)=p {{Some(v)}} else {{None}}).map(|v|Ok({})).collect::<Result<Vec<_>,String>>()?,parts.iter().filter_map(|p|if let hgl_semantics::ir::DeltaEntry::Remove(k)=p {{Some(k)}} else {{None}}).map(|k|Ok({})).collect::<Result<Vec<_>,String>>()?,",decode(key,"k"),decode(&child,"v"),decode(key,"k"))
         }
-        Ty::Tuple(_) | Ty::Struct(..)=>fields(origin).iter().enumerate().map(|(i,t)|format!("parts.iter().filter_map(|p|if let hgl_semantics::ir::DeltaEntry::Child(id,v)=p {{if *id=={i} {{Some(v)}} else {{None}}}} else {{None}}).map(|v|Ok({})).collect::<Result<Vec<_>,String>>()?,",decode(&t.clone().delta().unwrap_or_else(|_|unreachable!("checked child")),"v"))).collect::<Vec<_>>().concat(),
+        Ty::Tuple(_) | Ty::Struct(..)=>fields(origin).0.iter().enumerate().map(|(i,t)|format!("parts.iter().filter_map(|p|if let hgl_semantics::ir::DeltaEntry::Child(id,v)=p {{if *id=={i} {{Some(v)}} else {{None}}}} else {{None}}).map(|v|Ok({})).collect::<Result<Vec<_>,String>>()?,",decode(&t.clone().delta().unwrap_or_else(|_|unreachable!("checked child")),"v"))).collect::<Vec<_>>().concat(),
         Ty::Atomic(_) | Ty::Rolling(..) | Ty::Delta(_) | Ty::I64 | Ty::F64 | Ty::Bool | Ty::Str | Ty::Bytes | Ty::Any | Ty::Duration | Ty::Date | Ty::Time | Ty::DateTime | Ty::CivilDateTime | Ty::TimeZone | Ty::Enum(_) | Ty::ZonedTime | Ty::ZonedDateTime | Ty::Ref(_) | Ty::Nullable(_) | Ty::Recursive(_) | Ty::Family(_) | Ty::Void => unreachable!("checked structural delta"),
     };
     format!(
@@ -148,7 +129,7 @@ fn delta_encode(origin: &Ty, expression: &str) -> String {
             encode(key, "key")
         ));
     } else if matches!(origin, Ty::Tuple(_) | Ty::Struct(..)) {
-        for (i, t) in fields(origin).iter().enumerate() {
+        for (i, t) in fields(origin).0.iter().enumerate() {
             body.push(format!(
                 "for item in &v.{i} {{parts.push(hgl_semantics::ir::DeltaEntry::Child({i},{}));}}",
                 encode(
@@ -170,12 +151,8 @@ fn delta_encode(origin: &Ty, expression: &str) -> String {
 }
 
 fn encode_fields(t: &Ty) -> String {
-    let optional = if let Ty::Struct(_, _, optional) = t {
-        optional.as_slice()
-    } else {
-        &[]
-    };
-    let entries = fields(t)
+    let (fields, optional) = fields(t);
+    let entries = fields
         .iter()
         .enumerate()
         .map(|(i, t)| {
@@ -235,4 +212,16 @@ fn scalar_codec(t: &Ty) -> (String, String, &'static str) {
         }
     };
     (variant.into(), decoded.into(), encoded)
+}
+
+fn collection_storage(ty: &Ty) -> Option<Ty> {
+    if !matches!(ty, Ty::Set(_) | Ty::Map(..)) {
+        return None;
+    }
+    Some(Ty::List(
+        Box::new(
+            crate::collections::element(ty).unwrap_or_else(|| unreachable!("checked collection")),
+        ),
+        None,
+    ))
 }

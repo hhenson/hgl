@@ -115,3 +115,6 @@ Expr::Located retains expression and optional named argument origins; syntax, sp
 
 `Ty::scalar()` identifies ordinary scalar leaves, including nominal enums;
 composites and temporal wrappers return false.
+
+Inert full native package headers/records are described by [native-package](hgl-native-package.md);
+shared cold node phase metadata is described by [execution-phase](hgl-execution-phase.md).

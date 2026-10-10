@@ -141,10 +141,7 @@ pub fn retained(source: &str, ty: &Ty, global_type: fn(&Ty) -> String) -> String
             global_type(ty)
         );
     }
-    if matches!(
-        ty,
-        Ty::Str | Ty::Bytes | Ty::TimeZone | Ty::Enum(_) | Ty::ZonedTime | Ty::ZonedDateTime
-    ) {
+    if (ty.owning_scalar() && *ty != Ty::Any) || matches!(ty, Ty::Enum(_)) {
         format!("hgl_store::Scalar::try_clone(&({source}))?")
     } else {
         format!("({source})")

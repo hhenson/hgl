@@ -1,7 +1,7 @@
 //! Bind checked values to concrete ordinary and temporal signatures.
 use crate::ir::{Kind, Value};
-use crate::library::{Role, Signature};
-use hgl_source::{Cursor, Expr, Ty};
+use crate::library::Signature;
+use hgl_source::{Expr, Ty};
 use std::collections::{BTreeMap, BTreeSet};
 type Bound = (Vec<Value>, BTreeMap<String, Ty>, Ty);
 /// Check bind at the typed call boundary.
@@ -339,80 +339,7 @@ pub fn signature_types(
     Ok(types)
 }
 
-/// Select and intern a native provider binding without invoking it.
-pub fn native(
-    library: &crate::library::Library,
-    declaration: &crate::library::Decl,
-    signature: &Signature,
-    (values, result): (Vec<Value>, Ty),
-    runtime: bool,
-    natives: &mut Vec<crate::ir::Native>,
-) -> Result<Value, String> {
-    let module = declaration.module.as_str();
-    let name = declaration.name.as_str();
-    if !runtime {
-        return Err("native value calls in composition are not yet supported".into());
-    }
-    let selected = library
-        .declarations
-        .iter()
-        .filter(|d| d.module == module && d.name == name && d.role == Role::Native)
-        .filter_map(|d| d.signature().ok())
-        .filter(|s| {
-            s.generics.is_empty()
-                && s.parameters.len() == signature.parameters.len()
-                && s.parameters
-                    .iter()
-                    .zip(&signature.parameters)
-                    .all(|(a, b)| a.name == b.name && a.ty == b.ty && a.constant == b.constant)
-                && s.throws == signature.throws
-                && s.result == signature.result
-                && !s.body.is_empty()
-        })
-        .collect::<Vec<_>>();
-    if selected.len() != 1 {
-        return Err(format!(
-            "{module}::{name}: expected one selected native implementation"
-        ));
-    }
-    let mut body = Cursor::new(&selected[0].body);
-    body.need("{")?;
-    body.lines();
-    body.need("}")?;
-    body.lines();
-    if !body.at("") {
-        return Err("unsupported native implementation".into());
-    }
-    let method = format!(
-        "{}_{}",
-        name,
-        values
-            .iter()
-            .map(|v| v.ty.name())
-            .collect::<Vec<_>>()
-            .join("_")
-    );
-    let full_name = format!("{module}::{name}");
-    let native = natives
-        .iter()
-        .position(|n| {
-            n.name == full_name && n.args == values.iter().map(|v| v.ty.clone()).collect::<Vec<_>>()
-        })
-        .unwrap_or(natives.len());
-    if native == natives.len() {
-        if natives.iter().any(|n| n.method == method) {
-            return Err("native Rust binding name collision".into());
-        }
-        natives.push(crate::ir::Native {
-            name: full_name,
-            method,
-            throws: signature.throws,
-            args: values.iter().map(|v| v.ty.clone()).collect(),
-            result: result.clone(),
-        });
-    }
-    Ok(Value::new(result, Kind::Native(native, values)))
-}
+pub use crate::native_contracts::bind as native;
 
 /// Match an explicit materialization against exact resolved source types.
 pub fn instantiated(

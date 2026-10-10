@@ -134,3 +134,7 @@ May use scalars. Byte comparisons and lengths borrow typed scalar slices, includ
 Prepared publication and ordered global writes delegate to hgl-rust-prepared-hooks. Independently retained Any locals and returns delegate to hgl-rust-any-prepared. Compiled box comparison borrows typed sources, preserving fallible contained capabilities.
 
 Generated-code formatting shares the crate's append sink across emitter modules; the helper performs the same infallible String formatting and introduces no runtime behavior.
+
+Checked native image calls use descriptor-selected static module symbols. Legacy
+input-view helpers retain their Native trait boundary; image calls need no supplied
+Provider type. Interface declarations and legacy adapters share signature emission.

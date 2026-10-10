@@ -1,5 +1,5 @@
 use crate::index::{Decl, Library, Role, Signature};
-use crate::syntax::{Cursor, Expr, Literal, Stmt, Ty};
+use crate::syntax::{Cursor, Expr, Issue, Literal, Stmt, Ty};
 use hgl_rust::{Kind, Native, Node, Plan, Statement, Value};
 use hgl_semantics::body_check::runtime_body;
 use hgl_semantics::endpoint_check::{
@@ -13,7 +13,7 @@ use hgl_semantics::value_bind::{
 };
 use hgl_semantics::value_check::{ordinary, writable};
 use hgl_semantics::value_eval::atomic_argument;
-use hgl_source::Issue;
+use hgl_source::execution_phase::ExecutionPhase as Phase;
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Default)]
@@ -55,13 +55,6 @@ enum ValueContext {
     Constant,
     Preparation,
     Runtime,
-}
-#[derive(Default, Clone, Copy, PartialEq, Eq)]
-enum Phase {
-    Start,
-    #[default]
-    Evaluation,
-    Stop,
 }
 type Selection = (usize, Signature, Vec<Value>, BTreeMap<String, Ty>, Ty);
 type Env = BTreeMap<String, Value>;
@@ -151,7 +144,7 @@ impl Checker {
                 &decl,
                 &signature,
                 (values, result),
-                runtime,
+                (runtime, self.phase.name()),
                 &mut self.plan.natives,
             )?);
         }
@@ -1821,6 +1814,7 @@ impl Checker {
             self.plan.natives.push(Native {
                 name: "info(logger)".into(),
                 method: "log_info_str".into(),
+                provider: None,
                 args: vec![Ty::Str],
                 result: Ty::Void,
                 throws: false,

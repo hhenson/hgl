@@ -11,6 +11,8 @@ line-budget = 2090
 # Budgets of the modules that were crates of their own (docs/decisions/0004).
 [package.metadata.hgl.modules]
 ordinary_shape = { budget = 120, uses = ["type_shape"] }
+execution_phase = { budget = 40, uses = [] }
+native_package = { budget = 80, uses = ["native_descriptor"] }
 native_descriptor = { budget = 140, uses = [] }
 scalar_shape = { budget = 80, uses = [] }
 diagnostics = { budget = 200, uses = [] }

@@ -15,3 +15,6 @@ Acceptance: existing prepared captures and shared atomic container debug/release
 runs; conversion occurs outside hot evaluation and never replays provider recipes.
 
 Bytes encode and decode as exact Literal::Bytes and Vec<u8>; constructor materialization precedes replay capture conversion. No text encoding or implicit conversion exists.
+
+Both cold keyed collection directions use one ordinary sequence storage adapter;
+the surrounding checked source type remains exact in captured metadata.

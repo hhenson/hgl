@@ -829,3 +829,9 @@ pub mod ordinary_shape;
 pub mod native_descriptor;
 /// Cold builtin scalar metadata preserves owning and nominal leaf boundaries.
 pub mod scalar_shape;
+
+/// Inert provider package records and image location parsing.
+pub mod native_package;
+
+/// Checked node lifecycle value phases.
+pub mod execution_phase;

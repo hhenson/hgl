@@ -110,3 +110,6 @@ slots retain descendant validity independently.
 Plan::ordinary_types retains closed harness payload layouts hidden behind Any before startup. It supplies cold descriptor preparation, never runtime type-name discovery.
 
 Finite capacity planning keeps recording rows at the existing cycles-plus-start bound; ordinary global lists preserve initial rows before reserved appends.
+
+Native.provider optionally retains the exact inert selected package Descriptor;
+image paths and signatures are checked metadata, never executable checker callbacks.
