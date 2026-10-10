@@ -57,3 +57,8 @@ Scalar-child i64 Map upsert is admitted alongside insert/update. Cold constructo
 topology preparation includes known operation keys and child widths; it never
 executes the operation or payload. These keys seed existing prepared membership
 slots so proved imperative sources can execute without per-cycle allocation.
+
+`set_operation(op,endpoint,key)` emits scalar set metadata and membership
+operations. Strict insert/remove validate absence/presence before mutation;
+tolerant upsert/discard retain their existing behavior. Arguments are evaluated
+once. Payload-free collection invalidation accepts structural children.

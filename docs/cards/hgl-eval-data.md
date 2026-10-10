@@ -5,7 +5,7 @@ Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-
 Compile-time preparation for finite eval publication traces. Depends only on
 hgl-source and hgl-rust-ir; budget 350 source lines. No runtime dispatch.
 
-Public `validate(shape, slots)` checks a fresh trace's canonical nonempty delta
+Public `validate(shape, slots)` checks a fresh trace's canonical delta
 admission and returns its first rejected position and reason. Sparse children
 retain their membership state between positions; removals destroy that child's
 validation state. This never fills omissions from held data or changes source

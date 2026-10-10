@@ -8,7 +8,8 @@ Public surface: `endpoint`, `supported`, `retain`, `indexed`,
 `delta_result`, `ordinary_result`, `nested_snapshot`. Canonical ordinary types remain exact. `retain` marks a supported
 current Tuple/concrete Struct/fixed List/Map read (or a projected/iterated scalar text child) for independent prepared ownership. `indexed` resolves fixed
 Tuple positions, preserving snapshot representation and source endpoint identity,
-and checks ordinary List indexing. Signals retain their existing payload ban.
+and checks ordinary List indexing. Static fixed List input indices resolve to
+the same endpoint projection IR, with constant-position bounds checks. Signals retain their existing payload ban.
 Implicit ordinary Tuple results may construct complete publications; explicitly
 required delta<T> results retain the catalogue's exact compatibility requirement.
 

@@ -73,6 +73,13 @@ impl<W: Wake> PreparedTick<'_, W> {
             self.writer,
         );
     }
+    /// Establish sparse parent validity without initializing any child.
+    pub fn initialize_sparse(&mut self, output: OutputId, generation: u32) {
+        self.authorize(output, generation);
+        if self.storage.bindings.output(output).modified_at == EngineTime::NEVER {
+            self.storage.bindings.publish(output, self.now, self.wake);
+        }
+    }
     /// Publish one independently retained arrival from a prepared source slot.
     pub fn rolling_from<S: crate::rolling::WindowShape>(
         &mut self,
@@ -224,15 +231,11 @@ impl<W: Wake> PreparedTick<'_, W> {
         value: &T::Value,
     ) -> NodeResult {
         self.authorize(output.id(), output.generation());
-        let slot = self
-            .storage
-            .atomic
-            .destination(self.storage.bindings, output)?;
-        T::check_native(self.storage.atomic.values(), slot, value)?;
-        T::copy_native(self.storage.atomic.values_mut(), slot, value);
-        self.storage
-            .bindings
-            .publish(output.id(), self.now, self.wake);
+        let storage = &mut self.storage;
+        let slot = storage.atomic.destination(storage.bindings, output)?;
+        T::check_native(storage.atomic.values(), slot, value)?;
+        T::copy_native(storage.atomic.values_mut(), slot, value);
+        storage.bindings.publish(output.id(), self.now, self.wake);
         Ok(())
     }
     /// Pass an atomic publication directly between independently prepared slots.
@@ -242,21 +245,12 @@ impl<W: Wake> PreparedTick<'_, W> {
         output: Output<Atomic<T>>,
     ) -> NodeResult {
         self.authorize(output.id(), output.generation());
-        let from = self.storage.atomic.borrow(self.storage.bindings, input)?;
-        let to = self
-            .storage
-            .atomic
-            .destination(self.storage.bindings, output)?;
-        T::check_slots(
-            self.storage.atomic.values(),
-            from,
-            self.storage.atomic.values(),
-            to,
-        )?;
-        T::copy_within(self.storage.atomic.values_mut(), from, to);
-        self.storage
-            .bindings
-            .publish(output.id(), self.now, self.wake);
+        let storage = &mut self.storage;
+        let from = storage.atomic.borrow(storage.bindings, input)?;
+        let to = storage.atomic.destination(storage.bindings, output)?;
+        T::check_slots(storage.atomic.values(), from, storage.atomic.values(), to)?;
+        T::copy_within(storage.atomic.values_mut(), from, to);
+        storage.bindings.publish(output.id(), self.now, self.wake);
         Ok(())
     }
     /// Publish from an independently owned prepared source arena.
@@ -267,15 +261,11 @@ impl<W: Wake> PreparedTick<'_, W> {
         output: Output<Atomic<T>>,
     ) -> NodeResult {
         self.authorize(output.id(), output.generation());
-        let to = self
-            .storage
-            .atomic
-            .destination(self.storage.bindings, output)?;
-        T::check_slots(source, from, self.storage.atomic.values(), to)?;
-        T::copy_between(source, from, self.storage.atomic.values_mut(), to);
-        self.storage
-            .bindings
-            .publish(output.id(), self.now, self.wake);
+        let storage = &mut self.storage;
+        let to = storage.atomic.destination(storage.bindings, output)?;
+        T::check_slots(source, from, storage.atomic.values(), to)?;
+        T::copy_between(source, from, storage.atomic.values_mut(), to);
+        storage.bindings.publish(output.id(), self.now, self.wake);
         Ok(())
     }
 }

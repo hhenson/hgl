@@ -1790,7 +1790,7 @@ impl Checker {
     ) -> Result<Value, Issue> {
         let (owner, item) = hgl_semantics::value_types::identity(&self.library, module, name);
         if matches!(name, "upsert" | "discard")
-            || (name == "contains"
+            || (matches!(name, "contains" | "insert" | "remove")
                 && args
                     .first()
                     .is_some_and(|(_, v)| matches!(v.ty, Ty::Set(_))))

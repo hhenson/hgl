@@ -1,0 +1,37 @@
+module hgraph.std part empty_delta_paths
+struct EmptyChildren { left: set<i64>
+right: list<i64,2> }
+fn forward_empty<T>(value:T)->T {when {let retained=delta_value(value)
+return retained}}
+fn direct_empty(step:i64)->EmptyChildren {when {return delta<EmptyChildren>(left:delta<set<i64>>())}}
+fn configured_empty(step:i64,const value:delta<EmptyChildren>)->EmptyChildren {when {return value}}
+fn same_cycle_empty(step:i64)->set<i64> {inject out
+when {out=delta<set<i64>>()
+out=delta<set<i64>>()}}
+fn cancelled(step:i64)->set<i64> {inject out
+when {upsert(out,1)
+discard(out,1)}}
+fn consume_cancelled(step:i64)->set<i64> => forward_empty(cancelled(step))
+fn growing_empty(value:list<set<i64>>)->list<set<i64>> => forward_empty(value)
+fn map_empty(value:map<i64,set<i64>>)->map<i64,set<i64>> => forward_empty(value)
+fn generic_empty(step:i64)->EmptyChildren {when {var text="x"
+var i=0
+while i<step {text=text+text
+i+=1}
+if step>0 {return delta<EmptyChildren>(left:delta<set<i64>>())}}}
+test direct_and_configured_empty {
+ assert eval(direct_empty,step:[1,1,_]) == [delta<EmptyChildren>(left:delta<set<i64>>()),_,_]
+ assert eval(configured_empty,step:[1,1],value:delta<EmptyChildren>(right:delta<list<i64,2>>())) == [delta<EmptyChildren>(right:delta<list<i64,2>>()),_]
+ assert eval(same_cycle_empty,step:[1,1]) == [delta<set<i64>>(),_]
+}
+test empty_cancellation_forwarding {
+ assert eval(cancelled,step:[1,1]) == [delta<set<i64>>(),delta<set<i64>>()]
+ assert eval(consume_cancelled,step:[1,1]) == [delta<set<i64>>(),_]
+}
+test empty_dynamic_children {
+ assert eval(growing_empty,value:[delta<list<set<i64>>>(items:[0:delta<set<i64>>()]),delta<list<set<i64>>>(items:[0:delta<set<i64>>()]),delta<list<set<i64>>>(items:[1:delta<set<i64>>()])]) == [delta<list<set<i64>>>(items:[0:delta<set<i64>>()]),_,delta<list<set<i64>>>(items:[1:delta<set<i64>>()])]
+ assert eval(map_empty,value:[delta<map<i64,set<i64>>>(upsert:[7:delta<set<i64>>()]),delta<map<i64,set<i64>>>(upsert:[7:delta<set<i64>>()]),delta<map<i64,set<i64>>>(upsert:[8:delta<set<i64>>()])]) == [delta<map<i64,set<i64>>>(upsert:[7:delta<set<i64>>()]),_,delta<map<i64,set<i64>>>(upsert:[8:delta<set<i64>>()])]
+}
+test generic_empty_application {
+ assert eval(generic_empty,step:[1,1]) == [delta<EmptyChildren>(left:delta<set<i64>>()),_]
+}

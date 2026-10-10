@@ -54,3 +54,7 @@ surface. rolling_text<S> authorizes a String window output, measures pure scalar
 source fragments through Observation, then composes into its independent reserved
 ring slot and commits one arrival. The callback contract matches scalar text:
 read inputs and append exactly the measured bytes, with no fallible side effects.
+
+`initialize_sparse(output,generation)` authorizes the destination and establishes
+parent validity only when invalid. It preserves children, repeated applications
+and any publication already made this cycle (EMPTY-1).

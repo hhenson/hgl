@@ -52,3 +52,6 @@ Tuple, Struct, nullable and atomic children, using the existing scalar owning
 classification for leaves. This cold proof distinguishes fixed positional
 arguments from text or collection descendants; it changes no runtime layout or
 return/mutation proof. value_calls combines it with structured literal-use proof.
+
+Invalidating a constant-key map child retains no child payload, including a
+structural child; it uses the same finite membership domain as scalar invalidation.

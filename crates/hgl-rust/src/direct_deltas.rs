@@ -80,7 +80,7 @@ pub fn publish(value: &Value, emit: impl Fn(&Value) -> String) -> Option<String>
     }
     let mut prelude = Vec::new();
     let body = delta(value, "self._output", &emit, &mut prelude);
-    Some(format!("{}{}return Ok(());", prelude.concat(), body))
+    Some(format!("{}{body}", prelude.concat()))
 }
 fn key_code(value: &Value, emit: &impl Fn(&Value) -> String, prelude: &mut Vec<String>) -> String {
     let id = prelude.len();
@@ -136,9 +136,6 @@ fn delta(
     let (Ty::Delta(origin), Kind::Delta(parts)) = (&value.ty, &value.kind) else {
         unreachable!("checked direct delta")
     };
-    if parts.is_empty() {
-        return "return Err(hgl_types::NodeError::new(\"empty structural delta application is outside the supported profile\"));".into();
-    }
     let growing = matches!(origin.as_ref(), Ty::List(_, None));
     let mut appended = Vec::new();
     let mut tail = Vec::new();
@@ -208,5 +205,9 @@ fn delta(
     } else {
         String::new()
     };
-    range + &validate.concat() + &removed.concat() + &updates.concat()
+    range
+        + &validate.concat()
+        + &removed.concat()
+        + &updates.concat()
+        + &format!("_ctx.prepared().initialize_sparse({output}.id(),{output}.generation());")
 }

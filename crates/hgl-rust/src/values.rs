@@ -273,7 +273,7 @@ pub fn statements(plan: &Plan, body: &[Statement], out: &mut Vec<String>, result
             },
             Statement::Var(i, v) => format!("let mut local{i} = {};\n", condition_code(plan, v)),
             Statement::Return(v) => {
-                if crate::finite_domains::prepared(plan) && plan.recording.is_some() && let Some(code)=prepared::forward(plan,v,result) {out.push(code);continue;}
+                if let Some(code)=prepared::publication(plan,v,result) {out.push(format!("{code}return Ok(());"));continue;}
                 let publication=if v.snapshot {crate::snapshot_views::publication(v,|v|value(plan,v))}else{condition_code(plan,v)};
                 if let Some(code)=crate::snapshot_slots::returned(v,&publication,result) {code} else {
                     let publish=if matches!(v.ty,Ty::Ref(_)) {"_ctx.set_reference(self._output, publication)?;".into()} else {result.filter(|ty|matches!(ty,Ty::Rolling(..))).map_or_else(||crate::deltas::publish(&v.ty,"publication"),|ty|crate::windows::apply(ty,"self._output","publication"))};
@@ -311,6 +311,11 @@ fn assignment(plan: &Plan, target: &Value, v: &Value) -> String {
         && let Some(code) = crate::structural_publication::assignment(v, |v| value(plan, v))
     {
         return code;
+    }
+    if matches!(target.kind, Kind::Output)
+        && let Some(code) = prepared::publication(plan, v, Some(&target.ty))
+    {
+        return format!("{{{code}}}");
     }
     let publish = crate::deltas::publish(&v.ty, "publication");
     let v = condition_code(plan, v);
@@ -436,30 +441,16 @@ fn set_query(plan: &Plan, op: &str, args: &[Value]) -> String {
         assert!(matches!(args[0].kind, Kind::Output), "checked set endpoint");
         "self._output.id()".to_owned()
     };
-    if op == "set_bound" {
-        return format!("_ctx.store().bindings().has_peer({endpoint})");
-    }
-    if op == "set_len" {
-        return format!(
-            "i64::try_from(_ctx.store().bindings().input({endpoint}).members.live.len()).map_err(|e|hgl_kernel::NodeError::new(e.to_string()))?"
-        );
-    }
-    let key = condition_code(plan, &args[1]);
-    let key = if args[1].ty == Ty::Bool {
+    let key = args
+        .get(1)
+        .map(|value| condition_code(plan, value))
+        .unwrap_or_default();
+    let key = if args.get(1).is_some_and(|value| value.ty == Ty::Bool) {
         format!("i64::from({key})")
     } else {
         key
     };
-    match op {
-        "set_contains" => {
-            format!("_ctx.store().bindings().child_input({endpoint},{key}).is_some()")
-        }
-        "set_discard" => format!("_ctx.remove_shaped({endpoint},{key})"),
-        "set_upsert" => format!(
-            "{{let key={key}; if _ctx.store().bindings().child_output({endpoint},key).is_none() {{_ctx.get_or_create_with({endpoint},key,|store,owner|store.add_output::<bool>(owner).id());let child=self._output.member(_ctx.store().bindings(),key).ok_or_else(||hgl_kernel::NodeError::new(\"missing created set member\"))?;_ctx.set(hgl_store::Store::prepared_output(child),true);}}}}"
-        ),
-        _ => unreachable!("checked set operation"),
-    }
+    crate::keyed::set_operation(op, &endpoint, &key)
 }
 
 fn native_argument(plan: &Plan, v: &Value) -> String {

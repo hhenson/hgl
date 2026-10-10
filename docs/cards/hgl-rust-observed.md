@@ -18,3 +18,8 @@ before any destination mutation and copied directly into prepared storage.
 read emits exact scalar, rolling, atomic and structural payload reads for scoped iteration children, sharing ordinary publication transport rather than assuming every child is rolling.
 
 input renders scalar or shaped input binding names for queries, including scoped iteration inputs; invalid non-input IR is rejected by its checked invariant.
+
+Empty sparse slot application and pass-through establish invalid destination
+validity. Repeated valid empties are silent. Observation retains present empty
+child entries separately from omission, and configured deltas reuse their
+prepared slots rather than cloning owning sparse storage during evaluation.

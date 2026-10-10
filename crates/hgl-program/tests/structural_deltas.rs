@@ -168,7 +168,7 @@ fn zero_size_list_data_checks_before_runtime_publication_validation() {
         assert!(!hgl_program::emit_tests(&suite).contains("empty structural publication"));
     }
     let source = "fn pass(value:list<i64,0>)->list<i64,0> {when {return delta_value(value)}}\ntest empty {eval(pass,[delta<list<i64,0>>()])}";
-    // Empty delta data is valid; structural_evaluation checks its rejection before start.
+    // Empty delta publication is valid, including a zero-child fixed shape.
     hgl_program::compile_tests(&with_std(source)).unwrap();
     let error = check("fn main() {let data=delta<list<i64,0>>(items:[0:1])}").unwrap_err();
     assert!(error.contains("out of bounds"), "{error}");

@@ -14,8 +14,8 @@ Written constructor payload order is retained before assembling storage order.
 Observation aliases keep prepared input tokens until an owning boundary.
 Application emits only supplied children; existing map children merge recursively.
 New child allocation uses a statically chosen factory, while existing allocator
-metadata validation/reuse remains construction work. Empty recursive application
-is rejected before writes. No source-level delta inspection is introduced.
+metadata validation/reuse remains construction work. Empty recursive application establishes invalid endpoint validity without
+initializing children; valid endpoints remain unchanged. No source-level delta inspection is introduced.
 
 Acceptance follows ordinary-delta-types.md and cases_ordinary_delta_types.md at
 spec60a2d7e: nested sparse ownership, removals, equal primitive publications,

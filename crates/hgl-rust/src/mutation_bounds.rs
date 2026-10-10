@@ -3,9 +3,10 @@ use hgl_semantics::ir::{Kind, Statement, Value};
 use hgl_source::Literal;
 use std::collections::BTreeMap;
 fn membership(op: &str) -> bool {
-    op == "set_upsert"
-        || op == "set_discard"
-        || (op.starts_with("collection_") && op != "collection_contains")
+    matches!(
+        op,
+        "set_upsert" | "set_discard" | "set_insert" | "set_remove"
+    ) || (op.starts_with("collection_") && op != "collection_contains")
 }
 type Constants = BTreeMap<usize, i64>;
 fn integer(value: &Value, constants: &Constants) -> Option<i64> {

@@ -28,3 +28,8 @@ items_scope fixes key and child endpoint locals for items(map-or-list) and its m
 operation also admits scalar-child i64 Map upsert with exact key/payload types.
 Unsupported recursive payload effects remain rejected; complete ordinary output
 assignment is checked by structural_admission, independently of these operations.
+
+Payload-free invalidate/remove/pop and membership checks preserve exact child
+shape without requiring a scalar payload; insertion/update payloads retain their
+existing scalar profile. Invalidation retains membership and delegates child
+validity transitions to Store.

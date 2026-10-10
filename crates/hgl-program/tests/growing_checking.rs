@@ -25,7 +25,7 @@ fn trace_validation_reports_first_bad_publication() {
         delta(&[], &[0]),
         delta(&[], &[2]),
         delta(&[1], &[1]),
-        delta(&[], &[]),
+        delta(&[2, 4], &[]),
     ] {
         let (index, _) = hgl_semantics::eval_data::validate(
             &shape,
@@ -38,7 +38,10 @@ fn trace_validation_reports_first_bad_publication() {
         hgl_semantics::eval_data::validate(
             &shape,
             &[
+                Some(delta(&[], &[])),
+                Some(delta(&[], &[])),
                 Some(delta(&[0, 1], &[])),
+                Some(delta(&[], &[])),
                 Some(delta(&[], &[1, 0])),
                 Some(delta(&[0], &[]))
             ]

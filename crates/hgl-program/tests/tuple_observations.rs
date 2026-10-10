@@ -715,3 +715,80 @@ fn measured_unset_failure_stops_and_preserves_primary_cleanup_context()
     );
     Ok(())
 }
+
+#[test]
+fn empty_sparse_deltas_publish_validity_once_without_allocating()
+-> Result<(), Box<dyn std::error::Error>> {
+    run_source(
+        include_str!("../../../external/hgraph_spec/language/examples/empty-delta-validity.hgl"),
+        true,
+        false,
+    )
+}
+
+#[test]
+fn empty_sparse_constructor_capture_and_cancellation_paths()
+-> Result<(), Box<dyn std::error::Error>> {
+    let source = include_str!("fixtures/empty_delta_paths.hgl");
+    run_selected(
+        source,
+        true,
+        false,
+        &[
+            "direct_and_configured_empty",
+            "empty_cancellation_forwarding",
+            "empty_dynamic_children",
+        ],
+        None,
+    )?;
+    let mut generic = compile_tests(&sources(source))?;
+    generic.select(&["generic_empty_application"])?;
+    let hgl_semantics::harness_ir::Step::Eval(evaluation) = &generic.tests[0].steps[0] else {
+        panic!("expected graph evaluation");
+    };
+    assert!(!hgl_rust::execution_proof::prepared(
+        &generic.plans[evaluation.case]
+    ));
+    run_selected(source, false, false, &["generic_empty_application"], None)?;
+    Ok(())
+}
+
+#[test]
+fn shared_empty_delta_validity_cases_execute() -> Result<(), Box<dyn std::error::Error>> {
+    run_source(
+        include_str!("../../../external/hgraph_std/hgl/hgraph/tests/empty_delta_validity.hgl"),
+        false,
+        false,
+    )
+}
+
+#[test]
+fn strict_set_membership_keeps_noncanonical_operations_as_errors()
+-> Result<(), Box<dyn std::error::Error>> {
+    for (body, error) in [
+        (
+            "insert(out,1)\ninsert(out,1)",
+            "set insert requires absence",
+        ),
+        ("remove(out,1)", "set removal requires presence"),
+    ] {
+        let source = format!(
+            "module hgraph.std part strict_empty_members\nfn invalid(step:i64)->set<i64> {{inject out\nwhen {{{body}}}}}\ntest strict_members {{eval(invalid,[1])}}"
+        );
+        run_selected(&source, false, true, &["strict_members"], Some(error))?;
+    }
+    Ok(())
+}
+
+#[test]
+fn empty_sparse_metadata_observation_uses_reserved_storage()
+-> Result<(), Box<dyn std::error::Error>> {
+    run_selected(
+        include_str!("../../../external/hgraph_std/hgl/hgraph/tests/empty_delta_validity.hgl"),
+        true,
+        false,
+        &[],
+        None,
+    )?;
+    Ok(())
+}

@@ -75,7 +75,7 @@ pub(super) fn marker(ty: &Ty) -> String {
     append(
         &mut code,
         format_args!(
-            "fn apply(output:hgl_store::shapes::Output<{marker}>,delta:{value},_ctx:&mut hgl_kernel::Ctx<'_>)->hgl_types::NodeResult {{ Self::validate(&delta)?; {} Ok(()) }} }}\n",
+            "fn apply(output:hgl_store::shapes::Output<{marker}>,delta:{value},_ctx:&mut hgl_kernel::Ctx<'_>)->hgl_types::NodeResult {{ Self::validate(&delta)?; {} _ctx.prepared().initialize_sparse(output.id(),output.generation()); Ok(()) }} }}\n",
             application(ty)
         ),
     );
@@ -115,11 +115,6 @@ fn allocate(ty: &Ty) -> String {
     );
     code
 }
-fn nonempty(condition: &str) -> String {
-    format!(
-        "if {condition} {{return Err(hgl_types::NodeError::new(\"empty structural delta application is outside the supported profile\"));}}"
-    )
-}
 fn child_validation(child: &Ty, source: &str) -> String {
     if structural(child) {
         format!("{}::validate({source})?;", operations(child))
@@ -129,30 +124,16 @@ fn child_validation(child: &Ty, source: &str) -> String {
 }
 fn validate(ty: &Ty) -> String {
     match ty {
-        Ty::Set(_) => nonempty("delta.0.is_empty() && delta.1.is_empty()"),
+        Ty::Set(_) => String::new(),
         Ty::List(child, _) | Ty::Map(_, child) => {
-            let cond = if matches!(ty, Ty::Map(..) | Ty::List(_, None)) {
-                "delta.0.is_empty() && delta.2.is_empty()"
-            } else {
-                "delta.0.is_empty()"
-            };
             format!(
-                "{} if delta.0.len()!=delta.1.len() {{ return Err(hgl_types::NodeError::new(\"malformed sparse delta\")); }} for child in &delta.1 {{{}}}",
-                nonempty(cond),
+                "if delta.0.len()!=delta.1.len() {{ return Err(hgl_types::NodeError::new(\"malformed sparse delta\")); }} for child in &delta.1 {{{}}}",
                 child_validation(child, "child")
             )
         }
         Ty::Struct(..) | Ty::Tuple(_) => {
             let fields = children(ty);
-            let condition = if fields.is_empty() {
-                "true".into()
-            } else {
-                (0..fields.len())
-                    .map(|i| format!("delta.{i}.is_empty()"))
-                    .collect::<Vec<_>>()
-                    .join(" && ")
-            };
-            let mut code = nonempty(&condition);
+            let mut code = String::new();
             for (i, child) in fields.iter().enumerate() {
                 append(
                     &mut code,

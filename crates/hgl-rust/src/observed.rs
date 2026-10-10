@@ -128,7 +128,7 @@ pub fn methods(ty: &Ty, shape: impl Fn(&Ty) -> String) -> String {
     let name = marker(ty);
     let shape_name = shape(ty);
     format!(
-        "impl {name} {{fn validate_slot(source:&hgl_store::ValueColumns,slot:hgl_store::ValueSlot<Self>)->hgl_types::NodeResult {{{}Ok(())}}fn apply_slot(output:hgl_store::shapes::Output<{shape_name}>,source:&hgl_store::ValueColumns,slot:hgl_store::ValueSlot<Self>,_ctx:&mut hgl_kernel::Ctx<'_>)->hgl_types::NodeResult {{Self::validate_slot(source,slot)?;{}Ok(())}} fn observe_slot(input:hgl_store::shapes::Input<{shape_name}>,observation:hgl_store::Observation<'_>,now:hgl_types::EngineTime,columns:&mut hgl_store::ValueColumns,slot:hgl_store::ValueSlot<Self>)->hgl_types::NodeResult {{{}Ok(())}} fn pass(input:hgl_store::shapes::Input<{shape_name}>,output:hgl_store::shapes::Output<{shape_name}>,_ctx:&mut hgl_kernel::Ctx<'_>)->hgl_types::NodeResult {{{}Ok(())}}}}",
+        "impl {name} {{fn validate_slot(source:&hgl_store::ValueColumns,slot:hgl_store::ValueSlot<Self>)->hgl_types::NodeResult {{{}Ok(())}}fn apply_slot(output:hgl_store::shapes::Output<{shape_name}>,source:&hgl_store::ValueColumns,slot:hgl_store::ValueSlot<Self>,_ctx:&mut hgl_kernel::Ctx<'_>)->hgl_types::NodeResult {{Self::validate_slot(source,slot)?;{}_ctx.prepared().initialize_sparse(output.id(),output.generation());Ok(())}} fn observe_slot(input:hgl_store::shapes::Input<{shape_name}>,observation:hgl_store::Observation<'_>,now:hgl_types::EngineTime,columns:&mut hgl_store::ValueColumns,slot:hgl_store::ValueSlot<Self>)->hgl_types::NodeResult {{{}Ok(())}} fn pass(input:hgl_store::shapes::Input<{shape_name}>,output:hgl_store::shapes::Output<{shape_name}>,_ctx:&mut hgl_kernel::Ctx<'_>)->hgl_types::NodeResult {{{}_ctx.prepared().initialize_sparse(output.id(),output.generation());Ok(())}}}}",
         validation(ty),
         application(ty),
         observation(ty),
@@ -297,31 +297,14 @@ fn validation(ty: &Ty) -> String {
         return validation(&Ty::Map(Box::new(Ty::I64), child.clone()));
     }
     let list_len = |i| format!("source.list(slot.fields().{i}.fields()).len()");
-    let (nonempty, children) = if let Ty::Set(_) = ty {
-        (vec![0, 1], Vec::new())
-    } else if let Ty::Map(_, child) = ty {
-        (vec![0, 2], vec![(1, child.as_ref())])
-    } else if let Ty::List(child, _) = ty {
-        (vec![0], vec![(1, child.as_ref())])
+    let children = if let Ty::Set(_) = ty {
+        Vec::new()
+    } else if let Ty::Map(_, child) | Ty::List(child, _) = ty {
+        vec![(1, child.as_ref())]
     } else {
-        (
-            (0..fields(ty).len()).collect(),
-            fields(ty).into_iter().enumerate().collect(),
-        )
+        fields(ty).into_iter().enumerate().collect()
     };
-    let condition = nonempty
-        .iter()
-        .map(|i| format!("{}==0", list_len(*i)))
-        .collect::<Vec<_>>()
-        .join(" && ");
-    let mut code = format!(
-        "if {} {{return Err(hgl_types::NodeError::new(\"empty structural delta application is outside the supported profile\"));}}",
-        if condition.is_empty() {
-            "true"
-        } else {
-            &condition
-        }
-    );
+    let mut code = String::new();
     if matches!(ty, Ty::Map(..) | Ty::List(..)) {
         append(
             &mut code,
@@ -397,10 +380,14 @@ pub fn input(v: &Value) -> String {
             format!("hgl_store::Store::prepared_input(local{id})")
         }
     } else if let Kind::Field(parent, index) = &v.kind {
-        let input = format!(
-            "({}).field::<{index}>(_ctx.store().bindings())",
-            input(parent)
-        );
+        let input = if matches!(parent.ty, Ty::List(_, Some(_))) {
+            format!("({}).index(_ctx.store().bindings(),{index})", input(parent))
+        } else {
+            format!(
+                "({}).field::<{index}>(_ctx.store().bindings())",
+                input(parent)
+            )
+        };
         if crate::deltas::shaped(&v.ty) {
             input
         } else {
