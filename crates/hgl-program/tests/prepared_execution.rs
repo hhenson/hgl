@@ -286,6 +286,100 @@ fn retained_rolling_byte_arrivals_publish_without_allocating()
 }
 
 #[test]
+fn retained_byte_field_aliases_publish_without_allocating() -> Result<(), Box<dyn std::error::Error>>
+{
+    let mut source = String::from(
+        "module retained_byte_fields\nstruct Packet {data:bytes\nkeep:i64}\nstruct Envelope {packet:Packet}\n",
+    );
+    for (shape_name, shape, projection, arguments) in [
+        (
+            "struct",
+            "Packet",
+            "value.data",
+            "[delta<Packet>(data:bytes([0,255]),keep:1),delta<Packet>(data:bytes()),_,delta<Packet>(data:bytes([1,2,3,4]))]",
+        ),
+        (
+            "tuple",
+            "tuple<bytes,i64>",
+            "value[0]",
+            "[(bytes([0,255]),1),(bytes(),_),_,(bytes([1,2,3,4]),_)]",
+        ),
+        (
+            "fixed",
+            "list<bytes,2>",
+            "value[0]",
+            "[delta<list<bytes,2>>(items:[0:bytes([0,255]),1:bytes([9])]),delta<list<bytes,2>>(items:[0:bytes()]),_,delta<list<bytes,2>>(items:[0:bytes([1,2,3,4])])]",
+        ),
+        (
+            "nested",
+            "Envelope",
+            "value.packet.data",
+            "[delta<Envelope>(packet:delta<Packet>(data:bytes([0,255]))),delta<Envelope>(packet:delta<Packet>(data:bytes())),_,delta<Envelope>(packet:delta<Packet>(data:bytes([1,2,3,4])))]",
+        ),
+    ] {
+        for (input, prelude, initializer) in [
+            ("direct", "", projection.into()),
+            (
+                "retained",
+                "let container=value\n",
+                projection.replace("value", "container"),
+            ),
+        ] {
+            for (output, result) in [("scalar", "bytes"), ("rolling", "rolling<bytes,2>")] {
+                for (operation, publication) in
+                    [("returned", "return alias"), ("assigned", "out=alias")]
+                {
+                    let name = format!("{shape_name}_{input}_{output}_{operation}");
+                    writeln!(
+                        source,
+                        "fn {name}(value:{shape})->{result} {{inject out\nwhen {{{prelude}let held={initializer}\nlet alias=held\n{publication}}}}}"
+                    )?;
+                    writeln!(
+                        source,
+                        "test {name} {{assert eval({name},{arguments})==[bytes([0,255]),bytes(),_,bytes([1,2,3,4])]}}"
+                    )?;
+                }
+            }
+        }
+    }
+    execute(source, RUNTIME, true)
+}
+
+#[test]
+fn retained_byte_selectors_run_once_and_own_their_values() -> Result<(), Box<dyn std::error::Error>>
+{
+    let source = r"module retained_byte_selectors
+native const fn byte_selector(value:i64)->i64 throws
+native const fn byte_selector(value:i64)->i64 throws {}
+native const fn byte_selection_count(value:i64) throws
+native const fn byte_selection_count(value:i64) throws {}
+fn copy(value:list<bytes,2>,index:i64)->rolling<bytes,2> {
+when {let whole=value
+let child=whole[byte_selector(index)]
+let alias=child
+return alias}
+stop {byte_selection_count(3)}}
+test copy {assert eval(copy,[delta<list<bytes,2>>(items:[0:bytes([0,255]),1:bytes([9])]),delta<list<bytes,2>>(items:[1:bytes()]),delta<list<bytes,2>>(items:[0:bytes([1,2,3,4])])],[0,1,0])==[bytes([0,255]),bytes(),bytes([1,2,3,4])]}
+fn independent(value:list<bytes,2>)->bytes {when {let first=value[0]
+let second=value[1]
+let alias=first
+if alias!=second {return alias}}}
+test independent {assert eval(independent,[delta<list<bytes,2>>(items:[0:bytes([0,255]),1:bytes([9])]),delta<list<bytes,2>>(items:[0:bytes(),1:bytes([1,2])])])==[bytes([0,255]),bytes()]}
+const fn ordinary(value:tuple<bytes,i64>)->bytes {var local=value[0]
+return local}
+test ordinary {assert ordinary((bytes([0,255]),1))==bytes([0,255])}
+";
+    let mut runtime = RUNTIME.replace("mod native {", r"mod native {
+pub fn byte_selector_i64(value:i64)->hgl_types::NodeResult<i64> {super::BYTE_SELECTIONS.fetch_add(1,std::sync::atomic::Ordering::SeqCst);Ok(value)}
+pub fn byte_selection_count_i64(expected:i64)->hgl_types::NodeResult {assert_eq!(super::BYTE_SELECTIONS.load(std::sync::atomic::Ordering::SeqCst),expected);Ok(())}
+");
+    runtime.push_str(
+        "static BYTE_SELECTIONS:std::sync::atomic::AtomicI64=std::sync::atomic::AtomicI64::new(0);",
+    );
+    execute(source.into(), &runtime, true)
+}
+
+#[test]
 fn rolling_byte_conversion_uses_prepared_execution() -> Result<(), Box<dyn std::error::Error>> {
     execute(
         r#"module rolling_bytes_constructor

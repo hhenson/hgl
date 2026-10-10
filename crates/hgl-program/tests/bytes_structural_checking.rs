@@ -132,3 +132,53 @@ fn retained_byte_constructors_keep_whole_aggregate_result_boundaries() {
         }
     }
 }
+
+#[test]
+fn byte_field_locals_keep_signal_mutability_and_selector_boundaries() {
+    for (shape, projection, argument) in [
+        ("Packet", "value.data", "delta<Packet>(data:bytes([0,255]))"),
+        ("tuple<bytes,i64>", "value[0]", "(bytes([0,255]),1)"),
+        (
+            "list<bytes,2>",
+            "value[0]",
+            "delta<list<bytes,2>>(items:[0:bytes([0,255])])",
+        ),
+    ] {
+        for result in ["bytes", "rolling<bytes,2>"] {
+            let body = format!(
+                "fn bad(value:{shape})->{result} {{when {{var held={projection}\nreturn held}}}}\ntest rejected {{eval(bad,[{argument}])}}"
+            );
+            let error = compile_tests(&sources(&body)).unwrap_err();
+            assert!(error.contains("mutable retained"), "{body}\n{error}");
+            let body = format!(
+                "fn observe(value:signal)->{result} {{when {{let held={projection}\nreturn held}}}}\nfn bad(value:{shape})->{result} => observe(value)\ntest rejected {{eval(bad,[{argument}])}}"
+            );
+            let error = compile_tests(&sources(&body)).unwrap_err();
+            assert!(error.contains("signal"), "{body}\n{error}");
+        }
+        let body = format!(
+            "fn bad(value:{shape})->bytes {{when {{let held=delta_value({projection})\nreturn held}}}}\ntest rejected {{eval(bad,[{argument}])}}"
+        );
+        let error = compile_tests(&sources(&body)).unwrap_err();
+        assert!(error.contains("temporal input endpoint"), "{body}\n{error}");
+    }
+    let body = "fn bad(value:list<bytes,2>,index:i64)->bytes {when {let held=value[index]\nreturn held}}\ntest rejected {eval(bad,[delta<list<bytes,2>>(items:[0:bytes()])],[0])}";
+    let error = compile_tests(&sources(body)).unwrap_err();
+    assert!(error.contains("constant integer position"), "{error}");
+}
+
+#[test]
+fn byte_field_snapshots_require_finite_preparation() {
+    for result in ["bytes", "rolling<bytes,2>"] {
+        for publication in ["return held", "out=held"] {
+            let body = format!(
+                "fn source()->Packet {{yield 0s:delta<Packet>(data:bytes([0,255]))}}\nfn copy(value:Packet)->{result} {{inject out\nwhen {{let held=value.data\n{publication}}}}}\nfn main()->{result} => copy(source())"
+            );
+            let error = hgl_program::compile(&sources(&body), "main").unwrap_err();
+            assert!(
+                error.contains("owning Tuple observations require finite prepared transport"),
+                "{body}\n{error}"
+            );
+        }
+    }
+}
