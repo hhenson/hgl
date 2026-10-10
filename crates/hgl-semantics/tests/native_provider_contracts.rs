@@ -29,7 +29,10 @@ fn checking_binds_data_without_loading_or_executing_provider_code() -> Result<()
     let descriptor = &library.native_contracts["provider"];
     assert_eq!(descriptor.scalars["Token"].identity, "existing.Token");
     assert_eq!(descriptor.functions["token"].symbol, "token_str");
-    assert!(descriptor.functions["token"].signature.value_function);
+    assert_eq!(
+        descriptor.functions["token"].parameters,
+        [("text".into(), "str".into())]
+    );
     descriptor.verify_image("owning-test", "contract-v1")?;
     assert!(
         descriptor
@@ -114,6 +117,7 @@ fn descriptor_format_modes_signals_and_phases_are_checked() {
         HELPER.replace("text:str", "text:signal"),
         HELPER.replace("text:str", "const text:str"),
         HELPER.replace("text:str", "text:list<signal>"),
+        HELPER.replace("text:str", "text:str,text:str"),
         HELPER.replace("ownership owned", "ownership borrowed"),
         HELPER.replace("{setup,cold,evaluation}", "{required_constant}"),
         HELPER.replace("{allocation}", "{blocking}"),

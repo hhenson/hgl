@@ -826,5 +826,6 @@ pub mod type_shape;
 pub mod type_syntax;
 
 pub mod ordinary_shape;
+pub mod native_descriptor;
 /// Cold builtin scalar metadata preserves owning and nominal leaf boundaries.
 pub mod scalar_shape;

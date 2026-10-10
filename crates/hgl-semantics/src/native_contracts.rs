@@ -1,28 +1,9 @@
 //! Descriptor-only native scalar and exact ordinary helper contracts.
 use crate::library::{Decl, Library, Role, Signature};
-use hgl_source::{Cursor, Expr, Issue, Literal};
-use std::collections::{BTreeMap, BTreeSet};
+use hgl_source::{Cursor, Issue};
+use std::collections::BTreeMap;
 
-/// Owning scalar operations advertised by the portable package contract.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Scalar {
-    /// Existing canonical scalar identity, independent of the HGL binding name.
-    pub identity: String,
-    /// Shared operations available to checked source contexts.
-    pub capabilities: BTreeSet<String>,
-}
-/// One exact ordinary function supplied by the selected provider.
-#[derive(Debug, Clone)]
-pub struct Function {
-    /// Exact portable value signature; no body is loaded or evaluated.
-    pub signature: Signature,
-    /// Reviewed target symbol, bound once before execution.
-    pub symbol: String,
-    /// Explicit execution contexts, excluding required constant evaluation.
-    pub phases: BTreeSet<String>,
-    /// Observable provider effects, checked independently of const syntax.
-    pub effects: BTreeSet<String>,
-}
+pub use hgl_source::native_descriptor::{Function, Scalar};
 /// A versioned package descriptor, separate from its implementation image.
 #[derive(Debug, Clone)]
 pub struct Descriptor {
@@ -52,130 +33,11 @@ pub type Contracts = BTreeMap<String, Descriptor>;
 pub fn sidecar(source: &str) -> bool {
     source.ends_with(".hgl-native")
 }
-fn text(c: &mut Cursor<'_>) -> Result<String, Issue> {
-    let Expr::Literal(Literal::Str(text)) = c.expr()?.syntax().clone() else {
-        return Err("native descriptor requires quoted text".into());
-    };
-    if text.is_empty() {
-        return Err("native descriptor identity must not be empty".into());
-    }
-    Ok(text)
-}
-fn names(c: &mut Cursor<'_>, allowed: &[&str]) -> Result<BTreeSet<String>, Issue> {
-    c.need("{")?;
-    c.lines();
-    let mut values = BTreeSet::new();
-    while !c.take("}") {
-        let name = c.name()?;
-        if !allowed.contains(&name.as_str()) || !values.insert(name) {
-            return Err("native descriptor has an unknown or duplicate contract member".into());
-        }
-        c.lines();
-        if !c.take(",") {
-            c.need("}")?;
-            break;
-        }
-        c.lines();
-    }
-    Ok(values)
-}
-fn scalar_record(c: &mut Cursor<'_>) -> Result<(String, Scalar), Issue> {
-    let name = c.name()?;
-    c.need("canonical")?;
-    let identity = text(c)?;
-    c.need("capabilities")?;
-    let capabilities = names(
-        c,
-        &["copy", "text", "equality", "hash", "order", "serialization"],
-    )?;
-    if !capabilities.contains("copy") || !capabilities.contains("text") {
-        return Err("native scalar requires owning copy and text operations".into());
-    }
-    Ok((
-        name,
-        Scalar {
-            identity,
-            capabilities,
-        },
-    ))
-}
-fn function_record(
-    source: &str,
-    module: &str,
-    c: &mut Cursor<'_>,
-) -> Result<(String, Function), Issue> {
-    let name = c.name()?;
-    let start = c.pos;
-    while !c.at("symbol") && !c.at("") && !c.at("\n") {
-        c.consume()?;
-    }
-    let mut tokens = hgl_source::lex(&format!("const fn {name}"))?;
-    tokens.extend_from_slice(&c.tokens[start..c.pos]);
-    let declaration = Decl {
-        module: module.into(),
-        name: name.clone(),
-        role: Role::Function,
-        tokens,
-        source: source.into(),
-        doc: String::new(),
-        test_only: false,
-    };
-    let signature = declaration.signature_checked()?;
-    if !signature.body.is_empty()
-        || !signature.generics.is_empty()
-        || signature
-            .parameters
-            .iter()
-            .any(|p| p.constant || p.default.is_some())
-    {
-        return Err("native descriptor requires one exact ordinary value signature".into());
-    }
-    c.need("symbol")?;
-    let symbol = text(c)?;
-    if !symbol
-        .bytes()
-        .enumerate()
-        .all(|(i, b)| b == b'_' || b.is_ascii_alphabetic() || (i > 0 && b.is_ascii_digit()))
-    {
-        return Err("native descriptor symbol requires a Rust identifier".into());
-    }
-    c.need("ownership")?;
-    c.need("owned")?;
-    c.need("phases")?;
-    let phases = names(c, &["setup", "cold", "evaluation", "start", "stop"])?;
-    if phases.is_empty() {
-        return Err("native helper requires a permitted phase".into());
-    }
-    c.need("effects")?;
-    let effects = names(c, &["allocation", "io", "blocking", "mutation"])?;
-    if effects.contains("blocking") && phases.contains("evaluation") {
-        return Err("native evaluation helpers must be nonblocking".into());
-    }
-    if effects.contains("mutation") {
-        return Err("ordinary native scalar helpers require readonly arguments".into());
-    }
-    Ok((
-        name,
-        Function {
-            signature,
-            symbol,
-            phases,
-            effects,
-        },
-    ))
-}
 /// Parse one descriptor using only the source lexer and inert metadata.
-pub fn parse(source: &str, input: &str) -> Result<Descriptor, Issue> {
+pub fn parse(_source: &str, input: &str) -> Result<Descriptor, Issue> {
     let tokens = hgl_source::lex(input)?;
     let mut c = Cursor::new(&tokens);
-    c.lines();
-    c.need("native_descriptor")?;
-    c.need("1")?;
-    c.need("target")?;
-    if text(&mut c)? != "hgl-rust-1" {
-        return Err("incompatible native descriptor target".into());
-    }
-    c.lines();
+    hgl_source::native_descriptor::version(&mut c)?;
     c.need("module")?;
     let mut module = c.name()?;
     while c.take(".") {
@@ -184,9 +46,9 @@ pub fn parse(source: &str, input: &str) -> Result<Descriptor, Issue> {
     }
     c.lines();
     c.need("provider")?;
-    let provider = text(&mut c)?;
+    let provider = hgl_source::native_descriptor::text(&mut c)?;
     c.need("fingerprint")?;
-    let fingerprint = text(&mut c)?;
+    let fingerprint = hgl_source::native_descriptor::text(&mut c)?;
     c.lines();
     let mut descriptor = Descriptor {
         module,
@@ -197,13 +59,13 @@ pub fn parse(source: &str, input: &str) -> Result<Descriptor, Issue> {
     };
     while !c.at("") {
         if c.take("scalar") {
-            let (name, scalar) = scalar_record(&mut c)?;
+            let (name, scalar) = hgl_source::native_descriptor::scalar(&mut c)?;
             if descriptor.scalars.insert(name, scalar).is_some() {
                 return Err("duplicate native scalar descriptor binding".into());
             }
         } else {
             c.need("value")?;
-            let (name, function) = function_record(source, &descriptor.module, &mut c)?;
+            let (name, function) = hgl_source::native_descriptor::function(&mut c)?;
             if descriptor.functions.insert(name, function).is_some() {
                 return Err("duplicate native helper descriptor binding".into());
             }
@@ -286,15 +148,7 @@ fn canonical(library: &Library, module: &str, name: &str) -> Result<String, Issu
         return Ok(scalar(library, declaration)?.identity.clone());
     }
     if let Some(ty) = hgl_source::Ty::parse(name)
-        && ty.atomic_payload()
-        && !matches!(
-            ty,
-            hgl_source::Ty::Atomic(_)
-                | hgl_source::Ty::List(..)
-                | hgl_source::Ty::Tuple(_)
-                | hgl_source::Ty::Map(..)
-                | hgl_source::Ty::Set(_)
-        )
+        && ty.scalar_kind().is_some()
     {
         return Ok(ty.source_name());
     }
@@ -310,45 +164,35 @@ pub fn function<'a>(
         .native_contracts
         .get(&declaration.module)
         .and_then(|d| d.functions.get(&declaration.name));
-    let names = signature
-        .parameters
-        .iter()
-        .map(|p| p.ty.as_str())
-        .chain(std::iter::once(signature.result.as_str()));
-    let mut native = false;
-    for name in names {
-        native |=
-            crate::struct_names::native_declaration(library, &declaration.module, name)?.is_some();
-    }
     let Some(selected) = selected else {
-        return if native {
-            Err(format!(
-                "{}::{}: missing exact native helper provider descriptor",
-                declaration.module, declaration.name
-            )
-            .into())
-        } else {
-            Ok(None)
-        };
+        let names = signature
+            .parameters
+            .iter()
+            .map(|p| p.ty.as_str())
+            .chain(std::iter::once(signature.result.as_str()));
+        for name in names {
+            if crate::struct_names::native_declaration(library, &declaration.module, name)?
+                .is_some()
+            {
+                return Err("missing exact native helper provider descriptor".into());
+            }
+        }
+        return Ok(None);
     };
     if !signature.generics.is_empty()
-        || signature.parameters.len() != selected.signature.parameters.len()
-        || signature.throws != selected.signature.throws
+        || signature.parameters.len() != selected.parameters.len()
+        || signature.throws != selected.throws
         || canonical(library, &declaration.module, &signature.result)?
-            != canonical(library, &declaration.module, &selected.signature.result)?
+            != canonical(library, &declaration.module, &selected.result)?
     {
         return Err("incompatible native helper provider signature".into());
     }
-    for (source, provider) in signature
-        .parameters
-        .iter()
-        .zip(&selected.signature.parameters)
-    {
-        if source.name != provider.name
+    for (source, provider) in signature.parameters.iter().zip(&selected.parameters) {
+        if source.name != provider.0
             || source.constant
             || source.default.is_some()
             || canonical(library, &declaration.module, &source.ty)?
-                != canonical(library, &declaration.module, &provider.ty)?
+                != canonical(library, &declaration.module, &provider.1)?
         {
             return Err("incompatible native helper provider parameter contract".into());
         }
