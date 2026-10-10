@@ -13,6 +13,34 @@ pub struct Scope {
     pub requirements: BTreeSet<String>,
     /// Injected service bindings, removed by local shadowing.
     pub services: BTreeSet<String>,
+    /// Known temporal dependencies, retained through ordinary local aliases.
+    pub tuple: crate::tuple_flow::Facts,
+}
+impl Scope {
+    pub(crate) fn inject(&mut self, name: String) {
+        self.tuple.runtime.insert(name.clone());
+        self.services.insert(name);
+    }
+    pub(crate) fn alias(&mut self, name: &str, expression: &Expr, runtime: bool) {
+        self.tuple.bind(name, expression, runtime);
+        if matches!(expression.syntax(),Expr::Name(source) if self.services.contains(source)) {
+            self.services.insert(name.into());
+        } else {
+            self.services.remove(name);
+        }
+    }
+    pub(crate) fn iteration(&mut self, name: &str) {
+        self.services.remove(name);
+        self.tuple.iteration(name);
+    }
+    fn lambda(&self, parameters: &[(String, String)]) -> Self {
+        let mut scope = self.clone();
+        for (name, _) in parameters {
+            scope.services.remove(name);
+            scope.tuple.runtime.remove(name);
+        }
+        scope
+    }
 }
 /// Whether an ordinary callable declaration is visible in this lexical test scope.
 pub fn visible(
@@ -40,11 +68,13 @@ pub fn expression(
     expr: &Expr,
     scope: &Scope,
 ) -> Result<(), Issue> {
-    match expr {
+    match expr.syntax() {
+        Expr::Located(..) => unreachable!("syntax strips source origins"),
         Expr::Call(name, args) | Expr::Applied(name, args) => {
+            crate::tuple_phase::call(library, module, test_scope, name, args, scope)?;
             let base = hgl_source::application(name).map_or(name.as_str(), |(base, _)| base);
             let receiver = args.first().and_then(|(_, value)| {
-                if let Expr::Name(name) = value
+                if let Expr::Name(name) = value.syntax()
                     && scope.services.contains(name)
                 {
                     Some(name.as_str())
@@ -53,7 +83,7 @@ pub fn expression(
                 }
             });
             let (owner, item) = crate::struct_names::identity(library, module, base);
-            if matches!(expr, Expr::Applied(..)) {
+            if matches!(expr.syntax(), Expr::Applied(..)) {
                 if library
                     .declarations
                     .iter()
@@ -109,43 +139,17 @@ pub fn expression(
                 return Err(format!("unknown value {name}").into());
             }
         }
+        Expr::Lambda(parameters, _, body) => {
+            expression(library, module, test_scope, body, &scope.lambda(parameters))?;
+        }
         Expr::Null | Expr::Literal(_) | Expr::TemporalLiteral(_) => {}
     }
     Ok(())
 }
 fn intrinsic(name: &str, receiver: Option<&str>, owner: &str, item: &str) -> bool {
     receiver.is_some()
-        || matches!(
-            name,
-            "schedule"
-                | "schedule_at"
-                | "key_set"
-                | "keys"
-                | "values"
-                | "added"
-                | "removed"
-                | "insert"
-                | "update"
-                | "remove"
-                | "invalidate"
-                | "clear"
-                | "pop"
-                | "scheduled"
-                | "items"
-                | "delta_value"
-                | "elements"
-                | "len"
-                | "push"
-                | "upsert"
-                | "discard"
-                | "contains"
-                | "valid"
-                | "modified"
-                | "all_valid"
-                | "last_modified"
-                | "passivate"
-                | "activate"
-        )
+        || "schedule schedule_at key_set keys values added removed insert update remove invalidate clear pop scheduled items delta_value elements len push upsert discard contains valid modified all_valid last_modified passivate activate"
+            .split_ascii_whitespace().any(|intrinsic| intrinsic == name)
         || (owner == "hgraph.native" && matches!(item, "bound" | "len"))
 }
 

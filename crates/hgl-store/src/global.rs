@@ -71,6 +71,19 @@ impl GlobalState {
     pub fn values_mut(&mut self) -> &mut ValueColumns {
         &mut self.values
     }
+    /// Copy one statically typed prepared scalar without allocating or changing presence.
+    pub fn copy_scalar<T: crate::columns::Scalar>(
+        &self,
+        from: usize,
+        destination: &mut T,
+    ) -> NodeResult {
+        let source = self.values.scalar::<T>(from);
+        if destination.capacity() < source.size() {
+            return Err(NodeError::new("prepared scalar capacity exceeded"));
+        }
+        destination.copy_from(source);
+        Ok(())
+    }
     /// Enable owner-supplied storage, preserving any existing entries.
     pub fn provision(&mut self) {
         self.provisioned = true;

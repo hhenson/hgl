@@ -4,7 +4,6 @@ use crate::library::{Role, Signature};
 use hgl_source::{Cursor, Expr, Ty};
 use std::collections::{BTreeMap, BTreeSet};
 type Bound = (Vec<Value>, BTreeMap<String, Ty>, Ty);
-type Arguments = Vec<(Option<String>, Value)>;
 /// Check bind at the typed call boundary.
 pub fn bind(
     signature: &Signature,
@@ -24,13 +23,11 @@ pub fn bind(
         let value = supplied
             .remove(&index)
             .or_else(|| {
-                p.default.as_ref().and_then(|e| {
-                    if let Expr::Literal(l) = e {
-                        Some(Value::new(l.ty(), Kind::Literal(l.clone())))
-                    } else {
-                        None
-                    }
-                })
+                if let Some(Expr::Literal(l)) = p.default.as_ref().map(Expr::syntax) {
+                    Some(Value::new(l.ty(), Kind::Literal(l.clone())))
+                } else {
+                    None
+                }
             })
             .ok_or_else(|| format!("missing argument {}", p.name))?;
         if p.constant && !constant(&value) {
@@ -80,17 +77,16 @@ pub fn bind(
 }
 
 /// Check supported type at the typed call boundary.
-pub fn supported_type(ty: &Ty) -> Result<(), String> {
-    if !ty.publication() && !matches!(ty, Ty::Void | Ty::Ref(_) | Ty::Nullable(_)) {
-        return Err("unsupported temporal publication shape".into());
-    }
-    if let Ty::Ref(child) = ty {
+pub fn supported_type(mut ty: &Ty) -> Result<(), String> {
+    while let Ty::Ref(child) = ty {
         if **child == Ty::Void {
             return Err("reference requires a temporal type".into());
         }
-        return supported_type(child);
+        ty = child;
     }
-    Ok(())
+    (ty.publication() || matches!(ty, Ty::Void | Ty::Nullable(_)))
+        .then_some(())
+        .ok_or_else(|| "unsupported temporal publication shape".into())
 }
 
 fn bind_type(
@@ -198,14 +194,14 @@ pub fn resolve_type(name: &str, types: &BTreeMap<String, Ty>) -> Option<Ty> {
     if let Some((element, size)) = Ty::list_parts(name) {
         return Some(Ty::List(Box::new(resolve_type(element, types)?), size));
     }
-    Ty::parse(name).or_else(|| types.get(name).cloned())
+    Ty::parse(name)
 }
 
 /// Check method arguments at the typed call boundary.
 pub fn method_arguments(
     name: &str,
     parameters: &[(&str, Ty)],
-    args: &Arguments,
+    args: &[(Option<String>, Value)],
 ) -> Result<Vec<Value>, String> {
     let names = parameters.iter().map(|(name, _)| *name).collect::<Vec<_>>();
     let bound = order_arguments(&names, args).map_err(|e| format!("{name}: {e}"))?;
@@ -264,11 +260,18 @@ pub fn signature_types(
     module: &str,
     signature: &Signature,
     args: &[(Option<String>, Value)],
-) -> Result<BTreeMap<String, Ty>, String> {
+) -> Result<BTreeMap<String, Ty>, hgl_source::Issue> {
     let supplied = order_arguments(&parameter_names(signature), args)?;
     let mut types = BTreeMap::new();
     for (index, value) in supplied {
         let parameter = &signature.parameters[index];
+        crate::source_check::argument_requirement(
+            library,
+            module,
+            &parameter.ty,
+            &types,
+            &value.ty,
+        )?;
         let formal = parameter
             .ty
             .strip_prefix("ref<")
@@ -325,11 +328,10 @@ pub fn signature_types(
         if matches!(name.as_str(), "signal" | "void") {
             continue;
         }
-        if let Some(ty) = resolve_type(name, &types) {
-            types.insert(name.clone(), ty);
-        } else if let Ok(ty) =
-            crate::value_types::substitute(library, module, name, &types, &mut BTreeSet::new())
-        {
+        if let Some(ty) = resolve_type(name, &types).map_or_else(
+            || crate::source_check::bound_type(library, module, name, &types),
+            |ty| Ok(Some(ty)),
+        )? {
             types.insert(name.clone(), ty);
         }
     }
@@ -451,7 +453,7 @@ pub fn bind_prepared(
     let supplied = order_arguments(&parameter_names(signature), &args)?;
     for (index, parameter) in signature.parameters.iter().enumerate() {
         if !supplied.contains_key(&index)
-            && let Some(Expr::TemporalLiteral(value)) = &parameter.default
+            && let Some(Expr::TemporalLiteral(value)) = parameter.default.as_ref().map(Expr::syntax)
         {
             args.push((
                 Some(parameter.name.clone()),
@@ -463,14 +465,12 @@ pub fn bind_prepared(
         .iter()
         .enumerate()
         .map(|(id, (name, value))| {
-            (
-                name.clone(),
-                if matches!(value.kind, Kind::Wire(_)) {
-                    value.clone()
-                } else {
-                    Value::new(value.ty.clone(), Kind::Prepared(id))
-                },
-            )
+            let value = if matches!(value.kind, Kind::Wire(_)) {
+                value.clone()
+            } else {
+                Value::new(value.ty.clone(), Kind::Prepared(id))
+            };
+            (name.clone(), value)
         })
         .collect::<Vec<_>>();
     let (mut values, types, result) = bind(signature, &checked, runtime, hint, types)?;

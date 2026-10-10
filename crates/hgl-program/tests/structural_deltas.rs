@@ -98,7 +98,7 @@ fn malformed_constructors_and_incompatible_origins() {
         ("delta<list<i64,2>>(items:[2:1])", "out of bounds"),
         ("delta<map<i64,i64>>(upsert:[1:1],remove:[1])", "overlap"),
         ("delta<set<bool>>(added:[true,true])", "duplicate"),
-        ("delta<tuple<i64,str>>(items:[1:2])", "child type mismatch"),
+        ("delta<tuple<i64,str>>(items:[1:2])", "delta.type_mismatch"),
         ("delta<list<ref<i64>>>()", "unsupported publication shape"),
     ] {
         let actual=check(&format!("fn source()->i64 {{ start {{ let d={value} }}\nwhen {{return 1}} }}\nfn main()->i64=>source()")).unwrap_err();
@@ -185,10 +185,7 @@ fn generic_delta_origins_require_exact_arguments_and_sizes() {
             "struct A<T> {{value:i64}}\nstruct B<T> {{value:i64}}\nconst fn same<T>(first:delta<T>,second:delta<T>)->i64 => 1\nfn main() {{let value=same(delta<{first}>(),delta<{second}>())}}"
         );
         let error = check(&source).unwrap_err();
-        assert!(
-            error.contains("expected one matching declaration"),
-            "{error}"
-        );
+        assert!(error.contains("delta.type_mismatch"), "{error}");
     }
 }
 

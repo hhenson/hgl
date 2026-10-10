@@ -1,6 +1,7 @@
 use crate::library::Library;
 use crate::name_check::Scope;
 use crate::source_check::{annotation, inferred};
+use crate::tuple_writes::{assignment, conditional, handler};
 use hgl_source::{Cursor, Issue, Ty};
 pub(super) struct Checker<'a> {
     pub library: &'a Library,
@@ -14,16 +15,11 @@ impl Checker<'_> {
         environment: &Scope,
     ) -> Result<hgl_source::Expr, Issue> {
         let span = cursor.span();
-        let expression = cursor.expr()?;
-        crate::name_check::expression(
-            self.library,
-            self.module,
-            self.test_only.then_some(self.module),
-            &expression,
-            environment,
-        )
-        .map_err(|issue| issue.at(span))?;
-        Ok(expression)
+        let value = cursor.expr()?;
+        let selected = self.test_only.then_some(self.module);
+        crate::name_check::expression(self.library, self.module, selected, &value, environment)
+            .map_err(|issue| issue.at(span))?;
+        Ok(value)
     }
 
     pub(super) fn block(
@@ -40,6 +36,9 @@ impl Checker<'_> {
             cursor.lines();
         }
         Ok(())
+    }
+    fn scoped(&self, cursor: &mut Cursor<'_>, scope: &mut Scope) -> Result<(), Issue> {
+        crate::tuple_flow::nested(scope, |child| self.block(cursor, child))
     }
     fn statement(&self, cursor: &mut Cursor<'_>, environment: &mut Scope) -> Result<(), Issue> {
         if cursor.take("yield") {
@@ -62,7 +61,7 @@ impl Checker<'_> {
         } else if cursor.take("inject") {
             cursor.lines();
             loop {
-                environment.services.insert(cursor.name()?);
+                environment.inject(cursor.name()?);
                 if !cursor.take(",") {
                     break;
                 }
@@ -70,46 +69,48 @@ impl Checker<'_> {
             }
         } else if cursor.at("start") || cursor.at("stop") {
             cursor.consume()?;
-            self.block(cursor, &mut environment.clone())?;
-        } else if cursor.take("when") || cursor.take("while") {
-            if !cursor.at("{") {
-                self.expression(cursor, environment)?;
-            }
-            self.block(cursor, &mut environment.clone())?;
+            self.scoped(cursor, environment)?;
+        } else if matches!(cursor.peek(), "when" | "while") {
+            handler(
+                cursor,
+                environment,
+                |c, s| self.expression(c, s),
+                |c, s| self.block(c, s),
+            )?;
         } else if cursor.take("if") {
-            self.expression(cursor, environment)?;
-            self.block(cursor, &mut environment.clone())?;
-            cursor.lines();
-            if cursor.take("else") {
-                if cursor.at("if") {
-                    self.statement(cursor, &mut environment.clone())?;
-                } else {
-                    self.block(cursor, &mut environment.clone())?;
-                }
-            }
+            let selector = self.expression(cursor, environment)?;
+            conditional(
+                cursor,
+                environment,
+                &selector,
+                |c, s| self.block(c, s),
+                |c, s| self.statement(c, s),
+            )?;
         } else if cursor.take("for") {
             let mut body = environment.clone();
-            body.services.remove(&cursor.name()?);
+            body.iteration(&cursor.name()?);
             while cursor.take(",") {
-                body.services.remove(&cursor.name()?);
+                body.iteration(&cursor.name()?);
             }
             cursor.need("in")?;
-            self.expression(cursor, environment)?;
+            let collection = self.expression(cursor, environment)?;
+            body.tuple
+                .writes
+                .select(&collection, &environment.tuple.runtime);
             self.block(cursor, &mut body)?;
+            environment.tuple.merge(&body.tuple);
         } else if cursor.take("return") {
             if !cursor.at("}") && !cursor.at("\n") {
                 self.expression(cursor, environment)?;
             }
         } else {
-            self.expression(cursor, environment)?;
-            if cursor.take("=") || cursor.take("+=") {
-                self.expression(cursor, environment)?;
-            }
+            let target = self.expression(cursor, environment)?;
+            assignment(cursor, environment, &target, |c, s| self.expression(c, s))?;
         }
         Ok(())
     }
     fn binding(&self, cursor: &mut Cursor<'_>, environment: &mut Scope) -> Result<(), Issue> {
-        cursor.consume()?;
+        let retained = matches!(cursor.consume()?.as_str(), "state" | "cache");
         let name = cursor.name()?;
         let declared = if cursor.take(":") {
             let start = cursor.pos;
@@ -128,18 +129,13 @@ impl Checker<'_> {
         };
         cursor.need("=")?;
         let expression = self.expression(cursor, environment)?;
+        environment.alias(&name, &expression, retained);
         let ty = declared.or(inferred(
             self.library,
             self.module,
             &expression,
             &environment.types,
         )?);
-        if matches!(&expression, hgl_source::Expr::Name(source) if environment.services.contains(source))
-        {
-            environment.services.insert(name.clone());
-        } else {
-            environment.services.remove(&name);
-        }
         if let Some(ty) = ty {
             environment.types.insert(name, ty);
         }

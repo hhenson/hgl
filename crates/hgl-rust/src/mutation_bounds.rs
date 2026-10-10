@@ -2,6 +2,11 @@
 use hgl_semantics::ir::{Kind, Statement, Value};
 use hgl_source::Literal;
 use std::collections::BTreeMap;
+fn membership(op: &str) -> bool {
+    op == "set_upsert"
+        || op == "set_discard"
+        || (op.starts_with("collection_") && op != "collection_contains")
+}
 type Constants = BTreeMap<usize, i64>;
 fn integer(value: &Value, constants: &Constants) -> Option<i64> {
     if let Kind::Literal(Literal::Int(value)) = &value.kind {
@@ -33,7 +38,9 @@ fn invalidate(body: &[Statement], constants: &mut Constants) {
             ) => {
                 constants.remove(id);
             }
-            Statement::While(_, body) | Statement::For(_, _, body) => invalidate(body, constants),
+            Statement::While(_, body)
+            | Statement::ForItems(_, _, _, _, body)
+            | Statement::For(_, _, body) => invalidate(body, constants),
             Statement::If(_, yes, no) => {
                 invalidate(yes, constants);
                 invalidate(no, constants);
@@ -129,17 +136,20 @@ fn width(
             Statement::Call(Value {
                 kind: Kind::Query(op, _),
                 ..
-            }) if op == "set_upsert" || op == "set_discard" => "1usize".into(),
+            }) if membership(op) => "1usize".into(),
             Statement::If(_, yes, no) => format!(
                 "({}).max({})",
                 width(yes, source, &mut constants.clone())?,
                 width(no, source, &mut constants.clone())?
             ),
-            Statement::For(_, collection, body) => format!(
-                "({}).checked_mul({}).ok_or(\"prepared loop width overflow\")?",
-                source(collection),
-                width(body, source, &mut constants.clone())?
-            ),
+            Statement::ForItems(_, _, _, collection, body)
+            | Statement::For(_, collection, body) => {
+                format!(
+                    "({}).checked_mul({}).ok_or(\"prepared loop width overflow\")?",
+                    source(collection),
+                    width(body, source, &mut constants.clone())?
+                )
+            }
             Statement::While(condition, body) => {
                 let count = iterations(condition, body, constants);
                 if count.is_none() && mutations(body) > 0 {
@@ -191,6 +201,7 @@ fn width(
             | Statement::Yield(_)
             | Statement::Call(_)
             | Statement::Assign(..)
+            | Statement::ForItems(..)
             | Statement::For(..)
             | Statement::If(..) => invalidate(std::slice::from_ref(statement), constants),
         }
@@ -213,9 +224,11 @@ pub fn mutations(body: &[Statement]) -> usize {
             Statement::Call(Value {
                 kind: Kind::Query(op, _),
                 ..
-            }) if op == "set_upsert" || op == "set_discard" => 1,
+            }) if membership(op) => 1,
             Statement::If(_, yes, no) => mutations(yes).max(mutations(no)),
-            Statement::For(_, _, body) | Statement::While(_, body) => mutations(body),
+            Statement::ForItems(_, _, _, _, body)
+            | Statement::For(_, _, body)
+            | Statement::While(_, body) => mutations(body),
             Statement::Exit
             | Statement::Let(..)
             | Statement::Var(..)

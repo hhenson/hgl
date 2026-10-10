@@ -1,0 +1,215 @@
+module hgraph.std part structural_value_publication_tests
+
+struct PublicationPair {
+    left: i64
+    right: bool
+}
+
+test {
+
+    fn select_value(step: i64, a: PublicationPair, b: PublicationPair) -> PublicationPair {
+        when modified(step) && valid(step, a, b) {
+            if step == 1 {
+                let copy = a
+                return copy
+            } else {
+                let copy = b
+                return copy
+            }
+        }
+    }
+
+    fn select_delta(step: i64, a: PublicationPair, b: PublicationPair) -> PublicationPair {
+        when modified(step) && valid(step, a, b) {
+            if step == 1 {
+                if modified(a) { return delta_value(a) }
+            } else {
+                if modified(b) { return delta_value(b) }
+            }
+        }
+    }
+
+    fn pair_validity(step: i64, watched: PublicationPair) -> bool {
+        when modified(step) && valid(step) { return all_valid(watched) }
+    }
+    fn value_validity(step: i64, a: PublicationPair, b: PublicationPair) -> bool =>
+        pair_validity(step, select_value(step, a, b))
+    fn delta_validity(step: i64, a: PublicationPair, b: PublicationPair) -> bool =>
+        pair_validity(step, select_delta(step, a, b))
+
+    test complete_value_and_delta_have_distinct_child_validity {
+        let full = delta<PublicationPair>(left: 1, right: true)
+        let partial = delta<PublicationPair>(left: 2)
+        # B is independently partial; it never held A's right-hand value.
+        assert eval(value_validity, step: [1, 2, 3], a: [full, _, _], b: [partial, partial, _]) == [true, false, false]
+        assert eval(delta_validity, step: [1, 2, 3], a: [full, _, _], b: [partial, partial, _]) == [true, true, true]
+    }
+
+    fn removing_map(step: i64) -> map<i64, i64> {
+        inject out
+        when {
+            if step == 1 {
+                upsert(out, 7, 10)
+                upsert(out, 8, 20)
+            } else if step == 2 { remove(out, 8) }
+        }
+    }
+    fn invalidating_map(step: i64) -> map<i64, i64> {
+        inject out
+        when {
+            if step == 1 {
+                upsert(out, 7, 10)
+                upsert(out, 8, 20)
+            } else if step == 2 { invalidate(out, 8) }
+        }
+    }
+    fn copy_map(step: i64, value: map<i64, i64>) -> map<i64, i64> {
+        when modified(step) && valid(step, value) {
+            let copy = value
+            return copy
+        }
+    }
+    fn delta_map(value: map<i64, i64>) -> map<i64, i64> {
+        when { return delta_value(value) }
+    }
+    fn has_second(step: i64, watched: map<i64, i64>) -> bool {
+        when modified(step) && valid(step, watched) { return contains(watched, 8) }
+    }
+    fn map_validity(step: i64, watched: map<i64, i64>) -> bool {
+        when modified(step) && valid(step) { return all_valid(watched) }
+    }
+    fn copied_membership(step: i64) -> bool => has_second(step, copy_map(step, removing_map(step)))
+    fn delta_membership(step: i64) -> bool => has_second(step, delta_map(removing_map(step)))
+    fn copied_invalid_membership(step: i64) -> bool => has_second(step, copy_map(step, invalidating_map(step)))
+    fn copied_map_validity(step: i64) -> bool => map_validity(step, copy_map(step, invalidating_map(step)))
+
+    # Child invalidation is observed through the complete value; no empty delta
+    # application or new invalid member is required by these cases.
+    test complete_map_copy_reconciles_membership_and_child_validity {
+        assert eval(copied_membership, step: [1, 2, 3]) == [true, false, false]
+        assert eval(delta_membership, step: [1, 2, 3]) == [true, false, false]
+        assert eval(copied_invalid_membership, step: [1, 2, 3]) == [true, true, true]
+        assert eval(copied_map_validity, step: [1, 2, 3]) == [true, false, false]
+    }
+
+    fn select_tuple(step: i64, a: tuple<i64, bool>, b: tuple<i64, bool>) -> tuple<i64, bool> {
+        when modified(step) && valid(step, a, b) {
+            if step == 1 {
+                let copy = a
+                return copy
+            } else {
+                let copy = b
+                return copy
+            }
+        }
+    }
+    fn tuple_validity(step: i64, watched: tuple<i64, bool>) -> bool {
+        when modified(step) && valid(step) { return all_valid(watched) }
+    }
+    fn tuple_result_validity(step: i64, a: tuple<i64, bool>, b: tuple<i64, bool>) -> bool =>
+        tuple_validity(step, select_tuple(step, a, b))
+
+    test complete_tuple_copy_clears_a_previously_valid_child {
+        # Separate B has no right child; sparse updates to A cannot create this state.
+        assert eval(tuple_result_validity, step: [1, 2, 3], a: [(1, true), _, _], b: [(2, _), (2, _), _]) == [true, false, false]
+    }
+
+    fn select_list(step: i64, a: list<i64, 2>, b: list<i64, 2>) -> list<i64, 2> {
+        when modified(step) && valid(step, a, b) {
+            if step == 1 {
+                let copy = a
+                return copy
+            } else {
+                let copy = b
+                return copy
+            }
+        }
+    }
+    fn list_validity(step: i64, watched: list<i64, 2>) -> bool {
+        when modified(step) && valid(step) { return all_valid(watched) }
+    }
+    fn list_result_validity(step: i64, a: list<i64, 2>, b: list<i64, 2>) -> bool =>
+        list_validity(step, select_list(step, a, b))
+
+    test complete_fixed_list_copy_clears_a_previously_valid_child {
+        let full = delta<list<i64, 2>>(items: [0: 1, 1: 10])
+        let partial = delta<list<i64, 2>>(items: [0: 2])
+        assert eval(list_result_validity, step: [1, 2, 3], a: [full, _, _], b: [partial, partial, _]) == [true, false, false]
+    }
+}
+
+# Own bounded publication controls, independent of the shared conformance file.
+fn complete_text_map(value:map<str,i64>)->map<str,i64> {
+    when valid(value) {let copy=value
+    return copy}
+}
+test complete_map_capture_uses_key_domain_order_after_remove_and_reinsert {
+    let first=delta<map<str,i64>>(upsert:["z":10,"a":20])
+    let changed=delta<map<str,i64>>(remove:["z"],upsert:["a":21])
+    let reinsert=delta<map<str,i64>>(upsert:["z":11])
+    let final_value=delta<map<str,i64>>(upsert:["a":21,"z":11])
+    assert eval(complete_text_map,[first,changed,reinsert]) == [first,changed,final_value]
+}
+struct NestedPublication {
+    pair:PublicationPair
+    positions:list<i64,2>
+    book:map<str,i64>
+}
+fn nested_selected(step:i64,a:NestedPublication,b:NestedPublication)->NestedPublication {
+    when modified(step)&&valid(step,a,b) {
+        if step==1 {let copy=a
+        return copy} else {let copy=b
+        return copy}
+    }
+}
+fn nested_metadata(step:i64,value:NestedPublication)->tuple<bool,bool,bool> {
+    when modified(step)&&valid(step) {
+        return(all_valid(value.pair),all_valid(value.positions),all_valid(value.book))
+    }
+}
+fn nested_result(step:i64,a:NestedPublication,b:NestedPublication)->tuple<bool,bool,bool> =>
+    nested_metadata(step,nested_selected(step,a,b))
+test complete_nested_nominal_publication_reconciles_descendants {
+    let full=delta<NestedPublication>(pair:delta<PublicationPair>(left:1,right:true),positions:delta<list<i64,2>>(items:[0:1,1:2]),book:delta<map<str,i64>>(upsert:["z":10,"a":20]))
+    let partial=delta<NestedPublication>(pair:delta<PublicationPair>(left:2),positions:delta<list<i64,2>>(items:[0:3]),book:delta<map<str,i64>>(upsert:["a":30]))
+    assert eval(nested_result,step:[1,2,3],a:[full,_,_],b:[partial,partial,_]) == [(true,true,true),(false,false,true),(false,false,true)]
+}
+fn assign_pair(step:i64,a:PublicationPair,b:PublicationPair)->PublicationPair {
+    inject out
+    when modified(step)&&valid(step,a,b) {
+        if step==1 {out=a} else {let copy=b
+        out=copy}
+    }
+}
+fn assigned_validity(step:i64,value:PublicationPair)->bool {
+    when modified(step)&&valid(step) {return all_valid(value)}
+}
+fn assignment_result(step:i64,a:PublicationPair,b:PublicationPair)->bool =>
+    assigned_validity(step,assign_pair(step,a,b))
+test complete_ordinary_assignment_reconciles_the_nodes_own_output {
+    let full=delta<PublicationPair>(left:1,right:true)
+    let partial=delta<PublicationPair>(left:2)
+    assert eval(assignment_result,step:[1,2,3],a:[full,_,_],b:[partial,partial,_]) == [true,false,false]
+}
+
+test reverse_order_native_maps_keep_ordinary_constant_identity {
+    let first=map<i64,i64>(items:[8:20,7:10])
+    let second=map<i64,i64>(items:[7:10,8:20])
+    assert (first,true)==(second,true)
+}
+
+struct TextPublication {text:str
+held:bool}
+fn text_child(value:TextPublication)->str {
+    when all_valid(value) {return value.text}
+}
+fn text_length(value:TextPublication)->i64 {
+    when all_valid(value) {let copy=value.text
+    return text_len(copy)}
+}
+test concrete_struct_text_children_keep_prepared_scalar_ownership {
+    let first=delta<TextPublication>(text:"held",held:false)
+    let second=delta<TextPublication>(text:"changed")
+    assert eval(text_child,[first,second])==["held","changed"]
+    assert eval(text_length,[first,second])==[4,7]
+}

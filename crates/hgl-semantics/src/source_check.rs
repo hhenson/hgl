@@ -2,7 +2,7 @@
 use crate::library::{Decl, Library, Role, Signature};
 use hgl_source::diagnostics::{Diagnostic, Issue};
 use hgl_source::{Cursor, Expr, Token, Ty};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 mod body;
 
 /// Check every declaration, including functions unreachable from selected tests.
@@ -129,6 +129,7 @@ fn function(library: &Library, declaration: &Decl, signature: &Signature) -> Res
     let mut environment = crate::name_check::Scope {
         types,
         parameters: signature.generics.iter().cloned().collect(),
+        tuple: crate::tuple_flow::Facts::new(crate::tuple_phase::signature(signature)?),
         ..Default::default()
     };
     if let Some((name, _, _)) = &signature.requirement {
@@ -149,6 +150,7 @@ fn function(library: &Library, declaration: &Decl, signature: &Signature) -> Res
     }
 
     if cursor.take("=>") {
+        cursor.lines();
         checker.expression(&mut cursor, &environment)?;
     } else {
         checker.block(&mut cursor, &mut environment)?;
@@ -201,11 +203,13 @@ fn annotation(tokens: &[Token]) -> Result<(), Issue> {
     })
 }
 fn closed(expression: &Expr) -> bool {
-    match expression {
+    match expression.syntax() {
+        Expr::Located(..) => unreachable!("syntax strips source origins"),
         Expr::Literal(_) => true,
         Expr::Unary(_, value) => closed(value),
         Expr::Binary(_, left, right) => closed(left) && closed(right),
-        Expr::Null
+        Expr::Lambda(..)
+        | Expr::Null
         | Expr::Property(..)
         | Expr::Index(..)
         | Expr::TemporalLiteral(_)
@@ -223,7 +227,8 @@ fn inferred(
     expression: &Expr,
     environment: &BTreeMap<String, Ty>,
 ) -> Result<Option<Ty>, String> {
-    match expression {
+    match expression.syntax() {
+        Expr::Located(..) => unreachable!("syntax strips source origins"),
         Expr::Literal(value) => Ok(Some(value.ty())),
         Expr::Name(name) => Ok(environment.get(name).cloned()),
         Expr::Unary(_, value) => inferred(library, module, value, environment),
@@ -265,7 +270,7 @@ fn inferred(
             })
         }
         Expr::Property(parent, property)
-            if matches!(parent.as_ref(), Expr::Name(name) if name == "clock" && !environment.contains_key(name))
+            if matches!(parent.as_ref().syntax(), Expr::Name(name) if name == "clock" && !environment.contains_key(name))
                 && (property == "evaluation_time" || property == "now") =>
         {
             Ok(Some(Ty::DateTime))
@@ -281,7 +286,8 @@ fn inferred(
                     .map(|(_, ty)| ty.clone())
             }))
         }
-        Expr::TemporalLiteral(_)
+        Expr::Lambda(..)
+        | Expr::TemporalLiteral(_)
         | Expr::Null
         | Expr::Index(..)
         | Expr::Sequence(_)
@@ -310,4 +316,107 @@ pub fn concrete_signature(declaration: &Decl) -> Result<Option<Signature>, Issue
     } else {
         Ok(Some(signature))
     }
+}
+
+/// Supply a unique declaration's exact contextual argument and source delta requirement.
+pub fn argument_hint(
+    library: &Library,
+    module: &str,
+    name: &str,
+    index: usize,
+    label: Option<&str>,
+    earlier: &[(Option<String>, crate::ir::Value)],
+) -> Option<(Ty, bool)> {
+    let (owner, item) = crate::value_types::identity(library, module, name);
+    let mut declarations = library.declarations.iter().filter(|declaration| {
+        declaration.module == owner
+            && declaration.name == item
+            && matches!(
+                declaration.role,
+                Role::Function | Role::Native | Role::Operator
+            )
+    });
+    let signature = declarations.next()?.signature().ok()?;
+    if declarations.next().is_some() {
+        return None;
+    }
+    let parameter = if let Some(label) = label {
+        signature
+            .parameters
+            .iter()
+            .find(|parameter| parameter.name == label)?
+    } else {
+        signature.parameters.get(index)?
+    };
+    let mut bindings = BTreeMap::new();
+    for (position, (label, value)) in earlier.iter().enumerate() {
+        let parameter = crate::eval_data::parameter(&signature, position, label.as_deref()).ok()?;
+        crate::value_types::unify(
+            library,
+            &owner,
+            &parameter.ty,
+            &value.ty,
+            &signature.generics,
+            &mut bindings,
+        )
+        .ok()?;
+    }
+    Some((
+        crate::value_access::project(
+            &crate::value_types::concrete(library, &owner, &parameter.ty, &bindings).ok()?,
+        ),
+        hgl_source::delta_argument(&parameter.ty).is_some(),
+    ))
+}
+
+/// Resolve the exact source-owned replay entry for a concrete temporal shape.
+pub fn replay_type(library: &Library, ty: &Ty) -> Result<Ty, Issue> {
+    let decl = crate::value_types::declaration(library, "hgraph.std", "TimedValue")?
+        .ok_or("eval requires the ordinary TimedValue declaration")?;
+    Ok(crate::value_types::specialize(
+        library,
+        decl,
+        vec![ty.clone()],
+        &mut BTreeSet::new(),
+    )?)
+}
+/// Resolve a bound signature shape, preserving coded formation failures at its call.
+pub fn bound_type(
+    library: &Library,
+    module: &str,
+    name: &str,
+    types: &BTreeMap<String, Ty>,
+) -> Result<Option<Ty>, Issue> {
+    crate::value_types::concrete(library, module, name, types)
+        .map(Some)
+        .or_else(|mut issue| {
+            issue.span = 0..0;
+            if issue.code.is_some() {
+                Err(issue)
+            } else {
+                Ok(None)
+            }
+        })
+}
+
+/// Enforce an explicitly written delta argument after earlier parameters constrain generics.
+pub fn argument_requirement(
+    library: &Library,
+    module: &str,
+    pattern: &str,
+    types: &BTreeMap<String, Ty>,
+    actual: &Ty,
+) -> Result<(), Issue> {
+    if hgl_source::delta_argument(pattern).is_some()
+        && let Ok(expected) = crate::value_types::concrete(library, module, pattern, types)
+        && &expected != actual
+    {
+        return Err(Issue::coded(
+            "type",
+            "delta.type_mismatch",
+            0..0,
+            "delta argument type mismatch",
+        ));
+    }
+    Ok(())
 }

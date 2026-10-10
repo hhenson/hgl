@@ -1,0 +1,108 @@
+module hgraph.std part tuple_observations_own
+use examples.ordinary_tuple_values::{independently_retained_children}
+fn direct_tuple(value:tuple<i64,bool>)->tuple<i64,bool> {
+    when valid(value) { return value }
+}
+fn embedded_input(value:tuple<i64,bool>)->tuple<tuple<i64,bool>,bool> {
+    when valid(value) { return (value,false) }
+}
+fn embedded_copy(value:tuple<i64,bool>)->tuple<tuple<i64,bool>,bool> {
+    when valid(value) { let copy=value
+ return (copy,false) }
+}
+fn nested_read(value:tuple<list<tuple<i64,bool>,2>,bool>)->i64 {
+    when valid(value,value[0]) { let copy=value
+ return copy[0][0][0] }
+}
+test tuple_ordinary_direct_results_and_embedding {
+    assert eval(direct_tuple, [(7,_),(_,false),_]) == [(7,_),(7,false),_]
+    assert eval(embedded_input, [(7,_),(_,false),_]) == [((7,_),false),((7,false),false),_]
+    assert eval(embedded_copy, [(7,_),(_,false),_]) == [((7,_),false),((7,false),false),_]
+    let partial=delta<tuple<i64,bool>>(items:[0:7])
+    let first=delta<tuple<list<tuple<i64,bool>,2>,bool>>(items:[0:delta<list<tuple<i64,bool>,2>>(items:[0:partial]),1:true])
+    assert eval(nested_read,[first,_]) == [7,_]
+}
+fn observed_growing_copy(value:tuple<list<tuple<i64,bool>>,bool>)->tuple<list<tuple<i64,bool>>,bool> {
+    when valid(value,value[0],value[1]) {let copy=value
+    return copy}
+}
+test tuple_observation_retains_admitted_growing_list_children {
+    let partial=delta<tuple<i64,bool>>(items:[0:7])
+    let complete=delta<tuple<i64,bool>>(items:[0:7,1:false])
+    let first=delta<tuple<list<tuple<i64,bool>>,bool>>(items:[0:delta<list<tuple<i64,bool>>>(items:[0:partial]),1:true])
+    let tick=delta<tuple<list<tuple<i64,bool>>,bool>>(items:[0:delta<list<tuple<i64,bool>>>(items:[0:delta<tuple<i64,bool>>(items:[1:false])])])
+    let second=delta<tuple<list<tuple<i64,bool>>,bool>>(items:[0:delta<list<tuple<i64,bool>>>(items:[0:complete]),1:true])
+    assert eval(observed_growing_copy,[first,_,tick]) == [first,_,second]
+}
+native const fn echo(value:i64)->i64
+native const fn echo(value:i64)->i64 {}
+fn copied_scalar(value:tuple<i64,bool>)->i64 {
+    when valid(value,value[0]) {let copy=value
+    let number=copy[0]
+    let alias=number
+    return echo(alias)}
+}
+fn copied_text(value:tuple<str,bool>)->str {
+    when valid(value,value[0]) {let copy=value
+    let text=copy[0]
+    return text}
+}
+test tuple_scalar_projection_copies_and_text_returns {
+    assert eval(copied_scalar,[(7,_),(_,false),_]) == [7,7,_]
+    assert eval(copied_text,[("held",_),(_,false),_]) == ["held","held",_]
+}
+
+fn retained_constant_example(value:i64,const checked:bool=independently_retained_children())->tuple<i64,bool> {
+ when {return (value, checked)}
+}
+test tuple_constant_retention_example_during_evaluate {
+ assert eval(retained_constant_example,value:[7,_,9],checked:independently_retained_children()) == [(7,true),_,(9,true)]
+}
+
+fn remade_text(value:tuple<str,bool>)->tuple<str,bool> {
+ when all_valid(value) {let saved=value
+ return (saved[0],false)}
+}
+fn embedded_text(value:tuple<str,bool>)->tuple<tuple<str,bool>,str> {
+ when all_valid(value) {let saved=value
+ return (saved,saved[0])}
+}
+test tuple_text_positions_copy_into_prepared_constructors {
+ assert eval(remade_text,[("held",true),(_,false)]) == [("held",false),("held",false)]
+ assert eval(embedded_text,[("held",true),(_,false)]) == [(("held",true),"held"),(("held",false),"held")]
+}
+
+native const fn text_len(value:str)->i64
+native const fn text_len(value:str)->i64 {}
+fn text_helper(value:tuple<str,bool>)->i64 {
+ when all_valid(value) {let saved=value
+ let text=saved[0]
+ return text_len(text)}
+}
+test tuple_text_projection_native_helper_borrows_prepared_scalar {
+ assert eval(text_helper,[("held",true),(_,false)]) == [4,4]
+}
+
+fn direct_text_helper(value:tuple<str,i64>)->i64 {
+ when all_valid(value) {return text_len(value[0])}
+}
+test tuple_direct_endpoint_text_helper_borrows_scalar {
+ assert eval(direct_text_helper,[("held",1),(_,2)]) == [4,4]
+}
+
+native const fn both(first:str,second:str)->i64
+native const fn both(first:str,second:str)->i64 {}
+fn owned_text_arguments(value:tuple<str,str>)->i64 {
+ when all_valid(value) {let saved=value
+ let first=saved[0]
+ let second=saved[1]
+ return both(first,second)}
+}
+fn mixed_text_arguments(value:tuple<str,str>)->i64 {
+ when all_valid(value) {let saved=value
+ return both(saved[0],value[1])}
+}
+test tuple_multiple_native_text_arguments_share_immutable_columns {
+ assert eval(owned_text_arguments,[("held","read"),(_,"again")]) == [8,9]
+ assert eval(mixed_text_arguments,[("held","read"),(_,"again")]) == [8,9]
+}

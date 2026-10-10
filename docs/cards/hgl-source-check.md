@@ -47,3 +47,7 @@ requirements are retained; generic types and constant values are not invented.
 
 with_module_semantics checks production dependencies and root-module test scopes;
 other modules retain their own test-only declaration scopes.
+
+argument_hint supplies unique concrete argument context and the written delta requirement; argument_requirement applies an explicitly written delta parameter after earlier arguments constrain generics. bound_type preserves catalogued excluded substituted shapes at the constraining call. replay_type resolves the source-owned TimedValue specialization. These checks retain reduced scalar delta provenance without transferring it into ordinary destinations. May use IR for checked argument identity.
+
+Argument context incorporates earlier checked operands when they constrain generics, so reduced delta type failures locate the actual supplied expression. May use value_access for the existing ordinary payload projection.

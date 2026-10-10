@@ -52,9 +52,9 @@ explicit retention boundaries; helper returns/calls cannot escape observations.
 Ordered delta children are traversed for entry effects without weakening borrow
 conflict checks. Delta binary comparison and field/index inspection are rejected.
 
-`aggregate(expr: &Expr, expected: Option<&Ty>, constant_context: bool,
-check: impl FnMut(&Expr, Option<&Ty>) -> Result<Value, String>) ->
-Result<Value, String>` centralizes
+`aggregate_checked<E>(expr: &Expr, expected: Option<&Ty>, constant_context: bool,
+check: impl FnMut(&Expr, Option<&Ty>) -> Result<Value, E>) ->
+Result<Value, E>` centralizes
 ordinary list and positional tuple checking. The caller supplies its existing
 expression checker; element admission, constant-expression requirements and
 exact contextual list fixedness are unchanged. Tuple arity and each position's
@@ -77,4 +77,6 @@ retained keys obey the same constant/provenance checks as child expressions.
 Binary ==/!= accepts exact ordinary set/map types. Their unordered recursive comparison is separate from sparse delta operations.
 
 aggregate_checked preserves typed source Issue failures through contextual
-child-check callbacks. aggregate adapts String callbacks at its existing API.
+child-check callbacks. String callers use the same generic entry point.
+
+Runtime Tuple children delegate prepared ownership admission to tuple_admission.

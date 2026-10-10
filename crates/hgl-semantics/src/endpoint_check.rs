@@ -39,13 +39,13 @@ pub fn set_call(
         "len" => Ty::I64,
         _ => Ty::Void,
     };
-    Ok(Value {
+    Ok(Value::new(
         ty,
-        kind: Kind::Query(
+        Kind::Query(
             format!("set_{op}"),
             args.into_iter().map(|(_, v)| v).collect(),
         ),
-    })
+    ))
 }
 /// Check scalar within the admitted endpoint profile.
 pub fn scalar(ty: &Ty) -> bool {
@@ -68,12 +68,12 @@ pub fn scalar(ty: &Ty) -> bool {
 pub fn endpoint_metadata(name: &str) -> bool {
     matches!(
         name,
-        "valid" | "modified" | "last_modified" | "activate" | "passivate"
+        "valid" | "modified" | "all_valid" | "last_modified" | "activate" | "passivate"
     )
 }
 /// Check injected clock within the admitted endpoint profile.
 pub fn injected_clock(expr: &Expr, env: &Env) -> bool {
-    matches!(expr, Expr::Name(name) if name == "clock" && !env.get(name).is_some_and(|v| matches!(v.ty, Ty::Struct(..))))
+    matches!(expr.syntax(), Expr::Name(name) if name == "clock" && !env.get(name).is_some_and(|v| matches!(v.ty, Ty::Struct(..))))
 }
 /// Check clock property within the admitted endpoint profile.
 pub fn clock_property(
@@ -82,7 +82,7 @@ pub fn clock_property(
     env: &Env,
     runtime: bool,
 ) -> Result<Value, String> {
-    if !matches!(receiver, Expr::Name(receiver) if receiver == "clock") || !runtime {
+    if !matches!(receiver.syntax(), Expr::Name(receiver) if receiver == "clock") || !runtime {
         return Err("clock property requires the direct injected clock in a runtime hook".into());
     }
     capability_payload("clock", env)?;
@@ -103,11 +103,14 @@ pub fn require_payload(value: &Value) -> Result<(), String> {
     if matches!(value.ty, Ty::Nullable(_)) {
         return Err("nullable replay result requires presence proof before payload use".into());
     }
-    if matches!(value.kind, Kind::Input(..) | Kind::Output)
+    if (crate::tuple_values::endpoint(value) || matches!(value.kind, Kind::Output))
         && matches!(
             value.ty,
             Ty::Atomic(_) | Ty::Map(..) | Ty::Tuple(_) | Ty::List(..) | Ty::Struct(..)
         )
+        || (crate::tuple_values::endpoint(value)
+            && matches!(value.kind, Kind::Field(..))
+            && matches!(value.ty, Ty::Set(_)))
     {
         return Err("structural endpoint payload requires delta_value observation".into());
     }
@@ -117,9 +120,9 @@ pub fn require_payload(value: &Value) -> Result<(), String> {
 pub fn endpoint_call(name: &str, args: Arguments, runtime: bool) -> Result<Value, String> {
     if !runtime
         || args.is_empty()
-        || args
-            .iter()
-            .any(|(n, v)| n.is_some() || !matches!(v.kind, Kind::Input(..) | Kind::Output))
+        || args.iter().any(|(n, v)| {
+            n.is_some() || !matches!(v.kind, Kind::Output) && !crate::tuple_values::endpoint(v)
+        })
     {
         return Err("endpoint query requires runtime endpoints".into());
     }

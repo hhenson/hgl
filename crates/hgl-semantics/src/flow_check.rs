@@ -12,6 +12,7 @@ pub fn terminates(body: &[Statement]) -> bool {
         | Statement::Var(..)
         | Statement::Borrow(..)
         | Statement::Assign(..)
+        | Statement::ForItems(..)
         | Statement::For(..)
         | Statement::While(..)
         | Statement::TimedYield(..) => false,

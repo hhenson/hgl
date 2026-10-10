@@ -41,6 +41,9 @@ fn value(plan: &Plan, v: &Value) -> String {
     if let Some(slot) = atomic_place(plan, v) {
         return format!("({slot}).read(_ctx.store().atomic_values())?");
     }
+    if v.snapshot {
+        return crate::snapshot_slots::read(v, |v| value(plan, v));
+    }
     match &v.kind {
         Kind::Prepared(id) => retained(&format!("prepared{id}"), &v.ty),
         Kind::TemporalLiteral(_) => unreachable!("preparation expressions cannot reach node hooks"),
@@ -57,7 +60,10 @@ fn value(plan: &Plan, v: &Value) -> String {
         Kind::Push(parent, item) => push(plan, parent, item),
         Kind::ValueCall(args, body) => direct_call(plan, &v.ty, args, body),
         Kind::Configuration(id) => retained(&format!("self.configuration{id}"), &v.ty),
-        Kind::Construct(fields) => construct(plan, &v.ty, fields),
+        Kind::Construct(fields) => crate::snapshots::ordinary(&v.ty, fields, |v| value(plan, v)),
+        Kind::Field(..) if hgl_semantics::tuple_values::endpoint(v) => {
+            crate::snapshot_slots::endpoint_read(v)
+        }
         Kind::Index(..) | Kind::Field(..) | Kind::BorrowedLocal(..) => {
             if let Some(slot) = borrowed_place(plan, v) {
                 format!("{{ let slot = {slot}; _ctx.global_state().read(slot)? }}")
@@ -71,6 +77,7 @@ fn value(plan: &Plan, v: &Value) -> String {
             value(plan, v)
         ),
         Kind::Literal(l) => literal(l),
+        Kind::IterationInput(_) => crate::snapshot_slots::endpoint_read(v),
         Kind::Input(i, _) => {
             if matches!(v.ty, Ty::Enum(_)) {
                 format!(
@@ -102,19 +109,22 @@ fn value(plan: &Plan, v: &Value) -> String {
             crate::layouts::family_coerce(&v.ty, &operand.ty, &value(plan, operand))
         }
         Kind::Unary(op, v) => unary(plan, op, v),
-        Kind::Query(op, args) => {
-            if op.contains('.') {
-                capability_call(plan, op, args)
-            } else if op.starts_with("set_") {
-                set_query(plan, op, args)
-            } else {
-                query(op, args)
-            }
-        }
+        Kind::Query(op, args) => query_value(plan, op, args),
         Kind::Output => "_ctx.output_value(self._output).expect(\"valid output\")".into(),
         Kind::Captured(..) | Kind::Wire(_) | Kind::Void | Kind::Capability => {
             unreachable!("checked runtime value")
         }
+    }
+}
+fn query_value(plan: &Plan, op: &str, args: &[Value]) -> String {
+    if op.starts_with("collection_") {
+        crate::deltas::collection_operation(op, args, |v| value(plan, v))
+    } else if op.contains('.') {
+        capability_call(plan, op, args)
+    } else if op.starts_with("set_") {
+        set_query(plan, op, args)
+    } else {
+        query(op, args)
     }
 }
 fn unary(plan: &Plan, op: &str, operand: &Value) -> String {
@@ -131,45 +141,7 @@ fn unary(plan: &Plan, op: &str, operand: &Value) -> String {
         format!("({op}{value})")
     }
 }
-fn construct(plan: &Plan, ty: &Ty, fields: &[(usize, Value)]) -> String {
-    let (count, optional) = if let Ok((_, all, optional)) = ty.structure() {
-        (all.len(), optional)
-    } else if let Ty::Tuple(all) = ty {
-        (all.len(), &[][..])
-    } else {
-        unreachable!("aggregate constructor")
-    };
-    if count == 0 {
-        return "()".into();
-    }
-    let mut code = vec!["{ ".to_owned()];
-    for (index, argument) in fields {
-        code.push(format!("let field{index} = {}; ", value(plan, argument)));
-    }
-    let fields = (0..count)
-        .map(|index| {
-            if optional.contains(&index) {
-                if fields.iter().any(|(i, _)| *i == index) {
-                    if ty.structure().is_ok_and(|(_,all,_)|matches!(&all[index].1,Ty::Recursive(batch) if batch.definitions().is_empty())) {
-                        format!("Some(Box::new(field{index}))")
-                    } else { format!("Some(field{index})") }
-                } else {
-                    "None".into()
-                }
-            } else {
-                format!("field{index}")
-            }
-        })
-        .collect::<Vec<_>>()
-        .join(",");
-    let prefix = if matches!(ty, Ty::Recursive(_) | Ty::Family(_)) {
-        format!("Owned{}", global_type(ty))
-    } else {
-        String::new()
-    };
-    code.push(format!("{prefix}({fields},) }}"));
-    code.concat()
-}
+
 fn place(plan: &Plan, v: &Value) -> String {
     if let Kind::GeneratorLocal(id) = v.kind {
         return format!(
@@ -190,13 +162,26 @@ fn place(plan: &Plan, v: &Value) -> String {
         );
     }
     if let Kind::Field(parent, index) = &v.kind {
+        if let Ty::Family(family) = &parent.ty {
+            return crate::collections::family_field(family, *index, &place(plan, parent));
+        }
+        if parent.snapshot {
+            return format!(
+                "(*({}).{index}.as_ref().ok_or_else(||hgl_types::NodeError::new(\"absent ordinary tuple child\"))?)",
+                place(plan, parent)
+            );
+        }
         return format!("({}).{index}", place(plan, parent));
     }
     value(plan, v)
 }
 
 fn binary(plan: &Plan, result: &Ty, op: &str, a: &Value, b: &Value) -> String {
-    if matches!(a.ty, Ty::Set(_) | Ty::Map(..) | Ty::Family(_)) && matches!(op, "==" | "!=") {
+    if matches!(
+        a.ty,
+        Ty::Set(_) | Ty::Map(..) | Ty::Family(_) | Ty::Tuple(_)
+    ) && matches!(op, "==" | "!=")
+    {
         return format!(
             "{{let left={};let right={};({})=={}}}",
             value(plan, a),
@@ -275,6 +260,7 @@ pub fn statements(plan: &Plan, body: &[Statement], out: &mut Vec<String>, result
             }
             Statement::Yield(v) => format!("return Ok({});\n", value(plan, v)),
             Statement::Exit => "return Ok(());\n".into(),
+            Statement::Let(i,v) if v.snapshot => crate::snapshot_slots::local(*i,v, |v| value(plan,v)),
             Statement::Let(i,v) => {
                 let init = atomic_place(plan,v).or_else(||observation(v)).unwrap_or_else(||condition_code(plan,v));
                 format!("let local{i} = {init};\n")
@@ -288,11 +274,20 @@ pub fn statements(plan: &Plan, body: &[Statement], out: &mut Vec<String>, result
             Statement::Var(i, v) => format!("let mut local{i} = {};\n", condition_code(plan, v)),
             Statement::Return(v) => {
                 if crate::finite_domains::prepared(plan) && plan.recording.is_some() && let Some(code)=prepared::forward(plan,v,result) {out.push(code);continue;}
-                let publish = if matches!(v.ty, Ty::Ref(_)) { "_ctx.set_reference(self._output, publication)?;" } else { "" };
-                let publish = if publish.is_empty() { result.filter(|ty| matches!(ty,Ty::Rolling(..))).map_or_else(|| crate::deltas::publish(&v.ty,"publication"),|ty| crate::windows::apply(ty,"self._output","publication")) } else { publish.into() };
-                format!("let publication = {};\n{publish}\nreturn Ok(());\n", condition_code(plan, v))
+                let publication=if v.snapshot {crate::snapshot_views::publication(v,|v|value(plan,v))}else{condition_code(plan,v)};
+                if let Some(code)=crate::snapshot_slots::returned(v,&publication,result) {code} else {
+                    let publish=if matches!(v.ty,Ty::Ref(_)) {"_ctx.set_reference(self._output, publication)?;".into()} else {result.filter(|ty|matches!(ty,Ty::Rolling(..))).map_or_else(||crate::deltas::publish(&v.ty,"publication"),|ty|crate::windows::apply(ty,"self._output","publication"))};
+                    format!("let publication={publication};{publish}return Ok(());\n")
+                }
             },
             Statement::Call(v) => format!("{};\n", condition_code(plan, v)),
+            Statement::ForItems(key_id, child_id, modified, collection, body) => {
+                let Kind::Input(input, _) = collection.kind else { unreachable!("checked map input"); };
+                let mut code = vec![crate::collections::iteration_start(&collection.ty, &format!("self.input{input}"), (*key_id,*child_id), *modified, global_type)];
+                statements(plan,body,&mut code,result);
+                code.push("}}".into());
+                code.concat()
+            }
             Statement::For(id,collection,body)=> {
                 let Kind::Input(input, _)=collection.kind else {unreachable!("checked collection")};
                 let Ty::Set(element)=&collection.ty else {unreachable!("checked collection")};
@@ -312,6 +307,11 @@ pub fn statements(plan: &Plan, body: &[Statement], out: &mut Vec<String>, result
     }
 }
 fn assignment(plan: &Plan, target: &Value, v: &Value) -> String {
+    if matches!(target.kind, Kind::Output)
+        && let Some(code) = crate::structural_publication::assignment(v, |v| value(plan, v))
+    {
+        return code;
+    }
     let publish = crate::deltas::publish(&v.ty, "publication");
     let v = condition_code(plan, v);
     if let Some(slot) = borrowed_place(plan, target) {
@@ -367,22 +367,19 @@ pub fn query(op: &str, args: &[Value]) -> String {
                     _ => unreachable!("checked output query"),
                 };
             }
-            let Kind::Input(i, _) = v.kind else {
-                unreachable!("checked endpoint query")
-            };
-            if let Some(code) = crate::windows::query(&v.ty, op, &format!("self.input{i}")) {
+            let input = crate::observed::input(v);
+            if let Some(code) = crate::windows::query(&v.ty, op, &input) {
                 return code;
             }
             if let Some(payload) = whole_payload(&v.ty)
                 && op == "delta_value"
             {
                 return format!(
-                    "_ctx.store().atomic_get::<{}>(self.input{i})?",
+                    "_ctx.store().atomic_get::<{}>({input})?",
                     global_type(payload)
                 );
             }
             if crate::deltas::shaped(&v.ty) {
-                let input = format!("self.input{i}");
                 return match op {
                     "delta_value" => crate::deltas::observe(
                         &v.ty
@@ -404,23 +401,23 @@ pub fn query(op: &str, args: &[Value]) -> String {
             }
             if matches!(v.ty, Ty::Ref(_)) {
                 return match op {
-                    "valid" => format!("_ctx.store().input_valid(self.input{i})"),
-                    "modified" => format!(
-                        "_ctx.store().bindings().modified(self.input{i},_ctx.evaluation_time())"
-                    ),
+                    "valid" => format!("_ctx.store().input_valid({input})"),
+                    "modified" => {
+                        format!("_ctx.store().bindings().modified({input},_ctx.evaluation_time())")
+                    }
                     "last_modified" => {
-                        format!("_ctx.store().bindings().last_modified(self.input{i})")
+                        format!("_ctx.store().bindings().last_modified({input})")
                     }
                     _ => unreachable!("unsupported structural query"),
                 };
             }
             match op {
-                "delta_value" => format!("_ctx.get(self.input{i})"),
-                "last_modified" => format!("_ctx.last_modified(self.input{i})"),
+                "delta_value" => format!("_ctx.get({input})"),
+                "last_modified" => format!("_ctx.last_modified({input})"),
                 "activate" | "passivate" => {
-                    format!("_ctx.set_active(self.input{i},{})", op == "activate")
+                    format!("_ctx.set_active({input},{})", op == "activate")
                 }
-                _ => format!("_ctx.{op}(self.input{i})"),
+                _ => format!("_ctx.{op}({input})"),
             }
         })
         .collect::<Vec<_>>();
@@ -469,13 +466,20 @@ fn native_argument(plan: &Plan, v: &Value) -> String {
     if v.ty != Ty::Str {
         return condition_code(plan, v);
     }
+    if v.snapshot {
+        let slot = crate::snapshot_slots::projection(v, |v| value(plan, v));
+        return format!(
+            "_ctx.store().global_values().scalar::<String>(({slot}).fields()).as_str()"
+        );
+    }
+    if hgl_semantics::tuple_values::endpoint(v) && matches!(v.kind, Kind::Field(..)) {
+        return crate::snapshot_slots::native_text(v);
+    }
     if borrowed_place(plan, v).is_some() {
         return format!("&({})", value(plan, v));
     }
     match &v.kind {
-        Kind::Input(i, _) => {
-            format!("_ctx.store().get_ref(self.input{i}).as_str()")
-        }
+        Kind::IterationInput(_) | Kind::Input(..) => crate::snapshot_slots::native_text(v),
         Kind::Literal(Literal::Str(s)) => format!("{s:?}"),
         Kind::Cache(i) => format!("self.cache{i}.as_str()"),
         Kind::Local(i) | Kind::MutableLocal(i) => format!("local{i}.as_str()"),
@@ -606,7 +610,10 @@ fn push(plan: &Plan, parent: &Value, item: &Value) -> String {
 fn direct_call(plan: &Plan, result: &Ty, args: &[Value], body: &[Statement]) -> String {
     let mut code = vec!["{ ".into()];
     for (i, arg) in args.iter().enumerate() {
-        code.push(format!("let argument{i} = {};", value(plan, arg)));
+        code.push(format!(
+            "let argument{i} = {};",
+            crate::value_calls::argument(arg, i, body, |v| value(plan, v))
+        ));
     }
     code.push(format!(
         "(|| -> Result<{}, Box<hgl_types::NodeError>> {{",
@@ -640,6 +647,9 @@ fn prepare_place(plan: &Plan, target: &Value, setup: &mut Vec<String>) -> String
 }
 
 fn length(plan: &Plan, parent: &Value) -> String {
+    if parent.snapshot {
+        return crate::snapshot_views::length(parent, |v| value(plan, v));
+    }
     if let Some(slot) = atomic_place(plan, parent) {
         return format!(
             "hgl_store::list_len(_ctx.store().atomic_values().list(({slot}).fields()))?"

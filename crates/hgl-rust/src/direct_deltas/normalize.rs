@@ -51,7 +51,9 @@ fn statements(body: &mut Vec<Statement>, config: &mut Vec<Value>, aliases: &mut 
                 rewrite(a, config, aliases);
                 rewrite(b, config, aliases);
             }
-            Statement::While(v, body) | Statement::For(_, v, body) => {
+            Statement::While(v, body)
+            | Statement::ForItems(_, _, _, v, body)
+            | Statement::For(_, v, body) => {
                 rewrite(v, config, aliases);
                 statements(body, config, &mut aliases.clone());
             }
@@ -113,6 +115,7 @@ fn rewrite(value: &mut Value, config: &mut Vec<Value>, aliases: &Aliases) {
         | Kind::TemporalLiteral(_)
         | Kind::Prepared(_)
         | Kind::Wire(_)
+        | Kind::IterationInput(_)
         | Kind::Input(..)
         | Kind::Cache(_)
         | Kind::GeneratorLocal(_)
@@ -145,7 +148,9 @@ fn generator_payloads(body: &mut [Statement], config: &mut Vec<Value>) {
                 generator_payloads(yes, config);
                 generator_payloads(no, config);
             }
-            Statement::While(_, body) | Statement::For(_, _, body) => {
+            Statement::While(_, body)
+            | Statement::ForItems(_, _, _, _, body)
+            | Statement::For(_, _, body) => {
                 generator_payloads(body, config);
             }
             Statement::Let(..)

@@ -33,19 +33,31 @@ fn every_scalar_and_enum_forms_keyed_map_and_set_data() {
 #[test]
 fn known_duplicates_overlap_and_wrong_types_fail_during_checking() {
     for (body, message) in [
-        ("let p=delta<set<f64>>(added:[0.0,-0.0])", "duplicate"),
+        (
+            "let p=delta<set<f64>>(added:[0.0,-0.0])",
+            "delta.duplicate_entry",
+        ),
         (
             "let p=delta<map<f64,i64>>(upsert:[0.0:1],remove:[-0.0])",
-            "overlap",
+            "delta.overlap",
         ),
-        ("let p=delta<map<f64,i64>>(upsert:[1:1])", "type mismatch"),
-        ("let p=delta<set<E>>(added:[Other::first])", "type mismatch"),
-        ("let p=delta<map<E,i64>>(upsert:[-7:1])", "type mismatch"),
+        (
+            "let p=delta<map<f64,i64>>(upsert:[1:1])",
+            "delta.entry_type",
+        ),
+        (
+            "let p=delta<set<E>>(added:[Other::first])",
+            "delta.entry_type",
+        ),
+        ("let p=delta<map<E,i64>>(upsert:[-7:1])", "delta.entry_type"),
         (
             "let p=delta<map<str,i64>>(upsert:[\"same\":1,\"same\":2])",
-            "duplicate",
+            "delta.duplicate_entry",
         ),
-        ("let p=delta<tuple<i64,i64>>(items:[0.0:1])", "constant i64"),
+        (
+            "let p=delta<tuple<i64,i64>>(items:[0.0:1])",
+            "delta.entry_type",
+        ),
     ] {
         let error = checked(body).unwrap_err();
         assert!(error.contains(message), "{body}: {error}");
@@ -75,23 +87,23 @@ fn immutable_key_aliases_preserve_exact_identity() {
     for (body, message) in [
         (
             "var key=1\nlet alias=key\nlet p=delta<set<i64>>(added:[alias])",
-            "constant",
+            "delta.entry_constant",
         ),
         (
             "let key=0.0\nlet alias=key\nlet p=delta<set<f64>>(added:[alias,-0.0])",
-            "duplicate",
+            "delta.duplicate_entry",
         ),
         (
             "let key=1\nlet p=delta<map<f64,i64>>(upsert:[key:1])",
-            "type mismatch",
+            "delta.entry_type",
         ),
         (
             "let key=1\nlet p=delta<map<i64,i64>>(upsert:[key:1],remove:[key])",
-            "overlap",
+            "delta.overlap",
         ),
         (
             "let key=1\nif true {var key=2\nlet p=delta<set<i64>>(added:[key])}",
-            "constant",
+            "delta.entry_constant",
         ),
     ] {
         let error = checked(body).unwrap_err();

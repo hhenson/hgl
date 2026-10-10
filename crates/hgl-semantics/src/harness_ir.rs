@@ -58,6 +58,8 @@ pub enum Argument {
         entry_type: Ty,
         /// Written cells; absence is not a value.
         slots: Vec<Option<Value>>,
+        /// Ordinary present publication sequence, evaluated once during admission.
+        sequence: Option<Box<Value>>,
     },
 }
 /// Constructed owning configurations for a single fresh graph.

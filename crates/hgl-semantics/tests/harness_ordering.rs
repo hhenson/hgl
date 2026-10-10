@@ -64,6 +64,7 @@ fn setup_and_arguments_execute_once_and_expectations_follow_the_graph() {
                         shape: Ty::TimeZone,
                         entry_type: entry,
                         slots: vec![Some(recipe("second")), None],
+                        sequence: None,
                     },
                     constant(2, local(0)),
                 ],
@@ -152,4 +153,47 @@ fn argument_failure_stops_later_expressions_and_target_start() {
     .unwrap_err();
     assert_eq!(error, "invalid zone");
     assert_eq!(*trace.borrow(), ["first", "invalid"]);
+}
+
+#[test]
+fn later_argument_failure_precedes_earlier_input_profile_validation() {
+    let trace = RefCell::new(Vec::new());
+    let shape = Ty::Set(Box::new(Ty::I64));
+    let entry_type = Ty::Struct(
+        "hgraph.std::TimedValue".into(),
+        vec![
+            ("time".into(), Ty::DateTime),
+            ("value".into(), shape.clone().delta().unwrap()),
+        ],
+        vec![],
+    );
+    let test = Test {
+        name: "profile-order".into(),
+        steps: vec![eval(
+            0,
+            vec![
+                Argument::Dense {
+                    parameter: "input".into(),
+                    binding: 0,
+                    shape: shape.clone(),
+                    entry_type,
+                    slots: vec![Some(Value::new(
+                        shape.delta().unwrap(),
+                        Kind::Delta(vec![]),
+                    ))],
+                    sequence: None,
+                },
+                constant(1, recipe("invalid")),
+            ],
+            None,
+        )],
+    };
+    let error = hgl_semantics::harness::execute(
+        &test,
+        |r| materialize(r, &trace),
+        |_, _| panic!("invalid ordinary argument must prevent graph startup"),
+    )
+    .unwrap_err();
+    assert_eq!(error, "invalid zone");
+    assert_eq!(*trace.borrow(), ["invalid"]);
 }

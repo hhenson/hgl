@@ -33,3 +33,5 @@ bound evaluations); skipped branches never contribute successful counts.
 Complete set/map comparison delegates to hgl-collection-values, preserving exact key/value identities while ignoring entry order.
 
 The eval callback now returns Failure. Raises executes its scope once, preserves outer writes, and matches only structured execution identity after teardown. Nested assertion failure is Other and cannot be caught. execute still renders a final String failure.
+
+Dense arguments can retain an ordinary list of publication values as one sequence expression. All supplied ordinary arguments evaluate once in source order before any publication trace validates. Each trace starts from fresh input state; failure carries eval.input_delta_profile with parameter and zero-based slot context, before graph construction/start. Later ordinary argument failure therefore precedes an earlier malformed trace.

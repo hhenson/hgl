@@ -54,10 +54,25 @@ pub fn writable(value: &Value) -> bool {
 }
 /// Resolve a declared ordinary field without changing its parent's authority.
 pub fn field(parent: Value, name: &str) -> Result<Value, String> {
-    let (_, fields, optional) = parent.ty.structure().map_err(|error| {
+    if matches!(parent.kind, Kind::Input(_, true)) {
+        return Err("signal has no ordinary scalar value".into());
+    }
+    let schema = if let Ty::Family(family) = &parent.ty {
+        family
+            .members()
+            .first()
+            .map(|(_, ty)| ty)
+            .ok_or("empty family has no field")?
+    } else {
+        &parent.ty
+    };
+    let (_, fields, optional) = schema.structure().map_err(|error| {
         format!("field access requires an ordinary struct or direct injected clock: {error}")
     })?;
-    if matches!(parent.kind, Kind::Input(..) | Kind::Wire(_) | Kind::Output) {
+    if matches!(parent.kind, Kind::Wire(_) | Kind::Output)
+        || (matches!(parent.kind, Kind::Input(..) | Kind::IterationInput(_))
+            && !matches!(parent.ty, Ty::Struct(..)))
+    {
         return Err(
             "temporal child projection is outside the admitted publication-delta profile".into(),
         );
@@ -70,7 +85,10 @@ pub fn field(parent: Value, name: &str) -> Result<Value, String> {
     if optional.contains(&index) {
         return Err("optional field access is outside the admitted value profile".into());
     }
-    Ok(Value::new(ty.clone(), Kind::Field(Box::new(parent), index)))
+    let snapshot = parent.snapshot;
+    let mut value = Value::new(ty.clone(), Kind::Field(Box::new(parent), index));
+    value.snapshot = snapshot;
+    Ok(value)
 }
 /// Return the entry and access mode carried by an aggregate view.
 pub fn provenance(value: &Value) -> Option<(usize, bool)> {
@@ -112,10 +130,16 @@ pub fn binding(id: usize, value: &Value, mutable: bool, annotated: bool) -> Resu
     } else {
         Kind::Local(id)
     };
-    Ok(Value::new(value.ty.clone(), kind))
+    let mut binding = Value::new(value.ty.clone(), kind);
+    binding.delta_required = value.delta_required;
+    binding.snapshot = value.snapshot;
+    Ok(binding)
 }
 /// Reject passing a borrowed aggregate through an ordinary helper boundary.
 pub fn helper_argument(value: &Value) -> Result<(), String> {
+    if value.snapshot && aggregate(&value.ty) {
+        return Err("retained tuple aggregates cannot yet cross an ordinary helper or global replacement boundary".into());
+    }
     if observed(value) {
         return Err(
             "structural delta observation cannot escape through an ordinary helper call".into(),

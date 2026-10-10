@@ -106,7 +106,7 @@ fn flatten(
     let mut own = decl.required_struct()?;
     crate::struct_names::exported_fields(library, decl)?;
     for (_, value) in &mut own.defaults {
-        if matches!(value, hgl_source::Expr::Name(_)) {
+        if matches!(value.syntax(), hgl_source::Expr::Name(_)) {
             *value = match crate::enums::default(library, &decl.module, value)? {
                 hgl_source::ParsedLiteral::Value(value) => hgl_source::Expr::Literal(value),
                 hgl_source::ParsedLiteral::Contextual(value) => {

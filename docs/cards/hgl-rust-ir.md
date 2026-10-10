@@ -99,3 +99,10 @@ nominal type. No source cast or temporal projection is introduced.
 Plan.ordinary_instantiation marks standalone node registration whose external
 caller uses the ordinary graph instantiator. Such a plan has no generated finite
 capacity installation phase, even when its source schedule is provably finite.
+
+Value.delta_required records an explicitly written reduced publication requirement at a destination. Kind::IterationInput and Statement::ForItems retain typed child endpoint bindings and the membership/modified selector; all walkers account for the collection and body.
+
+`Value.snapshot` records owning retained Tuple observation representation. It
+does not alter canonical `Value.ty`, source identity or explicit delta requirements.
+Projection and aliases preserve this emission provenance; private typed optional
+slots retain descendant validity independently.

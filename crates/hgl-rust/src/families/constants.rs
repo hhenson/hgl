@@ -32,7 +32,9 @@ fn statements(body: &mut [Statement], configuration: &mut Vec<Value>) {
                 statements(yes, configuration);
                 statements(no, configuration);
             }
-            Statement::While(_, body) | Statement::For(_, _, body) => {
+            Statement::While(_, body)
+            | Statement::ForItems(_, _, _, _, body)
+            | Statement::For(_, _, body) => {
                 statements(body, configuration);
             }
             Statement::Let(..)

@@ -13,3 +13,12 @@ Ordinary test loads explicit files/parts and libraries once, prepares hgl-reject
 The target module owns executable discovery; imported modules supply production
 declarations, and their tests remain in their own scope. Temporary-file, build,
 execution and cleanup errors are identified as infrastructure failures.
+
+The executable CLI test host supplies the existing hgl-stdlib standard native
+facade and Provider implementation adapter. Implicit logger service forwarding
+uses log_info_str from that same host, including calls inside ordinary value
+helpers. Custom native implementations remain an embedding responsibility; the
+CLI selects no custom provider or arbitrary code dynamically. No source callable
+identity, evaluation order, service privilege or external dependency changes.
+Acceptance includes the selected published Tuple order examples with captured
+actual INFO lines exactly 2,1,3,2,1, alongside successful source result assertions.

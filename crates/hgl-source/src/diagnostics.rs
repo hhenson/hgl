@@ -16,6 +16,19 @@ pub struct Issue {
     pub message: String,
 }
 impl Issue {
+    /// Reject a resolved source shape without changing its exact identity.
+    pub fn delta_shape(name: &str) -> Self {
+        let mut issue = Self::from(format!("delta: unsupported publication shape {name}"));
+        issue.category = "shape";
+        issue.code = Some("delta.unsupported_shape");
+        issue
+    }
+    /// Retain an uncatalogued ordinary type failure for contextual diagnostics.
+    pub fn typed(span: Range<usize>, message: impl Into<String>) -> Self {
+        let mut issue = Self::from(message.into()).at(span);
+        issue.category = "type";
+        issue
+    }
     /// Construct a coded failure at the rule's primary source location.
     pub fn coded(
         category: &'static str,
@@ -60,9 +73,7 @@ impl Issue {
     /// Attach owning source without replacing an earlier diagnostic origin.
     #[must_use]
     pub fn in_source(mut self, source: &str) -> Self {
-        if self.source.is_none() {
-            self.source = Some(source.into());
-        }
+        self.source.get_or_insert_with(|| source.into());
         self
     }
     /// Translate a relative argument range into its containing source range.
@@ -171,9 +182,23 @@ pub const SOURCE_CODES: &[(&str, &str)] = &[
     ("type", "yield.time_type"),
     ("type", "test.raises_code"),
     ("phase", "test.statement_phase"),
+    ("shape", "delta.unsupported_shape"),
+    ("type", "delta.type_mismatch"),
+    ("name", "delta.argument_name"),
+    ("name", "delta.duplicate_argument"),
+    ("type", "delta.entry_constant"),
+    ("type", "delta.entry_type"),
+    ("type", "delta.duplicate_entry"),
+    ("type", "delta.index_bounds"),
+    ("type", "delta.overlap"),
 ];
 /// Initial execution-error catalogue, disjoint from source-error codes.
-pub const EXECUTION_CODES: &[&str] = &["yield.negative_duration", "yield.non_increasing_time"];
+pub const EXECUTION_CODES: &[&str] = &[
+    "value.unset_read",
+    "yield.negative_duration",
+    "yield.non_increasing_time",
+    "eval.input_delta_profile",
+];
 
 /// Render a typed failure against its original source, retaining physical lines.
 pub fn render_issue(sources: &[(String, String)], issue: Issue) -> String {

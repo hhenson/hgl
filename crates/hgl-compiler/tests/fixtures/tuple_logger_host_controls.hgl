@@ -1,0 +1,7 @@
+module examples.tuple_logger_host_controls
+
+const fn used_label(text:str)->bool => text=="2"
+fn used_argument(value:i64)->bool {when {return used_label("2")}}
+test ordinary_text_formals_keep_the_owned_abi {
+    assert used_label("2")==true
+}

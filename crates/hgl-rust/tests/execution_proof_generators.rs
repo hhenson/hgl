@@ -2,10 +2,7 @@
 use hgl_semantics::ir::{Kind, Node, Plan, Statement, Value};
 use hgl_source::{Literal, Ty};
 fn scalar(value: i64) -> Value {
-    Value {
-        ty: Ty::I64,
-        kind: Kind::Literal(Literal::Int(value)),
-    }
+    Value::new(Ty::I64, Kind::Literal(Literal::Int(value)))
 }
 fn publication() -> Statement {
     Statement::TimedYield(scalar(1), scalar(1))

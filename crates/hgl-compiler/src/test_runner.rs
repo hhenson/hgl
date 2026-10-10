@@ -77,6 +77,7 @@ fn build_run(dir: &Path, root: &Path, source: &str) -> Result<(), String> {
         "hgl-semantics",
         "hgl-source",
         "hgl-testkit",
+        "hgl-stdlib",
     ] {
         let path = root
             .join("crates")
@@ -89,6 +90,8 @@ fn build_run(dir: &Path, root: &Path, source: &str) -> Result<(), String> {
     }
     std::fs::write(dir.join("Cargo.toml"), manifest)
         .map_err(|error| format!("infrastructure: {error}"))?;
+    let source =
+        format!("struct Provider;mod native {{pub use hgl_stdlib::std_native::*;}}\n{source}");
     std::fs::write(dir.join("src/main.rs"), source)
         .map_err(|error| format!("infrastructure: {error}"))?;
     let status = Command::new("cargo")

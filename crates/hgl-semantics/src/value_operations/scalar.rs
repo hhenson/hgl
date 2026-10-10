@@ -42,7 +42,10 @@ fn as_float(value: i64) -> f64 {
 pub fn binary(op: &str, a: &Value, b: &Value) -> Result<Value, EvalError> {
     if matches!(
         a.ty,
-        hgl_source::Ty::Set(_) | hgl_source::Ty::Map(..) | hgl_source::Ty::Family(_)
+        hgl_source::Ty::Set(_)
+            | hgl_source::Ty::Map(..)
+            | hgl_source::Ty::Family(_)
+            | hgl_source::Ty::Tuple(_)
     ) && matches!(op, "==" | "!=")
     {
         return Ok(value(Literal::Bool(

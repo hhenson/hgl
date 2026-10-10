@@ -63,3 +63,5 @@ Schema bound discovery uses hgl-type-sizes::expressions without fake zero values
 Rolling bounds stay scalar expressions; payloads alone are traversed as type
 arguments. The compiler evaluates collected expressions in declaration scope and
 retains their exact Literal kind before canonical type validation.
+
+Constructor::delta_required retains the declared delta spelling for each field, including inherited generic fields. delta_place identifies explicit scalar-reduced delta destinations and exact structural delta places. field restricts family access to declared inherited/common fields before selecting representation indices.

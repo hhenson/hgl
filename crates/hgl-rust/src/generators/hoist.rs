@@ -48,6 +48,7 @@ fn rewrite(value: &mut Value) {
         | Kind::BorrowedLocal(..)
         | Kind::Literal(_)
         | Kind::Wire(_)
+        | Kind::IterationInput(_)
         | Kind::Input(..)
         | Kind::Cache(_)
         | Kind::GeneratorLocal(_)

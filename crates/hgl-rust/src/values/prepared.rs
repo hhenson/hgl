@@ -83,6 +83,13 @@ pub(super) fn append(plan: &Plan, item: &Value, list: &str) -> String {
 }
 
 pub(super) fn set(plan: &Plan, id: usize, v: &Value) -> String {
+    if v.snapshot {
+        let marker = global_type(&v.ty);
+        let source = crate::snapshot_slots::projection(v, |v| value(plan, v));
+        return format!(
+            "{{let source={source};let globals=_ctx.global_state();let destination=globals.destination(self.global{id});<{marker} as hgl_store::PreparedValue>::check_slots(globals.values(),source,globals.values(),destination)?;<{marker} as hgl_store::PreparedValue>::copy_within(globals.values_mut(),source,destination);globals.mark_present(self.global{id});}}"
+        );
+    }
     if !crate::finite_domains::prepared(plan)
         || plan.recording.as_ref().is_none_or(|(_, ty)| ty != &v.ty)
     {

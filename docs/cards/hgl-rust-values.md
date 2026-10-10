@@ -96,3 +96,26 @@ propagated through nested blocks. Rolling returns publish ordinary arrival V int
 the typed window; ordinary helper bodies pass None. Window-specific delta_value
 and all_valid queries delegate to hgl-rust-windows; metadata queries retain the
 existing statically selected endpoint path.
+
+Current Tuple node-local copies and complete results lower through
+hgl-rust-snapshot-slots; ordinary aggregate constructor assembly lowers through
+hgl-rust-snapshots. Owned optional positions preserve unset data independently.
+No structural-delta observation or canonical type identity is substituted.
+
+Native text arguments from iteration child endpoints borrow the typed scalar
+column through the existing prepared input token. They do not clone text or
+convert endpoint identity to an ordinary owning argument.
+
+Own-output complete ordinary assignment delegates to structural_publication.
+Required projected scalar and native text child reads check existing input
+validity before access; an unset child never becomes a default scalar. Prepared
+text projections keep read-only native borrows and independent local ownership.
+
+Dense fixed List iteration visits unset child endpoints for metadata. Reading
+its payload uses the same checked required-child transport as direct projection;
+valid zero, false and floating zero remain available values. This guard changes
+no iteration selection or metadata query and holds in debug and release.
+
+May use snapshot_views for retained ordinary observation presence and List length.
+Required scalar/Boolean payload reads preserve value.unset_read; let retention and
+Tuple constructor copying preserve absence without consuming payloads.

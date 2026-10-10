@@ -361,3 +361,7 @@ Store owns and exposes an independent hgl-rolling Arena. Rolling and WindowShape
 are reexported for statically typed output/input handles. Shaped allocation creates
 invalid rolling roots; PreparedStorage owns the disjoint cold/hot access. The
 payload is ordinary V and root membership/readiness is private rolling state.
+
+`global_values(&self) -> &ValueColumns` borrows prepared ordinary columns
+without mutation authority. Typed snapshot scalar arguments and projections can
+share this immutable view with temporal scalar observations during native calls.

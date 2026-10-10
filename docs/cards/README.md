@@ -242,3 +242,11 @@ modules; [hgl-program](hgl-program.md) checks and emits graphs and tests.
 [hgl-calendar](hgl-calendar.md) parses/projects calendar values;
 [hgl-std-native](hgl-std-native.md) supplies the selected Rust value functions.
 The dense recorder remains in [hgl-testkit](hgl-testkit-harness.md).
+
+## Complete ordinary publication
+
+[hgl-structural-admission](hgl-structural-admission.md) owns ordinary result and
+own-output source compatibility.
+[hgl-rust-structural-publication](hgl-rust-structural-publication.md) owns prepared
+complete publication, fixed child validity and exact Map membership reconciliation.
+Snapshot layouts and cold capacities remain with their existing owners.

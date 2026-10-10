@@ -22,3 +22,10 @@ walk parsed bound expressions at signatures, fields and local annotations.
 Defaults and native requirement types use this same walk. Shape specialization
 and constant evaluation remain with the ordinary checker. Uses existing enum
 and bound-expression parser crates.
+
+Scope delegates source runtime provenance to tuple_flow Facts, including ordinary
+aliases, assignments and injected payload capabilities. Lambda parameters shadow service and runtime names.
+Constant Tuple call boundaries use hgl-tuple-phase before deferred specialization.
+
+Scope.alias accepts an explicit runtime-binding flag. State/cache identities and
+assignment dependence remain runtime facts even when a fixed initializer exists.

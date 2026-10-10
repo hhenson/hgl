@@ -1,0 +1,73 @@
+module hgraph.std part retained_unset_owner_controls
+
+struct RetainedPair {number:i64
+flag:bool}
+struct RetainedNested {sibling:i64
+pair:RetainedPair}
+
+fn aliased_partial(value:tuple<i64,bool>)->tuple<i64,bool> {
+    when {
+        let copy=value
+        let child=copy[1]
+        let alias=child
+        let independent=alias
+        return(copy[0],independent)
+    }
+}
+fn nested_absent(value:RetainedNested)->i64 {
+    when {
+        let copy=value
+        let inner=copy.pair
+        let number=inner.number
+        let alias=number
+        return alias+1
+    }
+}
+fn present_list_child(value:list<i64,2>)->tuple<i64,bool> {
+    when {
+        let copy=value
+        let child=copy[0]
+        let alias=child
+        return(alias,false)
+    }
+}
+fn unused_absent(value:tuple<i64,bool>)->i64 {
+    when {
+        let copy=value
+        let child=copy[1]
+        let alias=child
+        return copy[0]
+    }
+}
+
+fn unused_text_child(value:tuple<i64,str>)->i64 {
+    when {
+        let copy=value
+        let child=copy[1]
+        let alias=child
+        return copy[0]
+    }
+}
+fn consumed_text_child(value:tuple<i64,str>)->i64 {
+    when {
+        let copy=value
+        let child=copy[1]
+        let alias=child
+        return text_len(alias)
+    }
+}
+
+test retention_does_not_consume_unset_payloads {
+    assert eval(aliased_partial,[(1,_),(2,false),(3,true)])==[(1,_),(2,false),(3,true)]
+    assert eval(unused_absent,[(0,_)])==[0]
+    assert eval(unused_text_child,[(0,_)])==[0]
+    assert eval(consumed_text_child,[(1,"held")])==[4]
+    assert eval(present_list_child,[delta<list<i64,2>>(items:[1:7])])==[(_,false)]
+    assert eval(present_list_child,[delta<list<i64,2>>(items:[0:0,1:7])])==[(0,false)]
+    assert eval(nested_absent,[delta<RetainedNested>(sibling:1,pair:delta<RetainedPair>(number:0))])==[1]
+}
+
+test required_retained_alias_reads_raise {
+    assert raises("value.unset_read") {eval(consumed_text_child,[(1,_)])}
+    assert raises("value.unset_read") {eval(nested_absent,[delta<RetainedNested>(sibling:1)])}
+}

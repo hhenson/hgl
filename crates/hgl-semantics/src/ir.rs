@@ -8,16 +8,27 @@ pub struct Value {
     pub ty: Ty,
     /// Checked expression form.
     pub kind: Kind,
+    /// Source checking provenance for an explicit reduced delta requirement.
+    pub delta_required: bool,
+    /// Ordinary retained temporal children use typed optional snapshot storage.
+    pub snapshot: bool,
 }
 impl Value {
     /// Pair a checked expression with its resolved type.
     pub fn new(ty: Ty, kind: Kind) -> Self {
-        Self { ty, kind }
+        Self {
+            ty,
+            kind,
+            delta_required: false,
+            snapshot: false,
+        }
     }
 }
 /// Checked expressions and frontend-only binding markers.
 #[derive(Debug, Clone)]
 pub enum Kind {
+    /// Typed map child endpoint scoped to one modified-entry iteration.
+    IterationInput(usize),
     /// Closed harness sequence with dense horizon and only present owned slots.
     Captured(usize, Vec<(usize, Value)>),
     /// Ordered sparse constructor parts with exact originating type in Value.ty.
@@ -128,6 +139,8 @@ impl DeltaEntry {
 /// Checked statements in a node lifecycle hook or handler.
 #[derive(Debug, Clone)]
 pub enum Statement {
+    /// Iterate live modified map entries with key and child endpoint identities.
+    ForItems(usize, usize, bool, Value, Vec<Self>),
     /// End evaluation without publishing a value.
     Exit,
     /// Local binding index and initializer.
@@ -241,6 +254,7 @@ impl Value {
             | Kind::IsPresent(_)
             | Kind::Present(_)
             | Kind::Wire(_)
+            | Kind::IterationInput(_)
             | Kind::Input(..)
             | Kind::Cache(_)
             | Kind::ObservedLocal(_)

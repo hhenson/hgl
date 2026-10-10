@@ -79,7 +79,7 @@ impl Constructor {
             if fields.contains(&index) {
                 return Err(format!("duplicate struct field {name}"));
             }
-            if matches!(expr, Expr::Null) && !schema.optional.contains(&index) {
+            if matches!(expr.syntax(), Expr::Null) && !schema.optional.contains(&index) {
                 return Err("null supplied to required struct field".into());
             }
             fields.push(index);
@@ -99,6 +99,10 @@ impl Constructor {
             values: vec![None; args.len()],
         })
     }
+    /// Whether the written field requires an explicit delta before reduction.
+    pub fn delta_required(&self, index: usize) -> bool {
+        delta_argument(&self.schema.fields[self.fields[index]].1).is_some()
+    }
     /// Select one unchecked field and its available concrete expected type.
     pub fn next(
         &mut self,
@@ -115,10 +119,16 @@ impl Constructor {
             specialize(library, &self.declaration, arguments, &mut BTreeSet::new())?;
         }
         for (index, (_, expr)) in args.iter().enumerate() {
-            if matches!(expr, Expr::Null) {
+            if matches!(expr.syntax(), Expr::Null) {
                 continue;
             }
-            if self.values[index].is_none() {
+            if self.values[index].is_none()
+                && self
+                    .schema
+                    .generics
+                    .iter()
+                    .any(|name| !self.bindings.contains_key(name))
+            {
                 self.literal_evidence(
                     library,
                     &ordinary_pattern(&self.schema.fields[self.fields[index]].1),
@@ -128,7 +138,7 @@ impl Constructor {
         }
         for (index, (_, expr)) in args.iter().enumerate() {
             if self.values[index].is_none()
-                && !matches!(expr, Expr::Null)
+                && !matches!(expr.syntax(), Expr::Null)
                 && let Ok(ty) = crate::value_types::field_type(
                     library,
                     &self.patterns[self.fields[index]],
@@ -143,7 +153,9 @@ impl Constructor {
             .values
             .iter()
             .enumerate()
-            .filter(|(index, value)| value.is_none() && !matches!(args[*index].1, Expr::Null))
+            .filter(|(index, value)| {
+                value.is_none() && !matches!(args[*index].1.syntax(), Expr::Null)
+            })
             .map(|(index, _)| index)
             .collect::<Vec<_>>();
         if let Some(index) = pending
@@ -163,7 +175,9 @@ impl Constructor {
         pattern: &str,
         expr: &Expr,
     ) -> Result<(), String> {
-        if let (Some((element, _)), Expr::Sequence(values)) = (Ty::list_parts(pattern), expr) {
+        if let (Some((element, _)), Expr::Sequence(values)) =
+            (Ty::list_parts(pattern), expr.syntax())
+        {
             for expr in values.iter().flatten() {
                 if let Some(literal) = expr.fixed() {
                     unify(
@@ -183,6 +197,9 @@ impl Constructor {
     }
     /// Unify and retain the checked field once, without executing its expression.
     pub fn checked(&mut self, library: &Library, index: usize, value: Value) -> Result<(), String> {
+        if value.snapshot {
+            crate::value_access::helper_argument(&value)?;
+        }
         let resolved = crate::value_types::field_type(
             library,
             &self.patterns[self.fields[index]],
@@ -234,7 +251,7 @@ impl Constructor {
             })
             .collect::<Result<Vec<_>, String>>()?;
         for (index, default) in self.schema.defaults {
-            if matches!(default, Expr::Null) {
+            if matches!(default.syntax(), Expr::Null) {
                 continue;
             }
             if !fields.iter().any(|(field, _)| *field == index) {
@@ -254,7 +271,8 @@ impl Constructor {
     }
 }
 fn needs_context(library: &Library, module: &str, expr: &Expr) -> bool {
-    match expr {
+    match expr.syntax() {
+        Expr::Located(..) => unreachable!("syntax strips source origins"),
         Expr::Sequence(_) | Expr::Null => true,
         Expr::Call(name, args) => {
             if let Ok(Some(decl)) = declaration(library, module, name)
@@ -278,15 +296,17 @@ fn needs_context(library: &Library, module: &str, expr: &Expr) -> bool {
                     .iter()
                     .any(|parameter| !evidence.contains(parameter.as_str()));
             }
-            if name == "get"
-                && matches!(args.first(), Some((None, Expr::Name(receiver))) if receiver == "global_state")
-            {
+            if name == "get" && args.first().is_some_and(|(name, value)| {
+                name.is_none()
+                    && matches!(value.syntax(), Expr::Name(receiver) if receiver == "global_state")
+            }) {
                 return true;
             }
             args.iter()
                 .any(|(_, expr)| needs_context(library, module, expr))
         }
-        Expr::Applied(..)
+        Expr::Lambda(..)
+        | Expr::Applied(..)
         | Expr::Sparse(_)
         | Expr::Tuple(_)
         | Expr::TemporalLiteral(_)
@@ -386,4 +406,47 @@ fn expected_identity<'a>(ty: &'a Ty, decl: &Decl) -> Option<&'a hgl_source::Nomi
     } else {
         ty.structure().ok().map(|(identity, _, _)| identity)
     }
+}
+
+/// Retain a declared field's explicit reduced delta requirement at replacement.
+pub fn delta_place(library: &Library, value: &Value) -> bool {
+    if value.delta_required || matches!(value.ty, Ty::Delta(_)) {
+        return true;
+    }
+    let Kind::Field(parent, index) = &value.kind else {
+        return false;
+    };
+    let Ok((id, _, _)) = parent.ty.structure() else {
+        return false;
+    };
+    library
+        .declarations
+        .iter()
+        .find(|declaration| format!("{}::{}", declaration.module, declaration.name) == id.origin)
+        .and_then(|declaration| crate::inheritance::schema(library, declaration).ok())
+        .and_then(|(schema, _)| {
+            schema
+                .fields
+                .get(*index)
+                .map(|(_, ty)| delta_argument(ty).is_some())
+        })
+        .unwrap_or(false)
+}
+
+/// Admit only the abstract declaration's common ordinary family fields.
+pub fn field(library: &Library, parent: Value, name: &str) -> Result<Value, String> {
+    if let Ty::Family(family) = &parent.ty {
+        let declaration = library
+            .declarations
+            .iter()
+            .find(|declaration| {
+                format!("{}::{}", declaration.module, declaration.name) == family.identity().origin
+            })
+            .ok_or("unknown family declaration")?;
+        let (schema, _) = crate::inheritance::schema(library, declaration)?;
+        if !schema.fields.iter().any(|(field, _)| field == name) {
+            return Err(format!("unknown common family field {name}"));
+        }
+    }
+    crate::value_access::field(parent, name)
 }

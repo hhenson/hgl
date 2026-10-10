@@ -97,13 +97,15 @@ pub fn member(library: &Library, module: &str, name: &str) -> Result<Option<Lite
 }
 /// Resolve a supported scalar default in its declaring module.
 pub fn default(library: &Library, module: &str, expr: &Expr) -> Result<ParsedLiteral, String> {
-    match expr {
+    match expr.syntax() {
+        Expr::Located(..) => unreachable!("syntax strips source origins"),
         Expr::Literal(value) => Ok(ParsedLiteral::Value(value.clone())),
         Expr::TemporalLiteral(value) => Ok(ParsedLiteral::Contextual(value.clone())),
         Expr::Name(name) => member(library, module, name)?
             .map(ParsedLiteral::Value)
             .ok_or_else(|| format!("unsupported scalar default {name}")),
-        Expr::Null
+        Expr::Lambda(..)
+        | Expr::Null
         | Expr::Property(..)
         | Expr::Index(..)
         | Expr::Sequence(_)
@@ -127,7 +129,8 @@ pub fn check_call(
         return Err("enum construction is unsupported; use a qualified declared member".into());
     }
     if matches!(name, "keys" | "values" | "elements")
-        && let [(_, Expr::Name(owner))] = args
+        && let [(_, expr)] = args
+        && let Expr::Name(owner) = expr.syntax()
         && resolve(library, module, owner)?.is_some()
     {
         return Err("enum enumeration is unsupported in this backend".into());

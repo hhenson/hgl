@@ -22,3 +22,9 @@ field payloads use ordinary projection, including inside nested containers.
 Explicit composite atomic wrappers in K/V remain outside ordinary grammar.
 
 constructor_checked preserves typed Issue failures through recursive key/value callbacks and returns Issue; constructor adapts existing String callbacks.
+
+items_scope fixes key and child endpoint locals for items(map-or-list) and its modified selector before checking the body. operation admits positional scalar-child map/list effects only on output endpoints, and contains on input endpoints. This profile uses i64 keys, exact scalar payloads and existing Store effects; unsupported child payloads fail checking.
+
+operation also admits scalar-child i64 Map upsert with exact key/payload types.
+Unsupported recursive payload effects remain rejected; complete ordinary output
+assignment is checked by structural_admission, independently of these operations.

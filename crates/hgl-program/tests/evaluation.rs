@@ -300,6 +300,43 @@ fn actual_stdlib_and_harness_regressions_run_on_rust() -> Result<(), Box<dyn std
     fs::remove_dir_all(dir)?;
     Ok(())
 }
+#[test]
+fn collection_payload_failure_precedes_membership_precondition()
+-> Result<(), Box<dyn std::error::Error>> {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()?;
+    let dir = std::env::temp_dir().join(format!(
+        "hgl-collection-order-{}-{}",
+        std::process::id(),
+        NEXT_DIR.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    ));
+    fs::create_dir_all(dir.join("src"))?;
+    manifest(&root, &dir)?;
+    for (name, setup, operation) in [
+        ("insert", "insert(out,1,1)\n", "insert"),
+        ("update", "", "update"),
+    ] {
+        let input = source(&format!(
+            "fn target(x:i64)->map<i64,i64> {{inject out\nwhen {{{setup}{operation}(out,1,7%x)}}}}\ntest failure {{eval(target,[0])}}"
+        ));
+        module(&dir, name, &emit_tests(&compile_tests(&input)?))?;
+    }
+    image_main(&dir, ["insert", "update"].into_iter())?;
+    let binary = build_binary(&dir)?;
+    for name in ["insert", "update"] {
+        let output = Command::new(&binary).arg(name).output()?;
+        let text = format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(!output.status.success(), "{name}: {text}");
+        assert!(text.contains("modulo by zero"), "{name}: {text}");
+    }
+    fs::remove_dir_all(dir)?;
+    Ok(())
+}
 fn standard_batches(
     dir: &Path,
     sources: &[(String, String)],

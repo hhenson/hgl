@@ -5,6 +5,7 @@ fn append(out: &mut String, args: std::fmt::Arguments<'_>) {
         .unwrap_or_else(|_| unreachable!("String formatting"));
 }
 use crate::layouts::{delta_type, global_type, rust_type, whole_payload};
+use hgl_semantics::ir::{Kind, Value};
 use hgl_source::Ty;
 fn structural(ty: &Ty) -> bool {
     matches!(
@@ -363,3 +364,49 @@ fn validation(ty: &Ty) -> String {
 
 mod text;
 pub use text::text;
+/// Read one checked child endpoint using its statically selected transport.
+pub fn read(ty: &Ty, input: &str, operation: Option<String>) -> String {
+    if matches!(ty, Ty::Rolling(..)) {
+        return crate::windows::read(ty, input);
+    }
+    if let Some(payload) = whole_payload(ty) {
+        return format!(
+            "_ctx.store().atomic_get::<{}>({input})?",
+            global_type(payload)
+        );
+    }
+    if let Some(operation) = operation {
+        format!("{operation}::observe({input},_ctx)?")
+    } else {
+        format!(
+            "hgl_store::Scalar::try_clone(_ctx.store().get_ref(hgl_store::Store::prepared_input({input})))?"
+        )
+    }
+}
+
+/// Render an exact checked input endpoint binding for scalar or shaped queries.
+/// # Panics
+/// Panics if the supplied IR is not an input or a scoped iteration input.
+pub fn input(v: &Value) -> String {
+    if let Kind::Input(i, _) = v.kind {
+        format!("self.input{i}")
+    } else if let Kind::IterationInput(id) = v.kind {
+        if structural(&v.ty) || whole_payload(&v.ty).is_some() || matches!(v.ty, Ty::Rolling(..)) {
+            format!("local{id}")
+        } else {
+            format!("hgl_store::Store::prepared_input(local{id})")
+        }
+    } else if let Kind::Field(parent, index) = &v.kind {
+        let input = format!(
+            "({}).field::<{index}>(_ctx.store().bindings())",
+            input(parent)
+        );
+        if crate::deltas::shaped(&v.ty) {
+            input
+        } else {
+            format!("hgl_store::Store::prepared_input({input})")
+        }
+    } else {
+        unreachable!("checked endpoint query")
+    }
+}

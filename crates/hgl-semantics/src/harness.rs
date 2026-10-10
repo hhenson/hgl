@@ -104,8 +104,9 @@ fn prepare(
     evaluator: &mut Evaluator,
     arguments: &[Argument],
     materialize: &mut impl FnMut(&TemporalLiteral) -> Result<Literal, EvalError>,
-) -> Result<PreparedEval, String> {
+) -> Result<PreparedEval, Failure> {
     let mut values = vec![None; arguments.len()];
+    let mut dense = Vec::new();
     let mut input_length = 0;
     for argument in arguments {
         let (binding, value) = match argument {
@@ -121,24 +122,31 @@ fn prepare(
                 shape,
                 entry_type,
                 slots,
+                sequence,
             } => {
-                let slots = slots
-                    .iter()
-                    .map(|slot| {
-                        slot.as_ref()
-                            .map(|value| evaluator.value_with(value, materialize))
-                            .transpose()
-                    })
-                    .collect::<Result<Vec<_>, _>>()
-                    .map_err(|e| e.to_string())?;
-                crate::eval_data::validate(shape, &slots).map_err(|(index, error)| {
-                    format!("eval: input delta outside publication profile: {parameter} at position {index}: {error}")
-                })?;
+                let slots = if let Some(sequence) = sequence {
+                    let value = evaluator
+                        .value_with(sequence, materialize)
+                        .map_err(|e| e.to_string())?;
+                    let Kind::List(values) = value.kind else {
+                        return Err("ordinary publication sequence requires a list".into());
+                    };
+                    values.into_iter().map(Some).collect()
+                } else {
+                    slots
+                        .iter()
+                        .map(|slot| {
+                            slot.as_ref()
+                                .map(|value| evaluator.value_with(value, materialize))
+                                .transpose()
+                        })
+                        .collect::<Result<Vec<_>, _>>()
+                        .map_err(|e| e.to_string())?
+                };
                 input_length = input_length.max(slots.len());
-                (
-                    *binding,
-                    crate::eval_data::timed(entry_type.clone(), &slots)?,
-                )
+                let value = crate::eval_data::timed(entry_type.clone(), &slots)?;
+                dense.push((parameter, shape, slots));
+                (*binding, value)
             }
         };
         let target = values.get_mut(binding).ok_or("invalid prepared binding")?;
@@ -146,9 +154,17 @@ fn prepare(
             return Err("duplicate prepared binding".into());
         }
     }
+    for (parameter, shape, slots) in dense {
+        crate::eval_data::validate(shape, &slots).map_err(|(index, error)| {
+            Failure::Execution(hgl_types::node_error::NodeError::coded(
+                format!("eval: input delta outside publication profile: {parameter} at position {index}: {error}"),
+                "eval.input_delta_profile",
+            ))
+        })?;
+    }
     let arguments = values
         .into_iter()
-        .map(|value| value.ok_or("missing prepared binding".into()))
+        .map(|value| value.ok_or_else(|| "missing prepared binding".to_owned()))
         .collect::<Result<_, String>>()?;
     Ok(PreparedEval {
         arguments,

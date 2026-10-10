@@ -72,6 +72,7 @@ fn text(value: &Value, locals: &BTreeMap<usize, Text>) -> Text {
         | Kind::TemporalLiteral(_)
         | Kind::Prepared(_)
         | Kind::Wire(_)
+        | Kind::IterationInput(_)
         | Kind::Input(..)
         | Kind::Cache(_)
         | Kind::Native(..)
@@ -124,7 +125,9 @@ fn text_statements(body: &[Statement], locals: &mut BTreeMap<usize, Text>, maxim
                     locals.entry(id).or_insert(Text::Width(1)).merge(bound);
                 }
             }
-            Statement::For(_, _, body) | Statement::While(_, body) => {
+            Statement::ForItems(_, _, _, _, body)
+            | Statement::For(_, _, body)
+            | Statement::While(_, body) => {
                 text_statements(body, &mut locals.clone(), maximum);
             }
             Statement::Borrow(..) | Statement::Exit => {}
@@ -158,4 +161,23 @@ pub fn text_factor(plan: &Plan) -> usize {
         .map(|index| node_factor(plan, index, &mut factors))
         .max()
         .unwrap_or(1)
+}
+
+/// Whether selected native formatters require the fixed complete scalar text envelope.
+pub fn native_text(plan: &Plan) -> bool {
+    plan.natives.iter().any(|native| {
+        native.name == "hgraph.native::as_str"
+            && native.result == Ty::Str
+            && native.args.as_slice() != [Ty::Str]
+    })
+}
+
+/// Reserve the existing fixed envelope only when scalar formatters are selected.
+pub fn native_limits(plan: &Plan, index: impl Fn() -> usize) -> String {
+    if native_text(plan) {
+        let index = index();
+        format!("capacity.limit{index}=capacity.limit{index}.max(64);")
+    } else {
+        String::new()
+    }
 }

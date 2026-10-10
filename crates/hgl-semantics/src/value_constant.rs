@@ -36,6 +36,7 @@ fn expression(value: &Value, locals: &BTreeSet<usize>) -> bool {
         | Kind::ObservedLocal(_)
         | Kind::GeneratorLocal(_)
         | Kind::Wire(_)
+        | Kind::IterationInput(_)
         | Kind::Input(..)
         | Kind::Cache(_)
         | Kind::Native(..)
@@ -62,6 +63,7 @@ fn block(body: &[Statement], inherited: &BTreeSet<usize>) -> bool {
         }
         Statement::Exit => true,
         Statement::Borrow(..)
+        | Statement::ForItems(..)
         | Statement::For(..)
         | Statement::TimedYield(..)
         | Statement::While(..)

@@ -27,3 +27,8 @@ these are terminal presentation boundaries, never source classification.
 
 Diagnostic.column records the one-based character column; Display preserves the
 ordinary file:line:column location form. Rejection matching still ignores columns.
+
+EXECUTION_CODES includes value.unset_read for an admitted operation consuming
+an unset child retained from an ordinary structural observation. Retention and
+constructor copying do not consume payloads; other read failures keep their
+existing identities.

@@ -13,6 +13,21 @@ pub fn constructors(
     let mut code = String::new();
     for (node, definition) in plan.nodes.iter().enumerate() {
         let mut visit = |value: &Value, locals: &Locals| {
+            if let Kind::Query(op, args) = &value.kind
+                && matches!(
+                    op.as_str(),
+                    "collection_insert" | "collection_update" | "collection_upsert"
+                )
+                && let [receiver, key, payload] = args.as_slice()
+                && let Ok(ty) = receiver.ty.clone().delta()
+                && let Some(domain) = root(&ty)
+            {
+                let publication = Value::new(
+                    ty,
+                    Kind::Delta(vec![DeltaEntry::Keyed(key.clone(), payload.clone())]),
+                );
+                code += &paths(&publication, locals, node, &domain, &width, &emit);
+            }
             if matches!(value.kind, Kind::Delta(_))
                 && let Some(domain) = root(&value.ty)
             {
@@ -149,7 +164,9 @@ fn statements(body: &[Statement], locals: &mut Locals, visit: &mut impl FnMut(&V
                 values(a, locals, visit);
                 values(b, locals, visit);
             }
-            Statement::For(_, v, body) | Statement::While(v, body) => {
+            Statement::ForItems(_, _, _, v, body)
+            | Statement::For(_, v, body)
+            | Statement::While(v, body) => {
                 values(v, locals, visit);
                 statements(body, &mut locals.clone(), visit);
             }
@@ -210,6 +227,7 @@ fn values(value: &Value, locals: &Locals, visit: &mut impl FnMut(&Value, &Locals
         | Kind::Captured(..)
         | Kind::Prepared(_)
         | Kind::Wire(_)
+        | Kind::IterationInput(_)
         | Kind::Input(..)
         | Kind::Cache(_)
         | Kind::GeneratorLocal(_)

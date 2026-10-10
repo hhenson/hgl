@@ -2,6 +2,7 @@
 mod owning;
 use hgl_semantics::ir::{Kind, Plan, Statement, Value};
 use hgl_source::Literal;
+pub use owning::owning_argument;
 fn local(value: &Value, id: usize) -> bool {
     matches!(value.kind,Kind::MutableLocal(actual) if actual==id)
 }
@@ -41,7 +42,7 @@ fn direct(body: &[Statement]) -> Option<usize> {
         let arrivals = match statement {
             Statement::Yield(_) | Statement::TimedYield(..) => 1,
             Statement::If(_, yes, no) => direct(yes)?.max(direct(no)?),
-            Statement::While(..) | Statement::For(..) => return None,
+            Statement::While(..) | Statement::ForItems(..) | Statement::For(..) => return None,
             Statement::Let(..)
             | Statement::Var(..)
             | Statement::Borrow(..)
@@ -69,6 +70,7 @@ pub fn direct_arrivals(plan: &Plan) -> Option<usize> {
 /// Unknown plans retain the existing whole-adapter execution path; no hook is evaluated here.
 pub fn prepared(plan: &Plan) -> bool {
     !plan.ordinary_instantiation
+        && crate::value_calls::prepared(plan)
         && owning::finite(plan)
         && direct_arrivals(plan).is_some()
         && plan.nodes.iter().all(|node| {

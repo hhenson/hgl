@@ -6,8 +6,9 @@ use hgl_source::{Expr, Ty};
 use std::collections::BTreeSet;
 
 /// Apply ordinary widening without turning a value into a connection.
-fn widen(value: Value, expected: &Ty) -> Value {
-    if *expected == Ty::F64 && value.ty == Ty::I64 && !matches!(value.kind, Kind::Wire(_)) {
+fn widen(value: Value, expected: &Ty, allowed: bool) -> Value {
+    let numeric = *expected == Ty::F64 && value.ty == Ty::I64;
+    if allowed && numeric && !matches!(value.kind, Kind::Wire(_)) {
         Value::new(Ty::F64, Kind::Unary("float".into(), Box::new(value)))
     } else {
         value
@@ -16,6 +17,7 @@ fn widen(value: Value, expected: &Ty) -> Value {
 
 /// Check a resolved local annotation in the initializer's own category.
 pub fn initializer(value: Value, annotation: Option<&Ty>) -> Result<Value, String> {
+    let value = crate::tuple_values::retain(value, false);
     if value.ty == Ty::Void {
         return Err("statement operation has no initializer value".into());
     }
@@ -23,7 +25,7 @@ pub fn initializer(value: Value, annotation: Option<&Ty>) -> Result<Value, Strin
         owning_payload(&value)?;
     }
     let value = if let Some(ty) = annotation {
-        widen(value, ty)
+        widen(value, ty, true)
     } else {
         value
     };
@@ -43,6 +45,9 @@ pub fn statement(
     annotated: bool,
 ) -> Result<(Value, Statement), String> {
     if mutable {
+        if value.snapshot {
+            return Err("mutable retained tuple locals are outside this backend profile".into());
+        }
         owning_payload(&value)?;
         if !ordinary(&value.ty) {
             return Err("mutable locals currently require an ordinary scalar or struct".into());
@@ -67,7 +72,7 @@ pub fn assignment_type(target: &Value, evaluation: bool) -> Result<Ty, String> {
         return Err("assignment requires writable var, state, cache or out".into());
     }
     if matches!(target.kind, Kind::Output) {
-        target.ty.clone().delta()
+        Ok(target.ty.clone().delta()?)
     } else {
         Ok(target.ty.clone())
     }
@@ -76,14 +81,13 @@ pub fn assignment_type(target: &Value, evaluation: bool) -> Result<Ty, String> {
 /// Ordinary mutation never changes a binding into a temporal connection.
 pub fn assignment(target: Value, value: Value) -> Result<Statement, String> {
     let expected = assignment_type(&target, true)?;
+    if matches!(target.kind, Kind::Output) {
+        return crate::structural_admission::assignment(target, value, &expected);
+    }
     if matches!(value.kind, Kind::Wire(_)) {
         return Err("local assignment category mismatch: ordinary value required".into());
     }
-    let value = if writable(&target) {
-        widen(value, &expected)
-    } else {
-        value
-    };
+    let value = widen(value, &expected, writable(&target));
     if expected != value.ty || !ordinary(&expected) {
         return Err("assignment type mismatch".into());
     }
@@ -99,7 +103,7 @@ pub fn replacement(target: &Value, value: Value, mutable_port: bool) -> Result<V
     if matches!(target.kind, Kind::Wire(_)) != matches!(value.kind, Kind::Wire(_)) {
         return Err("local assignment category mismatch".into());
     }
-    let value = widen(value, &target.ty);
+    let value = widen(value, &target.ty, true);
     if target.ty != value.ty {
         return Err("local assignment type mismatch".into());
     }
@@ -108,13 +112,23 @@ pub fn replacement(target: &Value, value: Value, mutable_port: bool) -> Result<V
 
 /// Build ordinary binary IR or a temporal scalar node from checked operands.
 pub fn binary(op: &str, mut values: [Value; 2], plan: &mut Plan) -> Result<Value, String> {
+    values.iter().try_for_each(require_payload)?;
     if values.iter().any(|value| {
         matches!(value.ty, Ty::Set(_) | Ty::Map(..))
-            && matches!(value.kind, Kind::Wire(_) | Kind::Input(..) | Kind::Output)
+            && matches!(
+                value.kind,
+                Kind::Wire(_) | Kind::IterationInput(_) | Kind::Input(..) | Kind::Output
+            )
     }) {
         return Err(format!(
             "unsupported binary operation {op} on structural collection endpoints"
         ));
+    }
+    if values
+        .iter()
+        .any(|v| v.snapshot && matches!(v.ty, Ty::Tuple(_) | Ty::List(..) | Ty::Map(..)))
+    {
+        return Err("retained aggregate comparisons are outside this backend profile".into());
     }
     let temporal = values.iter().any(|v| matches!(v.kind, Kind::Wire(_)));
     let mut node = Node {
@@ -149,10 +163,10 @@ pub fn binary(op: &str, mut values: [Value; 2], plan: &mut Plan) -> Result<Value
     require_payload(&a)?;
     require_payload(&b)?;
     if a.ty == Ty::I64 && b.ty == Ty::F64 {
-        a = widen(a, &Ty::F64);
+        a = widen(a, &Ty::F64, true);
     }
     if a.ty == Ty::F64 && b.ty == Ty::I64 {
-        b = widen(b, &Ty::F64);
+        b = widen(b, &Ty::F64, true);
     }
     let ty = crate::value_check::binary_type(op, &a.ty, &b.ty)?;
     let value = Value::new(
@@ -190,7 +204,7 @@ impl GraphLocals {
         }
     }
     fn signal(&self, expr: &Expr) -> bool {
-        matches!(expr, Expr::Name(name) if self.signals.contains(name))
+        matches!(expr.syntax(), Expr::Name(name) if self.signals.contains(name))
     }
     /// Reject payload arithmetic on a formal signal, including its lexical aliases.
     pub fn payload(&self, (a, b): (&Expr, &Expr)) -> Result<(), String> {

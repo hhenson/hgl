@@ -85,3 +85,5 @@ excluded from this publication test matrix; existing compiler reference support
 is separate. Signal coverage is observation-only, without payload recording.
 The [compiler card](../cards/hgl-program.md) records additional limits, including
 uninitialized locals and unsupported contextual construction paths.
+
+All ordinary eval argument expressions finish in their written order before input traces are validated. A malformed publication sequence raises eval.input_delta_profile with the parameter and zero-based publication slot before graph startup. Ordinary list<delta<T>> bindings retain their exact publication element identity and evaluate once when supplied as a sequence.

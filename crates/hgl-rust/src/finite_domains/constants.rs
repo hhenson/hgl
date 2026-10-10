@@ -30,7 +30,9 @@ fn statements<'a>(body: &'a [Statement], out: &mut Vec<&'a Value>) {
                 value(a, out);
                 value(b, out);
             }
-            Statement::While(v, body) | Statement::For(_, v, body) => {
+            Statement::While(v, body)
+            | Statement::ForItems(_, _, _, v, body)
+            | Statement::For(_, v, body) => {
                 value(v, out);
                 statements(body, out);
             }
@@ -92,6 +94,7 @@ fn value<'a>(v: &'a Value, out: &mut Vec<&'a Value>) {
         | Kind::Captured(..)
         | Kind::Prepared(_)
         | Kind::Wire(_)
+        | Kind::IterationInput(_)
         | Kind::Input(..)
         | Kind::Cache(_)
         | Kind::GeneratorLocal(_)

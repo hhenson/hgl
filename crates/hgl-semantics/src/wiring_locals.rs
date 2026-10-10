@@ -20,10 +20,10 @@ pub fn handles(statement: &Stmt, env: &Env) -> bool {
     false
 }
 fn port(expr: &Expr, ports: &BTreeSet<String>) -> bool {
-    if let Expr::Name(name) = expr {
+    if let Expr::Name(name) = expr.syntax() {
         return ports.contains(name);
     }
-    if let Expr::Binary(_, a, b) = expr {
+    if let Expr::Binary(_, a, b) = expr.syntax() {
         return port(a, ports) || port(b, ports);
     }
     false
@@ -174,13 +174,14 @@ fn block(
                     }
                 }
             }
-            Stmt::Assign(..) | Stmt::Add(..) | Stmt::Exit | Stmt::Return(_) | Stmt::Call(_) | Stmt::TimedYield(..) | Stmt::While(..) | Stmt::For(..) => return Err("conditional connection rebinding admits local declarations, name assignments and ordinary if blocks".into()),
+            Stmt::Assign(..) | Stmt::Add(..) | Stmt::Exit | Stmt::Return(_) | Stmt::Call(_) | Stmt::TimedYield(..) | Stmt::While(..) | Stmt::ForItems(..) | Stmt::For(..) => return Err("conditional connection rebinding admits local declarations, name assignments and ordinary if blocks".into()),
         }
     }
     Ok(outer)
 }
 fn expression(expr: &Expr, scope: &mut Scope, plan: &mut Plan) -> Result<Value, String> {
-    match expr {
+    match expr.syntax() {
+        Expr::Located(..) => unreachable!("syntax strips source origins"),
         Expr::Name(name) => scope.env.get(name).cloned().ok_or_else(|| format!("unknown value {name}")),
         Expr::Literal(value) => Ok(Value::new(value.ty(), Kind::Literal(value.clone()))),
         Expr::Binary(op, a, b) => {
@@ -200,7 +201,7 @@ fn expression(expr: &Expr, scope: &mut Scope, plan: &mut Plan) -> Result<Value, 
             }
             Ok(Value::new(Ty::Bool, Kind::Unary(op.clone(), Box::new(value))))
         }
-        Expr::Null | Expr::TemporalLiteral(_) | Expr::Sequence(_) | Expr::Tuple(_) | Expr::Sparse(_) | Expr::Call(..) | Expr::Applied(..) | Expr::Unary(..) | Expr::Property(..) | Expr::Index(..) => Err("conditional connection rebinding requires existing locals, scalar literals and binary expressions; calls are unsupported".into()),
+        Expr::Lambda(..) | Expr::Null | Expr::TemporalLiteral(_) | Expr::Sequence(_) | Expr::Tuple(_) | Expr::Sparse(_) | Expr::Call(..) | Expr::Applied(..) | Expr::Unary(..) | Expr::Property(..) | Expr::Index(..) => Err("conditional connection rebinding requires existing locals, scalar literals and binary expressions; calls are unsupported".into()),
     }
 }
 fn closed(value: Value, scope: &mut Scope, plan: &mut Plan) -> Result<Value, String> {

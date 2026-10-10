@@ -42,7 +42,8 @@ fn payload(value: &Value) -> bool {
                 Kind::Input(..) | Kind::Configuration(_) | Kind::Literal(_) => true,
                 Kind::Binary(_, a, b) => !matches!(value.ty, Ty::Str) && payload(a) && payload(b),
                 Kind::Unary(_, child) => payload(child),
-                Kind::Delta(_)
+                Kind::IterationInput(_)
+                | Kind::Delta(_)
                 | Kind::ObservedLocal(_)
                 | Kind::WiringFailure(_)
                 | Kind::List(_)

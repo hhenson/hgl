@@ -36,3 +36,19 @@ for recording and duration-window storage before any source runs.
 The complete prepared adapter also requires an installation phase. A plan marked
 ordinary_instantiation always retains generic publication: finite source bounds
 alone do not imply that temporal destination slots have been reserved.
+
+Loop-free scalar-child i64 Map mutations with known literal keys are prepared
+when payload widths and schedules are proved. Insert/update/upsert/remove and
+invalidate effects contribute to finite membership bounds; contains is read-only.
+No dynamic key, growing payload, provider execution or opaque loop is added to
+this proof. Allocation-counted complete-publication fixtures exercise the path.
+
+The complete owning proof delegates text value-call argument storage to
+value_calls. A used owning text formal has no finite helper slot preparation;
+it cannot establish a zero-allocation transport proof.
+
+`owning_argument(&Ty)` checks native helper argument storage recursively through
+Tuple, Struct, nullable and atomic children, using the existing scalar owning
+classification for leaves. This cold proof distinguishes fixed positional
+arguments from text or collection descendants; it changes no runtime layout or
+return/mutation proof. value_calls combines it with structured literal-use proof.

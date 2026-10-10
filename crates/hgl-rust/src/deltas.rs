@@ -110,24 +110,11 @@ pub fn equivalent(ty: &Ty, left: &str, right: &str) -> String {
         format!("{left} == {right}")
     }
 }
-fn read(ty: &Ty, input: &str) -> String {
-    if matches!(ty, Ty::Rolling(..)) {
-        return crate::windows::read(ty, input);
-    }
-    if let Some(payload) = whole_payload(ty) {
-        return format!(
-            "_ctx.store().atomic_get::<{}>({input})?",
-            global_type(payload)
-        );
-    }
-    if structural(ty) {
-        format!("{}::observe({input},_ctx)?", operations(ty))
-    } else {
-        format!(
-            "hgl_store::Scalar::try_clone(_ctx.store().get_ref(hgl_store::Store::prepared_input({input})))?"
-        )
-    }
+/// Read one checked child endpoint using its statically selected transport.
+pub fn read(ty: &Ty, input: &str) -> String {
+    crate::observed::read(ty, input, structural(ty).then(|| operations(ty)))
 }
+
 fn apply(ty: &Ty, output: &str, payload: &str) -> String {
     if matches!(ty, Ty::Rolling(..)) {
         return crate::windows::apply(ty, output, payload);
@@ -330,7 +317,9 @@ fn statements(body: &[Statement], types: &mut BTreeSet<Ty>) {
                 values(a, types);
                 values(b, types);
             }
-            Statement::While(v, body) | Statement::For(_, v, body) => {
+            Statement::While(v, body)
+            | Statement::ForItems(_, _, _, v, body)
+            | Statement::For(_, v, body) => {
                 values(v, types);
                 statements(body, types);
             }
@@ -386,6 +375,7 @@ fn values(value: &Value, types: &mut BTreeSet<Ty>) {
         | Kind::BorrowedLocal(..)
         | Kind::Literal(_)
         | Kind::Wire(_)
+        | Kind::IterationInput(_)
         | Kind::Input(..)
         | Kind::Cache(_)
         | Kind::GeneratorLocal(_)
@@ -405,4 +395,13 @@ use emit::marker;
 /// Whether endpoint handles carry an exact prepared shape rather than a scalar column.
 pub fn shaped(ty: &Ty) -> bool {
     structural(ty) || whole_payload(ty).is_some() || matches!(ty, Ty::Rolling(..))
+}
+
+/// Lower already-checked collection operands in source order.
+pub fn collection_operation(
+    op: &str,
+    args: &[Value],
+    emit: impl FnMut(&Value) -> String,
+) -> String {
+    crate::keyed::collection_operation(op, args, emit, allocation, apply)
 }

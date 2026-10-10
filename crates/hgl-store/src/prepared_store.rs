@@ -59,12 +59,12 @@ impl<'a> PreparedStorage<'a> {
 pub struct PreparedTick<'a, W: Wake> {
     /// Disjoint source and destination access for generated fieldwise recording.
     pub storage: PreparedStorage<'a>,
-    now: EngineTime,
+    pub(crate) now: EngineTime,
     writer: NodeId,
-    wake: &'a mut W,
+    pub(crate) wake: &'a mut W,
 }
 impl<W: Wake> PreparedTick<'_, W> {
-    fn authorize(&self, output: OutputId, generation: u32) {
+    pub(crate) fn authorize(&self, output: OutputId, generation: u32) {
         validate_write(
             self.storage.bindings,
             output,

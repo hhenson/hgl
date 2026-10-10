@@ -11,3 +11,7 @@ of known complete identities without replacing emitted local accesses. Mutable
 origins remain excluded. Provider recipes are never executed by discovery.
 Nested lexical branches receive independent origin scopes. Returned values seed
 cold domains through existing exact generated preparation operations.
+
+Known scalar Map operation keys use the same immutable StaticValues materializer
+as sparse constructor keys. Discovery records identity only; operand evaluation
+and operation preconditions remain in generated execution.

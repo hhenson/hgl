@@ -1,0 +1,29 @@
+module tuple_order
+native const fn mark(value:i64)->i64 throws
+native const fn mark(value:i64)->i64 throws {}
+fn source()->i64 {
+    inject alarm
+    start { schedule(alarm,0us) }
+    when { return 1 }
+}
+fn observe(value:i64,const failing:bool,const nested:bool) {
+    inject global_state
+    when {
+        set(global_state,"before",1)
+        if failing {
+            let incomplete=(mark(9),mark(1))
+            set(global_state,"after",incomplete[0])
+        } else {
+            if nested {
+                let pair=((mark(3),mark(4)),mark(5))
+                set(global_state,"after",pair[0][0]*100+pair[0][1]*10+pair[1])
+            } else {
+                let pair=(mark(2),mark(1))
+                set(global_state,"after",pair[0]*10+pair[1])
+            }
+        }
+    }
+}
+export fn success() { observe(source(),false,false) }
+export fn nested() { observe(source(),false,true) }
+export fn failure() { observe(source(),true,false) }
