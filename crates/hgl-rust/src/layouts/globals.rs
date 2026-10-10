@@ -97,18 +97,13 @@ pub fn global_markers(plan: &Plan) -> String {
         .filter(|ty| emitted.insert(global_type(ty)))
         .enumerate()
         .map(|(domain, ty)| {
-            if let Ty::Family(family) = ty {
-                crate::structs::marker(
-                    &crate::layouts::family_storage(family),
-                    global_type,
-                    global_schema,
-                )
-            } else if matches!(ty, Ty::Set(_) | Ty::Map(..)) {
+            if matches!(ty, Ty::Set(_) | Ty::Map(..)) {
                 crate::collections::marker(ty, global_type, global_schema)
             } else if let Ty::Enum(identity) = ty {
                 crate::enums::marker(identity)
             } else {
-                crate::structs::marker(ty, global_type, global_schema)
+                let schema = crate::layouts::ordinary_storage(ty).unwrap_or_else(|| ty.clone());
+                crate::structs::marker(&schema, global_type, global_schema)
                     + &if crate::composite_keys::composite(ty) {
                         crate::composite_keys::implementation(ty, domain, global_type)
                     } else {

@@ -1,20 +1,6 @@
 //! Static owning family layouts and concrete-tag-preserving conversion emission.
+pub use hgl_source::ordinary_shape::family_storage;
 use hgl_source::{FamilyType, Ty};
-/// Fixed typed discriminator and member slots for a closed nominal family.
-pub fn family_storage(family: &FamilyType) -> Ty {
-    let mut fields = vec![("tag".into(), Ty::I64)];
-    fields.extend(
-        family
-            .members()
-            .iter()
-            .map(|(id, ty)| (id.source_name(), ty.clone())),
-    );
-    Ty::Struct(
-        format!("\0family<{}>", family.identity().source_name()).into(),
-        fields,
-        (1..=family.members().len()).collect(),
-    )
-}
 /// Construct the fixed representation for one checked exact member.
 pub fn family_member(family: &FamilyType, index: usize, expression: &str) -> String {
     let fields = (0..family.members().len())

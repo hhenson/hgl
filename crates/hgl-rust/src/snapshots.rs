@@ -21,22 +21,27 @@ fn optional(ty: &Ty) -> Ty {
 }
 /// Private emission-only storage; canonical HGL tuple identity never changes.
 pub fn storage(ty: &Ty) -> Ty {
-    if let Ty::Tuple(children) = ty {
-        Ty::Struct(
-            format!("\0snapshot<{}>", ty.source_name()).into(),
-            children
-                .iter()
-                .enumerate()
-                .map(|(i, child)| (i.to_string(), storage(child)))
-                .collect(),
-            (0..children.len()).collect(),
-        )
-    } else if let Ty::Struct(_, fields, _) = ty {
-        Ty::Struct(
+    if matches!(ty, Ty::Tuple(_) | Ty::Struct(..)) {
+        let name = if matches!(ty, Ty::Tuple(_)) {
+            format!("\0snapshot<{}>", ty.source_name()).into()
+        } else {
             hgl_source::type_shape::Nominal {
                 origin: "\0snapshot-struct".into(),
                 arguments: vec![ty.clone()],
-            },
+            }
+        };
+        let fields = if let Ty::Struct(_, fields, _) = ty {
+            fields.clone()
+        } else {
+            children(ty)
+                .unwrap_or_default()
+                .iter()
+                .enumerate()
+                .map(|(i, child)| (i.to_string(), (*child).clone()))
+                .collect()
+        };
+        Ty::Struct(
+            name,
             fields
                 .iter()
                 .map(|(name, child)| (name.clone(), storage(child)))

@@ -2,7 +2,7 @@
 use crate::layouts::global_type;
 use hgl_semantics::ir::{Kind, Value};
 use hgl_source::Ty;
-fn schema(ty: &Ty) -> Ty {
+pub(crate) fn schema(ty: &Ty) -> Ty {
     crate::layouts::ordinary_storage(ty).unwrap_or_else(|| ty.clone())
 }
 fn child_slot(marker: &str, parent: &str) -> String {

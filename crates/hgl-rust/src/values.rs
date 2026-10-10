@@ -90,8 +90,8 @@ fn value(plan: &Plan, v: &Value) -> String {
     }
 }
 fn query_value(plan: &Plan, op: &str, args: &[Value]) -> String {
-    if op.starts_with("\0any-compare:") {
-        crate::any_comparisons::comparison(plan, op, args)
+    if op.starts_with("\0family-eq:") {
+        crate::owner_comparisons::comparison(plan, op, args)
     } else if op.starts_with("collection_") {
         crate::deltas::collection_operation(op, args, |v| value(plan, v))
     } else if op.contains('.') {

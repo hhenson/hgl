@@ -1,7 +1,35 @@
 //! Ordinary constructor locals own canonical reserved slots before any projection or boxing.
-use crate::layouts::global_type;
+use crate::{constructor_fields::schema, layouts::global_type};
 use hgl_semantics::ir::{Kind, Plan, Value};
-use hgl_source::Ty;
+use hgl_source::{Literal, Ty};
+/// Canonical fixed family fields preserve a checked concrete member without native construction.
+pub(crate) fn family(value: &Value) -> Option<Value> {
+    let (Ty::Family(target), Kind::Unary(op, member)) = (&value.ty, &value.kind) else {
+        return None;
+    };
+    if op != "family" {
+        return None;
+    }
+    let index = target
+        .members()
+        .iter()
+        .position(|(_, ty)| *ty == member.ty)?;
+    Some(Value::new(
+        value.ty.clone(),
+        Kind::Construct(vec![
+            (
+                0,
+                Value::new(
+                    Ty::I64,
+                    Kind::Literal(Literal::Int(
+                        i64::try_from(index).unwrap_or_else(|_| unreachable!("finite family tag")),
+                    )),
+                ),
+            ),
+            (index + 1, *member.clone()),
+        ]),
+    ))
+}
 /// Emit a single ordered write into an independently preflighted canonical owner.
 pub(crate) fn local(plan: &Plan, id: usize, value: &Value, key: &str) -> String {
     format!("let local{id}={};", retained(plan, value, key))
@@ -48,16 +76,15 @@ fn stage(plan: &Plan, value: &Value, slot: &str) -> String {
 }
 
 fn optional_bound(ty: &Ty, bound: String) -> String {
-    let bound = if matches!(ty, Ty::Recursive(batch) if batch.definitions().is_empty()) {
-        format!("Box::new({bound})")
-    } else {
-        bound
-    };
+    if matches!(ty, Ty::Recursive(batch) if batch.definitions().is_empty()) {
+        return format!("Some(Box::new({bound}))");
+    }
     format!("Some({bound})")
 }
 fn bounds(value: &Value, fallback: &impl Fn(&Ty) -> String) -> String {
+    let schema = schema(&value.ty);
     if let Kind::Construct(supplied) = &value.kind
-        && let Ok((_, fields, optional)) = value.ty.structure()
+        && let Ok((_, fields, optional)) = schema.structure()
     {
         let args = fields
             .iter()
@@ -98,7 +125,11 @@ pub(crate) fn global_bounds(
             if let Kind::Query(op, args) = &v.kind
                 && op == key
             {
-                result = Some(bounds(&args[0], &fallback));
+                result = Some(bounds(
+                    args.last()
+                        .unwrap_or_else(|| unreachable!("constructor bounds")),
+                    &fallback,
+                ));
             }
             true
         });
@@ -106,12 +137,19 @@ pub(crate) fn global_bounds(
     result
 }
 
-/// Recover the checked recipe retained by an ordinary constructor staging owner.
+/// Recover the checked finite constructor shape, including copied and boxed family owners.
 pub(crate) fn origin(value: &Value) -> Option<&Value> {
     let Kind::Query(op, args) = &value.kind else {
         return None;
     };
-    op.starts_with("\0constructor:")
-        .then(|| args.last())
-        .flatten()
+    if !op.starts_with("\0constructor:") {
+        return None;
+    }
+    let child = args.last()?;
+    if matches!(child.ty, Ty::Family(_))
+        && let Kind::Construct(fields) = &child.kind
+    {
+        return fields.last().map(|(_, child)| child);
+    }
+    Some(child)
 }

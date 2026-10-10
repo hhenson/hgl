@@ -22,3 +22,5 @@ capacity allocation. Recursive fields terminate bounds at absent Optional entrie
 boxes in present edge bounds follow actual finite payload depth.
 
 delegate(&str,&str)->String emits PreparedValue operations for a generated marker using an existing physically compatible marker. enumeration delegates to i64 through that function.
+
+Per-field include, check and copy bodies are assembled through one operation table. The emitted whole-value checks and independent typed copies retain their previous ordering.

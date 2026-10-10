@@ -68,3 +68,61 @@ test {
             any(KeptBoxes(initial:any(2),replacement:any(4)))]
     }
 }
+
+abstract struct MixedChoice { value:i64
+    items:list<i64>
+}
+struct MixedFirst:MixedChoice {}
+test {
+ fn mixed_family(value:i64)->any {
+  when {
+   let choice:MixedChoice=MixedFirst(value:value,items:[1,2])
+   if choice==choice {return any(choice)} else {return any()}
+  }
+ }
+ test mixed_family_owner_is_retained {
+  assert eval(mixed_family,[1,2])==[any(MixedFirst(value:1,items:[1,2])),any(MixedFirst(value:2,items:[1,2]))]
+ }
+}
+
+struct AliasRecord { value:i64
+    items:list<i64>
+}
+test {
+    fn copied_owner(value:i64)->any {
+        when {
+            let record=AliasRecord(value:value,items:[1,2])
+            let copied=record
+            let seen=copied.value
+            if seen>=0 {return any(copied)} else {return any()}
+        }
+    }
+    test ordinary_owner_copies_have_independent_prepared_destinations {
+        assert eval(copied_owner,[1,2])==[any(AliasRecord(value:1,items:[1,2])),any(AliasRecord(value:2,items:[1,2]))]
+    }
+}
+
+struct MixedSecond:MixedChoice {}
+test {
+    fn family_members_equal(value:i64)->bool {
+        when {
+            let first:MixedChoice=MixedFirst(value:value,items:[1,2])
+            let same=first
+            let changed:MixedChoice=MixedFirst(value:value+1,items:[1,2])
+            let second:MixedChoice=MixedSecond(value:value,items:[1,2])
+            return first==same && first!=changed && first!=second && !(first==second)
+        }
+    }
+    fn copied_family(value:i64)->any {
+        when {
+            let first:MixedChoice=MixedFirst(value:value,items:[1,2])
+            let copied=first
+            let seen=copied.value
+            if seen>=0 {return any(copied)} else {return any()}
+        }
+    }
+    test family_copy_keeps_contents_and_concrete_member_identity {
+        assert eval(family_members_equal,[1,2])==[true,true]
+        assert eval(copied_family,[1,2])==[any(MixedFirst(value:1,items:[1,2])),any(MixedFirst(value:2,items:[1,2]))]
+    }
+}

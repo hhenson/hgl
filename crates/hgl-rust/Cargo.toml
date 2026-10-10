@@ -10,13 +10,13 @@ line-budget = 8940
 
 # Budgets of the modules that were crates of their own (docs/decisions/0004).
 [package.metadata.hgl.modules]
-any_comparisons = { budget = 100, uses = ["any_prepared", "any_values", "values"] }
+owner_comparisons = { budget = 100, uses = ["source_slots", "any_prepared", "any_values", "values"] }
 constructor_fields = { budget = 100, uses = ["layouts"] }
-any_expression = { budget = 180, uses = ["any_values", "source_slots", "observed"] }
+any_expression = { budget = 180, uses = ["any_values", "source_slots", "observed", "constructor_owners"] }
 constructor_owners = { budget = 180, uses = ["constructor_fields", "prepared_hooks", "layouts"] }
 identifiers = { budget = 40, uses = [] }
 any_values = { budget = 600, uses = ["deltas", "layouts", "collections", "families", "scalars", "value_convert"] }
-any_prepared = { budget = 250, uses = ["any_comparisons", "execution_proof", "source_slots", "layouts", "any_values", "values", "observed", "any_expression", "constructor_owners"] }
+any_prepared = { budget = 250, uses = ["execution_proof", "source_slots", "layouts", "any_values", "values", "observed", "any_expression", "constructor_owners", "owner_comparisons"] }
 prepared_hooks = { budget = 180, uses = ["constructor_fields", "source_slots", "any_values", "scalars", "layouts", "direct_deltas", "finite_domains", "observed", "snapshot_slots", "execution_proof", "any_prepared", "values", "any_expression"] }
 capacity = { budget = 400, uses = ["snapshots", "collections", "deltas", "finite_domains", "keyed", "layouts", "pure_bounds", "windows", "any_values", "any_expression"] }
 checked_data = { budget = 250, uses = ["enums", "type_data"] }
@@ -47,7 +47,7 @@ structs = { budget = 230, uses = ["collections", "prepared_values", "any_values"
 type_data = { budget = 120, uses = ["enums"] }
 value_convert = { budget = 320, uses = ["scalars", "checked_data", "collections", "families", "layouts", "any_values"] }
 tuple_adapter = { budget = 60, uses = ["value_calls", "execution_proof"] }
-values = { budget = 800, uses = ["any_comparisons", "any_values", "any_prepared", "prepared_hooks", "source_slots", "scalars", "execution_proof", "keyed", "snapshot_views", "value_calls", "structural_publication", "snapshot_slots", "snapshots", "collections", "deltas", "direct_deltas", "finite_domains", "layouts", "observed", "windows", "constructor_owners"] }
+values = { budget = 800, uses = ["any_values", "any_prepared", "prepared_hooks", "source_slots", "scalars", "execution_proof", "keyed", "snapshot_views", "value_calls", "structural_publication", "snapshot_slots", "snapshots", "collections", "deltas", "direct_deltas", "finite_domains", "layouts", "observed", "windows", "constructor_owners", "owner_comparisons"] }
 windows = { budget = 100, uses = ["layouts"] }
 
 structural_publication = { budget = 220, uses = ["snapshot_views", "layouts", "snapshot_slots", "snapshots"] }

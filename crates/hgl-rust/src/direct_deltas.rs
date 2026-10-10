@@ -24,41 +24,18 @@ pub fn supported(value: &Value) -> bool {
 }
 fn payload(value: &Value) -> bool {
     supported(value)
-        || scalar(&value.ty)
-            && match &value.kind {
-                Kind::Input(..) | Kind::Configuration(_) | Kind::Literal(_) => true,
-                Kind::Binary(_, a, b) => !matches!(value.ty, Ty::Str) && payload(a) && payload(b),
-                Kind::Unary(_, child) => payload(child),
-                Kind::IterationInput(_)
-                | Kind::Delta(_)
-                | Kind::ObservedLocal(_)
-                | Kind::WiringFailure(_)
-                | Kind::List(_)
-                | Kind::Index(..)
-                | Kind::Length(_)
-                | Kind::Push(..)
-                | Kind::ValueCall(..)
-                | Kind::Construct(_)
-                | Kind::Field(..)
-                | Kind::GlobalGet(_)
-                | Kind::BorrowedLocal(..)
-                | Kind::GlobalSet(..)
-                | Kind::IsPresent(_)
-                | Kind::Present(_)
-                | Kind::TemporalLiteral(_)
-                | Kind::Prepared(_)
-                | Kind::Wire(_)
-                | Kind::Cache(_)
-                | Kind::GeneratorLocal(_)
-                | Kind::Local(_)
-                | Kind::MutableLocal(_)
-                | Kind::Native(..)
-                | Kind::Query(..)
-                | Kind::Output
-                | Kind::Capability
-                | Kind::Captured(..)
-                | Kind::Void => false,
+        || scalar(&value.ty) && {
+            if let Kind::Binary(_, a, b) = &value.kind {
+                value.ty != Ty::Str && payload(a) && payload(b)
+            } else if let Kind::Unary(_, child) = &value.kind {
+                payload(child)
+            } else {
+                matches!(
+                    value.kind,
+                    Kind::Input(..) | Kind::Configuration(_) | Kind::Literal(_)
+                )
             }
+        }
 }
 /// Emit one supported returned constructor, evaluating all scalar operands before mutation.
 pub fn publish(value: &Value, emit: impl Fn(&Value) -> String) -> Option<String> {

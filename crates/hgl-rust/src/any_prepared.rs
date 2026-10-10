@@ -68,14 +68,18 @@ pub fn prepare(plan: &Plan) -> Plan {
     if !crate::execution_proof::prepared(plan) {
         return plan.clone();
     }
+    let original = plan;
     let mut plan = plan.clone();
     hgl_semantics::call_locals::prepare(&mut plan);
-    let mut plan =
-        hgl_semantics::constructor_owners::prepare(&plan, crate::execution_proof::owning_argument);
-    for node in &mut plan.nodes {
+    let mut plan = hgl_semantics::constructor_owners::prepare(
+        &plan,
+        crate::execution_proof::owning_argument,
+        crate::constructor_owners::family,
+    );
+    for (node_id, node) in plan.nodes.iter_mut().enumerate() {
         let mut globals = std::mem::take(&mut node.globals);
         let mut prepare_payload = |v: &mut Value| {
-            if crate::any_comparisons::prepare(v, &mut globals) {
+            if crate::owner_comparisons::prepare(original, v, &mut globals, node_id) {
                 return true;
             }
             if let Kind::Unary(op, arg) = &mut v.kind

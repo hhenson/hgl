@@ -2,10 +2,8 @@
 use hgl_semantics::ir::{Kind, Plan, Value};
 use hgl_source::Ty;
 fn argument(value: &Value) -> Option<&Value> {
-    if let Kind::Query(op, args) = &value.kind
-        && op.starts_with("\0constructor:")
-    {
-        return args.first();
+    if let Some(child) = crate::constructor_owners::origin(value) {
+        return Some(child);
     }
     if let Kind::Unary(op, child) = &value.kind
         && (op == "any" || op == "family")

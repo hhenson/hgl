@@ -1,5 +1,5 @@
 //! Static ordinary shape capabilities and field metadata, independent of values or execution.
-use crate::Ty;
+use crate::{FamilyType, Ty};
 /// Static capability declarations; contained boxes retain their claimed capabilities.
 pub fn capable(ty: &Ty, operation: usize) -> bool {
     match ty {
@@ -83,4 +83,20 @@ pub fn contains_any(ty: &Ty) -> bool {
         | Ty::ZonedDateTime
         | Ty::Void => false,
     }
+}
+
+/// Fixed typed discriminator and member slots for a closed nominal family.
+pub fn family_storage(family: &FamilyType) -> Ty {
+    let mut fields = vec![("tag".into(), Ty::I64)];
+    fields.extend(
+        family
+            .members()
+            .iter()
+            .map(|(id, ty)| (id.source_name(), ty.clone())),
+    );
+    Ty::Struct(
+        format!("\0family<{}>", family.identity().source_name()).into(),
+        fields,
+        (1..=family.members().len()).collect(),
+    )
 }
