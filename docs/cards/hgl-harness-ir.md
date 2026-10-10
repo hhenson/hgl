@@ -38,3 +38,5 @@ Suite { tests, plans } owns the checked test inventory and graph plans. select a
 Suite is Default. require_tests preserves the ordinary empty-suite error after mixed-run orchestration.
 
 Argument::Dense retains optional boxed ordinary sequence IR alongside literal sparse slots. The harness evaluates that sequence once, then applies the same fresh pre-start trace validation.
+
+From<EvalError> for Failure preserves coded ordinary execution failures as NodeError; other ordinary failures keep their existing text channel. May use value_eval. Cleanup and phase matching rules remain unchanged.

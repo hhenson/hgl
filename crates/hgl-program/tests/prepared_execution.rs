@@ -114,6 +114,30 @@ fn growing_list_publications_use_prepared_storage() -> Result<(), Box<dyn std::e
     )
 }
 #[test]
+fn bytes_construction_publication_and_recording_allocate_nothing()
+-> Result<(), Box<dyn std::error::Error>> {
+    execute(r#"module bytes_prepared
+const fn convert(value:list<i64>)->bytes {return bytes(value)}
+fn direct(value:atomic<list<i64>>)->bytes {when {return bytes(value)}}
+fn helper(value:atomic<list<i64>>)->bytes {when {return convert(value)}}
+fn fixed(value:atomic<list<i64,2>>)->bytes {when {return bytes(value)}}
+fn invalid(value:i64)->bytes {when {return bytes([256])}}
+fn forward(value:bytes)->bytes {when {return delta_value(value)}}
+fn members(value:map<bytes,bytes>)->map<bytes,bytes> {when {return delta_value(value)}}
+fn rolling(value:rolling<bytes,2>)->rolling<bytes,2> {when {return delta_value(value)}}
+fn compare(value:bytes,other:bytes)->bool {when {return len(value)>=0 && value==other}}
+test compare {assert eval(compare,[bytes(),bytes([0,255]),_,bytes([128])],[bytes(),bytes([0,255]),_,bytes([127])])==[true,true,_,false]}
+test direct {assert eval(direct,[[],[0,128,255],_,[0],[]])==[bytes(),bytes([0,128,255]),_,bytes([0]),bytes()]}
+test helper {assert eval(helper,[[255,0],[],_,[255,0]])==[bytes([255,0]),bytes(),_,bytes([255,0])]}
+test fixed {assert eval(fixed,[[0,255],_,[255,0]])==[bytes([0,255]),_,bytes([255,0])]}
+test invalid {assert raises("value.byte_range") {eval(invalid,[1])}}
+test forward {assert eval(forward,[bytes(),bytes(),_,bytes([0,255])])==[bytes(),bytes(),_,bytes([0,255])]}
+test members {assert eval(members,[delta<map<bytes,bytes>>(upsert:[bytes():bytes([255])]),delta<map<bytes,bytes>>(remove:[bytes()])])==[delta<map<bytes,bytes>>(upsert:[bytes():bytes([255])]),delta<map<bytes,bytes>>(remove:[bytes()])]}
+test rolling {assert eval(rolling,[bytes(),bytes([0,255]),_,bytes([0,255])])==[bytes(),bytes([0,255]),_,bytes([0,255])]}
+"#.into(), RUNTIME, true)
+}
+
+#[test]
 fn finite_owning_publications_use_prepared_storage() -> Result<(), Box<dyn std::error::Error>> {
     execute(
         format!("{SOURCE}{}{}", scaling_source(), branch_source()),

@@ -54,6 +54,7 @@ pub fn decode(t: &Ty, expression: &str) -> String {
         | Ty::I64
         | Ty::F64
         | Ty::Str
+        | Ty::Bytes
         | Ty::Date
         | Ty::Time
         | Ty::DateTime
@@ -112,6 +113,7 @@ pub fn encode(t: &Ty, expression: &str) -> String {
         | Ty::I64
         | Ty::F64
         | Ty::Str
+        | Ty::Bytes
         | Ty::Date
         | Ty::Time
         | Ty::DateTime
@@ -150,7 +152,7 @@ fn delta_decode(origin: &Ty, expression: &str) -> String {
             format!("parts.iter().filter_map(|p|if let hgl_semantics::ir::DeltaEntry::Keyed(k,_)=p {{Some(k)}} else {{None}}).map(|k|Ok({})).collect::<Result<Vec<_>,String>>()?,parts.iter().filter_map(|p|if let hgl_semantics::ir::DeltaEntry::Keyed(_,v)=p {{Some(v)}} else {{None}}).map(|v|Ok({})).collect::<Result<Vec<_>,String>>()?,parts.iter().filter_map(|p|if let hgl_semantics::ir::DeltaEntry::Remove(k)=p {{Some(k)}} else {{None}}).map(|k|Ok({})).collect::<Result<Vec<_>,String>>()?,",decode(key,"k"),decode(&child,"v"),decode(key,"k"))
         }
         Ty::Tuple(_) | Ty::Struct(..)=>fields(origin).iter().enumerate().map(|(i,t)|format!("parts.iter().filter_map(|p|if let hgl_semantics::ir::DeltaEntry::Child(id,v)=p {{if *id=={i} {{Some(v)}} else {{None}}}} else {{None}}).map(|v|Ok({})).collect::<Result<Vec<_>,String>>()?,",decode(&t.clone().delta().unwrap_or_else(|_|unreachable!("checked child")),"v"))).collect::<Vec<_>>().concat(),
-        Ty::Atomic(_) | Ty::Rolling(..) | Ty::Delta(_) | Ty::I64 | Ty::F64 | Ty::Bool | Ty::Str | Ty::Duration | Ty::Date | Ty::Time | Ty::DateTime | Ty::CivilDateTime | Ty::TimeZone | Ty::Enum(_) | Ty::ZonedTime | Ty::ZonedDateTime | Ty::Ref(_) | Ty::Nullable(_) | Ty::Recursive(_) | Ty::Family(_) | Ty::Void => unreachable!("checked structural delta"),
+        Ty::Atomic(_) | Ty::Rolling(..) | Ty::Delta(_) | Ty::I64 | Ty::F64 | Ty::Bool | Ty::Str | Ty::Bytes | Ty::Duration | Ty::Date | Ty::Time | Ty::DateTime | Ty::CivilDateTime | Ty::TimeZone | Ty::Enum(_) | Ty::ZonedTime | Ty::ZonedDateTime | Ty::Ref(_) | Ty::Nullable(_) | Ty::Recursive(_) | Ty::Family(_) | Ty::Void => unreachable!("checked structural delta"),
     };
     format!(
         "{{let hgl_semantics::ir::Kind::Delta(parts)=&({expression}).kind else {{return Err(\"prepared delta required\".into())}}; ({storage})}}"
@@ -203,6 +205,7 @@ fn delta_encode(origin: &Ty, expression: &str) -> String {
         | Ty::F64
         | Ty::Bool
         | Ty::Str
+        | Ty::Bytes
         | Ty::Duration
         | Ty::Date
         | Ty::Time
@@ -255,6 +258,7 @@ fn scalar_decode(t: &Ty) -> String {
         Ty::I64 => ("Int", "*item"),
         Ty::F64 => ("Float", "*item"),
         Ty::Str => ("Str", "item.clone()"),
+        Ty::Bytes => ("Bytes", "item.clone()"),
         Ty::Date => ("Date", "hgl_types::Date(*item)"),
         Ty::Time => ("Time", "hgl_types::Time(*item)"),
         Ty::DateTime => ("DateTime", "hgl_types::EngineTime::from_micros(*item)"),
@@ -292,6 +296,7 @@ fn scalar_encode(t: &Ty) -> String {
         Ty::I64 => ("Int", "*v"),
         Ty::F64 => ("Float", "*v"),
         Ty::Str => ("Str", "v.clone()"),
+        Ty::Bytes => ("Bytes", "v.clone()"),
         Ty::Date => ("Date", "v.0"),
         Ty::Time => ("Time", "v.0"),
         Ty::DateTime => ("DateTime", "v.micros()"),

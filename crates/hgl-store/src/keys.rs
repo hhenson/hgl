@@ -116,6 +116,7 @@ pub struct Keys {
     durations: Domain,
     civils: Domain,
     strings: Table<String>,
+    bytes: Table<Vec<u8>>,
     zones: Table<ZoneId>,
     zoned_times: Table<ZonedTime>,
     zoned_datetimes: Table<ZonedDateTime>,
@@ -264,6 +265,26 @@ impl Key for String {
     }
     fn with_value<R>(keys: &Keys, id: i64, visit: impl FnOnce(&Self::Value) -> R) -> NodeResult<R> {
         Ok(visit(keys.strings.get(id)?))
+    }
+}
+impl Key for Vec<u8> {
+    fn prepare(keys: &mut Keys, value: &Self::Value) -> NodeResult {
+        if keys.bytes.find(value).is_some() {
+            return Ok(());
+        }
+        keys.bytes.prepare(<Self as GlobalValue>::retain(value)?)
+    }
+    fn id(keys: &Keys, value: &Self::Value) -> NodeResult<i64> {
+        keys.bytes.require(value)
+    }
+    fn value(keys: &Keys, id: i64) -> NodeResult<Self::Value> {
+        <Self as GlobalValue>::retain(keys.bytes.get(id)?)
+    }
+    fn ids(keys: &Keys) -> &[i64] {
+        &keys.bytes.ids
+    }
+    fn with_value<R>(keys: &Keys, id: i64, visit: impl FnOnce(&Self::Value) -> R) -> NodeResult<R> {
+        Ok(visit(keys.bytes.get(id)?))
     }
 }
 impl Key for ZoneId {

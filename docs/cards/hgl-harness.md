@@ -35,3 +35,5 @@ Complete set/map comparison delegates to hgl-collection-values, preserving exact
 The eval callback now returns Failure. Raises executes its scope once, preserves outer writes, and matches only structured execution identity after teardown. Nested assertion failure is Other and cannot be caught. execute still renders a final String failure.
 
 Dense arguments can retain an ordinary list of publication values as one sequence expression. All supplied ordinary arguments evaluate once in source order before any publication trace validates. Each trace starts from fresh input state; failure carries eval.input_delta_profile with parameter and zero-based slot context, before graph construction/start. Later ordinary argument failure therefore precedes an earlier malformed trace.
+
+Ordinary setup, conditions, expected outputs and eval materialization translate EvalError through Failure without discarding coded execution identity. Range failures occur before graph start and retain value.byte_range.

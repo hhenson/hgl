@@ -64,6 +64,9 @@ pub struct PreparedTick<'a, W: Wake> {
     pub(crate) wake: &'a mut W,
 }
 impl<W: Wake> PreparedTick<'_, W> {
+    fn publish(&mut self, output: OutputId) {
+        self.storage.bindings.publish(output, self.now, self.wake);
+    }
     pub(crate) fn authorize(&self, output: OutputId, generation: u32) {
         validate_write(
             self.storage.bindings,
@@ -77,7 +80,7 @@ impl<W: Wake> PreparedTick<'_, W> {
     pub fn initialize_sparse(&mut self, output: OutputId, generation: u32) {
         self.authorize(output, generation);
         if self.storage.bindings.output(output).modified_at == EngineTime::NEVER {
-            self.storage.bindings.publish(output, self.now, self.wake);
+            self.publish(output);
         }
     }
     /// Publish one independently retained arrival from a prepared source slot.
@@ -157,6 +160,22 @@ impl<W: Wake> PreparedTick<'_, W> {
             .pass(self.storage.bindings, input, output, self.now, self.wake)
     }
 
+    /// Validate the complete ordinary list before changing or publishing byte storage.
+    pub fn bytes_from_list<const N: i64>(
+        &mut self,
+        input: Input<Atomic<crate::list::List<i64, N>>>,
+        output: crate::Out<Vec<u8>>,
+    ) -> NodeResult {
+        self.authorize(output.id(), output.generation());
+        let storage = &mut self.storage;
+        let slot = storage.bindings.output(output.id()).slot as usize;
+        let destination = &mut scalar_values::<Vec<u8>>(storage.columns)[slot];
+        storage
+            .atomic
+            .copy_bytes(storage.bindings, input, destination)?;
+        self.publish(output.id());
+        Ok(())
+    }
     /// Copy a checked native scalar into reserved owning capacity, then publish.
     pub fn scalar<T: Scalar>(
         &mut self,
@@ -171,7 +190,7 @@ impl<W: Wake> PreparedTick<'_, W> {
             return Err(NodeError::new("prepared scalar capacity exceeded"));
         }
         destination.copy_from(value);
-        self.storage.bindings.publish(output, self.now, self.wake);
+        self.publish(output);
         Ok(())
     }
     /// Copy a scalar source directly into an independent reserved destination.
@@ -198,7 +217,7 @@ impl<W: Wake> PreparedTick<'_, W> {
             let (left, right) = values.split_at_mut(from);
             left[to].copy_from(&right[0]);
         }
-        self.storage.bindings.publish(output, self.now, self.wake);
+        self.publish(output);
         Ok(())
     }
     /// Compose text directly into its reserved destination after a complete size check.
@@ -221,7 +240,7 @@ impl<W: Wake> PreparedTick<'_, W> {
         destination.clear();
         compose(&mut destination, self.storage.observations().0);
         scalar_values::<String>(self.storage.columns)[slot] = destination;
-        self.storage.bindings.publish(output, self.now, self.wake);
+        self.publish(output);
         Ok(())
     }
     /// Publish one native complete ordinary payload without retaining an intermediate.
@@ -235,7 +254,7 @@ impl<W: Wake> PreparedTick<'_, W> {
         let slot = storage.atomic.destination(storage.bindings, output)?;
         T::check_native(storage.atomic.values(), slot, value)?;
         T::copy_native(storage.atomic.values_mut(), slot, value);
-        storage.bindings.publish(output.id(), self.now, self.wake);
+        self.publish(output.id());
         Ok(())
     }
     /// Pass an atomic publication directly between independently prepared slots.
@@ -250,22 +269,7 @@ impl<W: Wake> PreparedTick<'_, W> {
         let to = storage.atomic.destination(storage.bindings, output)?;
         T::check_slots(storage.atomic.values(), from, storage.atomic.values(), to)?;
         T::copy_within(storage.atomic.values_mut(), from, to);
-        storage.bindings.publish(output.id(), self.now, self.wake);
-        Ok(())
-    }
-    /// Publish from an independently owned prepared source arena.
-    pub fn atomic_from<T: PreparedValue>(
-        &mut self,
-        source: &ValueColumns,
-        from: ValueSlot<T>,
-        output: Output<Atomic<T>>,
-    ) -> NodeResult {
-        self.authorize(output.id(), output.generation());
-        let storage = &mut self.storage;
-        let to = storage.atomic.destination(storage.bindings, output)?;
-        T::check_slots(source, from, storage.atomic.values(), to)?;
-        T::copy_between(source, from, storage.atomic.values_mut(), to);
-        storage.bindings.publish(output.id(), self.now, self.wake);
+        self.publish(output.id());
         Ok(())
     }
 }

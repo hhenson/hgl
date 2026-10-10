@@ -75,6 +75,7 @@ pub fn native(ty: &Ty, output: &str, value: &str) -> String {
         | Ty::F64
         | Ty::Bool
         | Ty::Str
+        | Ty::Bytes
         | Ty::Duration
         | Ty::Date
         | Ty::Time

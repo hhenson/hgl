@@ -293,12 +293,17 @@ pub fn endpoint_read(value: &Value) -> String {
     )
 }
 /// Borrow scalar text from an endpoint, preserving required child-read validity.
-pub fn native_text(value: &Value) -> String {
+pub fn native_scalar(value: &Value) -> String {
     let input = crate::observed::input(value);
     let check = if matches!(value.kind, Kind::Input(..)) {
         ""
     } else {
         "if !_ctx.store().input_valid(input.id()) {return Err(hgl_types::NodeError::new(\"ordinary tuple input is invalid\"));}"
     };
-    format!("{{let input={input};{check}_ctx.store().get_ref(input).as_str()}}")
+    format!("{{let input={input};{check}_ctx.store().get_ref(input)}}")
+}
+
+/// Borrow text with the same validity checks as every owning scalar endpoint.
+pub fn native_text(value: &Value) -> String {
+    format!("({}).as_str()", native_scalar(value))
 }

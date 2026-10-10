@@ -19,6 +19,7 @@ pub struct Columns {
     i64s: Vec<i64>,
     f64s: Vec<f64>,
     texts: Vec<String>,
+    bytes: Vec<Vec<u8>>,
     durations: Vec<hgl_types::EngineDelta>,
     datetimes: Vec<hgl_types::EngineTime>,
     times: Vec<hgl_types::Time>,
@@ -42,6 +43,7 @@ impl Columns {
             ScalarType::DateTime => ScalarValue::DateTime(self.datetimes[slot]),
             ScalarType::Duration => ScalarValue::Duration(self.durations[slot]),
             ScalarType::Text => ScalarValue::Text(self.texts[slot].clone()),
+            ScalarType::Bytes => ScalarValue::Bytes(self.bytes[slot].clone()),
             ScalarType::CivilDateTime => ScalarValue::CivilDateTime(self.civil_datetimes[slot]),
             ScalarType::TimeZone => ScalarValue::TimeZone(self.zones[slot].clone()),
             ScalarType::ZonedTime => ScalarValue::ZonedTime(self.zoned_times[slot].clone()),
@@ -119,11 +121,10 @@ impl Scalar for bool {
         ScalarValue::Bool(self)
     }
     fn from_value(value: ScalarValue) -> Option<Self> {
-        if let ScalarValue::Bool(value) = value {
-            Some(value)
-        } else {
-            None
-        }
+        let ScalarValue::Bool(value) = value else {
+            return None;
+        };
+        Some(value)
     }
 }
 
@@ -144,11 +145,10 @@ impl Scalar for i64 {
         ScalarValue::I64(self)
     }
     fn from_value(value: ScalarValue) -> Option<Self> {
-        if let ScalarValue::I64(value) = value {
-            Some(value)
-        } else {
-            None
-        }
+        let ScalarValue::I64(value) = value else {
+            return None;
+        };
+        Some(value)
     }
 }
 
@@ -169,11 +169,10 @@ impl Scalar for f64 {
         ScalarValue::F64(self)
     }
     fn from_value(value: ScalarValue) -> Option<Self> {
-        if let ScalarValue::F64(value) = value {
-            Some(value)
-        } else {
-            None
-        }
+        let ScalarValue::F64(value) = value else {
+            return None;
+        };
+        Some(value)
     }
 }
 
@@ -199,11 +198,10 @@ impl Scalar for String {
         ScalarValue::Text(self)
     }
     fn from_value(value: ScalarValue) -> Option<Self> {
-        if let ScalarValue::Text(value) = value {
-            Some(value)
-        } else {
-            None
-        }
+        let ScalarValue::Text(value) = value else {
+            return None;
+        };
+        Some(value)
     }
 }
 
@@ -221,11 +219,10 @@ impl Scalar for hgl_types::Date {
         ScalarValue::Date(self)
     }
     fn from_value(value: ScalarValue) -> Option<Self> {
-        if let ScalarValue::Date(value) = value {
-            Some(value)
-        } else {
-            None
-        }
+        let ScalarValue::Date(value) = value else {
+            return None;
+        };
+        Some(value)
     }
 }
 
@@ -243,11 +240,10 @@ impl Scalar for hgl_types::Time {
         ScalarValue::Time(self)
     }
     fn from_value(value: ScalarValue) -> Option<Self> {
-        if let ScalarValue::Time(value) = value {
-            Some(value)
-        } else {
-            None
-        }
+        let ScalarValue::Time(value) = value else {
+            return None;
+        };
+        Some(value)
     }
 }
 
@@ -265,11 +261,10 @@ impl Scalar for hgl_types::EngineTime {
         ScalarValue::DateTime(self)
     }
     fn from_value(value: ScalarValue) -> Option<Self> {
-        if let ScalarValue::DateTime(value) = value {
-            Some(value)
-        } else {
-            None
-        }
+        let ScalarValue::DateTime(value) = value else {
+            return None;
+        };
+        Some(value)
     }
 }
 
@@ -287,11 +282,10 @@ impl Scalar for hgl_types::EngineDelta {
         ScalarValue::Duration(self)
     }
     fn from_value(value: ScalarValue) -> Option<Self> {
-        if let ScalarValue::Duration(value) = value {
-            Some(value)
-        } else {
-            None
-        }
+        let ScalarValue::Duration(value) = value else {
+            return None;
+        };
+        Some(value)
     }
 }
 
@@ -309,11 +303,10 @@ impl Scalar for hgl_types::CivilDateTime {
         ScalarValue::CivilDateTime(self)
     }
     fn from_value(value: ScalarValue) -> Option<Self> {
-        if let ScalarValue::CivilDateTime(value) = value {
-            Some(value)
-        } else {
-            None
-        }
+        let ScalarValue::CivilDateTime(value) = value else {
+            return None;
+        };
+        Some(value)
     }
 }
 
@@ -335,11 +328,10 @@ impl Scalar for hgl_types::ZoneId {
         ScalarValue::TimeZone(self)
     }
     fn from_value(value: ScalarValue) -> Option<Self> {
-        if let ScalarValue::TimeZone(value) = value {
-            Some(value)
-        } else {
-            None
-        }
+        let ScalarValue::TimeZone(value) = value else {
+            return None;
+        };
+        Some(value)
     }
 }
 
@@ -361,11 +353,10 @@ impl Scalar for hgl_types::ZonedDateTime {
         ScalarValue::ZonedDateTime(self)
     }
     fn from_value(value: ScalarValue) -> Option<Self> {
-        if let ScalarValue::ZonedDateTime(value) = value {
-            Some(value)
-        } else {
-            None
-        }
+        let ScalarValue::ZonedDateTime(value) = value else {
+            return None;
+        };
+        Some(value)
     }
 }
 
@@ -387,10 +378,38 @@ impl Scalar for hgl_types::ZonedTime {
         ScalarValue::ZonedTime(self)
     }
     fn from_value(value: ScalarValue) -> Option<Self> {
-        if let ScalarValue::ZonedTime(value) = value {
-            Some(value)
-        } else {
-            None
-        }
+        let ScalarValue::ZonedTime(value) = value else {
+            return None;
+        };
+        Some(value)
+    }
+}
+
+impl Column for Vec<u8> {
+    fn column(columns: &Columns) -> &[Self] {
+        &columns.bytes
+    }
+    fn column_mut(columns: &mut Columns) -> &mut Vec<Self> {
+        &mut columns.bytes
+    }
+}
+impl Scalar for Vec<u8> {
+    fn try_clone(&self) -> hgl_types::NodeResult<Self> {
+        let mut value = Self::new();
+        value
+            .try_reserve(self.len())
+            .map_err(|e| hgl_types::NodeError::new(e.to_string()))?;
+        value.extend_from_slice(self);
+        Ok(value)
+    }
+    const TYPE: ScalarType = ScalarType::Bytes;
+    fn into_value(self) -> ScalarValue {
+        ScalarValue::Bytes(self)
+    }
+    fn from_value(value: ScalarValue) -> Option<Self> {
+        let ScalarValue::Bytes(value) = value else {
+            return None;
+        };
+        Some(value)
     }
 }

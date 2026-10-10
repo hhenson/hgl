@@ -183,6 +183,7 @@ impl Capacity {
     /// Reserve the fixed textual envelope of built-in scalar formatters.
     pub fn native_limits(&self, plan: &Plan) -> String {
         crate::pure_bounds::native_limits(plan, || self.index(&Ty::Str))
+            + &crate::pure_bounds::byte_limits(self.types.values(), |ty| self.index(ty))
     }
     /// Widen retained text for checked pure concatenation expressions.
     pub fn text_limits(&self, plan: &Plan) -> String {
@@ -355,35 +356,19 @@ impl Capacity {
                 "{{let output={id};let domain={domain};for index in 0..store.bindings().output(output).fixed.len() {{let child=store.bindings().output(output).fixed[index];let domain=domain.children.get(&(index as i64)).unwrap_or(&empty);{}}}}}",
                 self.output_with(child, "child","domain")
             ),
-            Ty::Struct(_, children, _) => children
-                .iter()
-                .enumerate()
-                .map(|(i, (_, child))| {
-                    format!(
-                        "{{let child=store.bindings().output({id}).fixed[{i}];let domain=({domain}).children.get(&{i}).unwrap_or(&empty);{}}}",
-                        self.output_with(child, "child","domain")
-                    )
-                })
-                .collect::<Vec<_>>()
-                .concat(),
-            Ty::Tuple(children) => children
-                .iter()
-                .enumerate()
-                .map(|(i, child)| {
-                    format!(
-                        "{{let child=store.bindings().output({id}).fixed[{i}];let domain=({domain}).children.get(&{i}).unwrap_or(&empty);{}}}",
-                        self.output_with(child, "child","domain")
-                    )
-                })
-                .collect::<Vec<_>>()
-                .concat(),
+            Ty::Struct(..) | Ty::Tuple(_) => fields(ty).iter().enumerate().map(|(i,child)| format!(
+                "{{let child=store.bindings().output({id}).fixed[{i}];let domain=({domain}).children.get(&{i}).unwrap_or(&empty);{}}}",
+                self.output_with(child, "child", "domain")
+            )).collect::<Vec<_>>().concat(),
             Ty::Enum(_)
-            | Ty::Atomic(_) | Ty::Rolling(..)
+            | Ty::Atomic(_)
+            | Ty::Rolling(..)
             | Ty::Delta(_)
             | Ty::I64
             | Ty::F64
             | Ty::Bool
             | Ty::Str
+            | Ty::Bytes
             | Ty::Duration
             | Ty::Date
             | Ty::Time

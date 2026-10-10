@@ -11,3 +11,5 @@ Multipliers compose along actual node dependencies; independent branches combine
 by maximum. The whole-adapter proof excludes unknown owning growth before these
 bounds are used for prepared execution. The multiplier alone is not a proof for
 mutable loop bodies or opaque owning-return functions.
+
+byte_limits(type iterator, index function)->String emits cold Bytes width propagation from exact ordinary i64 list capacities. It does not inspect runtime contents or move constructor execution.

@@ -32,6 +32,7 @@ pub fn owning_argument(ty: &Ty) -> bool {
         | Ty::F64
         | Ty::Bool
         | Ty::Str
+        | Ty::Bytes
         | Ty::Duration
         | Ty::Date
         | Ty::Time
@@ -48,6 +49,7 @@ pub fn owning_argument(ty: &Ty) -> bool {
 fn value(plan: &Plan, input: &Value, looping: bool) -> bool {
     match &input.kind {
         Kind::Captured(..) => false,
+        Kind::Unary(op, _) if op == "bytes" => false,
         Kind::Native(index, args) => {
             (!owning(&input.ty) || plan.natives[*index].name == "hgraph.native::as_str")
                 && args.iter().all(|arg| value(plan, arg, looping))
@@ -134,6 +136,7 @@ fn statements(plan: &Plan, body: &[Statement], looping: bool) -> bool {
                 && statements(plan, yes, looping)
                 && statements(plan, no, looping)
         }
+        Statement::Return(source) if crate::scalars::bytes_input(source).is_some() => true,
         Statement::Return(source) if crate::direct_deltas::supported(source) => true,
         Statement::Let(_, source)
         | Statement::Var(_, source)

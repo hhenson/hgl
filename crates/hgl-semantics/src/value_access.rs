@@ -30,6 +30,7 @@ pub fn ordinary(ty: &Ty) -> bool {
             | Ty::I64
             | Ty::F64
             | Ty::Str
+            | Ty::Bytes
             | Ty::Date
             | Ty::Time
             | Ty::DateTime

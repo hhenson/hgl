@@ -56,3 +56,5 @@ Boolean. snapshot_views owns observation projection/copy versus required reads;
 initializing owning child lets and constructing Tuples copy exact unset state.
 Private capacity/layout preparation is unchanged. Temporal-root validity errors
 remain separate from value.unset_read on retained ordinary payload consumption.
+
+native_scalar(&Value)->String borrows an owning scalar endpoint with existing required-child validity checks. native_text delegates this shared borrowing path and preserves its existing public result.

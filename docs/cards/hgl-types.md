@@ -202,3 +202,5 @@ OrdinaryType::Set(Box<OrdinaryType>) and Map(Box<OrdinaryType>,Box<OrdinaryType>
 TsType::Growing(Box<TsType>) has exact growing-list identity and a repeated member shape, without fixed children. Re-export validate_growing and validate_growing_distinct from hgl-growing-range.
 
 NodeId, Phase, NodeError and NodeResult are reexported from hgl-node-error. The structured error preserves its stable execution code and cleanup failures.
+
+ScalarType::Bytes and ScalarValue::Bytes(Vec<u8>) describe exact independently owned octets. bytes(&[i64])->NodeResult<Vec<u8>> validates the complete range before retention and preserves value.byte_range. No source byte literal or encoding is added.

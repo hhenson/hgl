@@ -58,3 +58,5 @@ read inputs and append exactly the measured bytes, with no fallible side effects
 `initialize_sparse(output,generation)` authorizes the destination and establishes
 parent validity only when invalid. It preserves children, repeated applications
 and any publication already made this cycle (EMPTY-1).
+
+PreparedTick::bytes_from_list<const N>(Input<Atomic<List<i64,N>>>, Out<Vec<u8>>)->NodeResult validates writing authority, copies the complete ordinary list through atomic preflight, then publishes. Empty and equal values tick; failure changes neither payload nor stamp. May use list. Typed independent-source atomic_from now lives with prepared_globals.

@@ -37,3 +37,5 @@ source rejection control, alongside the constant ABI positive.
 The native owning argument proof is delegated to execution_proof recursively;
 text/collection descendants of configured Tuple/Struct arguments cannot escape
 by returning a scalar. Fixed positional scalar arguments remain prepared.
+
+May use scalars. Pure one-return bytes helpers consuming a complete atomic i64 list use the compiler-selected prepared constructor path; effect-bearing or other owning helper forms retain existing admission rules.

@@ -14,6 +14,7 @@ fn literal(l: &Literal) -> String {
     let inner = match l {
         Literal::Enum(e, number) => format!("Enum({}, {number})", enum_data(e)),
         Literal::Str(s) => format!("Str({s:?}.into())"),
+        Literal::Bytes(bytes) => format!("Bytes(vec!{bytes:?})"),
         Literal::Float(v) => format!("Float(f64::from_bits({}))", v.to_bits()),
         Literal::TimeZone(zone) => format!(
             "TimeZone(hgl_types::ZoneId::from_validated_name({:?}.into()))",

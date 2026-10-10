@@ -18,6 +18,28 @@ fn overflow() -> EvalError {
 }
 /// Evaluate a checked ordinary scalar unary operation.
 pub fn unary(op: &str, operand: &Value) -> Result<Value, EvalError> {
+    if op == "bytes" {
+        let Kind::List(items) = &operand.kind else {
+            return Err(unsupported("bytes requires an ordinary list"));
+        };
+        let octets = items
+            .iter()
+            .map(|item| {
+                let Literal::Int(value) = scalar(item)? else {
+                    return Err(unsupported("bytes requires i64 octets"));
+                };
+                Ok(*value)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        return hgl_types::bytes(&octets)
+            .map(|bytes| value(Literal::Bytes(bytes)))
+            .map_err(|error| {
+                error.code.map_or_else(
+                    || EvalError::Operation(error.message.clone()),
+                    |code| EvalError::Coded(code, error.message.clone()),
+                )
+            });
+    }
     let result = match (op, scalar(operand)?) {
         ("!", Literal::Bool(v)) => Literal::Bool(!v),
         ("-", Literal::Int(v)) => Literal::Int(v.checked_neg().ok_or_else(overflow)?),
@@ -66,6 +88,7 @@ pub fn binary(op: &str, a: &Value, b: &Value) -> Result<Value, EvalError> {
             "!=" => a != b,
             _ => return Err(unsupported("unsupported ordinary bool operation")),
         }),
+        (Literal::Bytes(a), Literal::Bytes(b)) => comparison(op, Some(a.cmp(b)))?,
         (Literal::Str(a), Literal::Str(b)) if op == "+" => Literal::Str(format!("{a}{b}")),
         (Literal::Str(a), Literal::Str(b)) => comparison(op, Some(a.cmp(b)))?,
         (Literal::Duration(a), Literal::Duration(b)) if matches!(op, "+" | "-") => {

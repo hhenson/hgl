@@ -268,20 +268,22 @@ pub fn list_operation(name: &str, args: &[Value]) -> Result<Value, String> {
     ) {
         return Err("ordinary list operation requires ordinary value access".into());
     }
-    let Ty::List(element, size) = &receiver.ty else {
-        return Err("ordinary list receiver required".into());
-    };
-    if name == "len" && args.len() == 1 {
+    if name == "len"
+        && args.len() == 1
+        && (receiver.ty == Ty::Bytes || matches!(receiver.ty, Ty::List(..)))
+    {
         return Ok(Value::new(
             Ty::I64,
             Kind::Length(Box::new(receiver.clone())),
         ));
     }
-    if name != "push" || args.len() != 2 {
-        return Err("ordinary list operation argument mismatch".into());
-    }
-    if size.is_some() {
-        return Err("push requires an unbounded ordinary list".into());
+    let Ty::List(element, size) = &receiver.ty else {
+        return Err("ordinary list receiver required".into());
+    };
+    match (name, args.len(), size) {
+        ("push", 2, None) => {}
+        ("push", 2, Some(_)) => return Err("push requires an unbounded ordinary list".into()),
+        _ => return Err("ordinary list operation argument mismatch".into()),
     }
     if !writable(receiver) {
         return Err("push requires writable ordinary list access".into());
@@ -379,6 +381,7 @@ pub fn binary_type(op: &str, a: &Ty, b: &Ty) -> Result<Ty, String> {
                     | Ty::CivilDateTime
                     | Ty::Time
                     | Ty::Duration
+                    | Ty::Bytes
             ) =>
         {
             Ty::Bool

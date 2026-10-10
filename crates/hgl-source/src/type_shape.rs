@@ -83,6 +83,8 @@ pub enum Ty {
     Bool,
     /// UTF-8 text.
     Str,
+    /// Uninterpreted octets.
+    Bytes,
     /// Microsecond interval.
     Duration,
     /// Calendar date.
@@ -131,6 +133,7 @@ impl Ty {
             Self::F64 => "f64",
             Self::Bool => "bool",
             Self::Str => "str",
+            Self::Bytes => "bytes",
             Self::Duration => "duration",
             Self::Date => "date",
             Self::Time => "time",
@@ -166,6 +169,12 @@ impl Ty {
             if base == "atomic" && arguments.len() == 1 {
                 return Some(Self::parse(arguments[0])?.atomic());
             }
+            if base == "ref" && arguments.len() == 1 {
+                return Some(Self::Ref(Box::new(Self::parse(arguments[0])?)));
+            }
+            if base == "set" && arguments.len() == 1 {
+                return Some(Self::Set(Box::new(Self::parse(arguments[0])?)));
+            }
             if base == "tuple" {
                 return Some(Self::Tuple(
                     arguments
@@ -181,12 +190,6 @@ impl Ty {
                 ));
             }
         }
-        if let Some(child) = name.strip_prefix("ref<").and_then(|s| s.strip_suffix('>')) {
-            return Some(Self::Ref(Box::new(Self::parse(child)?)));
-        }
-        if let Some(child) = name.strip_prefix("set<").and_then(|s| s.strip_suffix('>')) {
-            return Some(Self::Set(Box::new(Self::parse(child)?)));
-        }
         if let Some((element, size)) = Self::list_parts(name) {
             return Some(Self::List(Box::new(Self::parse(element)?), size));
         }
@@ -195,6 +198,7 @@ impl Ty {
             "f64" => Some(Self::F64),
             "bool" => Some(Self::Bool),
             "str" => Some(Self::Str),
+            "bytes" => Some(Self::Bytes),
             "duration" => Some(Self::Duration),
             "date" => Some(Self::Date),
             "time" => Some(Self::Time),
@@ -221,13 +225,13 @@ impl Ty {
             Self::Struct(identity, _, _) => identity.source_name(),
             Self::Recursive(batch) => batch.identity().source_name(),
             Self::Family(family) => family.identity().source_name(),
-            Self::Delta(origin) => format!("delta<{}>", origin.source_name()),
             Self::Tuple(children) => format!("tuple<{}>", type_names(children)),
             Self::Map(key, child) => format!("map<{},{}>", key.source_name(), child.source_name()),
             Self::List(element, size) => match size {
                 Some(size) => format!("list<{},{}>", element.source_name(), size),
                 None => format!("list<{}>", element.source_name()),
             },
+            Self::Delta(origin) => format!("delta<{}>", origin.source_name()),
             Self::Atomic(child) | Self::Ref(child) | Self::Set(child) | Self::Nullable(child) => {
                 format!("{}<{}>", self.name(), child.source_name())
             }
@@ -235,6 +239,7 @@ impl Ty {
             | Self::F64
             | Self::Bool
             | Self::Str
+            | Self::Bytes
             | Self::Duration
             | Self::Date
             | Self::Time
@@ -277,20 +282,18 @@ impl Ty {
         if let Self::Atomic(payload) | Self::Rolling(payload, _) = self {
             return Ok(*payload);
         }
-        Ok(if self.scalar() {
-            self
-        } else {
-            Self::Delta(Box::new(self))
-        })
+        if self.scalar() {
+            return Ok(self);
+        }
+        Ok(Self::Delta(Box::new(self)))
     }
     /// Normalize admitted non-composite spellings before type comparison.
     #[must_use]
     pub fn atomic(self) -> Self {
         if self.scalar() {
-            self
-        } else {
-            Self::Atomic(Box::new(self))
+            return self;
         }
+        Self::Atomic(Box::new(self))
     }
     /// Whether an ordinary value belongs to the finite complete-payload profile.
     pub fn atomic_payload(&self) -> bool {
@@ -301,11 +304,10 @@ impl Ty {
             return key.collection_key() && child.atomic_payload();
         }
         if let Self::List(child, _) = self {
-            child.atomic_payload()
-        } else {
-            matches!(self, Self::Recursive(_) | Self::Family(_))
-                || self.components(Self::atomic_payload)
+            return child.atomic_payload();
         }
+        matches!(self, Self::Recursive(_) | Self::Family(_))
+            || self.components(Self::atomic_payload)
     }
     /// Exact finite complete keys exclude recursive, family and collection components.
     pub fn collection_key(&self) -> bool {
@@ -328,6 +330,7 @@ impl Ty {
                 | Self::I64
                 | Self::F64
                 | Self::Str
+                | Self::Bytes
                 | Self::Date
                 | Self::Time
                 | Self::DateTime

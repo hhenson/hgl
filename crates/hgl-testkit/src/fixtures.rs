@@ -69,6 +69,7 @@ impl Node for Replay {
                 ScalarValue::Bool(_)
                 | ScalarValue::F64(_)
                 | ScalarValue::Text(_)
+                | ScalarValue::Bytes(_)
                 | ScalarValue::Date(_)
                 | ScalarValue::Time(_)
                 | ScalarValue::DateTime(_)

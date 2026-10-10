@@ -113,3 +113,22 @@ pub fn length(value: &Value, emit: impl Fn(&Value) -> String) -> String {
         payload(value, emit)
     )
 }
+
+/// Borrow exact byte contents from a typed slot, live endpoint or ordinary local.
+pub fn byte_slice(value: &Value, source: Option<(&str, String)>, ordinary: &str) -> String {
+    if let Some((columns, slot)) = source {
+        return format!(
+            "{{let source={slot};_ctx.store().{columns}().scalar::<Vec<u8>>(source.fields()).as_slice()}}"
+        );
+    }
+    if hgl_semantics::tuple_values::endpoint(value) {
+        let input = crate::observed::input(value);
+        let check = if matches!(value.kind, Kind::Input(..)) {
+            ""
+        } else {
+            "if !_ctx.store().input_valid(input.id()) {return Err(hgl_types::NodeError::new(\"ordinary tuple input is invalid\"));}"
+        };
+        return format!("{{let input={input};{check}_ctx.store().get_ref(input).as_slice()}}");
+    }
+    format!("({ordinary}).as_slice()")
+}

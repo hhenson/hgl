@@ -88,3 +88,46 @@ impl ScalarCopy for hgl_types::ZonedDateTime {
         self.copy_prepared(source);
     }
 }
+
+impl ScalarCopy for Vec<u8> {
+    fn size(&self) -> usize {
+        self.len()
+    }
+    fn capacity(&self) -> usize {
+        self.capacity()
+    }
+    fn reserve(&mut self, size: usize) -> NodeResult {
+        self.try_reserve(size.saturating_sub(self.len()))
+            .map_err(|e| NodeError::new(e.to_string()))
+    }
+    fn copy_from(&mut self, source: &Self) {
+        self.clear();
+        self.extend_from_slice(source);
+    }
+}
+
+/// Preflight all octets before preserving a prepared destination's capacity.
+pub fn bytes_from_octets(
+    destination: &mut Vec<u8>,
+    octets: impl Iterator<Item = i64> + Clone,
+) -> NodeResult {
+    let mut length = 0;
+    for octet in octets.clone() {
+        if !(0..=255).contains(&octet) {
+            return Err(NodeError::coded(
+                "byte octet must be between 0 and 255",
+                "value.byte_range",
+            ));
+        }
+        length += 1;
+    }
+    if destination.capacity() < length {
+        return Err(NodeError::new("prepared scalar capacity exceeded"));
+    }
+    destination.clear();
+    for octet in octets {
+        destination
+            .push(u8::try_from(octet).unwrap_or_else(|_| unreachable!("validated byte octet")));
+    }
+    Ok(())
+}

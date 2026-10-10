@@ -4,6 +4,11 @@ pub(super) fn publication(plan: &Plan, value: &Value, result: Option<&Ty>) -> Op
     if !crate::finite_domains::prepared(plan) || plan.recording.is_none() {
         return None;
     }
+    if let Some(id) = crate::scalars::bytes_input(value) {
+        return Some(format!(
+            "_ctx.prepared().bytes_from_list(self.input{id},self._output)?;"
+        ));
+    }
     if let Kind::Configuration(id) = value.kind
         && (value.ty.atomic_payload() || matches!(value.ty, Ty::Delta(_)))
     {
