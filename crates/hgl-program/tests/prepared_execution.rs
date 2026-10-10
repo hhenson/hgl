@@ -151,6 +151,70 @@ test observed_arrival {assert eval(observed_arrival,[bytes([0,255]),bytes(),_,by
 }
 
 #[test]
+fn retained_byte_locals_publish_without_allocating() -> Result<(), Box<dyn std::error::Error>> {
+    let mut source = String::from("module retained_byte_locals\n");
+    for (input, initializer) in [("direct", "value"), ("observed", "delta_value(value)")] {
+        for (output, result) in [("scalar", "bytes"), ("rolling", "rolling<bytes,2>")] {
+            for (copy, binding) in [("local", "held"), ("alias", "alias")] {
+                let name = format!("{input}_{output}_{copy}");
+                writeln!(
+                    source,
+                    "fn {name}(value:bytes)->{result} {{when {{let held={initializer}\nlet alias=held\nif len(alias)==len(value) && alias==value {{return {binding}}}}}}}"
+                )?;
+                writeln!(
+                    source,
+                    "test {name} {{assert eval({name},[bytes([0,255]),bytes(),_,bytes([0,255]),bytes([1,2,3,4]),bytes([0,255])])==[bytes([0,255]),bytes(),_,bytes([0,255]),bytes([1,2,3,4]),bytes([0,255])]}}"
+                )?;
+            }
+        }
+    }
+    source.push_str(r"fn scalar_assignment(value:bytes)->bytes {inject out
+when {let held=value
+out=held}}
+fn rolling_assignment(value:bytes)->rolling<bytes,2> {inject out
+when {let held=delta_value(value)
+out=held}}
+test scalar_assignment {assert eval(scalar_assignment,[bytes([0,255]),bytes(),_,bytes([1,2,3,4])])==[bytes([0,255]),bytes(),_,bytes([1,2,3,4])]}
+test rolling_assignment {assert eval(rolling_assignment,[bytes([0,255]),bytes(),_,bytes([1,2,3,4])])==[bytes([0,255]),bytes(),_,bytes([1,2,3,4])]}
+fn independent(value:bytes,other:bytes)->rolling<bytes,2> {when {let held=value
+let alias=held
+let later=other
+if alias!=later {return alias}}}
+test independent {assert eval(independent,[bytes([0,255]),bytes(),bytes([1,2,3,4])],[bytes([1]),bytes([2]),bytes()])==[bytes([0,255]),bytes(),bytes([1,2,3,4])]}
+fn pair(value:bytes)->tuple<bytes,i64> {when {let held=value
+return (held,len(held))}}
+test pair {assert eval(pair,[bytes([0,255]),bytes(),_,bytes([1,2,3,4])])==[(bytes([0,255]),2),(bytes(),0),_,(bytes([1,2,3,4]),4)]}
+test ordinary_locals {let original=bytes([0,255])
+var owned=original
+owned=bytes()
+assert original==bytes([0,255])
+assert owned==bytes()}
+
+");
+    execute(source, RUNTIME, true)
+}
+
+#[test]
+fn retained_rolling_byte_arrivals_publish_without_allocating()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut source = String::from("module retained_rolling_byte_arrivals\n");
+    for (output, result) in [("scalar", "bytes"), ("rolling", "rolling<bytes,2>")] {
+        for (operation, publication) in [("returned", "return alias"), ("assigned", "out=alias")] {
+            let name = format!("{output}_{operation}");
+            writeln!(
+                source,
+                "fn {name}(value:rolling<bytes,2>)->{result} {{inject out\nwhen {{let held=delta_value(value)\nlet alias=held\n{publication}}}}}"
+            )?;
+            writeln!(
+                source,
+                "test {name} {{assert eval({name},[bytes([0,255]),bytes(),_,bytes([0,255]),bytes([1,2,3,4])])==[bytes([0,255]),bytes(),_,bytes([0,255]),bytes([1,2,3,4])]}}"
+            )?;
+        }
+    }
+    execute(source, RUNTIME, true)
+}
+
+#[test]
 fn rolling_byte_conversion_uses_prepared_execution() -> Result<(), Box<dyn std::error::Error>> {
     execute(
         r#"module rolling_bytes_constructor

@@ -274,7 +274,8 @@ pub fn statements(plan: &Plan, body: &[Statement], out: &mut Vec<String>, result
 }
 fn assignment(plan: &Plan, target: &Value, v: &Value) -> String {
     if matches!(target.kind, Kind::Output)
-        && let Some(code) = crate::structural_publication::assignment(v, |v| value(plan, v))
+        && let Some(code) =
+            crate::structural_publication::assignment(v, &target.ty, |v| value(plan, v))
     {
         return code;
     }

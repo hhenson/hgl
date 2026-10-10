@@ -48,8 +48,11 @@ pub fn result(value: Value, result: &Ty, expected: &Ty, node: bool) -> Result<Va
             "runtime ordinary collection children require prepared retained observations".into(),
         );
     }
-    if value.snapshot && matches!(result, Ty::Atomic(_)) {
-        return Err("retained Tuple observations cannot cross an atomic result boundary".into());
+    if value.snapshot
+        && matches!(result, Ty::Atomic(_) | Ty::Rolling(..))
+        && crate::tuple_values::ordinary_result(&value.ty)
+    {
+        return Err("retained aggregates cannot cross atomic or rolling result boundaries".into());
     }
     crate::endpoint_check::require_payload(&value)?;
     Ok(value)

@@ -38,7 +38,7 @@ pub fn scalar(ty: &Ty, input: &str, output: &str) -> String {
 /// Prepared source-to-output arrival copy.
 pub fn from(ty: &Ty, output: &str, source: &str, slot: &str) -> String {
     format!(
-        "_ctx.prepared().rolling_from::<{}>({source},{slot},{output})?;",
+        "_ctx.prepared().rolling_from::<{}>(Some({source}),{slot},{output})?;",
         marker(ty)
     )
 }

@@ -44,7 +44,7 @@ byte length before an infallible append closure writes the independent destinati
 The destination is temporarily moved out of its column to permit safe disjoint
 source borrowing, then restored before its single publication.
 Rolling storage is a disjoint Arena field in PreparedStorage and Observation.
-PreparedTick adds rolling<S>(Output<S>,&Payload), rolling_from<S>(columns,slot,
+PreparedTick adds rolling<S>(Output<S>,&Payload), rolling_from<S>(Option<columns>,slot,
 Output<S>) and pass_rolling<S>(Input<S>,Output<S>) for WindowShape markers with
 PreparedValue payloads. They share the existing write authority check and only
 publish after the independent complete arrival copy succeeds.

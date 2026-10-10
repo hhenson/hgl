@@ -190,7 +190,11 @@ pub fn local(id: usize, value: &Value, emit: impl Fn(&Value) -> String) -> Strin
         format!(
             "let input={};let mut prepared=_ctx.prepared();let(observation,globals)=prepared.storage.observations();let columns=globals.values_mut();if !observation.bindings.valid(input.id()) {{return Err(hgl_types::NodeError::new(\"ordinary tuple input is invalid\"));}}{}true",
             crate::observed::input(input),
-            capture(&value.ty, "input", "destination")
+            if matches!(input.ty, Ty::Rolling(..)) {
+                crate::observed::capture(&input.ty, "input", "destination")
+            } else {
+                capture(&value.ty, "input", "destination")
+            }
         )
     } else if matches!(value.kind, Kind::Construct(_)) {
         format!("{}true", constructed(value, "destination", &emit))
@@ -223,6 +227,10 @@ pub fn publish(ty: &Ty, output: &str, source: &str) -> String {
 }
 /// Select the complete ordinary tuple publication boundary before ordinary scalar transport.
 pub fn returned(value: &Value, expression: &str, result: Option<&Ty>) -> Option<String> {
+    publication(value, expression, result).map(|code| format!("{code}return Ok(());\n"))
+}
+/// Select exact prepared scalar, structural or rolling publication transport.
+pub fn publication(value: &Value, expression: &str, result: Option<&Ty>) -> Option<String> {
     if result.is_some_and(|ty| matches!(ty, Ty::Atomic(_)))
         || (!value.snapshot && !matches!(value.ty, Ty::Tuple(_) | Ty::Struct(..)))
     {
@@ -234,10 +242,16 @@ pub fn returned(value: &Value, expression: &str, result: Option<&Ty>) -> Option<
         crate::snapshots::complete(&value.ty, expression)
     };
     let publish = if value.snapshot
+        && value.ty == Ty::Bytes
+        && result.is_some_and(|ty| matches!(ty, Ty::Rolling(child, _) if **child == Ty::Bytes))
+    {
+        "_ctx.prepared().rolling_from(None,publication,self._output)?;".into()
+    } else if value.snapshot
         && !matches!(
             value.ty,
             Ty::Tuple(_) | Ty::Struct(..) | Ty::List(..) | Ty::Map(..)
-        ) {
+        )
+    {
         format!(
             "_ctx.prepared().scalar_from_global::<{}>(self._output.id(),self._output.generation(),publication.fields())?;",
             rust_type(&value.ty)
@@ -247,9 +261,7 @@ pub fn returned(value: &Value, expression: &str, result: Option<&Ty>) -> Option<
     } else {
         crate::snapshots::publish(&value.ty, "self._output", "publication")
     };
-    Some(format!(
-        "let publication={publication};{publish}return Ok(());\n"
-    ))
+    Some(format!("let publication={publication};{publish}"))
 }
 
 fn constructed(value: &Value, destination: &str, emit: &impl Fn(&Value) -> String) -> String {

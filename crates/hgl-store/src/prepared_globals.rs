@@ -27,7 +27,7 @@ impl<W: Wake> PreparedTick<'_, W> {
     /// Publish one independently retained arrival from a prepared source slot.
     pub fn rolling_from<S: crate::rolling::WindowShape>(
         &mut self,
-        source: &ValueColumns,
+        source: Option<&ValueColumns>,
         from: ValueSlot<S::Payload>,
         output: Output<S>,
     ) -> NodeResult
@@ -35,6 +35,7 @@ impl<W: Wake> PreparedTick<'_, W> {
         S::Payload: PreparedValue,
     {
         self.authorize(output.id(), output.generation());
+        let source = source.unwrap_or_else(|| self.storage.globals.values());
         self.storage.rolling.from(
             self.storage.bindings,
             output,

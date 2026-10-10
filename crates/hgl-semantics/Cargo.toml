@@ -28,7 +28,7 @@ harness_ir = { budget = 200, uses = ["ir", "value_eval"] }
 inheritance = { budget = 300, uses = ["enums", "library", "struct_names"] }
 ir = { budget = 180, uses = [] }
 library = { budget = 500, uses = ["struct_declarations"] }
-local_check = { budget = 220, uses = ["endpoint_check", "ir", "structural_admission", "tuple_values", "value_check"] }
+local_check = { budget = 220, uses = ["endpoint_check", "ir", "structural_admission", "tuple_admission", "value_check"] }
 name_check = { budget = 250, uses = ["tuple_flow", "tuple_phase", "enums", "library", "struct_names", "type_sizes"] }
 publication_trace = { budget = 150, uses = ["composite_keys", "delta_check", "ir"] }
 recursive_types = { budget = 350, uses = ["enums", "library", "shape_obligations", "struct_names", "value_access"] }

@@ -65,3 +65,37 @@ fn byte_conversion_cannot_read_atomic_signal_payloads() {
         }
     }
 }
+
+#[test]
+fn retained_byte_locals_keep_mutability_and_signal_boundaries() {
+    for initializer in ["value", "delta_value(value)"] {
+        for result in ["bytes", "rolling<bytes,2>"] {
+            let body = format!(
+                "fn target(value:bytes)->{result} {{when {{var held={initializer}\nreturn held}}}}\ntest rejected {{eval(target,[bytes([0,255])])}}"
+            );
+            let error = compile_tests(&sources(&body)).unwrap_err();
+            assert!(error.contains("mutable retained"), "{body}\n{error}");
+            let body = format!(
+                "fn observe(value:signal)->{result} {{when {{let held={initializer}\nreturn held}}}}\nfn target(value:bytes)->{result} => observe(value)\ntest rejected {{eval(target,[bytes([0,255])])}}"
+            );
+            let error = compile_tests(&sources(&body)).unwrap_err();
+            assert!(error.contains("signal"), "{body}\n{error}");
+        }
+    }
+}
+
+#[test]
+fn rolling_byte_arrival_retention_keeps_signal_and_mutability_boundaries() {
+    for result in ["bytes", "rolling<bytes,2>"] {
+        let body = format!(
+            "fn observe(value:signal)->{result} {{when {{let held=delta_value(value)\nreturn held}}}}\nfn target(value:rolling<bytes,2>)->{result} => observe(value)\ntest rejected {{eval(target,[bytes([0,255])])}}"
+        );
+        let error = compile_tests(&sources(&body)).unwrap_err();
+        assert!(error.contains("signal"), "{body}\n{error}");
+        let body = format!(
+            "fn target(value:rolling<bytes,2>)->{result} {{when {{var held=delta_value(value)\nreturn held}}}}\ntest rejected {{eval(target,[bytes([0,255])])}}"
+        );
+        let error = compile_tests(&sources(&body)).unwrap_err();
+        assert!(error.contains("mutable retained"), "{body}\n{error}");
+    }
+}

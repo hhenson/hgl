@@ -109,3 +109,26 @@ test sparse {assert eval(sparse,[bytes(),bytes([0,255])])==[delta<Packet>(data:b
     ));
     assert!(result.is_ok(), "{result:?}");
 }
+
+#[test]
+fn retained_byte_constructors_keep_whole_aggregate_result_boundaries() {
+    for (result, constructor) in [
+        ("atomic<Packet>", "Packet(data:held)"),
+        ("rolling<Packet,2>", "Packet(data:held)"),
+        ("atomic<tuple<bytes,i64>>", "(held,1)"),
+        ("rolling<tuple<bytes,i64>,2>", "(held,1)"),
+    ] {
+        for publication in [
+            format!("return {constructor}"),
+            format!("out={constructor}"),
+        ] {
+            let body = format!(
+                "fn bad(value:bytes)->{result} {{inject out\nwhen {{let held=value\n{publication}}}}}\ntest rejected {{eval(bad,[bytes([0,255])])}}"
+            );
+            let error = compile_tests(&sources(&body))
+                .err()
+                .unwrap_or_else(|| panic!("unexpected whole-arrival admission: {body}"));
+            assert!(error.contains("retained"), "{body}\n{error}");
+        }
+    }
+}

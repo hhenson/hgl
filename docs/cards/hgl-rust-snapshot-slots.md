@@ -4,7 +4,7 @@ Own independent node-local Tuple/concrete Struct observation storage and prepare
 The `snapshot_slots` module has an initial 350 source-line budget within the
 unchanged hgl-rust crate limit. It uses layouts, observed endpoints and snapshots.
 
-Public surface: `prepare`, `local`, `projection`, `read`, `publish`, `returned`, `endpoint_read`, `native_text`.
+Public surface: `prepare`, `local`, `projection`, `read`, `publish`, `publication`, `returned`, `endpoint_read`, `native_text`.
 `prepare` clones the emission plan, reserves a distinct private typed destination
 for each retained local, and inserts implicit locals for direct retained returns or own-output assignments or
 runtime tuple construction containing observed children. Source types remain
@@ -58,3 +58,18 @@ Private capacity/layout preparation is unchanged. Temporal-root validity errors
 remain separate from value.unset_read on retained ordinary payload consumption.
 
 native_scalar(&Value)->String borrows an owning scalar endpoint with existing required-child validity checks. native_text delegates this shared borrowing path and preserves its existing public result.
+
+Readable byte input lets capture binding-time contents into these same private
+slots. Scalar returns and own-output assignments use scalar_from_global; byte rolling
+publications copy the slot
+through rolling_from(None, ...), with complete arrival preflight before commit.
+Local byte comparison and length borrow the slot; alias lets own separate copies.
+Retained byte children can enter existing prepared Tuple construction. Direct
+unprepared owning child construction and mutable retained locals stay diagnosed.
+Acceptance includes measured direct/observed byte lets, scalar/rolling returns,
+aliases, independent locals, tuple children, empty/equal arrivals and silence.
+
+Byte locals initialized by delta_value on a readable rolling input capture the
+latest arrival through observed's existing rolling source transport. The snapshot
+owns the Bytes payload, never a whole window or a borrowed endpoint. Returns and
+assignments then use the same scalar/rolling byte destination selection.

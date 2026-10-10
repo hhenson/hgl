@@ -40,3 +40,8 @@ have distinct validity; removal, existing invalid membership, idle persistence,
 nested fields and own-output assignment execute with zero per-cycle allocations.
 Reverse-order native collection publication rejects with its specific ordinary
 profile diagnostic; scalar ordinary and explicit delta matrices remain intact.
+
+Prepared Tuple/Struct/List/Map snapshots retain optional descendant storage and
+cannot cross whole atomic or rolling aggregate result boundaries. This profile
+rejection covers returns and own-output assignments; scalar byte snapshots retain
+their exact representation and can publish scalar or rolling byte arrivals.
