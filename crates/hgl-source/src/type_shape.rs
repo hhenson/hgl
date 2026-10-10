@@ -270,15 +270,6 @@ impl Ty {
         if let Self::Atomic(payload) | Self::Rolling(payload, _) = self {
             return payload.atomic_payload();
         }
-        if let Self::Set(member) = self {
-            return member.collection_key();
-        }
-        if let Self::List(child, _) = self {
-            return child.publication();
-        }
-        if let Self::Map(key, child) = self {
-            return key.collection_key() && child.publication();
-        }
         if let Self::Struct(_, _, optional) = self
             && !optional.is_empty()
         {
@@ -309,23 +300,24 @@ impl Ty {
     }
     /// Whether an ordinary value belongs to the finite complete-payload profile.
     pub fn atomic_payload(&self) -> bool {
-        if let Self::Set(key) = self {
-            return key.collection_key();
-        }
-        if let Self::Map(key, child) = self {
-            return key.collection_key() && child.atomic_payload();
-        }
-        if let Self::List(child, _) = self {
-            return child.atomic_payload();
-        }
         matches!(self, Self::Recursive(_) | Self::Family(_))
             || self.components(Self::atomic_payload)
     }
     /// Exact finite complete keys exclude recursive, family and collection components.
     pub fn collection_key(&self) -> bool {
-        self.components(Self::collection_key)
+        !matches!(self, Self::Set(_) | Self::Map(..) | Self::List(..))
+            && self.components(Self::collection_key)
     }
     fn components(&self, check: fn(&Self) -> bool) -> bool {
+        if let Self::Set(key) = self {
+            return key.collection_key();
+        }
+        if let Self::Map(key, child) = self {
+            return key.collection_key() && check(child);
+        }
+        if let Self::List(child, _) = self {
+            return check(child);
+        }
         if let Self::Tuple(children) = self {
             return children.iter().all(check);
         }

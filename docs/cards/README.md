@@ -258,3 +258,5 @@ Additional ordinary value contracts: [Any semantics](hgl-any-values.md), [compil
 
 - [Native owning values](hgl-native-values.md)
 - [Reusable owning columns](hgl-owned-columns.md)
+
+- [Inert native contract data](hgl-native-contract-data.md)

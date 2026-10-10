@@ -13,3 +13,7 @@ binding, canonical type comparison and alias validation remain semantic work.
 Required-constant execution, signal payloads, borrowing, mutation, generic/default
 parameter forms and blocking evaluation remain rejected. Fields retain the source
 metadata needed for exact checking; parsing never fabricates a runtime value.
+
+Portable Scalar/Function records live in hgl-types::native_contracts; this source
+module reexports them and owns their inert token parsing. No executable callback
+or provider image is stored in the records.
