@@ -111,14 +111,10 @@ pub fn equal(ty: &Ty, a: &str, b: &str, marker: fn(&Ty) -> String) -> String {
             )
         };
     }
-    let (fields, optional) = if let Ty::Tuple(fields) = ty {
-        (fields.iter().collect::<Vec<_>>(), &[][..])
-    } else if let Ty::Struct(_, fields, optional) = ty {
-        (
-            fields.iter().map(|(_, ty)| ty).collect(),
-            optional.as_slice(),
-        )
-    } else {
+    let Some((fields, optional)) = matches!(ty, Ty::Tuple(_) | Ty::Struct(..))
+        .then(|| hgl_source::ordinary_shape::fields(ty))
+        .flatten()
+    else {
         return format!("({a})==({b})");
     };
     let checks = fields.iter().enumerate().map(|(i, t)| {
@@ -164,14 +160,10 @@ fn key_checks(ty: &Ty, value: &str) -> String {
             "if ({value}).is_nan() {{return Err(hgl_types::NodeError::new(\"NaN collection key\"));}}"
         );
     }
-    let (fields, optional) = if let Ty::Tuple(fields) = ty {
-        (fields.iter().collect::<Vec<_>>(), &[][..])
-    } else if let Ty::Struct(_, fields, optional) = ty {
-        (
-            fields.iter().map(|(_, ty)| ty).collect(),
-            optional.as_slice(),
-        )
-    } else {
+    let Some((fields, optional)) = matches!(ty, Ty::Tuple(_) | Ty::Struct(..))
+        .then(|| hgl_source::ordinary_shape::fields(ty))
+        .flatten()
+    else {
         return String::new();
     };
     fields

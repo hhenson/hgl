@@ -5,7 +5,7 @@ Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-
 Statically selected owning abstract family layouts and conversion emission.
 Depends on source, rust-ir and rust-type-data; budget 200 source lines. No runtime crate.
 
-family_storage(FamilyType) returns an internal exact nominal struct with an i64
+family_storage(FamilyType), reexported from source ordinary-shape metadata, returns an internal exact nominal struct with an i64
 discriminator and a typed optional position for every canonical concrete member.
 Exactly one position is present in an owning family value. family_member forms
 that representation; family_coerce remaps an explicit subfamily into its ancestor

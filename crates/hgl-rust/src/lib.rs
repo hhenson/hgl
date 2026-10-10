@@ -58,3 +58,5 @@ pub(crate) fn append(code: &mut String, text: std::fmt::Arguments<'_>) {
     code.write_fmt(text)
         .unwrap_or_else(|_| unreachable!("String formatting"));
 }
+
+mod owner_comparisons;
