@@ -38,4 +38,4 @@ projection's source lifetime contract.
 
 Private source/read helpers project complete global, atomic or configuration storage before retaining native owners. They preserve snapshot optional presence and exact child types; configuration scalar selection does not clone an owning parent.
 
-Exact atomic source projections take priority over private snapshot views. A prepared Any binding copies its selected source independently; snapshot metadata on the binding does not change the source arena.
+Exact atomic and canonical borrowed-owner projections take priority over private snapshot views. A prepared Any binding copies its selected source independently; snapshot metadata on the binding does not change the source arena.

@@ -50,7 +50,7 @@ pub(crate) fn publication(plan: &Plan, value: &Value, result: Option<&Ty>) -> Op
     crate::observed::forwarded(value, result)
 }
 fn write(plan: &Plan, v: &Value, slot: &str, prelude: &mut Vec<String>) -> String {
-    if (!v.snapshot || v.ty == Ty::Any)
+    if (!v.snapshot || v.ty.owning_scalar())
         && let Some((arena, source)) = crate::source_slots::source(plan, v)
     {
         let marker = global_type(&v.ty);
@@ -67,11 +67,10 @@ fn write(plan: &Plan, v: &Value, slot: &str, prelude: &mut Vec<String>) -> Strin
             )
         };
     }
-    if let Kind::Construct(fields) = &v.kind {
-        return fields
-            .iter()
-            .map(|(i, value)| write(plan, value, &format!("({slot}).fields().{i}"), prelude))
-            .collect();
+    if let Some(code) =
+        crate::constructor_owners::fields(v, slot, |value, slot| write(plan, value, slot, prelude))
+    {
+        return code;
     }
     if let Kind::Unary(op, argument) = &v.kind
         && op == "any"

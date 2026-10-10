@@ -60,7 +60,8 @@ pub fn prepare(plan: &Plan) -> Plan {
     if !crate::execution_proof::prepared(plan) {
         return plan.clone();
     }
-    let mut plan = plan.clone();
+    let mut plan =
+        hgl_semantics::constructor_owners::prepare(plan, crate::execution_proof::owning_argument);
     for node in &mut plan.nodes {
         let mut globals = std::mem::take(&mut node.globals);
         let mut prepare_payload = |v: &mut Value| {

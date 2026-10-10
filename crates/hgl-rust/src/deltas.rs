@@ -23,40 +23,29 @@ fn identity(ty: &Ty) -> String {
 }
 /// Compile-time marker for one exact prepared temporal shape.
 pub fn shape_marker(ty: &Ty) -> String {
-    match ty {
-        Ty::Rolling(..) => crate::windows::marker(ty),
-        Ty::Enum(_) | Ty::Any => format!("hgl_store::shapes::Atomic<{}>", global_type(ty)),
-        Ty::Atomic(payload) => format!("hgl_store::shapes::Atomic<{}>", global_type(payload)),
-        Ty::List(child, None) => format!("hgl_store::shapes::Growing<{}>", shape_marker(child)),
-        Ty::List(child, Some(n)) => {
-            format!("hgl_store::shapes::Fixed<{}, {n}>", shape_marker(child))
-        }
-        Ty::Map(key, child) => format!(
+    if matches!(ty, Ty::Rolling(..)) {
+        crate::windows::marker(ty)
+    } else if matches!(ty, Ty::Enum(_) | Ty::Any) {
+        format!("hgl_store::shapes::Atomic<{}>", global_type(ty))
+    } else if let Ty::Atomic(payload) = ty {
+        format!("hgl_store::shapes::Atomic<{}>", global_type(payload))
+    } else if let Ty::List(child, size) = ty {
+        size.map_or_else(
+            || format!("hgl_store::shapes::Growing<{}>", shape_marker(child)),
+            |n| format!("hgl_store::shapes::Fixed<{}, {n}>", shape_marker(child)),
+        )
+    } else if let Ty::Map(key, child) = ty {
+        format!(
             "hgl_store::shapes::Map<{},{}>",
             shape_marker(child),
             global_type(key)
-        ),
-        Ty::Set(key) => format!("hgl_store::shapes::Set<{}>", global_type(key)),
-        Ty::Tuple(_) | Ty::Struct(..) => format!("Shape{}", identity(ty)),
-        Ty::Delta(_)
-        | Ty::I64
-        | Ty::F64
-        | Ty::Bool
-        | Ty::Str
-        | Ty::Bytes
-        | Ty::CivilDateTime
-        | Ty::TimeZone
-        | Ty::ZonedTime
-        | Ty::ZonedDateTime
-        | Ty::Duration
-        | Ty::Date
-        | Ty::Time
-        | Ty::DateTime
-        | Ty::Ref(_)
-        | Ty::Nullable(_)
-        | Ty::Recursive(_)
-        | Ty::Family(_)
-        | Ty::Void => rust_type(ty).into(),
+        )
+    } else if let Ty::Set(key) = ty {
+        format!("hgl_store::shapes::Set<{}>", global_type(key))
+    } else if matches!(ty, Ty::Tuple(_) | Ty::Struct(..)) {
+        format!("Shape{}", identity(ty))
+    } else {
+        rust_type(ty).into()
     }
 }
 fn operations(ty: &Ty) -> String {
@@ -269,41 +258,17 @@ fn origin(ty: &Ty, types: &mut BTreeSet<Ty>) {
 }
 
 fn collect(ty: &Ty, types: &mut BTreeSet<Ty>) {
-    match ty {
-        Ty::Delta(ty) => origin(ty, types),
-        Ty::List(child, _) => collect(child, types),
-        Ty::Struct(_, fields, _) => {
-            for (_, child) in fields {
-                collect(child, types);
-            }
+    if let Ty::Delta(ty) = ty {
+        origin(ty, types);
+    } else if let Ty::List(child, _) = ty {
+        collect(child, types);
+    } else if let Ty::Struct(_, fields, _) = ty {
+        for (_, child) in fields {
+            collect(child, types);
         }
-        Ty::Rolling(..)
-        | Ty::Atomic(_)
-        | Ty::Map(..)
-        | Ty::Tuple(_)
-        | Ty::I64
-        | Ty::F64
-        | Ty::Bool
-        | Ty::Str
-        | Ty::Bytes
-        | Ty::Any
-        | Ty::CivilDateTime
-        | Ty::TimeZone
-        | Ty::Enum(_)
-        | Ty::ZonedTime
-        | Ty::ZonedDateTime
-        | Ty::Duration
-        | Ty::Date
-        | Ty::Time
-        | Ty::DateTime
-        | Ty::Ref(_)
-        | Ty::Set(_)
-        | Ty::Nullable(_)
-        | Ty::Recursive(_)
-        | Ty::Family(_)
-        | Ty::Void => {}
     }
 }
+
 fn values(value: &Value, types: &mut BTreeSet<Ty>) {
     hgl_semantics::ir_visit::value(value, &mut |value| {
         collect(&value.ty, types);

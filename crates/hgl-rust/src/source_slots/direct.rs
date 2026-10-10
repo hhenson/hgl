@@ -11,6 +11,9 @@ pub(crate) fn source(plan: &Plan, value: &Value) -> Option<(&'static str, String
     if let Some(slot) = atomic_place(plan, value) {
         return Some(("atomic_values", slot));
     }
+    if let Some(slot) = borrowed_place(plan, value) {
+        return Some(("global_values", slot));
+    }
     if value.snapshot
         && matches!(
             value.kind,
@@ -27,7 +30,7 @@ pub(crate) fn source(plan: &Plan, value: &Value) -> Option<(&'static str, String
     {
         return Some(("configuration_columns", slot));
     }
-    borrowed_place(plan, value).map(|slot| ("global_values", slot))
+    None
 }
 
 /// Read a typed configuration or atomic projection without retaining its parent.

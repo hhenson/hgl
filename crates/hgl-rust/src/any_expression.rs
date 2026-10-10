@@ -2,6 +2,11 @@
 use hgl_semantics::ir::{Kind, Plan, Value};
 use hgl_source::Ty;
 fn argument(value: &Value) -> Option<&Value> {
+    if let Kind::Query(op, args) = &value.kind
+        && op.starts_with("\0constructor:")
+    {
+        return args.first();
+    }
     if let Kind::Unary(op, child) = &value.kind
         && (op == "any" || op == "family")
     {
@@ -36,14 +41,18 @@ fn body(
     if let Kind::Construct(supplied) = &value.kind
         && let Some((fields, optional)) = hgl_semantics::any_values::fields(&value.ty)
     {
+        let children: Vec<_> = supplied
+            .iter()
+            .map(|(id, v)| (*id, body(plan, v, prelude, emit)))
+            .collect();
         return fields
             .iter()
             .enumerate()
             .map(|(i, _)| {
-                let child = supplied
+                let child = children
                     .iter()
                     .find(|(id, _)| *id == i)
-                    .map(|(_, v)| body(plan, v, prelude, emit));
+                    .map(|(_, code)| code.clone());
                 let child = if optional.contains(&i) {
                     child.map_or("out.write(&[0]);".into(), |s| {
                         format!("out.write(&[1]);{s}")
