@@ -125,62 +125,42 @@ fn child_validation(child: &Ty, source: &str) -> String {
     }
 }
 fn validate(ty: &Ty) -> String {
-    match ty {
-        Ty::Set(_) => String::new(),
-        Ty::List(child, _) | Ty::Map(_, child) => {
-            format!(
-                "if delta.0.len()!=delta.1.len() {{ return Err(hgl_types::NodeError::new(\"malformed sparse delta\")); }} for child in &delta.1 {{{}}}",
-                child_validation(child, "child")
-            )
+    if matches!(ty, Ty::Set(_)) {
+        String::new()
+    } else if let Ty::List(child, _) | Ty::Map(_, child) = ty {
+        format!(
+            "if delta.0.len()!=delta.1.len() {{ return Err(hgl_types::NodeError::new(\"malformed sparse delta\")); }} for child in &delta.1 {{{}}}",
+            child_validation(child, "child")
+        )
+    } else if matches!(ty, Ty::Struct(..) | Ty::Tuple(_)) {
+        let mut code = String::new();
+        for (i, child) in children(ty).iter().enumerate() {
+            append(
+                &mut code,
+                format_args!(
+                    "if delta.{i}.len()>1 {{return Err(hgl_types::NodeError::new(\"malformed sparse field\"));}} for child in &delta.{i} {{{}}}",
+                    child_validation(child, "child")
+                ),
+            );
         }
-        Ty::Struct(..) | Ty::Tuple(_) => {
-            let fields = children(ty);
-            let mut code = String::new();
-            for (i, child) in fields.iter().enumerate() {
-                append(
-                    &mut code,
-                    format_args!(
-                        "if delta.{i}.len()>1 {{return Err(hgl_types::NodeError::new(\"malformed sparse field\"));}} for child in &delta.{i} {{{}}}",
-                        child_validation(child, "child")
-                    ),
-                );
-            }
-            code
-        }
-        Ty::Atomic(_)
-        | Ty::Rolling(..)
-        | Ty::Delta(_)
-        | Ty::I64
-        | Ty::F64
-        | Ty::Bool
-        | Ty::Str
-        | Ty::Bytes
-        | Ty::Any
-        | Ty::CivilDateTime
-        | Ty::TimeZone
-        | Ty::Enum(_)
-        | Ty::ZonedTime
-        | Ty::ZonedDateTime
-        | Ty::Duration
-        | Ty::Date
-        | Ty::Time
-        | Ty::DateTime
-        | Ty::Ref(_)
-        | Ty::Nullable(_)
-        | Ty::Recursive(_)
-        | Ty::Family(_)
-        | Ty::Void => unreachable!("structural origin"),
+        code
+    } else {
+        unreachable!("structural origin")
     }
 }
+
 fn push(target: &str, value: &str) -> String {
     format!("{} {target}.push({value});", reserve(target))
 }
 fn observation(ty: &Ty) -> String {
-    match ty {
-        Ty::Set(key) => crate::keyed::observation(key, None),
-        Ty::List(child, None) => crate::keyed::observation(&Ty::I64, Some(&read(child, "child"))),
-        Ty::Map(key, child) => crate::keyed::observation(key, Some(&read(child, "child"))),
-        Ty::List(child, Some(n)) => format!(
+    if let Ty::Set(key) = ty {
+        crate::keyed::observation(key, None)
+    } else if let Ty::List(child, None) = ty {
+        crate::keyed::observation(&Ty::I64, Some(&read(child, "child")))
+    } else if let Ty::Map(key, child) = ty {
+        crate::keyed::observation(key, Some(&read(child, "child")))
+    } else if let Ty::List(child, Some(n)) = ty {
+        format!(
             "for n in 0..{n} {{let child=input.index(_ctx.store().bindings(),n); {} }}",
             observe_child(
                 child,
@@ -188,8 +168,9 @@ fn observation(ty: &Ty) -> String {
                 "delta.1",
                 true
             )
-        ),
-        Ty::Struct(..) | Ty::Tuple(_) => children(ty)
+        )
+    } else if matches!(ty, Ty::Struct(..) | Ty::Tuple(_)) {
+        children(ty)
             .iter()
             .enumerate()
             .map(|(i, child)| {
@@ -199,32 +180,12 @@ fn observation(ty: &Ty) -> String {
                 )
             })
             .collect::<Vec<_>>()
-            .concat(),
-        Ty::Atomic(_)
-        | Ty::Rolling(..)
-        | Ty::Delta(_)
-        | Ty::I64
-        | Ty::F64
-        | Ty::Bool
-        | Ty::Str
-        | Ty::Bytes
-        | Ty::Any
-        | Ty::CivilDateTime
-        | Ty::TimeZone
-        | Ty::Enum(_)
-        | Ty::ZonedTime
-        | Ty::ZonedDateTime
-        | Ty::Duration
-        | Ty::Date
-        | Ty::Time
-        | Ty::DateTime
-        | Ty::Ref(_)
-        | Ty::Nullable(_)
-        | Ty::Void
-        | Ty::Recursive(_)
-        | Ty::Family(_) => unreachable!("structural origin"),
+            .concat()
+    } else {
+        unreachable!("structural origin")
     }
 }
+
 fn observe_child(child: &Ty, index: &str, target: &str, keys: bool) -> String {
     let key = if keys {
         push("delta.0", index)

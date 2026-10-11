@@ -35,25 +35,12 @@ pub fn rust_type(ty: &Ty) -> &'static str {
     }
 }
 /// Emit the checked scalar type form.
-pub fn scalar_type(ty: &Ty) -> &'static str {
-    match ty
-        .scalar_kind()
-        .unwrap_or_else(|| unreachable!("checked scalar endpoint type"))
-    {
-        hgl_types::ScalarType::Bool => "Bool",
-        hgl_types::ScalarType::F64 => "F64",
-        hgl_types::ScalarType::I64 => "I64",
-        hgl_types::ScalarType::Text => "Text",
-        hgl_types::ScalarType::Bytes => "Bytes",
-        hgl_types::ScalarType::Duration => "Duration",
-        hgl_types::ScalarType::Date => "Date",
-        hgl_types::ScalarType::Time => "Time",
-        hgl_types::ScalarType::DateTime => "DateTime",
-        hgl_types::ScalarType::CivilDateTime => "CivilDateTime",
-        hgl_types::ScalarType::TimeZone => "TimeZone",
-        hgl_types::ScalarType::ZonedTime => "ZonedTime",
-        hgl_types::ScalarType::ZonedDateTime => "ZonedDateTime",
-    }
+pub fn scalar_type(ty: &Ty) -> String {
+    format!(
+        "{:?}",
+        ty.scalar_kind()
+            .unwrap_or_else(|| unreachable!("checked scalar endpoint type"))
+    )
 }
 
 /// Emit the checked literal form.

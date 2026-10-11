@@ -176,3 +176,25 @@ test {
         assert eval(retain_rolling_arrival, [any(1), _, any(2)]) == [any(1), _, any(2)]
     }
 }
+
+struct OptionalReplacement { required:i64
+    optional:i64 = null
+}
+test {
+    fn replace_optional(value:i64)->any {
+        inject global_state
+        start { set(global_state, "optional_replacement", OptionalReplacement(required:1, optional:2)) }
+        when {
+            var target:OptionalReplacement=get(global_state, "optional_replacement")
+            if value == 1 { target=OptionalReplacement(required:value) }
+            else { target=OptionalReplacement(required:value, optional:0) }
+            return any(target)
+        }
+    }
+    test omitted_optional_constructor_fields_clear_existing_presence {
+        assert eval(replace_optional, [1,2,1]) == [
+            any(OptionalReplacement(required:1)),
+            any(OptionalReplacement(required:2, optional:0)),
+            any(OptionalReplacement(required:1))]
+    }
+}

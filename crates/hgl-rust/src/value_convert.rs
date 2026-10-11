@@ -126,67 +126,41 @@ fn delta_decode(origin: &Ty, expression: &str) -> String {
 }
 fn delta_encode(origin: &Ty, expression: &str) -> String {
     let mut body = Vec::<String>::new();
-    match origin {
-        Ty::Set(key) => {
-            for (i, tag) in ["Add", "Remove"].iter().enumerate() {
-                body.push(format!(
-                    "for item in &v.{i} {{parts.push(hgl_semantics::ir::DeltaEntry::{tag}({}));}}",
-                    encode(key, "item")
-                ));
-            }
-        }
-        Ty::List(child, size) => {
-            if size.is_none() {
-                body.push(format!(
-                    "for key in &v.2 {{parts.push(hgl_semantics::ir::DeltaEntry::Remove({}));}}",
-                    encode(&Ty::I64, "key")
-                ));
-            }
-            body.push(format!("for (key,item) in v.0.iter().zip(&v.1) {{parts.push(hgl_semantics::ir::DeltaEntry::Child(*key,{}));}}",encode(&child.clone().delta().unwrap_or_else(|_|unreachable!("checked child")),"item")));
-        }
-        Ty::Map(key, child) => {
-            body.push(format!("for (key,item) in v.0.iter().zip(&v.1) {{parts.push(hgl_semantics::ir::DeltaEntry::Keyed({},{}));}}",encode(key,"key"),encode(&child.clone().delta().unwrap_or_else(|_|unreachable!("checked child")),"item")));
+    if let Ty::Set(key) = origin {
+        for (i, tag) in ["Add", "Remove"].iter().enumerate() {
             body.push(format!(
-                "for key in &v.2 {{parts.push(hgl_semantics::ir::DeltaEntry::Remove({}));}}",
-                encode(key, "key")
+                "for item in &v.{i} {{parts.push(hgl_semantics::ir::DeltaEntry::{tag}({}));}}",
+                encode(key, "item")
             ));
         }
-        Ty::Tuple(_) | Ty::Struct(..) => {
-            for (i, t) in fields(origin).iter().enumerate() {
-                body.push(format!(
-                    "for item in &v.{i} {{parts.push(hgl_semantics::ir::DeltaEntry::Child({i},{}));}}",
-                    encode(
-                        &t.clone()
-                            .delta()
-                            .unwrap_or_else(|_| unreachable!("checked child")),
-                        "item"
-                    )
-                ));
-            }
+    } else if let Ty::List(child, size) = origin {
+        if size.is_none() {
+            body.push(format!(
+                "for key in &v.2 {{parts.push(hgl_semantics::ir::DeltaEntry::Remove({}));}}",
+                encode(&Ty::I64, "key")
+            ));
         }
-        Ty::Atomic(_)
-        | Ty::Rolling(..)
-        | Ty::Delta(_)
-        | Ty::I64
-        | Ty::F64
-        | Ty::Bool
-        | Ty::Str
-        | Ty::Bytes
-        | Ty::Any
-        | Ty::Duration
-        | Ty::Date
-        | Ty::Time
-        | Ty::DateTime
-        | Ty::CivilDateTime
-        | Ty::TimeZone
-        | Ty::Enum(_)
-        | Ty::ZonedTime
-        | Ty::ZonedDateTime
-        | Ty::Ref(_)
-        | Ty::Nullable(_)
-        | Ty::Recursive(_)
-        | Ty::Family(_)
-        | Ty::Void => unreachable!("checked structural delta"),
+        body.push(format!("for (key,item) in v.0.iter().zip(&v.1) {{parts.push(hgl_semantics::ir::DeltaEntry::Child(*key,{}));}}",encode(&child.clone().delta().unwrap_or_else(|_|unreachable!("checked child")),"item")));
+    } else if let Ty::Map(key, child) = origin {
+        body.push(format!("for (key,item) in v.0.iter().zip(&v.1) {{parts.push(hgl_semantics::ir::DeltaEntry::Keyed({},{}));}}",encode(key,"key"),encode(&child.clone().delta().unwrap_or_else(|_|unreachable!("checked child")),"item")));
+        body.push(format!(
+            "for key in &v.2 {{parts.push(hgl_semantics::ir::DeltaEntry::Remove({}));}}",
+            encode(key, "key")
+        ));
+    } else if matches!(origin, Ty::Tuple(_) | Ty::Struct(..)) {
+        for (i, t) in fields(origin).iter().enumerate() {
+            body.push(format!(
+                "for item in &v.{i} {{parts.push(hgl_semantics::ir::DeltaEntry::Child({i},{}));}}",
+                encode(
+                    &t.clone()
+                        .delta()
+                        .unwrap_or_else(|_| unreachable!("checked child")),
+                    "item"
+                )
+            ));
+        }
+    } else {
+        unreachable!("checked structural delta");
     }
     let body = body.concat();
     format!(
@@ -229,35 +203,36 @@ fn scalar_encode(t: &Ty) -> String {
     let (variant, _, encode) = scalar_codec(t);
     format!("hgl_semantics::ir::Kind::Literal(hgl_source::Literal::{variant}({encode}))")
 }
-fn scalar_codec(t: &Ty) -> (&'static str, &'static str, &'static str) {
-    match t
+fn scalar_codec(t: &Ty) -> (String, String, &'static str) {
+    use hgl_types::ScalarType;
+    let kind = t
         .scalar_kind()
-        .unwrap_or_else(|| unreachable!("checked scalar"))
-    {
-        hgl_types::ScalarType::Bool => ("Bool", "*item", "*v"),
-        hgl_types::ScalarType::I64 => ("Int", "*item", "*v"),
-        hgl_types::ScalarType::F64 => ("Float", "*item", "*v"),
-        hgl_types::ScalarType::Text => ("Str", "item.clone()", "v.clone()"),
-        hgl_types::ScalarType::Bytes => ("Bytes", "item.clone()", "v.clone()"),
-        hgl_types::ScalarType::Date => ("Date", "hgl_types::Date(*item)", "v.0"),
-        hgl_types::ScalarType::Time => ("Time", "hgl_types::Time(*item)", "v.0"),
-        hgl_types::ScalarType::DateTime => (
-            "DateTime",
-            "hgl_types::EngineTime::from_micros(*item)",
-            "v.micros()",
-        ),
-        hgl_types::ScalarType::Duration => (
-            "Duration",
-            "hgl_types::EngineDelta::from_micros(*item)",
-            "v.micros()",
-        ),
-        hgl_types::ScalarType::CivilDateTime => (
-            "CivilDateTime",
-            "hgl_types::CivilDateTime::from_micros(*item)",
-            "v.micros()",
-        ),
-        hgl_types::ScalarType::TimeZone => ("TimeZone", "item.clone()", "v.clone()"),
-        hgl_types::ScalarType::ZonedTime => ("ZonedTime", "item.clone()", "v.clone()"),
-        hgl_types::ScalarType::ZonedDateTime => ("ZonedDateTime", "item.clone()", "v.clone()"),
-    }
+        .unwrap_or_else(|| unreachable!("checked scalar"));
+    let (variant, decoded, encoded) = match kind {
+        ScalarType::Bool => ("Bool", "*item", "*v"),
+        ScalarType::I64 => ("Int", "*item", "*v"),
+        ScalarType::F64 => ("Float", "*item", "*v"),
+        ScalarType::Text => ("Str", "item.clone()", "v.clone()"),
+        ScalarType::Date | ScalarType::Time => {
+            return (
+                format!("{kind:?}"),
+                format!("{}(*item)", crate::scalars::rust_type(t)),
+                "v.0",
+            );
+        }
+        ScalarType::DateTime | ScalarType::Duration | ScalarType::CivilDateTime => {
+            return (
+                format!("{kind:?}"),
+                format!("{}::from_micros(*item)", crate::scalars::rust_type(t)),
+                "v.micros()",
+            );
+        }
+        ScalarType::Bytes
+        | ScalarType::TimeZone
+        | ScalarType::ZonedTime
+        | ScalarType::ZonedDateTime => {
+            return (format!("{kind:?}"), "item.clone()".into(), "v.clone()");
+        }
+    };
+    (variant.into(), decoded.into(), encoded)
 }

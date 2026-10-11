@@ -9,6 +9,7 @@ pub mod capacity;
 pub mod checked_data;
 pub mod collections;
 pub mod composite_keys;
+mod constructor_fields;
 pub mod deltas;
 pub mod direct_deltas;
 mod emit;

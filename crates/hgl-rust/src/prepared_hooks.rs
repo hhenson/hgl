@@ -67,11 +67,10 @@ fn write(plan: &Plan, v: &Value, slot: &str, prelude: &mut Vec<String>) -> Strin
             )
         };
     }
-    if let Kind::Construct(fields) = &v.kind {
-        return fields
-            .iter()
-            .map(|(i, value)| write(plan, value, &format!("({slot}).fields().{i}"), prelude))
-            .collect();
+    if let Some(code) =
+        crate::constructor_fields::fields(v, slot, |value, slot| write(plan, value, slot, prelude))
+    {
+        return code;
     }
     if let Kind::Unary(op, argument) = &v.kind
         && op == "any"

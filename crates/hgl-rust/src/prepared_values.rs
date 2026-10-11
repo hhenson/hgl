@@ -12,46 +12,32 @@ pub fn structure(name: &str, fields: &[(String, Ty)], marker: impl Fn(&Ty) -> St
 /// Emit prepared operations from already selected per-field storage markers.
 pub fn structure_fields(name: &str, markers: &[String]) -> String {
     let mut bounds = String::new();
-    let mut include = String::new();
     let mut allocated = Vec::new();
-    let mut check_native = String::new();
-    let mut check_slots = String::new();
-    let mut copy_native = String::new();
-    let mut copy_between = String::new();
-    let mut copy_within = String::new();
+    let mut methods: [String; 6] = std::array::from_fn(|_| String::new());
     for (i, marker) in markers.iter().enumerate() {
         let child = format!("<{marker} as hgl_store::PreparedValue>");
         append(&mut bounds, format_args!("field{i}:{child}::Bounds,\n"));
-        append(
-            &mut include,
-            format_args!("{child}::include(&mut bounds.field{i},&value.{i});"),
-        );
         allocated.push(format!("{child}::allocate(columns,&bounds.field{i})?"));
-        append(
-            &mut check_native,
-            format_args!("{child}::check_native(columns,destination.fields().{i},&value.{i})?;"),
-        );
-        append(
-            &mut check_slots,
-            format_args!(
-                "{child}::check_slots(source,from.fields().{i},destination,to.fields().{i})?;"
-            ),
-        );
-        append(
-            &mut copy_native,
-            format_args!("{child}::copy_native(columns,destination.fields().{i},&value.{i});"),
-        );
-        append(
-            &mut copy_between,
-            format_args!(
-                "{child}::copy_between(source,from.fields().{i},destination,to.fields().{i});"
-            ),
-        );
-        append(
-            &mut copy_within,
-            format_args!("{child}::copy_within(columns,from.fields().{i},to.fields().{i});"),
-        );
+        let calls = [
+            format!("include(&mut bounds.field{i},&value.{i});"),
+            format!("check_native(columns,destination.fields().{i},&value.{i})?;"),
+            format!("check_slots(source,from.fields().{i},destination,to.fields().{i})?;"),
+            format!("copy_native(columns,destination.fields().{i},&value.{i});"),
+            format!("copy_between(source,from.fields().{i},destination,to.fields().{i});"),
+            format!("copy_within(columns,from.fields().{i},to.fields().{i});"),
+        ];
+        for (method, call) in methods.iter_mut().zip(calls) {
+            append(method, format_args!("{child}::{call}"));
+        }
     }
+    let [
+        include,
+        check_native,
+        check_slots,
+        copy_native,
+        copy_between,
+        copy_within,
+    ] = methods;
     let allocated = if allocated.is_empty() {
         "()".into()
     } else {
