@@ -55,6 +55,30 @@ pub fn prepare(plan: &Plan, owning: impl Fn(&Ty) -> bool) -> Plan {
             node.global_state = true;
         }
         crate::ir_visit::hooks_mut(node, &mut |v| references(v, &owners));
+        let mut globals = std::mem::take(&mut node.globals);
+        let mut configuration = std::mem::take(&mut node.configuration);
+        let mut stage = |v: &mut Value| {
+            if matches!(&v.kind, Kind::Query(op, _) if op.starts_with("\0constructor:")) {
+                return false;
+            }
+            if matches!(v.kind, Kind::Construct(_))
+                && matches!(v.ty, Ty::Struct(..) | Ty::Recursive(_))
+                && owning(&v.ty)
+            {
+                let key = format!("\0constructor:{node_id}:expression:{}", globals.len());
+                globals.push((key.clone(), v.ty.clone()));
+                hoist(v, &mut configuration, &owning);
+                *v = Value::new(v.ty.clone(), Kind::Query(key, vec![v.clone()]));
+                return false;
+            }
+            !matches!(v.kind, Kind::Captured(..) | Kind::ValueCall(..))
+        };
+        for (_, body) in &mut node.handlers {
+            crate::ir_visit::statements_mut(body, &mut stage);
+        }
+        node.global_state |= !globals.is_empty();
+        node.globals = globals;
+        node.configuration = configuration;
     }
     plan
 }

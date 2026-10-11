@@ -4,16 +4,49 @@ use hgl_semantics::ir::{Kind, Plan, Value};
 use hgl_source::Ty;
 /// Emit a single ordered write into an independently preflighted canonical owner.
 pub(crate) fn local(plan: &Plan, id: usize, value: &Value, key: &str) -> String {
+    format!("let local{id}={};", retained(plan, value, key))
+}
+fn retained(plan: &Plan, value: &Value, key: &str) -> String {
     let entry = plan
         .nodes
         .iter()
         .find_map(|node| node.globals.iter().position(|(k, _)| k == key))
         .unwrap_or_else(|| unreachable!("compiled constructor owner"));
     format!(
-        "let local{id}={{let destination=_ctx.global_state().destination(self.global{entry});{}destination}};",
-        crate::prepared_hooks::replace(plan, value, "destination")
+        "{{let destination=_ctx.global_state().destination(self.global{entry});{}destination}}",
+        stage(plan, value, "destination")
     )
 }
+/// Evaluate an expression's private staging owner without publishing a replacement early.
+pub(crate) fn source(plan: &Plan, value: &Value) -> Option<String> {
+    let Kind::Query(key, args) = &value.kind else {
+        return None;
+    };
+    if !key.starts_with("\0constructor:") {
+        return None;
+    }
+    Some(retained(plan, &args[0], key))
+}
+
+/// Retain each operand into a private owner before the next operand executes.
+fn stage(plan: &Plan, value: &Value, slot: &str) -> String {
+    if let Some(code) = crate::constructor_fields::fields(
+        value,
+        slot,
+        |v, s| stage(plan, v, s),
+        crate::prepared_hooks::storage,
+    ) {
+        return code;
+    }
+    let mut prelude = Vec::new();
+    let code = crate::prepared_hooks::write(plan, value, slot, &mut prelude);
+    format!(
+        "{{{}{}}}",
+        prelude.concat(),
+        crate::prepared_hooks::storage(&code)
+    )
+}
+
 fn optional_bound(ty: &Ty, bound: String) -> String {
     let bound = if matches!(ty, Ty::Recursive(batch) if batch.definitions().is_empty()) {
         format!("Box::new({bound})")

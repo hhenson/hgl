@@ -13,7 +13,7 @@ line-budget = 8940
 any_comparisons = { budget = 100, uses = ["any_prepared", "any_values", "values"] }
 constructor_fields = { budget = 100, uses = ["layouts"] }
 any_expression = { budget = 180, uses = ["any_values", "source_slots", "observed"] }
-constructor_owners = { budget = 180, uses = ["prepared_hooks", "layouts"] }
+constructor_owners = { budget = 180, uses = ["constructor_fields", "prepared_hooks", "layouts"] }
 identifiers = { budget = 40, uses = [] }
 any_values = { budget = 600, uses = ["deltas", "layouts", "collections", "families", "scalars", "value_convert"] }
 any_prepared = { budget = 250, uses = ["any_comparisons", "execution_proof", "source_slots", "layouts", "any_values", "values", "observed", "any_expression", "constructor_owners"] }
@@ -42,7 +42,7 @@ scalars = { budget = 150, uses = [] }
 snapshot_slots = { budget = 350, uses = ["snapshot_views", "structural_publication", "layouts", "observed", "snapshots", "any_prepared", "windows"] }
 snapshot_views = { budget = 160, uses = ["observed", "layouts", "snapshots"] }
 snapshots = { budget = 300, uses = ["layouts", "structural_publication"] }
-source_slots = { budget = 100, uses = ["layouts", "snapshot_slots", "values"] }
+source_slots = { budget = 100, uses = ["constructor_owners", "layouts", "snapshot_slots", "values"] }
 structs = { budget = 230, uses = ["collections", "prepared_values", "any_values"] }
 type_data = { budget = 120, uses = ["enums"] }
 value_convert = { budget = 320, uses = ["scalars", "checked_data", "collections", "families", "layouts", "any_values"] }

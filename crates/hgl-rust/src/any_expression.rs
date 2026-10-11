@@ -87,7 +87,9 @@ fn boxed(
     prelude: &mut Vec<String>,
     emit: &impl Fn(&Value) -> String,
 ) -> String {
-    if let Some(child) = argument(value) {
+    if let Some(child) = argument(value)
+        && !matches!(value.kind, Kind::Query(..))
+    {
         return boxed(plan, child, prelude, emit);
     }
     if matches!(&value.kind,Kind::Construct(fields) if value.ty==Ty::Any && fields.is_empty()) {

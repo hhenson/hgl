@@ -49,7 +49,7 @@ pub(crate) fn publication(plan: &Plan, value: &Value, result: Option<&Ty>) -> Op
     }
     crate::observed::forwarded(value, result)
 }
-fn write(plan: &Plan, v: &Value, slot: &str, prelude: &mut Vec<String>) -> String {
+pub(crate) fn write(plan: &Plan, v: &Value, slot: &str, prelude: &mut Vec<String>) -> String {
     if (!v.snapshot || v.ty.owning_scalar())
         && let Some((arena, source)) = crate::source_slots::source(plan, v)
     {
@@ -67,9 +67,12 @@ fn write(plan: &Plan, v: &Value, slot: &str, prelude: &mut Vec<String>) -> Strin
             )
         };
     }
-    if let Some(code) =
-        crate::constructor_fields::fields(v, slot, |value, slot| write(plan, value, slot, prelude))
-    {
+    if let Some(code) = crate::constructor_fields::fields(
+        v,
+        slot,
+        |value, slot| write(plan, value, slot, prelude),
+        str::to_owned,
+    ) {
         return code;
     }
     if let Kind::Unary(op, argument) = &v.kind
@@ -123,22 +126,29 @@ fn write(plan: &Plan, v: &Value, slot: &str, prelude: &mut Vec<String>) -> Strin
     )
 }
 
+pub(crate) fn storage(code: &str) -> String {
+    format!(
+        "{{let now=_ctx.evaluation_time();let mut prepared=_ctx.prepared();let(observation,globals)=prepared.storage.observations();let columns=globals.values_mut();{code}}}"
+    )
+}
+
 pub(crate) fn append(plan: &Plan, item: &Value, list: &str) -> String {
     let marker = global_type(&item.ty);
     let mut prelude = Vec::new();
     let write = write(plan, item, "destination", &mut prelude);
-    format!(
-        "{{{}let now=_ctx.evaluation_time();let list={list};let mut prepared=_ctx.prepared();let (observation,globals)=prepared.storage.observations();let columns=globals.values_mut();let destination=hgl_store::append_slot::<{marker}>(columns,list)?;{}hgl_store::commit_append::<{marker}>(columns,list);}}",
-        prelude.concat(),
-        write
-    )
+    let code = storage(&format!(
+        "let destination=hgl_store::append_slot::<{marker}>(columns,list)?;{write}hgl_store::commit_append::<{marker}>(columns,list);"
+    ));
+    format!("{{{}let list={list};{code}}}", prelude.concat())
 }
+
 pub(crate) fn replace(plan: &Plan, item: &Value, slot: &str) -> String {
     let mut prelude = Vec::new();
     let write = write(plan, item, "destination", &mut prelude);
     format!(
-        "{{{}let destination={slot};let now=_ctx.evaluation_time();let mut prepared=_ctx.prepared();let(observation,globals)=prepared.storage.observations();let columns=globals.values_mut();{write}}}",
-        prelude.concat()
+        "{{{}let destination={slot};{}}}",
+        prelude.concat(),
+        storage(&write)
     )
 }
 

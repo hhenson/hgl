@@ -43,3 +43,6 @@ Exact atomic and canonical borrowed-owner projections take priority over private
 Direct typed global reads select the same checked slot as a bound global view.
 Presence is checked before copying; inline Any returns retain an independent
 prepared destination without native owning extraction or a source binding rule.
+
+May use constructor_owners to materialize a private typed staging source at its
+original expression position. Consumers copy only after complete retention.

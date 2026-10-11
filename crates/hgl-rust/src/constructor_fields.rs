@@ -15,6 +15,7 @@ pub(crate) fn fields(
     v: &Value,
     slot: &str,
     mut write: impl FnMut(&Value, &str) -> String,
+    scope: impl Fn(&str) -> String,
 ) -> Option<String> {
     let Kind::Construct(fields) = &v.kind else {
         return None;
@@ -28,10 +29,9 @@ pub(crate) fn fields(
         .iter()
         .filter(|i| !fields.iter().any(|(id, _)| id == *i))
     {
-        crate::append(
-            &mut code,
-            format_args!("columns.set_list_len(({slot}).fields().{i}.fields(),0);"),
-        );
+        code += &scope(&format!(
+            "columns.set_list_len(({slot}).fields().{i}.fields(),0);"
+        ));
     }
     for (i, value) in fields {
         let target = format!("({slot}).fields().{i}");
@@ -54,10 +54,7 @@ pub(crate) fn fields(
                 child
             };
             code += &write(value, &child);
-            crate::append(
-                &mut code,
-                format_args!("columns.set_list_len(({target}).fields(),1);"),
-            );
+            code += &scope(&format!("columns.set_list_len(({target}).fields(),1);"));
         } else {
             code += &write(value, &target);
         }

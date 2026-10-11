@@ -8,4 +8,11 @@ Acceptance: generated successful-evaluation allocation probes for Any scalar, ne
 
 Prepared lexical replacement checks and copies complete typed source slots into existing reserved owners. It preserves capacity through sparse or empty replacements so later larger observations cannot lose provisioned child storage. Growth bounds include one start publication plus the finite evaluation horizon.
 
-Constructor field publication delegates optional and recursive slot selection to constructor_owners. Ordinary owning scalar sources copy directly from retained typed slots.
+Constructor field publication delegates optional and recursive slot selection to constructor_fields. Ordinary owning scalar sources copy directly from retained typed slots.
+
+The constructor owner uses the private write and storage helpers for ordered
+field retention into staging. Replacement then preflights the complete source
+before copying to the existing destination. The lower-level regression shrinks
+private reservations deliberately: earlier retention failure stops later native
+effects, and a later field failure leaves an existing destination unchanged.
+This instrumentation does not claim those sources naturally exceed finite bounds.
