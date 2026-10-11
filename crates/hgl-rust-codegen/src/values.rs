@@ -250,7 +250,7 @@ pub fn statements(plan: &Plan, body: &[Statement], out: &mut Vec<String>, result
             }
             Statement::Yield(v) => format!("return Ok({});\n", value(plan, v)),
             Statement::Exit => "return Ok(());\n".into(),
-            Statement::Let(i,Value {kind:Kind::Query(op,args),..}) | Statement::Var(i,Value {kind:Kind::Query(op,args),..}) if op.starts_with("\0constructor:") => crate::constructor_owners::local(plan,*i,&args[0],op),
+            Statement::Let(i,Value {kind:Kind::Query(op,args),..}) | Statement::Var(i,Value {kind:Kind::Query(op,args),..}) if op.starts_with("\0constructor:") && args.len()==2 => crate::constructor_owners::local(plan,*i,&args[0],op),
             Statement::Let(i,v) | Statement::Var(i,v) if v.snapshot && matches!(v.ty,Ty::Any|Ty::Native(_)) => crate::any_prepared::local(plan,*i,v,|v|value(plan,v)),
             Statement::Let(i,v) if v.snapshot => crate::snapshot_slots::local(*i,v, |v| value(plan,v)),
             Statement::Let(i,v) => {

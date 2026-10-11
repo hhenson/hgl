@@ -21,3 +21,8 @@ Field writing and schema are now owned by constructor_fields. The canonical
 owner emitter exposes local, source, global_bounds, family and origin; source
 retains into its private owner before returning a checked typed slot.
 Native mutable locals, assignments and growing-owner exclusions remain intact.
+
+Canonical local-owner queries carry both value and bound origin; private
+expression stages carry one value. Ordinary growing locals read the completed
+stage into their existing ordinary representation rather than inheriting a
+canonical slot identity. Existing list-growth source controls cover this boundary.
