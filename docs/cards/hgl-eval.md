@@ -1,10 +1,11 @@
 # Card: hgl-eval
 
-Checked IR and ordinary execution form a lower layer depending only on
+Ordinary execution and traversal of checked IR form a lower layer depending only on
 hgl-value-model and hgl-types. It cannot parse syntax, resolve declarations or
 reenter semantic checking. Contextual temporal materialization uses the existing
 explicit callback; no execution API or language admission changes.
 
+The ir facade reexports syntax-neutral definitions from hgl-value-model.
 Public modules are ir, ir_visit, harness_ir, value_eval, value_operations,
 any_values, collection_values, composite_keys, scalar_keys, family_values,
 value_constant and publication_trace. Their existing contracts and module

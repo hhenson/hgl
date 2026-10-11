@@ -10,6 +10,6 @@ May use hgl-types and the existing jiff dependency; cannot depend on source AST,
 parsing, semantic binding or compiler emission. Optional reporting target: 1100 lines. Module dependencies remain enforced;
 source size is informational.
 
-DEC0004 reason 3: source and model each exceed 1000 lines
+DEC0004 reason 3: source, model and checked execution each exceed 1000 lines
 under xtask's code-line count. Cargo prevents lower layers from reaching source
 parsing and name resolution. The relocation changes no language behavior.
