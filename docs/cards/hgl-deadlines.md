@@ -1,6 +1,6 @@
 # Card: hgl-deadlines
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `deadlines` module of `hgl-kernel` (`crates/hgl-kernel/src/deadlines.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `deadlines` module of `hgl-kernel` (`crates/hgl-kernel/src/deadlines.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
 Share one indexed deadline heap between the kernel and child manager. May use
 `hgl-types`. Budget: 100 source lines.

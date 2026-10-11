@@ -1,6 +1,6 @@
 # Card: hgl-window-types
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `window_types` module of `hgl-types` (`crates/hgl-types/src/window_types.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `window_types` module of `hgl-types` (`crates/hgl-types/src/window_types.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
 Canonical rolling size identity shared by source types and cold runtime schemas.
 No dependencies or unsafe code; budget 100 source lines. Contract: normative

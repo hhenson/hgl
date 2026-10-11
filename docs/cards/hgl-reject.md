@@ -1,6 +1,6 @@
 # hgl-reject
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `reject` module of `hgl-compiler` (`crates/hgl-compiler/src/reject.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `reject` module of `hgl-compiler` (`crates/hgl-compiler/src/reject.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
 Mixed source-rejection orchestration; budget 250 source lines. No build or graph
 execution occurs here. Outcomes match every originating primary diagnostic once

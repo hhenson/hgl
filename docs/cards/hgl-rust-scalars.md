@@ -1,6 +1,6 @@
 # Card: hgl-rust-scalars
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `scalars` module of `hgl-rust` (`crates/hgl-rust/src/scalars.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `scalars` module of `hgl-rust` (`crates/hgl-rust/src/scalars.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
 Scalar source-to-Rust spelling helpers extracted unchanged from hgl-rust-layouts.
 Uses hgl-source and hgl-types; budget 150 source lines. Preserve and re-export

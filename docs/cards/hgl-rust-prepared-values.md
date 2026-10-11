@@ -1,6 +1,6 @@
 # Card: hgl-rust-prepared-values
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `prepared_values` module of `hgl-rust` (`crates/hgl-rust/src/prepared_values.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `prepared_values` module of `hgl-rust` (`crates/hgl-rust/src/prepared_values.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
 Typed prepared-copy emission for nominal ordinary layouts. Depends on hgl-source;
 250 source lines. Public `structure(name, fields, marker)` and `enumeration(name)`

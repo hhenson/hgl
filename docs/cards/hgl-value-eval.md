@@ -1,6 +1,6 @@
 # Card: hgl-value-eval
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `value_eval` module of `hgl-semantics` (`crates/hgl-semantics/src/value_eval.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `value_eval` module of `hgl-semantics` (`crates/hgl-semantics/src/value_eval.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
 Direct execution of checked ordinary value IR during constant evaluation and
 graph construction. Depends on `hgl-source`, `hgl-rust-ir` and `hgl-delta-check`; budget 500

@@ -1,6 +1,6 @@
 # Card: hgl-endpoints
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `endpoints` module of `hgl-store` (`crates/hgl-store/src/endpoints.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `endpoints` module of `hgl-store` (`crates/hgl-store/src/endpoints.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
 Own endpoint records and reusable slot allocation. Re-export recursive shapes
 from hgl-types. No

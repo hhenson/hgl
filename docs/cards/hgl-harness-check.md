@@ -1,6 +1,6 @@
 # Card: hgl-harness-check
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `harness_check` module of `hgl-semantics` (`crates/hgl-semantics/src/harness_check.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `harness_check` module of `hgl-semantics` (`crates/hgl-semantics/src/harness_check.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
 Check ordered lexical test steps without source name resolution or expression
 execution. Uses hgl-source, hgl-rust-ir, hgl-harness-ir, hgl-eval-data,

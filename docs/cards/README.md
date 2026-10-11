@@ -17,8 +17,9 @@ budget or a test is fixed, and the work is regenerated.
 
 [Decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) folded the
 crates below into modules of fourteen packages. A card still describes one unit
-of work; the unit is now a module directory, and `cargo xtask ci` holds its
-budget and "may use" list from the crate's `[package.metadata.hgl.modules]` table.
+of work; the unit is now a module directory. `cargo xtask ci` reports its
+size and enforces the "may use" list from the crate's
+`[package.metadata.hgl.modules]` table.
 
 | Card | Now | Of |
 |---|---|---|
@@ -258,3 +259,7 @@ Additional ordinary value contracts: [Any semantics](hgl-any-values.md), [compil
 - [Helper callsite storage identities](hgl-call-locals.md).
 
 - [Cold snapshot destination planning](hgl-snapshot-locals.md).
+
+Line counts and numerical targets in these cards are informational under
+[decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md).
+Module dependency lists remain enforced; size alone never fails CI.

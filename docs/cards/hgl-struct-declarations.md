@@ -1,6 +1,6 @@
 # Card: hgl-struct-declarations
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `struct_declarations` module of `hgl-semantics` (`crates/hgl-semantics/src/struct_declarations.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `struct_declarations` module of `hgl-semantics` (`crates/hgl-semantics/src/struct_declarations.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
 Declaration-owned struct syntax, separate from module indexing and nominal
 resolution. Depends on hgl-source; budget 200 source lines. Compilation only.

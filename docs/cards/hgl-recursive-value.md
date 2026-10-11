@@ -1,6 +1,6 @@
 # Card: hgl-recursive-value
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `recursive_value` module of `hgl-store` (`crates/hgl-store/src/recursive_value.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `recursive_value` module of `hgl-store` (`crates/hgl-store/src/recursive_value.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
 Typed owning indirection for internal recursive atomic fields. Uses types,
 global-value and prepared-value; budget220. No source type, optional
