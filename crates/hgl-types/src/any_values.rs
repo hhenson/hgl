@@ -6,17 +6,43 @@ use std::{
     hash::{Hash, Hasher},
 };
 
+mod data;
+pub use data::AnyView;
+
+/// A collision-free compile-time chunk of canonical UTF-8 type identity.
+#[derive(Debug)]
+pub struct IdentityChunk<const BYTES: u128, const LENGTH: usize>;
+
+/// Append a checked provider encoding into a selected owning sink.
+pub type NativeCopy = fn(&[u8], &mut dyn AnyBuffer);
+/// Validate provider retention before mutation.
+pub type NativeCheck = fn(&[u8], usize) -> NodeResult;
+/// Fallible cold-only conversion with no dependency on the checked value model.
+pub type ColdCapture = fn(AnyView<'_>) -> NodeResult<Box<dyn std::any::Any>>;
+
+/// Recursive runtime operations supplied without a runtime dependency in Types.
+#[derive(Debug)]
+pub struct AnyExecution {
+    /// Exact equality.
+    pub equal: fn(&AnyPlan, AnyView<'_>, AnyView<'_>) -> NodeResult<bool>,
+    /// Exact partial ordering.
+    pub compare: fn(&AnyPlan, AnyView<'_>, AnyView<'_>) -> NodeResult<Option<Ordering>>,
+    /// Capability-checked hashing.
+    pub hash: fn(&AnyPlan, AnyView<'_>) -> NodeResult<u64>,
+}
 /// An exact concrete layout and its declared value capabilities.
 #[derive(Debug)]
 pub struct AnyPlan {
-    /// Position in the generated, closed descriptor table.
-    pub index: usize,
+    /// Runtime layout execution selected at compilation.
+    pub execution: &'static AnyExecution,
+    /// Generated cold conversion; its carrier belongs to the compiler layer.
+    pub capture: Option<ColdCapture>,
     /// Canonical nominal marker identity, independent of its native representation.
     pub identity: fn() -> TypeId,
     /// Precompiled operations over this layout.
     pub operation: AnyOperation,
-    /// Compiled owning-copy codec, including provider-defined nested leaves.
-    pub copy: fn(&[u8], &mut dyn AnyBuffer),
+    /// Compiled provider-preserving owning copy after preflight.
+    pub copy: fn(AnyView<'_>, &mut dyn AnyBuffer),
     /// Equality, hash and order capability declarations.
     pub capabilities: [bool; 3],
 }
@@ -31,13 +57,13 @@ pub struct AnyField {
 /// Storage operations selected during compilation, never inferred from payload tags.
 #[derive(Debug)]
 pub enum AnyOperation {
-    /// Operations supplied by one checked provider over its opaque owning encoding.
+    /// Operations supplied by the checked opaque provider.
     Native {
         /// Provider equality.
         equal: fn(&[u8], &[u8]) -> NodeResult<bool>,
         /// Provider hash.
         hash: fn(&[u8]) -> NodeResult<u64>,
-        /// Provider partial order.
+        /// Provider ordering.
         compare: fn(&[u8], &[u8]) -> NodeResult<Option<Ordering>>,
     },
     /// Signed integer or enum member.
@@ -53,7 +79,7 @@ pub enum AnyOperation {
     /// A closed abstract family retains its concrete member.
     Family(&'static [&'static AnyPlan]),
     /// A nested box selects an already compiled descriptor.
-    Boxed(&'static [&'static AnyPlan]),
+    Boxed,
     /// Owning data with no equality, hash or order, such as a structural delta.
     Data,
 }
@@ -62,12 +88,14 @@ pub enum AnyOperation {
 pub struct AnyValue {
     plan: Option<&'static AnyPlan>,
     data: Vec<u8>,
+    descriptors: Vec<&'static AnyPlan>,
 }
 impl Clone for AnyValue {
     fn clone(&self) -> Self {
         let mut retained = Self {
-            plan: None,
             data: Vec::with_capacity(self.data.len()),
+            descriptors: Vec::with_capacity(self.descriptors.len()),
+            plan: None,
         };
         retained.copy_prepared(self);
         retained
@@ -75,10 +103,10 @@ impl Clone for AnyValue {
 }
 impl AnyValue {
     /// Install independently owned data produced by its statically selected codec.
-    pub fn from_encoded(plan: &'static AnyPlan, data: Vec<u8>) -> Self {
+    pub fn from_encoded(plan: &'static AnyPlan, data: impl Into<Self>) -> Self {
         Self {
             plan: Some(plan),
-            data,
+            ..data.into()
         }
     }
     /// Read the descriptor without inspecting or unboxing source values.
@@ -86,50 +114,118 @@ impl AnyValue {
         self.plan
     }
     /// Borrow encoded owning storage within the consumer's existing lifetime.
-    pub fn data(&self) -> &[u8] {
-        &self.data
+    pub fn data(&self) -> AnyView<'_> {
+        AnyView {
+            bytes: &self.data,
+            descriptors: &self.descriptors,
+        }
     }
     /// Reserve owning capacity before hooks execute.
     pub fn reserve(&mut self, size: usize) -> NodeResult {
         self.data
             .try_reserve(size.saturating_sub(self.data.len()))
+            .and_then(|()| {
+                self.descriptors
+                    .try_reserve((size / 8).saturating_sub(self.descriptors.len()))
+            })
             .map_err(|error| NodeError::new(error.to_string()))
     }
     /// Prepared width is the complete encoded size.
     pub fn capacity(&self) -> usize {
-        self.data.capacity()
+        self.data.capacity().min(
+            self.descriptors
+                .capacity()
+                .saturating_mul(8)
+                .saturating_add(7),
+        )
+    }
+    /// Validate complete reserved byte and descriptor storage before mutation.
+    pub fn check_capacity(&self, width: usize) -> NodeResult {
+        if self.capacity() < width {
+            return Err(NodeError::new("prepared any capacity exceeded"));
+        }
+        Ok(())
     }
     /// Copy only after the caller has checked the complete prepared capacity.
     pub fn copy_prepared(&mut self, source: &Self) {
-        self.data.clear();
-        if let Some(plan) = source.plan {
-            (plan.copy)(&source.data, &mut self.data);
-        }
-        self.plan = source.plan;
+        self.encode_prepared(source.plan, |out| {
+            if let Some(plan) = source.plan {
+                (plan.copy)(source.data(), out);
+            }
+        });
     }
     /// Assemble a completely preflighted publication in reserved owning capacity.
     pub fn encode_prepared(
         &mut self,
         plan: Option<&'static AnyPlan>,
-        encode: impl FnOnce(&mut Vec<u8>),
+        encode: impl FnOnce(&mut Self),
     ) {
         self.data.clear();
-        encode(&mut self.data);
+        self.descriptors.clear();
+        encode(self);
         self.plan = plan;
     }
     /// Retain independently with allocation failures on the ordinary error channel.
     pub fn retain(&self) -> NodeResult<Self> {
         let mut retained = Self::default();
         retained.reserve(self.data.len())?;
+        self.preflight()?;
         retained.copy_prepared(self);
         Ok(retained)
     }
+    /// Validate provider retention before changing any owning destination.
+    pub fn preflight(&self) -> NodeResult {
+        let mut width = AnyWidth::default();
+        if let Some(plan) = self.plan {
+            (plan.copy)(self.data(), &mut width);
+        }
+        width.finish().map(|_| ())
+    }
+    /// Recover the compiler's cold carrier, rejecting incompatible descriptors as errors.
+    pub fn capture<T: 'static>(&self) -> NodeResult<T> {
+        let callback = self
+            .plan
+            .and_then(|p| p.capture)
+            .ok_or_else(|| NodeError::new("missing cold any descriptor conversion"))?;
+        callback(self.data())?
+            .downcast::<T>()
+            .map(|value| *value)
+            .map_err(|_carrier| NodeError::new("incompatible cold any descriptor carrier"))
+    }
+    /// Compare exact concrete identity and contents.
+    pub fn equal(&self, other: &Self) -> NodeResult<bool> {
+        self.borrowed().equal(&other.borrowed())
+    }
+    /// Compare exact concrete identity and contents without coercion.
+    pub fn compare(&self, other: &Self) -> NodeResult<Option<Ordering>> {
+        self.borrowed().compare(&other.borrowed())
+    }
+    /// Hash complete contents through their retained descriptor.
+    pub fn key_hash(&self) -> NodeResult<u64> {
+        self.borrowed().key_hash()
+    }
+    fn borrowed(&self) -> AnyRef<'_> {
+        AnyRef {
+            plan: self.plan,
+            data: self.data(),
+        }
+    }
+}
+/// A descriptor and its owning-data borrow, used for root and nested dispatch.
+#[derive(Debug, Clone, Copy)]
+pub struct AnyRef<'a> {
+    /// Exact retained descriptor, or an empty box.
+    pub plan: Option<&'static AnyPlan>,
+    /// Borrowed payload and descriptor context.
+    pub data: AnyView<'a>,
+}
+impl AnyRef<'_> {
     /// Compare concrete identity before requesting contained equality.
     pub fn equal(&self, other: &Self) -> NodeResult<bool> {
         match (self.plan, other.plan) {
             (None, None) => Ok(true),
             (Some(a), Some(b)) if (a.identity)() == (b.identity)() => {
-                a.equal(&self.data, &other.data)
+                a.equal(self.data, other.data)
             }
             _ => Ok(false),
         }
@@ -141,7 +237,7 @@ impl AnyValue {
             (None, Some(_)) => Ok(Some(Ordering::Less)),
             (Some(_), None) => Ok(Some(Ordering::Greater)),
             (Some(a), Some(b)) if (a.identity)() == (b.identity)() => {
-                a.compare(&self.data, &other.data)
+                a.compare(self.data, other.data)
             }
             _ => Ok(None),
         }
@@ -151,244 +247,50 @@ impl AnyValue {
         let mut hash = std::collections::hash_map::DefaultHasher::new();
         if let Some(plan) = self.plan {
             (plan.identity)().hash(&mut hash);
-            plan.hash(&self.data)?.hash(&mut hash);
+            plan.hash(self.data)?.hash(&mut hash);
         }
         Ok(hash.finish())
     }
 }
-fn capability<T>() -> NodeResult<T> {
-    Err(NodeError::coded(
-        "contained value lacks the required capability",
-        "value.capability",
-    ))
-}
-fn number(data: &[u8]) -> u64 {
+
+/// Read one compiled eight-byte scalar or frame header.
+pub fn number(data: &[u8]) -> u64 {
     u64::from_le_bytes(
         data.try_into()
             .unwrap_or_else(|_| unreachable!("compiled scalar layout")),
     )
 }
-fn index(value: u64) -> usize {
-    usize::try_from(value).unwrap_or_else(|_| unreachable!("compiled descriptor index"))
+/// Decode a compiled frame or member index on the target architecture.
+pub fn index(value: u64) -> usize {
+    usize::try_from(value).unwrap_or_else(|_| unreachable!("compiled layout index"))
 }
 /// Borrow complete child frames at cold capture boundaries.
 #[derive(Debug)]
-pub struct Frames<'a>(pub &'a [u8]);
+pub struct Frames<'a>(pub AnyView<'a>);
 impl<'a> Iterator for Frames<'a> {
-    type Item = &'a [u8];
+    type Item = AnyView<'a>;
     fn next(&mut self) -> Option<Self::Item> {
         if self.0.is_empty() {
             return None;
         }
-        let size = usize::try_from(number(&self.0[..8]))
-            .unwrap_or_else(|_| unreachable!("compiled frame size"));
-        let value = &self.0[8..8 + size];
-        self.0 = &self.0[8 + size..];
+        let size = index(number(&self.0[..8]));
+        let value = self.0.slice(8..8 + size);
+        self.0 = self.0.slice(8 + size..self.0.len());
         Some(value)
     }
 }
 impl AnyPlan {
-    /// Delegate equality through the precompiled descendant layout.
-    pub fn equal(&self, a: &[u8], b: &[u8]) -> NodeResult<bool> {
-        if !self.capabilities[0] {
-            return capability();
-        }
-        match &self.operation {
-            AnyOperation::Native { equal, .. } => equal(a, b),
-            AnyOperation::Float => Ok(f64::from_bits(number(a))
-                .partial_cmp(&f64::from_bits(number(b)))
-                == Some(Ordering::Equal)),
-            AnyOperation::Integer | AnyOperation::Octets => Ok(a == b),
-            AnyOperation::Fields(fields) => {
-                let (mut left, mut right) = (Frames(a), Frames(b));
-                for field in *fields {
-                    if !field.equal(
-                        left.next()
-                            .unwrap_or_else(|| unreachable!("compiled field")),
-                        right
-                            .next()
-                            .unwrap_or_else(|| unreachable!("compiled field")),
-                    )? {
-                        return Ok(false);
-                    }
-                }
-                Ok(true)
-            }
-            AnyOperation::Sequence(child, unordered) => child.sequence_equal(a, b, *unordered),
-            AnyOperation::Family(members) => {
-                let (left, right) = (number(&a[..8]), number(&b[..8]));
-                Ok(left == right && members[index(left)].equal(&a[8..], &b[8..])?)
-            }
-            AnyOperation::Boxed(plans) => {
-                let (left, right) = (number(&a[..8]), number(&b[..8]));
-                if left == 0 || right == 0 {
-                    return Ok(left == right);
-                }
-                let (left, right) = (plans[index(left) - 1], plans[index(right) - 1]);
-                Ok((left.identity)() == (right.identity)() && left.equal(&a[8..], &b[8..])?)
-            }
-            AnyOperation::Data => capability(),
-        }
+    /// Execute equality selected during compilation.
+    pub fn equal(&self, a: AnyView<'_>, b: AnyView<'_>) -> NodeResult<bool> {
+        (self.execution.equal)(self, a, b)
     }
-    fn sequence_equal(&self, a: &[u8], b: &[u8], unordered: bool) -> NodeResult<bool> {
-        if Frames(a).count() != Frames(b).count() {
-            return Ok(false);
-        }
-        if unordered {
-            for left in Frames(a) {
-                if !Frames(b).try_fold(false, |found, right| -> NodeResult<bool> {
-                    Ok(found || self.equal(left, right)?)
-                })? {
-                    return Ok(false);
-                }
-            }
-        } else {
-            for (left, right) in Frames(a).zip(Frames(b)) {
-                if !self.equal(left, right)? {
-                    return Ok(false);
-                }
-            }
-        }
-        Ok(true)
+    /// Execute partial order selected during compilation.
+    pub fn compare(&self, a: AnyView<'_>, b: AnyView<'_>) -> NodeResult<Option<Ordering>> {
+        (self.execution.compare)(self, a, b)
     }
-    /// Return partial order without type-name ordering or numeric coercion.
-    pub fn compare(&self, a: &[u8], b: &[u8]) -> NodeResult<Option<Ordering>> {
-        if !self.capabilities[2] {
-            return capability();
-        }
-        match &self.operation {
-            AnyOperation::Native { compare, .. } => compare(a, b),
-            AnyOperation::Integer => Ok(Some(
-                i64::from_le_bytes(number(a).to_le_bytes())
-                    .cmp(&i64::from_le_bytes(number(b).to_le_bytes())),
-            )),
-            AnyOperation::Float => {
-                Ok(f64::from_bits(number(a)).partial_cmp(&f64::from_bits(number(b))))
-            }
-            AnyOperation::Octets => Ok(Some(a.cmp(b))),
-            AnyOperation::Fields(fields) => {
-                for ((left, right), field) in Frames(a).zip(Frames(b)).zip(*fields) {
-                    let order = field.compare(left, right)?;
-                    if order != Some(Ordering::Equal) {
-                        return Ok(order);
-                    }
-                }
-                Ok(Some(Ordering::Equal))
-            }
-            AnyOperation::Sequence(child, false) => {
-                for (left, right) in Frames(a).zip(Frames(b)) {
-                    let order = child.compare(left, right)?;
-                    if order != Some(Ordering::Equal) {
-                        return Ok(order);
-                    }
-                }
-                Ok(Some(Frames(a).count().cmp(&Frames(b).count())))
-            }
-            AnyOperation::Family(members) => {
-                let (left, right) = (number(&a[..8]), number(&b[..8]));
-                if left != right {
-                    return Ok(None);
-                }
-                members[index(left)].compare(&a[8..], &b[8..])
-            }
-            AnyOperation::Boxed(plans) => {
-                let (left, right) = (number(&a[..8]), number(&b[..8]));
-                if left == 0 || right == 0 {
-                    return Ok(Some(left.cmp(&right)));
-                }
-                let (left, right) = (plans[index(left) - 1], plans[index(right) - 1]);
-                if (left.identity)() != (right.identity)() {
-                    return Ok(None);
-                }
-                left.compare(&a[8..], &b[8..])
-            }
-            AnyOperation::Sequence(_, true) | AnyOperation::Data => capability(),
-        }
-    }
-    /// Hash complete contents; unordered containers combine member hashes independently.
-    pub fn hash(&self, data: &[u8]) -> NodeResult<u64> {
-        if !self.capabilities[0] || !self.capabilities[1] {
-            return capability();
-        }
-        let mut hash = std::collections::hash_map::DefaultHasher::new();
-        match &self.operation {
-            AnyOperation::Native { hash, .. } => return hash(data),
-            AnyOperation::Float => {
-                let value = f64::from_bits(number(data));
-                if value.is_nan() {
-                    return Err(NodeError::new(
-                        "NaN collection keys and members are unsupported",
-                    ));
-                }
-                (if value == 0.0 { 0 } else { value.to_bits() }).hash(&mut hash);
-            }
-            AnyOperation::Integer | AnyOperation::Octets => data.hash(&mut hash),
-            AnyOperation::Fields(fields) => {
-                for (field, data) in fields.iter().zip(Frames(data)) {
-                    field.hash(data)?.hash(&mut hash);
-                }
-            }
-            AnyOperation::Sequence(child, unordered) => {
-                let mut combined = 0;
-                for data in Frames(data) {
-                    let member = child.hash(data)?;
-                    if *unordered {
-                        combined ^= member;
-                    } else {
-                        member.hash(&mut hash);
-                    }
-                }
-                if *unordered {
-                    combined.hash(&mut hash);
-                }
-            }
-            AnyOperation::Family(members) => {
-                let member = number(&data[..8]);
-                member.hash(&mut hash);
-                members[index(member)].hash(&data[8..])?.hash(&mut hash);
-            }
-            AnyOperation::Boxed(plans) => {
-                let id = number(&data[..8]);
-                if id != 0 {
-                    let plan = plans[index(id) - 1];
-                    (plan.identity)().hash(&mut hash);
-                    plan.hash(&data[8..])?.hash(&mut hash);
-                }
-            }
-            AnyOperation::Data => return capability(),
-        }
-        Ok(hash.finish())
-    }
-}
-impl AnyField {
-    fn parts<'a>(&self, data: &'a [u8]) -> Option<&'a [u8]> {
-        if !self.optional {
-            Some(data)
-        } else if data[0] == 0 {
-            None
-        } else {
-            Some(&data[1..])
-        }
-    }
-    fn equal(&self, a: &[u8], b: &[u8]) -> NodeResult<bool> {
-        match (self.parts(a), self.parts(b)) {
-            (None, None) => Ok(true),
-            (Some(a), Some(b)) => self.plan.equal(a, b),
-            _ => Ok(false),
-        }
-    }
-    fn compare(&self, a: &[u8], b: &[u8]) -> NodeResult<Option<Ordering>> {
-        match (self.parts(a), self.parts(b)) {
-            (None, None) => Ok(Some(Ordering::Equal)),
-            (None, Some(_)) => Ok(Some(Ordering::Less)),
-            (Some(_), None) => Ok(Some(Ordering::Greater)),
-            (Some(a), Some(b)) => self.plan.compare(a, b),
-        }
-    }
-    fn hash(&self, data: &[u8]) -> NodeResult<u64> {
-        self.parts(data).map_or(Ok(0), |data| {
-            self.plan.hash(data).map(|hash| hash.wrapping_add(1))
-        })
+    /// Execute hash selected during compilation.
+    pub fn hash(&self, data: AnyView<'_>) -> NodeResult<u64> {
+        (self.execution.hash)(self, data)
     }
 }
 
@@ -402,8 +304,10 @@ pub trait AnyBuffer {
     }
     /// Append exact data; storage callers preflight capacity before entering the codec.
     fn write(&mut self, bytes: &[u8]);
-    /// Append one preflighted provider encoding; sizing must not execute its copy.
-    fn native(&mut self, data: &[u8], copy: fn(&[u8], &mut dyn AnyBuffer));
+    /// Preserve provider copying; sizing validates without executing the copy.
+    fn native(&mut self, data: &[u8], copy: NativeCopy, check: NativeCheck);
+    /// Append a typed descriptor header into the independently owned metadata.
+    fn descriptor(&mut self, plan: Option<&'static AnyPlan>);
     /// Finish a frame's width at its reserved header.
     fn width(&mut self, index: usize, width: usize);
     /// Retain a complete child frame without temporary buffers.
@@ -417,25 +321,18 @@ pub trait AnyBuffer {
         self.width(start, self.len() - start - 8);
     }
 }
-impl AnyBuffer for Vec<u8> {
-    fn native(&mut self, data: &[u8], copy: fn(&[u8], &mut dyn AnyBuffer)) {
-        copy(data, self);
-    }
-    fn len(&self) -> usize {
-        Vec::len(self)
-    }
-    fn write(&mut self, bytes: &[u8]) {
-        self.extend_from_slice(bytes);
-    }
-    fn width(&mut self, index: usize, width: usize) {
-        self[index..index + 8].copy_from_slice(&(width as u64).to_le_bytes());
-    }
-}
 /// Preflight sink used before mutating an owning destination.
 #[derive(Debug, Default)]
-pub struct AnyWidth(pub usize);
+pub struct AnyWidth(pub usize, Option<Box<NodeError>>);
+impl AnyWidth {
+    /// Complete fallible provider preflight before publication.
+    pub fn finish(self) -> NodeResult<usize> {
+        self.1.map_or(Ok(self.0), Err)
+    }
+}
 impl AnyBuffer for AnyWidth {
-    fn native(&mut self, data: &[u8], _: fn(&[u8], &mut dyn AnyBuffer)) {
+    fn native(&mut self, data: &[u8], _: NativeCopy, check: NativeCheck) {
+        self.1 = self.1.take().or_else(|| check(data, data.len()).err());
         self.write(data);
     }
     fn len(&self) -> usize {
@@ -445,4 +342,7 @@ impl AnyBuffer for AnyWidth {
         self.0 += bytes.len();
     }
     fn width(&mut self, _: usize, _: usize) {}
+    fn descriptor(&mut self, _: Option<&'static AnyPlan>) {
+        self.0 += 8;
+    }
 }

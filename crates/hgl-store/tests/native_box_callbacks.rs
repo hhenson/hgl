@@ -36,9 +36,10 @@ fn compare(a: &[u8], b: &[u8]) -> NodeResult<Option<Ordering>> {
     Ok(Some(datum(a)?.cmp(&datum(b)?)))
 }
 static PLAN: AnyPlan = AnyPlan {
-    index: 0,
+    execution: &hgl_store::any_values::operations::EXECUTION,
+    capture: None,
     identity,
-    copy: |data, out| out.native(data, copy),
+    copy: |data, out| out.native(&data, copy, |_, _| Ok(())),
     operation: AnyOperation::Native {
         equal,
         hash,
@@ -47,9 +48,10 @@ static PLAN: AnyPlan = AnyPlan {
     capabilities: [true; 3],
 };
 static RESTRICTED: AnyPlan = AnyPlan {
-    index: 0,
+    execution: &hgl_store::any_values::operations::EXECUTION,
+    capture: None,
     identity,
-    copy: |data, out| out.native(data, copy),
+    copy: |data, out| out.native(&data, copy, |_, _| Ok(())),
     operation: AnyOperation::Native {
         equal,
         hash,
@@ -87,7 +89,8 @@ fn checked_capability_mask_hides_extra_physical_operations() {
 }
 
 static NESTED: AnyPlan = AnyPlan {
-    index: 1,
+    execution: &hgl_store::any_values::operations::EXECUTION,
+    capture: None,
     identity: TypeId::of::<Vec<Opaque>>,
     operation: AnyOperation::Sequence(&PLAN, false),
     copy: |data, out| {
@@ -124,10 +127,15 @@ fn nested_copy_sizing_and_retention_preserve_independent_aliases() -> NodeResult
     drop(source);
     assert!(destination.data().is_empty());
     assert_eq!(
-        Frames(retained.data()).collect::<Vec<_>>(),
+        Frames(retained.data())
+            .map(|v| v.to_vec())
+            .collect::<Vec<_>>(),
         [&[3, 1], &[4, 1]]
     );
-    assert_eq!(Frames(alias.data()).collect::<Vec<_>>(), [&[3, 2], &[4, 2]]);
+    assert_eq!(
+        Frames(alias.data()).map(|v| v.to_vec()).collect::<Vec<_>>(),
+        [&[3, 2], &[4, 2]]
+    );
     let empty = AnyValue::from_encoded(&PLAN, Vec::new()).retain()?;
     assert!(empty.data().is_empty());
     assert_eq!(COPIES.load(Relaxed), 7);

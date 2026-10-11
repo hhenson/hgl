@@ -14,7 +14,7 @@ fn operation(ty: &Ty) -> String {
         );
     }
     let operation = if *ty == Ty::Any {
-        "Boxed(ANY_PLANS)".into()
+        "Boxed".into()
     } else if matches!(ty, Ty::Delta(_)) {
         "Data".into()
     } else if let Ty::Family(family) = ty {
@@ -68,11 +68,11 @@ fn scalar(ty: &Ty) -> Option<(&'static str, &'static str)> {
         })? {
             hgl_types::ScalarType::Bool => ("out.write(&[u8::from(*v)]);", "data[0]!=0"),
             hgl_types::ScalarType::I64 => {
-                ("out.write(&v.to_le_bytes());", "any_number(data) as i64")
+                ("out.write(&v.to_le_bytes());", "any_number(&data) as i64")
             }
             hgl_types::ScalarType::F64 => (
                 "out.write(&v.to_bits().to_le_bytes());",
-                "f64::from_bits(any_number(data))",
+                "f64::from_bits(any_number(&data))",
             ),
             hgl_types::ScalarType::Text => (
                 "out.write(v.as_bytes());",
@@ -81,23 +81,23 @@ fn scalar(ty: &Ty) -> Option<(&'static str, &'static str)> {
             hgl_types::ScalarType::Bytes => ("out.write(v);", "data.to_vec()"),
             hgl_types::ScalarType::Date => (
                 "out.write(&v.0.to_le_bytes());",
-                "hgl_types::Date(any_number(data) as i64)",
+                "hgl_types::Date(any_number(&data) as i64)",
             ),
             hgl_types::ScalarType::Time => (
                 "out.write(&v.0.to_le_bytes());",
-                "hgl_types::Time(any_number(data) as i64)",
+                "hgl_types::Time(any_number(&data) as i64)",
             ),
             hgl_types::ScalarType::DateTime => (
                 "out.write(&v.micros().to_le_bytes());",
-                "hgl_types::EngineTime::from_micros(any_number(data) as i64)",
+                "hgl_types::EngineTime::from_micros(any_number(&data) as i64)",
             ),
             hgl_types::ScalarType::Duration => (
                 "out.write(&v.micros().to_le_bytes());",
-                "hgl_types::EngineDelta::from_micros(any_number(data) as i64)",
+                "hgl_types::EngineDelta::from_micros(any_number(&data) as i64)",
             ),
             hgl_types::ScalarType::CivilDateTime => (
                 "out.write(&v.micros().to_le_bytes());",
-                "hgl_types::CivilDateTime::from_micros(any_number(data) as i64)",
+                "hgl_types::CivilDateTime::from_micros(any_number(&data) as i64)",
             ),
             hgl_types::ScalarType::TimeZone => (
                 "out.write(v.as_str().as_bytes());",
@@ -120,7 +120,7 @@ fn codecs(ty: &Ty) -> (String, String) {
         return (
             crate::native_values::append(scalar, "v.view().data()"),
             format!(
-                "hgl_store::native_values::NativeView::<{marker}>::from_provider(data).retain().expect(\"validated native encoding\")"
+                "hgl_store::native_values::NativeView::<{marker}>::from_provider(&data).retain()?"
             ),
         );
     }
@@ -128,7 +128,7 @@ fn codecs(ty: &Ty) -> (String, String) {
         return (write.into(), read.into());
     }
     if *ty == Ty::Any {
-        return ("out.write(&(v.plan().map_or(0,|p|p.index as u64+1)).to_le_bytes());if let Some(plan)=v.plan() {(plan.copy)(v.data(),out);}".into(),"{let id=any_number(&data[..8]);if id==0 {hgl_types::AnyValue::default()} else {any_retain(ANY_PLANS[id as usize-1],&data[8..])}}".into());
+        return ("out.descriptor(v.plan());if let Some(plan)=v.plan() {(plan.copy)(v.data(),out);}".into(),"{let value=data.boxed();if let Some(plan)=value.plan {any_retain(plan,value.data)?} else {hgl_types::AnyValue::default()}}".into());
     }
     if let Ty::Family(family) = ty {
         let write = members(family, |i, ty| {
@@ -144,7 +144,7 @@ fn codecs(ty: &Ty) -> (String, String) {
                 crate::families::family_member(
                     family,
                     i,
-                    &format!("any_read_{}(&data[8..])", name(ty))
+                    &format!("any_read_{}(data.slice(8..data.len()))?", name(ty))
                 )
             )
         });
@@ -159,14 +159,16 @@ fn codecs(ty: &Ty) -> (String, String) {
         let storage = crate::layouts::delta_storage(origin);
         return (
             format!("any_write_{}(v,out);", name(&storage)),
-            format!("any_read_{}(data)", name(&storage)),
+            format!("any_read_{}(data)?", name(&storage)),
         );
     }
     if let Some(child) = crate::collections::element(ty) {
         let child = name(&child);
         return (
             format!("for v in v {{out.frame(|out|any_write_{child}(v,out));}}"),
-            format!("hgl_types::any_values::Frames(data).map(any_read_{child}).collect()"),
+            format!(
+                "hgl_types::any_values::Frames(data).map(any_read_{child}).collect::<hgl_types::NodeResult<_>>()?"
+            ),
         );
     }
     field_codecs(ty)
@@ -181,7 +183,7 @@ fn field_codecs(ty: &Ty) -> (String, String) {
             write.push(format!(
                     "out.frame(|out|if let Some(v)=&v.{i} {{out.write(&[1]);any_write_{n}(v,out);}} else {{out.write(&[0]);}});"
                 ));
-            let value = format!("any_read_{n}(&data[1..])");
+            let value = format!("any_read_{n}(data.slice(1..data.len()))?");
             let value = if matches!(ty,Ty::Recursive(batch) if batch.definitions().is_empty()) {
                 format!("Box::new({value})")
             } else {
@@ -193,7 +195,7 @@ fn field_codecs(ty: &Ty) -> (String, String) {
         } else {
             write.push(format!("out.frame(|out|any_write_{n}(&v.{i},out));"));
             read.push(format!(
-                "any_read_{n}(frames.next().expect(\"encoded field\")),"
+                "any_read_{n}(frames.next().expect(\"encoded field\"))?,"
             ));
         }
     }
@@ -239,28 +241,30 @@ pub fn layouts(plan: &Plan) -> String {
     if !types.values().any(|ty| *ty == Ty::Any) {
         return String::new();
     }
-    let table = types
-        .values()
-        .map(|ty| format!("&ANY_{}", name(ty)))
-        .collect::<Vec<_>>()
-        .join(",");
-    let mut out = vec![format!(
-        "static ANY_PLANS:&[&hgl_types::AnyPlan]=&[{table}];fn any_number(data:&[u8])->u64 {{u64::from_le_bytes(data.try_into().expect(\"encoded number\"))}}\n"
-    )];
-    out.push("fn any_retain(plan:&'static hgl_types::AnyPlan,data:&[u8])->hgl_types::AnyValue {let mut out=Vec::with_capacity(data.len());(plan.copy)(data,&mut out);hgl_types::AnyValue::from_encoded(plan,out)}fn any_copy_frame(out:&mut dyn hgl_types::any_values::AnyBuffer,copy:impl FnOnce(&mut dyn hgl_types::any_values::AnyBuffer)){let start=out.len();out.write(&[0;8]);copy(out);out.width(start,out.len()-start-8);}".into());
+    let mut out=vec!["use hgl_types::any_values::number as any_number;fn any_retain(plan:&'static hgl_types::AnyPlan,data:hgl_types::any_values::AnyView<'_>)->hgl_types::NodeResult<hgl_types::AnyValue>{let mut width=hgl_types::any_values::AnyWidth::default();(plan.copy)(data,&mut width);let size=width.finish()?;let mut out=hgl_types::AnyValue::default();out.reserve(size)?;(plan.copy)(data,&mut out);Ok(hgl_types::AnyValue::from_encoded(plan,out))}fn any_copy_frame(out:&mut dyn hgl_types::any_values::AnyBuffer,copy:impl FnOnce(&mut dyn hgl_types::any_values::AnyBuffer)){let start=out.len();out.write(&[0;8]);copy(out);out.width(start,out.len()-start-8);}".into()];
     let mut decode = Vec::new();
-    let mut encode = Vec::new();
-    for (index, ty) in types.values().enumerate() {
+    for ty in types.values() {
         let n = name(ty);
         let (write, read) = codecs(ty);
+        let copy = copy_codec(ty);
         let native = owned_type(ty);
         let marker = global_type(ty);
         let operation = operation(ty);
-        let copy = copy_codec(ty);
+        let identity = crate::layouts::any_identity(ty.source_name().as_bytes());
         let caps = [0, 1, 2].map(|op| hgl_semantics::any_values::capable(ty, op));
         out.push(format!(
-                "static ANY_{n}:hgl_types::AnyPlan=hgl_types::AnyPlan {{index:{index},identity:std::any::TypeId::of::<{marker}>,operation:{operation},copy:any_copy_{n},capabilities:{caps:?}}};fn any_copy_{n}(data:&[u8],out:&mut dyn hgl_types::any_values::AnyBuffer) {{{copy}}}fn any_write_{n}<B:hgl_types::any_values::AnyBuffer>(v:&{native},out:&mut B) {{{write}}}fn any_read_{n}(data:&[u8])->{native} {{{read}}}fn any_size_{n}(v:&{native})->usize {{let mut width=hgl_types::any_values::AnyWidth::default();any_write_{n}(v,&mut width);width.0}}\n"
+                "static ANY_{n}:hgl_types::AnyPlan=hgl_types::AnyPlan {{execution:&hgl_store::any_values::operations::EXECUTION,capture:Some(any_capture_{n}),identity:std::any::TypeId::of::<{identity}>,operation:{operation},copy:any_copy_{n},capabilities:{caps:?}}};fn any_copy_{n}(data:hgl_types::any_values::AnyView<'_>,out:&mut dyn hgl_types::any_values::AnyBuffer) {{{copy}}}fn any_write_{n}<B:hgl_types::any_values::AnyBuffer>(v:&{native},out:&mut B) {{{write}}}fn any_read_{n}(data:hgl_types::any_values::AnyView<'_>)->hgl_types::NodeResult<{native}> {{Ok({read})}}fn any_size_{n}(v:&{native})->hgl_types::NodeResult<usize> {{let mut width=hgl_types::any_values::AnyWidth::default();any_write_{n}(v,&mut width);width.finish()}}\n"
             ));
+        let encoded = if let Ty::Native(scalar) = ty {
+            format!(
+                "hgl_semantics::ir::Value::new({},{})",
+                crate::checked_data::ty(ty),
+                crate::native_values::captured(scalar, "native.into_owned()")
+            )
+        } else {
+            crate::value_convert::encode(ty, "&native")
+        };
+        out.push(format!("fn any_capture_{n}(data:hgl_types::any_values::AnyView<'_>)->hgl_types::NodeResult<Box<dyn std::any::Any>> {{let native=any_read_{n}(data)?;let value=(||->Result<hgl_semantics::ir::Value,String>{{Ok({encoded})}})().map_err(hgl_types::NodeError::new)?;Ok(Box::new(value))}}"));
         let slots = slot_writer(ty);
         let bound = bound(ty);
         let native_boxed = native_box(ty);
@@ -289,18 +293,14 @@ pub fn layouts(plan: &Plan) -> String {
         if *ty != Ty::Any {
             let native = crate::value_convert::decode(ty, "value");
             decode.push(format!(
-                    "{:?}=>{{let native={native};let mut data=Vec::new();data.try_reserve(any_size_{n}(&native)).map_err(|e|e.to_string())?;any_write_{n}(&native,&mut data);Ok(hgl_types::AnyValue::from_encoded(&ANY_{n},data))}},",
+                    "{:?}=>{{let native={native};let mut data=hgl_types::AnyValue::default();data.reserve(any_size_{n}(&native).map_err(|e|e.message)?).map_err(|e|e.message)?;any_write_{n}(&native,&mut data);Ok(hgl_types::AnyValue::from_encoded(&ANY_{n},data))}},",
                     ty.source_name()
                 ));
-            encode.push(format!(
-                "{index}=>{{let native=any_read_{n}(value.data());{}}},",
-                crate::value_convert::encode(ty, "&native")
-            ));
         }
     }
-    let (decode, encode) = (decode.concat(), encode.concat());
+    let decode = decode.concat();
     out.push(format!(
-        "fn decode_any(value:&hgl_semantics::ir::Value)->Result<hgl_types::AnyValue,String>{{let Some(value)=hgl_semantics::any_values::contents(value) else {{return Ok(hgl_types::AnyValue::default())}};let value=hgl_semantics::family_values::concrete(value);match value.ty.source_name().as_str() {{{decode}_=>Err(\"unprepared any payload layout\".into())}}}}fn encode_any(value:&hgl_types::AnyValue)->hgl_semantics::ir::Value {{let Some(plan)=value.plan() else {{return hgl_semantics::ir::Value::new(hgl_source::Ty::Any,hgl_semantics::ir::Kind::Construct(Vec::new()))}};let payload=match plan.index {{{encode}_=>unreachable!(\"compiled any payload\")}};hgl_semantics::any_values::retain(payload)}}"
+        "fn decode_any(value:&hgl_semantics::ir::Value)->Result<hgl_types::AnyValue,String>{{let Some(value)=hgl_semantics::any_values::contents(value) else {{return Ok(hgl_types::AnyValue::default())}};let value=hgl_semantics::family_values::concrete(value);match value.ty.source_name().as_str() {{{decode}_=>Err(\"unprepared any payload layout\".into())}}}}fn encode_any(value:&hgl_types::AnyValue)->Result<hgl_semantics::ir::Value,String> {{if value.plan().is_none() {{return Ok(hgl_semantics::ir::Value::new(hgl_source::Ty::Any,hgl_semantics::ir::Kind::Construct(Vec::new())))}};value.capture::<hgl_semantics::ir::Value>().map(hgl_semantics::any_values::retain).map_err(|e|e.message)}}"
     ));
     out.concat()
 }
@@ -308,14 +308,14 @@ pub fn layouts(plan: &Plan) -> String {
 pub fn prepared_native(ty: &Ty, value: &str, destination: &str) -> String {
     let n = name(ty);
     format!(
-        "columns.compose_any({destination},|_|{{let mut width=hgl_types::any_values::AnyWidth::default();let plan=any_box_native_{n}(&{value},&mut width);Ok((plan,width.0))}},|_,out|{{any_box_native_{n}(&{value},out);}})?;"
+        "columns.compose_any({destination},|_|{{let mut width=hgl_types::any_values::AnyWidth::default();let plan=any_box_native_{n}(&{value},&mut width);Ok((plan,width.finish()?))}},|_,out|{{any_box_native_{n}(&{value},out);}})?;"
     )
 }
 /// Encode a borrowed complete ordinary owner using its compiled source columns.
 pub fn prepared_source(ty: &Ty, columns: &str, source: &str, destination: &str) -> String {
     let n = name(ty);
     format!(
-        "columns.compose_any({destination},|columns|{{let mut width=hgl_types::any_values::AnyWidth::default();let plan=any_box_slots_{n}({columns},{source},&mut width);Ok((plan,width.0))}},|columns,out|{{any_box_slots_{n}({columns},{source},out);}})?;"
+        "columns.compose_any({destination},|columns|{{let mut width=hgl_types::any_values::AnyWidth::default();let plan=any_box_slots_{n}({columns},{source},&mut width);Ok((plan,width.finish()?))}},|columns,out|{{any_box_slots_{n}({columns},{source},out);}})?;"
     )
 }
 /// Retain a checked empty or supplied box constructor through its concrete plan.
@@ -346,7 +346,7 @@ pub fn construct(ty: &Ty, value: &str) -> String {
     }
     let n = name(ty);
     format!(
-        "{{let value={value};let mut data=Vec::new();data.try_reserve(any_size_{n}(&value)).map_err(|e|hgl_types::NodeError::new(e.to_string()))?;any_write_{n}(&value,&mut data);hgl_types::AnyValue::from_encoded(&ANY_{n},data)}}"
+        "{{let value={value};let mut data=hgl_types::AnyValue::default();data.reserve(any_size_{n}(&value)?)?;any_write_{n}(&value,&mut data);hgl_types::AnyValue::from_encoded(&ANY_{n},data)}}"
     )
 }
 
@@ -355,7 +355,7 @@ pub use hgl_semantics::any_values::contains_any as contains;
 /// Cold owning capture comparison delegates dynamic failures without suppressing them.
 pub fn capture_equal(ty: &Ty, a: &str, b: &str) -> String {
     format!(
-        "hgl_semantics::any_values::equal_data(&({}),&({}))",
+        "{{let (a,b)=(||->Result<_,String>{{Ok(({},{}))}})().map_err(hgl_types::NodeError::new)?;hgl_semantics::any_values::equal_data(&a,&b)}}",
         crate::value_convert::encode(ty, a),
         crate::value_convert::encode(ty, b)
     )
@@ -519,7 +519,7 @@ pub fn publication(value: &hgl_semantics::ir::Value) -> Option<String> {
         )
     };
     Some(format!(
-        "_ctx.prepared().any(self._output,|observation|{{let mut width=hgl_types::any_values::AnyWidth::default();let out=&mut width;{write}Ok((plan,width.0))}},|out,observation|{{let result=(||->hgl_types::NodeResult{{{write}Ok(())}})();result.unwrap_or_else(|_|unreachable!(\"preflighted ordinary source\"));}})?;"
+        "_ctx.prepared().any(self._output,|observation|{{let mut width=hgl_types::any_values::AnyWidth::default();let out=&mut width;{write}Ok((plan,width.finish()?))}},|out,observation|{{let result=(||->hgl_types::NodeResult{{{write}Ok(())}})();result.unwrap_or_else(|_|unreachable!(\"preflighted ordinary source\"));}})?;"
     ))
 }
 
@@ -568,15 +568,15 @@ fn copy_codec(ty: &Ty) -> String {
     if let Ty::Native(scalar) = ty {
         let marker = crate::native_values::marker(scalar);
         return format!(
-            "out.native(data,<{marker} as hgl_store::native_values::NativeType>::copy);"
+            "out.native(&data,<{marker} as hgl_store::native_values::NativeType>::copy,<{marker} as hgl_store::native_values::NativeType>::preflight);"
         );
     }
     if *ty == Ty::Any {
-        return "out.write(&data[..8]);let id=any_number(&data[..8]);if id!=0 {(ANY_PLANS[id as usize-1].copy)(&data[8..],out);}".into();
+        return "let value=data.boxed();out.descriptor(value.plan);if let Some(plan)=value.plan {(plan.copy)(value.data,out);}".into();
     }
     if let Ty::Family(family) = ty {
         let arms = members(family, |i, ty| {
-            format!("{i}=>any_copy_{}(&data[8..],out),", name(ty))
+            format!("{i}=>any_copy_{}(data.slice(8..data.len()),out),", name(ty))
         });
         return format!(
             "out.write(&data[..8]);match any_number(&data[..8]) {{{arms}_=>unreachable!(\"family member\")}}"
@@ -599,7 +599,9 @@ fn copy_codec(ty: &Ty) -> String {
         for (i, child) in fields.iter().enumerate() {
             let child = name(child);
             let copy = if optional.contains(&i) {
-                format!("out.write(&data[..1]);if data[0]!=0 {{any_copy_{child}(&data[1..],out);}}")
+                format!(
+                    "out.write(&data[..1]);if data[0]!=0 {{any_copy_{child}(data.slice(1..data.len()),out);}}"
+                )
             } else {
                 format!("any_copy_{child}(data,out);")
             };
@@ -612,5 +614,5 @@ fn copy_codec(ty: &Ty) -> String {
         }
         return code;
     }
-    "out.write(data);".into()
+    "out.write(&data);".into()
 }

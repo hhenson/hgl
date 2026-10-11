@@ -29,9 +29,16 @@ pub(crate) fn decode(scalar: &Scalar) -> String {
 }
 /// Capture an independently owning cold value with retained provider callback lifetime.
 pub(crate) fn encode(scalar: &Scalar) -> String {
+    captured(
+        scalar,
+        "v.view().retain().map_err(|e|e.message)?.into_owned()",
+    )
+}
+/// Capture an already independently owned provider result without a second copy.
+pub(crate) fn captured(scalar: &Scalar, owned: &str) -> String {
     let marker = marker(scalar);
     format!(
-        "hgl_semantics::ir::Kind::Opaque(hgl_source::native_value::NativeValue::new(v.view().retain().unwrap_or_else(|_|unreachable!(\"validated native capture\")).into_owned(),&hgl_source::native_value::Operations {{copy:|data,out|<{marker} as hgl_store::native_values::NativeType>::copy(data,out),equal:<{marker} as hgl_store::native_values::NativeType>::equal,hash:<{marker} as hgl_store::native_values::NativeType>::hash,compare:<{marker} as hgl_store::native_values::NativeType>::compare}}))"
+        "hgl_semantics::ir::Kind::Opaque(hgl_source::native_value::NativeValue::new({owned},&hgl_source::native_value::Operations {{copy:|data,out|<{marker} as hgl_store::native_values::NativeType>::copy(data,out),equal:<{marker} as hgl_store::native_values::NativeType>::equal,hash:<{marker} as hgl_store::native_values::NativeType>::hash,compare:<{marker} as hgl_store::native_values::NativeType>::compare}}))"
     )
 }
 
@@ -43,5 +50,7 @@ pub fn domain(scalar: &Scalar) -> String {
 /// Append an exact opaque provider leaf into an owning or sizing sink.
 pub(crate) fn append(scalar: &Scalar, data: &str) -> String {
     let marker = marker(scalar);
-    format!("out.native({data},<{marker} as hgl_store::native_values::NativeType>::copy);")
+    format!(
+        "out.native({data},<{marker} as hgl_store::native_values::NativeType>::copy,<{marker} as hgl_store::native_values::NativeType>::preflight);"
+    )
 }

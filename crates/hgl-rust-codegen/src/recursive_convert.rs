@@ -34,9 +34,9 @@ impl {name} {{
   let hgl_semantics::ir::Kind::Construct(items)=&value.kind else {{return Err("prepared recursive value required".into())}};
   Ok(Owned{name}({values}))
  }}
- fn encode_recursive(value:&Owned{name})->hgl_semantics::ir::Value {{
+ fn encode_recursive(value:&Owned{name})->Result<hgl_semantics::ir::Value,String> {{
   let mut fields=Vec::new(); {entries}
-  hgl_semantics::ir::Value::new({metadata},hgl_semantics::ir::Kind::Construct(fields))
+  Ok(hgl_semantics::ir::Value::new({metadata},hgl_semantics::ir::Kind::Construct(fields)))
  }}
 }}
 "#))

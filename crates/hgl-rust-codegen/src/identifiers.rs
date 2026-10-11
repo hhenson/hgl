@@ -7,3 +7,22 @@ pub(crate) fn identifier(source: &str) -> String {
         name
     })
 }
+
+/// Exact canonical bytes form shared const-generic marker types, balanced for long names.
+pub(crate) fn any_identity(source: &[u8]) -> String {
+    if source.len() <= 16 {
+        let mut bytes = [0; 16];
+        bytes[..source.len()].copy_from_slice(source);
+        return format!(
+            "hgl_types::any_values::IdentityChunk<{},{}>",
+            u128::from_le_bytes(bytes),
+            source.len()
+        );
+    }
+    let middle = source.len().div_ceil(16).div_ceil(2) * 16;
+    format!(
+        "({},{})",
+        any_identity(&source[..middle]),
+        any_identity(&source[middle..])
+    )
+}

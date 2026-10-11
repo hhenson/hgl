@@ -1,8 +1,8 @@
 # Card: hgl-types-any-values
 
-The any_values vocabulary in hgl-types owns compiled box descriptors and independently retained encoded ordinary data. No runtime or third-party dependency is introduced. Initial module budget: 450 lines.
+The any_values vocabulary in hgl-types owns compiled box descriptors and independently retained encoded ordinary data. No runtime or third-party dependency is introduced. Module budget: 420 lines; 30 lines of the original allocation are transferred to Store with recursive execution.
 
-Public surface: AnyPlan {index, identity, operation, capabilities}, AnyField {plan, optional}, AnyOperation, AnyValue, Frames, AnyBuffer and AnyWidth. AnyValue exposes from_encoded, plan, data, reserve, capacity, copy_prepared, encode_prepared, retain, equal, compare and key_hash. AnyPlan exposes equal, compare and hash. AnyBuffer writes and frames typed bytes; AnyWidth measures the same encoding before publication. Frames iterates compiler-produced length-framed children.
+Public surface: AnyPlan {identity, operation, capabilities, execution, capture, copy}, AnyField {plan, optional}, AnyOperation, AnyValue, AnyRef, AnyView, AnyExecution, ColdCapture, Frames, AnyBuffer and AnyWidth. AnyValue exposes from_encoded, plan, data, reserve, capacity, copy_prepared, encode_prepared, retain, capture, equal, compare and key_hash. AnyPlan exposes equal, compare and hash. AnyBuffer writes and frames typed bytes, executes provider copies and writes descriptor headers; AnyWidth measures the same encoding before publication. Frames iterates compiler-produced length-framed children.
 
 Descriptors hold compiled operations and exact type identity, with no name lookup or payload type validation during successful evaluation. They cover arbitrary admitted ordinary layouts, recursively including family members and boxes. Encoded bytes and descriptors are an internal compiler/runtime contract, not a user serialization API. Whole family boxing selects a concrete member; nested family fields retain their tags.
 
@@ -10,4 +10,22 @@ Cold retain/reserve may allocate. Prepared copy/encoding checks destination capa
 
 Acceptance: hgl-store Any allocation/retention tests and generated compiler allocation probes, including boxed structural delta independence and empty container capability failures.
 
-AnyPlan.copy is the statically selected recursive owning-copy codec. AnyBuffer.native appends one provider leaf; Vec executes its provider copy while AnyWidth only counts its width. The caller preflights complete capacity and clears an owner exactly once before append; provider copies never clear sibling data. Clone, retain and prepared copy all use the selected codec, including Native leaves inside boxes and aggregates. Equality/hash/order delegate provider capabilities and propagate their error identifiers.
+Each owner retains descriptor references in a separate typed sidecar. Encoded headers index that owner's metadata, never a generated module table. Views preserve their owner context through frame slicing; compiled owning-copy codecs reconstruct headers in independent metadata without serializing pointers. Every populated nested header consumes eight bytes, so finite byte bounds also reserve an upper bound on descriptor slots. Successful prepared copies and compositions allocate neither bytes nor metadata.
+
+AnyPlan execution callbacks select Store's compiled recursive operations. Its optional capture callback returns an independently owned, type-erased checked carrier only at cold compiler boundaries. AnyValue::capture validates that carrier through a fallible cold downcast; missing or incompatible callbacks are construction errors. No compiler/Model dependency, lookup, or downcast enters evaluation. Static descriptor references outlive every retained owner.
+
+The internal ABI changes: data returns a metadata-preserving AnyView rather than bare bytes; encode_prepared receives an owning AnyValue buffer. AnyRef holds an optional plan and borrowed view; AnyView offers slice, boxed and field. AnyPlan has no module-local index. Raw encodings are compiler/runtime-private and are not portable serialization.
+
+IdentityChunk<BYTES,LENGTH> is a shared zero-sized compiler identity marker.
+Balanced tuples of exact chunks distinguish canonical names, generic arguments,
+and byte lengths across separately emitted modules. It carries no runtime data;
+its TypeId provides the existing constant-time descriptor identity observation.
+
+NativeCopy and NativeCheck name provider callbacks. AnyPlan.copy selects the
+recursive owning codec over AnyView; AnyValue.preflight and check_capacity
+validate retention before mutation. AnyBuffer.native uses provider checks in
+AnyWidth and copy callbacks in owning sinks. AnyWidth.finish propagates the
+first preflight failure. Cold readers preserve provider errors as NodeResult.
+AnyView.field, number and index expose bounded compiled data vocabulary.
+Frames.equal_by and compare_by iterate frames through caller-supplied fallible
+predicates; descriptor selection and operation semantics remain in Store.

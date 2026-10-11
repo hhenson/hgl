@@ -1,6 +1,6 @@
 //! Whole boxes retain independent buffers in the existing ordinary arena.
 use crate::{Capacity, GlobalValue, Layouts, PreparedValue, ValueColumns, ValueSlot};
-use hgl_types::{AnyValue, NodeError, NodeResult, OrdinaryType};
+use hgl_types::{AnyValue, NodeResult, OrdinaryType};
 
 /// The canonical owning any marker; its contained shape never becomes endpoints.
 #[derive(Debug)]
@@ -68,10 +68,10 @@ impl PreparedValue for Any {
         Ok(ValueSlot::from_fields(columns.insert_any(value)))
     }
     fn check_native(columns: &ValueColumns, to: ValueSlot<Self>, value: &AnyValue) -> NodeResult {
-        if columns.any(to.fields()).capacity() < value.data().len() {
-            return Err(NodeError::new("prepared any capacity exceeded"));
-        }
-        Ok(())
+        columns
+            .any(to.fields())
+            .check_capacity(value.data().len())?;
+        value.preflight()
     }
     fn check_slots(
         source: &ValueColumns,
@@ -108,39 +108,21 @@ impl<W: crate::Wake> crate::PreparedTick<'_, W> {
         measure: impl FnOnce(
             crate::Observation<'_>,
         ) -> NodeResult<(Option<&'static hgl_types::AnyPlan>, usize)>,
-        compose: impl FnOnce(&mut Vec<u8>, crate::Observation<'_>),
+        compose: impl FnOnce(&mut AnyValue, crate::Observation<'_>),
     ) -> NodeResult {
         self.authorize(output.id(), output.generation());
-        let (plan, width) = measure(self.storage.observations().0)?;
-        let destination = self
-            .storage
-            .atomic
-            .destination(self.storage.bindings, output)?;
-        if self
-            .storage
+        let storage = &mut self.storage;
+        let (plan, width) = measure(storage.observations().0)?;
+        let destination = storage.atomic.destination(storage.bindings, output)?;
+        storage
             .atomic
             .values()
             .any(destination.fields())
-            .capacity()
-            < width
-        {
-            return Err(NodeError::new("prepared any capacity exceeded"));
-        }
-        let mut value = std::mem::take(
-            self.storage
-                .atomic
-                .values_mut()
-                .any_mut(destination.fields()),
-        );
-        value.encode_prepared(plan, |data| compose(data, self.storage.observations().0));
-        *self
-            .storage
-            .atomic
-            .values_mut()
-            .any_mut(destination.fields()) = value;
-        self.storage
-            .bindings
-            .publish(output.id(), self.now, self.wake);
+            .check_capacity(width)?;
+        let mut value = std::mem::take(storage.atomic.values_mut().any_mut(destination.fields()));
+        value.encode_prepared(plan, |data| compose(data, storage.observations().0));
+        *storage.atomic.values_mut().any_mut(destination.fields()) = value;
+        storage.bindings.publish(output.id(), self.now, self.wake);
         Ok(())
     }
 }
@@ -154,12 +136,10 @@ impl ValueColumns {
         &mut self,
         destination: ValueSlot<Any>,
         measure: impl FnOnce(&Self) -> NodeResult<(Option<&'static hgl_types::AnyPlan>, usize)>,
-        compose: impl FnOnce(&Self, &mut Vec<u8>),
+        compose: impl FnOnce(&Self, &mut AnyValue),
     ) -> NodeResult {
         let (plan, width) = measure(self)?;
-        if self.any(destination.fields()).capacity() < width {
-            return Err(NodeError::new("prepared any capacity exceeded"));
-        }
+        self.any(destination.fields()).check_capacity(width)?;
         let mut value = std::mem::take(self.any_mut(destination.fields()));
         value.encode_prepared(plan, |data| compose(self, data));
         *self.any_mut(destination.fields()) = value;
@@ -175,25 +155,24 @@ impl<W: crate::Wake> crate::PreparedTick<'_, W> {
         source: ValueSlot<Any>,
     ) -> NodeResult {
         self.authorize(output.id(), output.generation());
-        let destination = self
-            .storage
-            .atomic
-            .destination(self.storage.bindings, output)?;
+        let storage = &mut self.storage;
+        let destination = storage.atomic.destination(storage.bindings, output)?;
         Any::check_slots(
-            self.storage.globals.values(),
+            storage.globals.values(),
             source,
-            self.storage.atomic.values(),
+            storage.atomic.values(),
             destination,
         )?;
         Any::copy_between(
-            self.storage.globals.values(),
+            storage.globals.values(),
             source,
-            self.storage.atomic.values_mut(),
+            storage.atomic.values_mut(),
             destination,
         );
-        self.storage
-            .bindings
-            .publish(output.id(), self.now, self.wake);
+        storage.bindings.publish(output.id(), self.now, self.wake);
         Ok(())
     }
 }
+
+/// Compiled descriptor execution over independently retained encoded owners.
+pub mod operations;

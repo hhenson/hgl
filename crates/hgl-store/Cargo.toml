@@ -15,7 +15,7 @@ native_keys = { budget = 100, uses = ["keys", "native_values"] }
 native_results = { budget = 80, uses = ["bindings", "columns", "native_values", "prepared_store", "shapes"] }
 owned_columns = { budget = 80, uses = [] }
 native_values = { budget = 260, uses = ["global_arena", "global_value", "prepared_value", "owned_columns"] }
-any_values = { budget = 350, uses = ["global_arena", "global_value", "prepared_value", "prepared_store", "shapes", "observation", "keys"] }
+any_values = { budget = 380, uses = ["global_arena", "global_value", "prepared_value", "prepared_store", "shapes", "observation", "keys"] }
 atomic = { budget = 180, uses = ["list", "scalar_copy", "bindings", "global_value", "prepared_value", "shapes"] }
 binding_build = { budget = 160, uses = ["endpoints"] }
 bindings = { budget = 1100, uses = ["binding_build", "endpoints"] }

@@ -8,3 +8,10 @@ Acceptance: exact canonical nominal specializations and arbitrary compiled box d
 
 This module now lives in hgl-rust-codegen below executable program assembly;
 its hgl-rust facade path and module ceiling remain unchanged.
+
+any_identity(source bytes) emits the shared Types IdentityChunk const-generic
+marker for each exact UTF-8 chunk, retaining its byte length. Balanced tuple
+composition bounds generated type nesting logarithmically in name length.
+TypeId observes this shared compiler-generated identity in constant time across
+independent modules; no hashing, registry, lazy initialization or name lookup is
+needed. Canonical source normalization occurs before identity emission.

@@ -8,7 +8,9 @@ Cold owning construction and capture conversion may allocate and use source name
 
 Acceptance: pinned shared Any suites and generated measured probes for family locals, complete atomic aggregate inputs, independently retained box locals and nested inline boxes appended to global entries.
 
-This module now lives in hgl-rust-codegen below executable program assembly;
-its hgl-rust facade path and module ceiling remain unchanged.
+Nested codecs write typed descriptor metadata with owner-relative headers. Decode and cold capture follow the producing descriptor, including types absent from the consumer's generated layouts. Every descriptor owns a fallible cold capture callback for its checked IR carrier; incompatible carriers report construction errors. Generated recursive/list capture propagates those errors. No local plan indices remain in retained data or capture dispatch.
 
-Generated copy codecs recursively traverse the existing compiled frames and optional/family tags, invoking the provider copy for every Native leaf. Sizing never invokes copy. Native descriptor operations route equality/hash/order to typed callbacks. Prepared slot encoding borrows typed Native views; it never extracts allocating Native owners.
+The codegen module uses checked_data for cold Native capture metadata. Compiled
+copy codecs preserve retained descriptor context; fallible readers preserve
+Native preflight errors. Producer-owned capture moves each retained native owner
+into checked data without repeating the provider copy.
