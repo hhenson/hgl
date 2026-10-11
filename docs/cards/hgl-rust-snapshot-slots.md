@@ -77,3 +77,6 @@ assignments then use the same scalar/rolling byte destination selection.
 Endpoint-backed byte fields use owned snapshot capture. An invalid direct temporal
 child retains its validity failure; a retained absent child raises value.unset_read
 only when its payload is consumed.
+
+This module now lives in hgl-rust-codegen below executable program assembly;
+its hgl-rust facade path and module ceiling remain unchanged.

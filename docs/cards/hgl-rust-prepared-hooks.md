@@ -9,3 +9,6 @@ Acceptance: generated successful-evaluation allocation probes for Any scalar, ne
 Prepared lexical replacement checks and copies complete typed source slots into existing reserved owners. It preserves capacity through sparse or empty replacements so later larger observations cannot lose provisioned child storage. Growth bounds include one start publication plus the finite evaluation horizon.
 
 Constructor field publication delegates optional and recursive slot selection to constructor_owners. Ordinary owning scalar sources copy directly from retained typed slots.
+
+This module now lives in hgl-rust-codegen below executable program assembly;
+its hgl-rust facade path and module ceiling remain unchanged.

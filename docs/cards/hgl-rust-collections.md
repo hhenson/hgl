@@ -32,3 +32,6 @@ metadata; full traversal includes unset children for metadata inspection.
 Cold field equality and key validation share canonical ordinary fields/optional
 metadata with box planning. Scalar retention uses the shared owning_scalar profile
 while preserving the existing Any ownership boundary.
+
+This module now lives in hgl-rust-codegen below executable program assembly;
+its hgl-rust facade path and module ceiling remain unchanged.

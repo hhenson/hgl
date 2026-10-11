@@ -138,3 +138,8 @@ Generated-code formatting shares the crate's append sink across emitter modules;
 Checked native image calls use descriptor-selected static module symbols. Legacy
 input-view helpers retain their Native trait boundary; image calls need no supplied
 Provider type. Interface declarations and legacy adapters share signature emission.
+
+This module now lives in hgl-rust-codegen below executable program assembly;
+its hgl-rust facade path and module ceiling remain unchanged.
+
+May use native_image for pure selected provider module naming.

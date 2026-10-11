@@ -7,3 +7,6 @@ Internal surface: encoding, compose and limits. Leaves retain their static typed
 Acceptance: generated recursive constructor with owning list and present child, measured after preparation; retained boxed sources and compound mutable box replacement remain independent.
 
 Constructor operands are cached once in supplied source order before encoding in declaration order. Private canonical constructor owners contribute their checked recursive bounds to width planning.
+
+This module now lives in hgl-rust-codegen below executable program assembly;
+its hgl-rust facade path and module ceiling remain unchanged.

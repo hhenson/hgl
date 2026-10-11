@@ -423,9 +423,8 @@ fn native_signature(native: &crate::ir::Native) -> String {
     };
     format!("fn {}({args})->{result}", native.method)
 }
-pub(crate) fn image_module(provider: &str) -> String {
-    format!("native_image{}", crate::identifiers::identifier(provider))
-}
+use hgl_rust_codegen::native_image::image_module;
+
 fn native_images(plan: &Plan) -> String {
     let providers = plan
         .natives

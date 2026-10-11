@@ -18,3 +18,6 @@ Bytes encode and decode as exact Literal::Bytes and Vec<u8>; constructor materia
 
 Both cold keyed collection directions use one ordinary sequence storage adapter;
 the surrounding checked source type remains exact in captured metadata.
+
+This module now lives in hgl-rust-codegen below executable program assembly;
+its hgl-rust facade path and module ceiling remain unchanged.

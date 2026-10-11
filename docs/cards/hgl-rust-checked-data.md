@@ -32,3 +32,6 @@ sparse Captured data without evaluating any branch or expression.
 Serialize Step::Raises with its exact code and recursive lexical block.
 
 Constructed Literal::Bytes data serializes exact octets. Constructor expressions remain checked IR so executed range failures retain their phase.
+
+This module now lives in hgl-rust-codegen below executable program assembly;
+its hgl-rust facade path and module ceiling remain unchanged.

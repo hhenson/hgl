@@ -17,3 +17,6 @@ Prepared append items retain literal owning leaves in immutable configuration be
 Direct Any publications stage complete nonlocal expressions into private slots before scalar or rolling transport. Input and delta_value captures copy from the typed atomic or rolling observation arena; readable local bindings independently own their reserved copy.
 
 Ordinary family equality over prepared owners reserves two independent comparison boxes and uses the compiled concrete-member codec. Its reads avoid native aggregate extraction and preserve ordinary equality semantics.
+
+This module now lives in hgl-rust-codegen below executable program assembly;
+its hgl-rust facade path and module ceiling remain unchanged.

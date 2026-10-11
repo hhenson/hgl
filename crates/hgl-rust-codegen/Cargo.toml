@@ -1,0 +1,57 @@
+[package]
+name = "hgl-rust-codegen"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[package.metadata.hgl]
+line-budget = 8940
+
+[package.metadata.hgl.modules]
+owner_comparisons = { budget = 100, uses = ["source_slots", "any_prepared", "any_values", "values"] }
+any_expression = { budget = 180, uses = ["any_values", "source_slots", "constructor_owners"] }
+constructor_owners = { budget = 180, uses = ["prepared_hooks", "layouts"] }
+identifiers = { budget = 40, uses = [] }
+any_values = { budget = 600, uses = ["deltas", "layouts", "collections", "families", "scalars", "value_convert"] }
+any_prepared = { budget = 250, uses = ["execution_proof", "source_slots", "layouts", "any_values", "values", "observed", "any_expression", "constructor_owners", "owner_comparisons", "native_image"] }
+prepared_hooks = { budget = 180, uses = ["source_slots", "any_values", "scalars", "layouts", "direct_deltas", "finite_domains", "observed", "snapshot_slots", "execution_proof", "any_prepared", "values", "any_expression", "constructor_owners"] }
+checked_data = { budget = 250, uses = ["enums", "type_data", "scalars"] }
+collections = { budget = 250, uses = ["families", "prepared_values", "layouts"] }
+composite_keys = { budget = 250, uses = [] }
+deltas = { budget = 700, uses = ["keyed", "layouts", "observed", "windows", "any_values", "any_expression"] }
+direct_deltas = { budget = 400, uses = ["layouts", "observed"] }
+enums = { budget = 180, uses = ["prepared_values", "identifiers"] }
+execution_proof = { budget = 250, uses = ["scalars", "value_calls", "direct_deltas", "mutation_bounds"] }
+families = { budget = 200, uses = ["type_data", "any_values"] }
+finite_domains = { budget = 250, uses = ["execution_proof", "layouts", "mutation_bounds"] }
+key_origins = { budget = 180, uses = [] }
+keyed = { budget = 450, uses = ["checked_data", "key_origins", "layouts", "value_convert", "any_values"] }
+layouts = { budget = 400, uses = ["identifiers", "snapshots", "collections", "composite_keys", "enums", "families", "prepared_values", "scalars", "structs"] }
+mutation_bounds = { budget = 250, uses = [] }
+observed = { budget = 500, uses = ["snapshots", "deltas", "composite_keys", "layouts", "windows"] }
+prepared_values = { budget = 250, uses = [] }
+pure_bounds = { budget = 300, uses = [] }
+recursive_convert = { budget = 160, uses = ["checked_data", "layouts"] }
+scalars = { budget = 150, uses = [] }
+snapshot_slots = { budget = 350, uses = ["snapshot_views", "structural_publication", "layouts", "observed", "snapshots", "any_prepared", "windows"] }
+snapshot_views = { budget = 160, uses = ["observed", "layouts", "snapshots"] }
+snapshots = { budget = 300, uses = ["layouts", "structural_publication"] }
+source_slots = { budget = 100, uses = ["layouts", "snapshot_slots", "values"] }
+structs = { budget = 230, uses = ["collections", "prepared_values", "any_values", "layouts"] }
+type_data = { budget = 120, uses = ["enums"] }
+value_convert = { budget = 320, uses = ["checked_data", "collections", "families", "layouts", "any_values", "scalars"] }
+tuple_adapter = { budget = 60, uses = ["value_calls", "execution_proof"] }
+values = { budget = 800, uses = ["any_values", "any_prepared", "prepared_hooks", "source_slots", "scalars", "execution_proof", "keyed", "snapshot_views", "value_calls", "structural_publication", "snapshot_slots", "snapshots", "collections", "deltas", "direct_deltas", "finite_domains", "layouts", "observed", "windows", "constructor_owners", "owner_comparisons", "native_image"] }
+windows = { budget = 100, uses = ["layouts"] }
+structural_publication = { budget = 220, uses = ["snapshot_views", "layouts", "snapshot_slots", "snapshots"] }
+value_calls = { budget = 100, uses = ["scalars", "execution_proof"] }
+native_image = { budget = 10, uses = ["identifiers"] }
+
+[dependencies]
+hgl-semantics = { path = "../hgl-semantics" }
+hgl-source = { path = "../hgl-source" }
+hgl-types = { path = "../hgl-types" }
+
+[lints]
+workspace = true

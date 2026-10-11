@@ -83,11 +83,7 @@ fn bounds(value: &Value, fallback: &impl Fn(&Ty) -> String) -> String {
     fallback(&value.ty)
 }
 /// Derive recursive constructor storage from the checked finite expression shape, never a hook.
-pub(crate) fn global_bounds(
-    plan: &Plan,
-    key: &str,
-    fallback: impl Fn(&Ty) -> String,
-) -> Option<String> {
+pub fn global_bounds(plan: &Plan, key: &str, fallback: impl Fn(&Ty) -> String) -> Option<String> {
     if !key.starts_with("\0constructor:") {
         return None;
     }

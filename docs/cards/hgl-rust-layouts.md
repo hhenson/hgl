@@ -74,3 +74,6 @@ ordinal in independently built stores, preserving identity across discovery and
 insertion order. Per-plan code never recomputes those domain ordinals.
 
 Any payload collection includes all reachable admitted ordinary types, not only nominal storage. harness_types collects cold box payloads through the shared checked harness visitor. ordinary_storage exposes backend storage wrappers. Private marker identities share hgl-rust-identifiers; scalar metadata delegates to Ty::scalar_kind.
+
+This module now lives in hgl-rust-codegen below executable program assembly;
+its hgl-rust facade path and module ceiling remain unchanged.

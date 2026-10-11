@@ -15,3 +15,6 @@ mutable loop bodies or opaque owning-return functions.
 byte_limits(type iterator, index function)->String emits cold Bytes width propagation from exact ordinary i64 list capacities. It does not inspect runtime contents or move constructor execution.
 
 `global_growth` keeps empty recorder row bounds separate from configured ordinary global rows plus bounded appends; it emits capacity arithmetic without executing a hook.
+
+This module now lives in hgl-rust-codegen below executable program assembly;
+its hgl-rust facade path and module ceiling remain unchanged.

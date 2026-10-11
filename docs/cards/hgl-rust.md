@@ -144,3 +144,8 @@ The standalone emit entry point marks ordinary_instantiation on its backend clon
 Its public register/graph-description API leaves instantiation to the caller and
 does not install finite evaluation capacity. Shared eval adapters retain their
 explicit preparation phase and allocation-free proved transport.
+
+The current assembly boundary is specified by hgl-rust-codegen.md. This facade
+owns emit, capacity, generators and preparation; the remaining public emission
+modules are reexported from the lower hgl-rust-codegen crate. Its aggregate
+ceiling is 1700, with moved module ceilings unchanged.

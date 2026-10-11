@@ -7,3 +7,6 @@ Public surface: layouts, constructor, construct, contains, capture_equal, limits
 Cold owning construction and capture conversion may allocate and use source names. Prepared native/source writers count encoded width and then write into reserved storage. Both select actual concrete family member identity and flatten boxes, with no per-tick name lookup or type checking. Type capabilities are compiled before execution, including empty composite payloads. Capture equality propagates capability failures through the test harness.
 
 Acceptance: pinned shared Any suites and generated measured probes for family locals, complete atomic aggregate inputs, independently retained box locals and nested inline boxes appended to global entries.
+
+This module now lives in hgl-rust-codegen below executable program assembly;
+its hgl-rust facade path and module ceiling remain unchanged.

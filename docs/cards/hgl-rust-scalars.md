@@ -14,3 +14,6 @@ structural children. Checked harness capture retains the original declaration
 and assigned member number; it never substitutes an ordinary integer.
 
 May use hgl-semantics. literal(&Literal)->String emits scalar values including bytes; values re-exports its existing path. integer_binary(&str,&str,&str)->String emits the established integer policy. bytes_input(&Value)->Option<usize> recognizes direct constructors and pure single-argument, one-return byte helpers fed by a complete atomic i64 list; it never executes or drops effects.
+
+This module now lives in hgl-rust-codegen below executable program assembly;
+its hgl-rust facade path and module ceiling remain unchanged.

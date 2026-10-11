@@ -50,3 +50,6 @@ publish accepts complete ordinary Set/Map payloads through atomic whole-value tr
 Growing publication emission preserves sparse owning index/value/removal triples and order-independent equality. Runtime application validates append/tail rules before using typed child membership; fixed-list removal remains outside its profile.
 
 read delegates exact scoped-child payload transport to observed. collection_operation forwards checked scalar map/list effects to keyed with static child allocation/application callbacks; existing invalidation and mutation rules remain owned by Store.
+
+This module now lives in hgl-rust-codegen below executable program assembly;
+its hgl-rust facade path and module ceiling remain unchanged.

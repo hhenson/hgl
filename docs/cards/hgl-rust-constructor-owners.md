@@ -7,3 +7,6 @@ Internal surface: local, global_bounds, fields, family and origin. Checked finit
 Acceptance: measured successful recursive constructor ownership, source-order provider calls with once-only counts, and independently retained Any field values, in debug and optimized profiles. No evaluation allocation, runtime name lookup or dynamic type test is introduced.
 
 Concrete family constructors select the static discriminator and typed member slot. Copies preserve the checked finite origin for preparation and boxing, while each copy owns an independent destination.
+
+This module now lives in hgl-rust-codegen below executable program assembly;
+its hgl-rust facade path and module ceiling remain unchanged.

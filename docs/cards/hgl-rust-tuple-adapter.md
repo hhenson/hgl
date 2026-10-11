@@ -19,3 +19,6 @@ emission with an ordinary uncatalogued backend profile diagnostic.
 Own-output assignments are included in the observation-slot scan. Runtime helper
 calls requiring unprepared owning text arguments reject before eval emission,
 using value_calls' cold proof; standalone/constant ordinary text ABI is unchanged.
+
+This module now lives in hgl-rust-codegen below executable program assembly;
+its hgl-rust facade path and module ceiling remain unchanged.

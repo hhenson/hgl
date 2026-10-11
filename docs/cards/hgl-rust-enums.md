@@ -24,3 +24,6 @@ hgl-rust-prepared-values, retaining exact identity in independently prepared slo
 metadata(&EnumType)->String emits complete cold checked enum metadata, shared by
 checked type and enum literal serialization. Numbers and nominal origins are
 retained exactly.
+
+This module now lives in hgl-rust-codegen below executable program assembly;
+its hgl-rust facade path and module ceiling remain unchanged.

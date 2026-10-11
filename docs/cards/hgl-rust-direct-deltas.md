@@ -34,3 +34,6 @@ configuration slots, including owning aggregates. It leaves the time expression
 and every call/provider expression at their original execution point. Repeated
 normalization is idempotent. This supplies prepared transport for finite direct
 generator schedules without constructing owning values during evaluation.
+
+This module now lives in hgl-rust-codegen below executable program assembly;
+its hgl-rust facade path and module ceiling remain unchanged.

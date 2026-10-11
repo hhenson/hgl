@@ -103,6 +103,16 @@ dependencies = [
 name = "hgl-rust"
 version = "0.0.0"
 dependencies = [
+ "hgl-rust-codegen",
+ "hgl-semantics",
+ "hgl-source",
+ "hgl-types",
+]
+
+[[package]]
+name = "hgl-rust-codegen"
+version = "0.0.0"
+dependencies = [
  "hgl-semantics",
  "hgl-source",
  "hgl-types",

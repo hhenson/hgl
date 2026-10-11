@@ -61,3 +61,6 @@ Invalidating a constant-key map child retains no child payload, including a
 structural child; it uses the same finite membership domain as scalar invalidation.
 
 May use scalars. Direct and pure-helper byte conversion can use finite prepared transport; owning constructor locals and unknown helper shapes do not claim this proof.
+
+This module now lives in hgl-rust-codegen below executable program assembly;
+its hgl-rust facade path and module ceiling remain unchanged.

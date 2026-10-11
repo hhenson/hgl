@@ -62,3 +62,6 @@ slots so proved imperative sources can execute without per-cycle allocation.
 operations. Strict insert/remove validate absence/presence before mutation;
 tolerant upsert/discard retain their existing behavior. Arguments are evaluated
 once. Payload-free collection invalidation accepts structural children.
+
+This module now lives in hgl-rust-codegen below executable program assembly;
+its hgl-rust facade path and module ceiling remain unchanged.

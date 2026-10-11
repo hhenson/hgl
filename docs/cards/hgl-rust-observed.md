@@ -28,3 +28,6 @@ Empty sparse slot application and pass-through establish invalid destination
 validity. Repeated valid empties are silent. Observation retains present empty
 child entries separately from omission, and configured deltas reuse their
 prepared slots rather than cloning owning sparse storage during evaluation.
+
+This module now lives in hgl-rust-codegen below executable program assembly;
+its hgl-rust facade path and module ceiling remain unchanged.

@@ -22,3 +22,6 @@ these fragments contain no dynamic schema interpretation or fallback allocation.
 `forward(source,result,input,output)` selects prepared arrival transport from
 the checked result: scalar, complete atomic payload, or rolling with its own
 window policy. Unsupported representations return None for ordinary emission.
+
+This module now lives in hgl-rust-codegen below executable program assembly;
+its hgl-rust facade path and module ceiling remain unchanged.

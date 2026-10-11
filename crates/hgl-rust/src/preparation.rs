@@ -33,7 +33,7 @@ pub(crate) fn native_context(plan: &Plan) -> String {
     let callbacks=plan.natives.iter().filter_map(|n| n.provider.as_ref().map(|p|(n,p))).filter(|(n,_)|names.insert(&n.name)).map(|(n,p)| {
         let args=n.args.iter().enumerate().map(|(i,t)|format!("let arg{i}=(||->Result<{},String>{{Ok({})}})().map_err(hgl_semantics::value_eval::EvalError::Operation)?;",crate::layouts::owned_type(t),decode(t,&format!("&args[{i}]")))).collect::<Vec<_>>().concat();
         let call_args=n.args.iter().enumerate().map(|(i,t)|format!("{}arg{i}",if *t==hgl_source::Ty::Str {"&"}else{""})).collect::<Vec<_>>().join(",");
-        let call=format!("{}::{}({call_args}){}",crate::emit::image_module(&p.provider),n.method,if n.throws {".map_err(|error|error.code.map_or_else(||hgl_semantics::value_eval::EvalError::Operation(error.message.clone()),|code|hgl_semantics::value_eval::EvalError::Coded(code,error.message.clone())))?"}else{""});
+        let call=format!("{}::{}({call_args}){}",hgl_rust_codegen::native_image::image_module(&p.provider),n.method,if n.throws {".map_err(|error|error.code.map_or_else(||hgl_semantics::value_eval::EvalError::Operation(error.message.clone()),|code|hgl_semantics::value_eval::EvalError::Coded(code,error.message.clone())))?"}else{""});
         format!("{:?}=>{{{args}let result={call};Ok({})}},",n.name,encode(&n.result,"&result"))
     }).collect::<Vec<_>>().concat();
     format!(

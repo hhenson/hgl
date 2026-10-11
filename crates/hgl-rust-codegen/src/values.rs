@@ -712,7 +712,7 @@ fn native_call(plan: &Plan, binding: &hgl_semantics::ir::Native, args: &[Value])
             .provider
             .as_ref()
             .map_or("<crate::Provider as Native>".into(), |p| {
-                crate::emit::image_module(&p.provider)
+                crate::native_image::image_module(&p.provider)
             }),
         binding.method,
         args.iter()

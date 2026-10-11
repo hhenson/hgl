@@ -9,3 +9,6 @@ publication origins. No expression evaluation or type inference occurs here.
 hgl-rust-checked-data re-exports this function for existing emission callers.
 
 Cold checked metadata includes Ty::Bytes with exact scalar identity through nested nominal and delta shapes.
+
+This module now lives in hgl-rust-codegen below executable program assembly;
+its hgl-rust facade path and module ceiling remain unchanged.

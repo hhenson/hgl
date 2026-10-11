@@ -46,3 +46,6 @@ structural publication exclusion. Required-read coding adds no publication polic
 assignment(value,result,emit) delegates the shared snapshot publication selection
 to snapshot_slots, preserving result-aware byte scalar versus rolling arrival
 transport without terminating the handler.
+
+This module now lives in hgl-rust-codegen below executable program assembly;
+its hgl-rust facade path and module ceiling remain unchanged.

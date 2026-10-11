@@ -93,3 +93,15 @@ ordinary execution operation cannot consult source declarations or discovery as
 an implicit fallback. The new aggregate ceiling is 2000, moved module ceilings
 remain unchanged, and existing crate ceilings are not increased. This is the
 second reason-3 boundary; it adds no third-party dependency.
+
+## Enforced Rust assembly boundary
+
+The Rust backend separates checked value/layout/hook emission into
+hgl-rust-codegen, below the hgl-rust program-assembly facade. The moved layer
+has 7492 code lines; the remaining graph/generator assembly, capacity provisioning
+and test adapters have 1504. This meets reason 3 on both sides. Cargo prevents
+codegen from reaching assembly or provisioning: the facade depends on codegen,
+and the reverse dependency would form a cycle. All existing module ceilings and
+the old 8940 aggregate ceiling move unchanged; the coherent new facade ceiling
+is 1700. Public facade reexports preserve consumers. No runtime or third-party
+dependency is introduced.

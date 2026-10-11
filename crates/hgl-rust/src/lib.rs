@@ -2,43 +2,43 @@
 //!
 //! The frontend must validate types, indices, method names and execution phases
 //! before constructing this IR. Emission performs no source-language checking.
-mod any_expression;
-pub mod any_prepared;
-pub mod any_values;
+use hgl_rust_codegen::any_expression;
+pub use hgl_rust_codegen::any_prepared;
+pub use hgl_rust_codegen::any_values;
 pub mod capacity;
-pub mod checked_data;
-pub mod collections;
-pub mod composite_keys;
-pub mod deltas;
-pub mod direct_deltas;
+pub use hgl_rust_codegen::checked_data;
+pub use hgl_rust_codegen::collections;
+pub use hgl_rust_codegen::composite_keys;
+pub use hgl_rust_codegen::deltas;
+pub use hgl_rust_codegen::direct_deltas;
 mod emit;
-pub mod enums;
-pub mod execution_proof;
-pub mod families;
-pub mod finite_domains;
+pub use hgl_rust_codegen::enums;
+pub use hgl_rust_codegen::execution_proof;
+pub use hgl_rust_codegen::families;
+pub use hgl_rust_codegen::finite_domains;
 pub mod generators;
-pub mod key_origins;
-pub mod keyed;
-pub mod layouts;
-pub mod mutation_bounds;
-pub mod observed;
+pub use hgl_rust_codegen::key_origins;
+pub use hgl_rust_codegen::keyed;
+pub use hgl_rust_codegen::layouts;
+pub use hgl_rust_codegen::mutation_bounds;
+pub use hgl_rust_codegen::observed;
 pub mod preparation;
-pub mod prepared_values;
-pub mod pure_bounds;
-pub mod recursive_convert;
-pub mod scalars;
-pub mod snapshot_slots;
-pub mod snapshot_views;
-pub mod snapshots;
-pub mod source_slots;
-pub mod structs;
-pub mod structural_publication;
-pub mod tuple_adapter;
-pub mod type_data;
-pub mod value_calls;
-pub mod value_convert;
-pub mod values;
-pub mod windows;
+pub use hgl_rust_codegen::prepared_values;
+pub use hgl_rust_codegen::pure_bounds;
+pub use hgl_rust_codegen::recursive_convert;
+pub use hgl_rust_codegen::scalars;
+pub use hgl_rust_codegen::snapshot_slots;
+pub use hgl_rust_codegen::snapshot_views;
+pub use hgl_rust_codegen::snapshots;
+pub use hgl_rust_codegen::source_slots;
+pub use hgl_rust_codegen::structs;
+pub use hgl_rust_codegen::structural_publication;
+pub use hgl_rust_codegen::tuple_adapter;
+pub use hgl_rust_codegen::type_data;
+pub use hgl_rust_codegen::value_calls;
+pub use hgl_rust_codegen::value_convert;
+pub use hgl_rust_codegen::values;
+pub use hgl_rust_codegen::windows;
 use hgl_semantics::ir;
 
 pub use emit::{
@@ -47,16 +47,8 @@ pub use emit::{
 pub use hgl_semantics::ir::{DeltaEntry, Kind, Native, Node, Plan, Statement, Value};
 
 /// Ordered prepared hooks preserve source evaluation and storage ownership.
-pub mod prepared_hooks;
+pub use hgl_rust_codegen::prepared_hooks;
 
-mod constructor_owners;
-mod identifiers;
+use hgl_rust_codegen::constructor_owners;
 
-/// Append generated code to an infallible String sink.
-pub(crate) fn append(code: &mut String, text: std::fmt::Arguments<'_>) {
-    use std::fmt::Write as _;
-    code.write_fmt(text)
-        .unwrap_or_else(|_| unreachable!("String formatting"));
-}
-
-mod owner_comparisons;
+use hgl_rust_codegen::append;

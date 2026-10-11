@@ -164,7 +164,7 @@ fn width(value: &Value, bounds: &impl Fn(&Ty) -> String) -> String {
     )
 }
 /// Reserve finite constructor-expression widths without executing any hook or provider.
-pub(crate) fn limits(plan: &Plan, bounds: impl Fn(&Ty) -> String, index: usize) -> String {
+pub fn limits(plan: &Plan, bounds: impl Fn(&Ty) -> String, index: usize) -> String {
     let mut result = Vec::new();
     for node in &plan.nodes {
         hgl_semantics::ir_visit::hooks(node, &mut |value| {
