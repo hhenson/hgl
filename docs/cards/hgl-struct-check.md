@@ -17,8 +17,10 @@ field must be named, unique and declared; all fields without defaults must be
 present.
 Checked Construct IR preserves written argument order and declared field indices;
 omitted non-null ordinary defaults follow supplied arguments in declaration
-order. finish_checked obtains them from the authoritative ordinary checker in
-the retained declaration module/source; the compatibility finish path retains
+order. finish_checked checks every concrete non-null default through the
+authoritative ordinary checker in the retained declaration module/source with
+concrete declaring-owner generic bindings, even
+when that field is supplied; only omitted defaults enter the constructor values. The compatibility finish path retains
 fixed literals and contextual recipes. Checking never executes supplied field values. Delta construction
 uses a separate checker and never fills omitted fields from defaults.
 Context-dependent fields are checked only once their concrete expected types

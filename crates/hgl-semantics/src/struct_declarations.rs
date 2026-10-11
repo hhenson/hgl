@@ -15,8 +15,8 @@ pub struct RequiredStruct {
     pub optional: Vec<usize>,
     /// Declaration-indexed ordinary defaults; null marks absence.
     pub defaults: Vec<(usize, Expr)>,
-    /// Effective default expression's declaration module and original source file.
-    pub default_origins: std::collections::BTreeMap<usize, (String, String)>,
+    /// Effective default's module, original source file and declaring struct identity.
+    pub default_origins: std::collections::BTreeMap<usize, (String, String, String)>,
     /// Supported finite type-domain constraint.
     pub type_domain: Option<(String, Vec<String>)>,
 }

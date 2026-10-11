@@ -107,7 +107,7 @@ fn flatten(
     own.default_origins = own
         .defaults
         .iter()
-        .map(|(i, _)| (*i, (decl.module.clone(), decl.source.clone())))
+        .map(|(i, _)| (*i, (decl.module.clone(), decl.source.clone(), id.clone())))
         .collect();
     crate::struct_names::exported_fields(library, decl)?;
     for (_, value) in &mut own.defaults {
@@ -214,4 +214,35 @@ fn abstract_schema(decl: &Decl) -> Result<RequiredStruct, String> {
         return Err("struct inheritance requires an abstract base".into());
     }
     Ok(schema)
+}
+
+/// Default-owner parameters expressed in the selected root's generic environment.
+pub fn default_parameters(
+    library: &Library,
+    decl: &Decl,
+    owner: &str,
+) -> Result<BTreeMap<String, Pattern>, String> {
+    if owner == format!("{}::{}", decl.module, decl.name) {
+        return Ok(decl
+            .required_struct()?
+            .generics
+            .into_iter()
+            .map(|name| (name.clone(), Pattern::Parameter(name)))
+            .collect());
+    }
+    for ancestor in ancestors(library, decl)? {
+        if let Pattern::Named(module, name, arguments) = ancestor {
+            let parent = crate::struct_names::declaration(library, &module, &name)?
+                .ok_or("unresolved default ancestor")?;
+            if owner == format!("{}::{}", parent.module, parent.name) {
+                return Ok(parent
+                    .required_struct()?
+                    .generics
+                    .into_iter()
+                    .zip(arguments)
+                    .collect());
+            }
+        }
+    }
+    Err("default owner is not an ancestor".into())
 }

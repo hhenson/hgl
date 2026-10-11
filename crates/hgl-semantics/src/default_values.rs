@@ -31,19 +31,22 @@ pub fn parameters(
     library: &Library,
     module: &str,
     signature: &mut Signature,
+    types: &BTreeMap<String, Ty>,
     mut check: impl FnMut(&str, &Expr, &Ty) -> Result<Value, Issue>,
 ) -> Result<(), Issue> {
     for parameter in &mut signature.parameters {
-        if !(parameter.constant || signature.value_function) {
+        if parameter.value_default.is_some() || !(parameter.constant || signature.value_function) {
             continue;
         }
         let Some(expr) = &parameter.default else {
             continue;
         };
-        if dependent(expr, &signature.generics) {
+        if dependent(expr, &|name| {
+            signature.generics.iter().any(|p| p == name) && !types.contains_key(name)
+        }) {
             continue;
         }
-        let Ok(ty) = crate::value_types::resolve_ordinary(library, module, &parameter.ty) else {
+        let Ok(ty) = crate::value_types::concrete(library, module, &parameter.ty, types) else {
             continue;
         };
         let value = if let Expr::TemporalLiteral(literal) = expr.syntax() {
@@ -59,21 +62,32 @@ pub fn parameters(
 pub fn declaration(
     library: &Library,
     decl: &Decl,
-    mut check: impl FnMut(&str, &Expr, &Ty) -> Result<Value, Issue>,
+    mut check: impl FnMut(&str, &Expr, &Ty, &BTreeMap<String, Ty>) -> Result<Value, Issue>,
 ) -> Result<(), Issue> {
     if matches!(
         decl.role,
         Role::Function | Role::Implementation | Role::Operator | Role::Native
     ) {
-        return parameters(library, &decl.module, &mut decl.signature_checked()?, check);
+        return parameters(
+            library,
+            &decl.module,
+            &mut decl.signature_checked()?,
+            &BTreeMap::new(),
+            |module, expr, ty| check(module, expr, ty, &BTreeMap::new()),
+        );
     }
     if decl.role != Role::Struct {
         return Ok(());
     }
     let (schema, patterns) = crate::inheritance::schema(library, decl)?;
     for (index, expr) in &schema.defaults {
+        let (module, source, owner) = &schema.default_origins[index];
+        let parameters = crate::inheritance::default_parameters(library, decl, owner)?;
+        let types = bindings(library, &parameters, &BTreeMap::new())?;
         if matches!(expr.syntax(), Expr::Null)
-            || dependent(expr, &schema.generics)
+            || dependent(expr, &|name| {
+                parameters.contains_key(name) && !types.contains_key(name)
+            })
             || !closed_pattern(&patterns[*index])
         {
             continue;
@@ -84,43 +98,67 @@ pub fn declaration(
             &BTreeMap::new(),
             &mut BTreeSet::new(),
         )?;
-        let (module, source) = &schema.default_origins[index];
-        check(module, expr, &ty)
+        check(module, expr, &ty, &types)
             .and_then(|value| required(value, expr, &ty))
             .map_err(|e| e.in_source(source))?;
     }
     Ok(())
 }
 fn closed_pattern(pattern: &crate::inheritance::Pattern) -> bool {
+    resolved_pattern(pattern, &BTreeMap::new())
+}
+fn resolved_pattern(pattern: &crate::inheritance::Pattern, types: &BTreeMap<String, Ty>) -> bool {
     match pattern {
-        crate::inheritance::Pattern::Parameter(_) => false,
-        crate::inheritance::Pattern::Named(_, _, args) => args.iter().all(closed_pattern),
+        crate::inheritance::Pattern::Parameter(name) => types.contains_key(name),
+        crate::inheritance::Pattern::Named(_, _, args) => {
+            args.iter().all(|arg| resolved_pattern(arg, types))
+        }
     }
 }
-fn dependent(expr: &Expr, parameters: &[String]) -> bool {
-    let name = |name: &str| {
-        name.split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
-            .any(|word| parameters.iter().any(|p| p == word))
+fn dependent(expr: &Expr, parameter: &impl Fn(&str) -> bool) -> bool {
+    let local = if let Expr::Call(name, _) | Expr::Applied(name, _) = expr.syntax() {
+        hgl_source::application(name).is_some() && type_dependent(name, parameter)
+    } else if let Expr::Lambda(args, result, _) = expr.syntax() {
+        args.iter().any(|(_, ty)| type_dependent(ty, parameter))
+            || type_dependent(result, parameter)
+    } else {
+        false
     };
-    match expr.syntax() {
-        Expr::Located(..) => unreachable!("syntax strips origins"),
-        Expr::Name(n) => name(n),
-        Expr::Call(n, args) | Expr::Applied(n, args) => {
-            name(n) || args.iter().any(|(_, e)| dependent(e, parameters))
-        }
-        Expr::Lambda(_, ty, e) => name(ty) || dependent(e, parameters),
-        Expr::Property(e, _) | Expr::Unary(_, e) => dependent(e, parameters),
-        Expr::Index(a, b) | Expr::Binary(_, a, b) => {
-            dependent(a, parameters) || dependent(b, parameters)
-        }
-        Expr::Sequence(items) | Expr::Tuple(items) => {
-            items.iter().flatten().any(|e| dependent(e, parameters))
-        }
-        Expr::Sparse(items) => items
+    local
+        || expr
+            .children()
             .iter()
-            .any(|(a, b)| dependent(a, parameters) || dependent(b, parameters)),
-        Expr::Null | Expr::Literal(_) | Expr::TemporalLiteral(_) => false,
-    }
+            .any(|child| dependent(child, parameter))
+}
+
+fn type_dependent(name: &str, parameter: &impl Fn(&str) -> bool) -> bool {
+    parameter(name)
+        || hgl_source::application(name).is_some_and(|(base, args)| {
+            args.iter()
+                .take(if matches!(base, "list" | "rolling") {
+                    1
+                } else {
+                    args.len()
+                })
+                .any(|arg| type_dependent(arg, parameter))
+        })
+}
+/// Concrete default-owner bindings, retaining unresolved relationships for later checking.
+pub fn bindings(
+    library: &Library,
+    parameters: &BTreeMap<String, crate::inheritance::Pattern>,
+    types: &BTreeMap<String, Ty>,
+) -> Result<BTreeMap<String, Ty>, String> {
+    parameters
+        .iter()
+        .filter(|(_, pattern)| resolved_pattern(pattern, types))
+        .map(|(name, pattern)| {
+            Ok((
+                name.clone(),
+                crate::value_types::field_type(library, pattern, types, &mut BTreeSet::new())?,
+            ))
+        })
+        .collect()
 }
 
 /// Retain legacy fixed scalar/contextual defaults for standalone constructor callers.
@@ -146,17 +184,22 @@ pub fn size_environment(
         .enumerate()
         .filter(|(_, p)| p.constant)
         .filter_map(|(id, p)| {
-            let value = supplied
-                .get(&id)
-                .cloned()
-                .or_else(|| p.value_default.clone())
-                .or_else(|| {
-                    p.default
-                        .as_ref()?
-                        .fixed()
-                        .map(|v| Value::new(v.ty(), Kind::Literal(v)))
-                })?;
-            Some((p.name.clone(), resolve(&value)))
+            let value = supplied.get(&id).or(p.value_default.as_ref())?;
+            Some((p.name.clone(), resolve(value)))
         })
         .collect()
+}
+
+/// A retained direct contextual field still requires run preparation.
+pub fn contextual(value: &Value) -> bool {
+    matches!(&value.kind, Kind::Construct(fields)
+        if fields.iter().any(|(_, field)| matches!(field.kind, Kind::TemporalLiteral(_))))
+}
+
+/// Whether authoritative default checking can add any retained parameter values.
+pub fn pending(signature: &Signature) -> bool {
+    signature
+        .parameters
+        .iter()
+        .any(|p| p.default.is_some() && p.value_default.is_none())
 }

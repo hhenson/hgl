@@ -7,7 +7,7 @@ use std::{fmt::Write as _, fs, path::Path, process::Command};
 static NEXT_DIR: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
 fn source(body: &str) -> Vec<(String, String)> {
-    vec![
+    lifted_defaults(vec![
         (
             "preparation.hgl".into(),
             format!(
@@ -83,9 +83,68 @@ test ordered {{ {body} }}
             "replay_record_impl.hgl".into(),
             include_str!("../../../external/hgraph_std/hgl/hgraph/impl/replay_record.hgl").into(),
         ),
-    ]
+    ])
 }
-const CASES: [(&str, &str, bool, &str, usize); 30] = [
+
+fn lifted_defaults(mut sources: Vec<(String, String)>) -> Vec<(String, String)> {
+    sources[0].1.push_str(r"
+use default_scope::{scoped_default}
+const fn seed()->timezone => @[Missing/Caller]
+const fn lifted_default(value:i64,zone:timezone = @[UTC])->timezone => zone
+const fn lifted_unused(value:i64,zone:timezone = @[Missing/Default])->i64 {
+    return start_marker(value)
+}
+const fn lifted_order(value:i64,first:timezone = @[Missing/FirstDefault],second:timezone = @[Missing/SecondDefault])->i64 => value
+");
+    sources.push((
+            "default_scope.hgl".into(),
+            "module default_scope\nconst fn seed()->i64 => 7\nexport const fn scoped_default(value:i64,zone:timezone=@[UTC],offset:i64=seed())->i64 => value+offset".into(),
+        ));
+    sources
+}
+const CASES: [(&str, &str, bool, &str, usize); 36] = [
+    (
+        "lifted_default",
+        "assert eval(const(lifted_default),value:[1,2]) == [@[UTC],@[UTC]]",
+        true,
+        "0 failures",
+        0,
+    ),
+    (
+        "lifted_unused",
+        "eval(const(lifted_unused),value:[1,2])",
+        false,
+        "Missing/Default",
+        0,
+    ),
+    (
+        "lifted_supplied",
+        "assert eval(const(lifted_unused),value:[1,2],zone:@[UTC]) == [1,2]",
+        true,
+        "0 failures",
+        2,
+    ),
+    (
+        "lifted_default_order",
+        "eval(const(lifted_order),value:[1])",
+        false,
+        "Missing/FirstDefault",
+        0,
+    ),
+    (
+        "lifted_written_order",
+        "eval(const(lifted_order),value:[1],second:@[Missing/Written])",
+        false,
+        "Missing/Written",
+        0,
+    ),
+    (
+        "lifted_declaring_scope",
+        "assert eval(const(scoped_default),value:[1,2]) == [8,9]",
+        true,
+        "0 failures",
+        0,
+    ),
     (
         "hook_key",
         r#"assert eval(hook_key,value:[1,2]) == [delta<map<str,i64>>(upsert:["retained":1]),delta<map<str,i64>>(upsert:["retained":2])]"#,
@@ -445,6 +504,18 @@ fn contextual_composition_construction_requires_run_preparation() {
 }
 
 fn materializations(name: &str, text: &str) {
+    if name.starts_with("lifted_") {
+        let expected = if name == "lifted_default" {
+            3 // One retained default, then the two expected values after execution.
+        } else {
+            1 // Failures stop preparation; supplied configuration is retained once.
+        };
+        assert_eq!(
+            text.matches("MATERIALIZED").count(),
+            expected,
+            "{name}: {text}"
+        );
+    }
     if [
         "retained_alias",
         "alias_duplicate",

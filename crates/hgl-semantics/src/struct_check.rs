@@ -227,7 +227,7 @@ impl Constructor {
     }
     /// Validate complete inference and assemble source-order constructor IR.
     pub fn finish(self, library: &Library) -> Result<Value, String> {
-        self.finish_checked(library, |module, _, expr, _| {
+        self.finish_checked(library, |module, _, expr, _, _| {
             crate::default_values::literal(library, module, expr)
         })
     }
@@ -235,7 +235,7 @@ impl Constructor {
     pub fn finish_checked<E: From<String>>(
         self,
         library: &Library,
-        mut check: impl FnMut(&str, &str, &Expr, &Ty) -> Result<Value, E>,
+        mut check: impl FnMut(&str, &str, &Expr, &Ty, &BTreeMap<String, Ty>) -> Result<Value, E>,
     ) -> Result<Value, E> {
         let arguments = self
             .schema
@@ -264,15 +264,18 @@ impl Constructor {
             if matches!(default.syntax(), Expr::Null) {
                 continue;
             }
+            let (_, declared, _) = ty.structure().map_err(E::from)?;
+            let (module, source, owner) = &self.schema.default_origins[&index];
+            let parameters =
+                crate::inheritance::default_parameters(library, &self.declaration, owner)?;
+            let value = check(
+                module,
+                source,
+                &default,
+                &crate::value_access::project(&declared[index].1),
+                &crate::default_values::bindings(library, &parameters, &self.bindings)?,
+            )?;
             if !fields.iter().any(|(field, _)| *field == index) {
-                let (_, declared, _) = ty.structure().map_err(E::from)?;
-                let (module, source) = &self.schema.default_origins[&index];
-                let value = check(
-                    module,
-                    source,
-                    &default,
-                    &crate::value_access::project(&declared[index].1),
-                )?;
                 fields.push((index, value));
             }
         }

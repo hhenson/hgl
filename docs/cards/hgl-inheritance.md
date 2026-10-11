@@ -25,4 +25,9 @@ ordinary checked constant-size normalization in the ancestor's module.
 Rolling field patterns likewise retain Max/Min expression spelling beside the
 single payload type pattern; field resolution never resolves a bound as a type.
 
-RequiredStruct::default_origins retains each effective expression's declaring module and source file through inherited field offsets. Required evaluation never resolves an inherited generic field default in the child's module.
+RequiredStruct::default_origins retains each effective expression's declaring module, source file and struct identity through inherited field offsets. Required evaluation never resolves an inherited generic field default in the child's module.
+
+default_parameters(library, decl, owner) returns the declaring owner's generic
+parameters as scoped patterns in the selected root's environment. The frontend
+resolves these patterns before checking inherited default expressions, preserving
+renamed parameters, nested applications and imported declaration identity.
