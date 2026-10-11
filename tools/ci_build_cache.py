@@ -49,10 +49,12 @@ def environment_key(root):
     compiler = subprocess.check_output(['rustc', '-vV'])
     environment = {name: value for name, value in sorted(os.environ.items())
                    if name.startswith(('CARGO', 'RUST', 'CC', 'CXX', 'CFLAGS', 'CMAKE'))}
-    manifests = {path.relative_to(root).as_posix(): digest(path) for path in inputs(root)
-                 if path.name in {'Cargo.toml', 'Cargo.lock', 'rust-toolchain',
-                                  'rust-toolchain.toml'} or '.cargo' in path.parts}
-    return hashlib.sha256(compiler + json.dumps([environment, manifests],
+    # Cargo fingerprints validate manifests, features and dependency versions.
+    # Partition by the build environment, rather than discarding every reusable
+    # artifact whenever one crate's manifest or informational metadata changes.
+    configuration = {path.relative_to(root).as_posix(): digest(path) for path in inputs(root)
+                     if '.cargo' in path.parts}
+    return hashlib.sha256(compiler + json.dumps([environment, configuration],
                                                sort_keys=True).encode()).hexdigest()
 
 
