@@ -855,3 +855,5 @@ pub mod native_package;
 
 /// Checked node lifecycle value phases.
 pub use hgl_value_model::execution_phase;
+
+pub use hgl_value_model::native_contracts;

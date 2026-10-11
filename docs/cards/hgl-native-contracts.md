@@ -55,3 +55,10 @@ with its portable contract. A missing marker rejects that executable binding;
 the checker never guesses a Rust type name from an HGL alias or canonical string.
 The generated image gate checks the marker's full native ABI contract before
 setup, cold preparation or runtime helper execution.
+
+Portable Image, Scalar and Function metadata belongs to hgl-value-model, below
+source parsing and checked execution. Its existing 40-line module ceiling moves
+unchanged from hgl-types. hgl-source exposes the portable records and preserves
+its native_descriptor facade. Runtime Store contracts remain independent typed
+ABI operations and gain no dependency on this compiler metadata. Generated
+checked IR uses the source facade; no source/provider spelling changes.

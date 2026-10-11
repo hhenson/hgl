@@ -14,3 +14,5 @@ pub mod scalar_shape;
 pub mod time_context;
 pub mod type_shape;
 pub mod type_syntax;
+
+pub mod native_contracts;

@@ -1,6 +1,6 @@
 //! Inert native contract records parsed independently of provider code.
 use crate::{Cursor, Expr, Issue, Literal};
-pub use hgl_types::native_contracts::{Function, Scalar};
+pub use hgl_value_model::native_contracts::{Function, Scalar};
 use std::collections::BTreeSet;
 /// Admit the exact descriptor format and target before reading its records.
 pub fn version(c: &mut Cursor<'_>) -> Result<(), Issue> {

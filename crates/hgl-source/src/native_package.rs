@@ -1,6 +1,6 @@
 //! Inert complete package contracts and code locations; no provider code is read.
 use crate::{Cursor, Issue};
-use hgl_types::native_contracts::{Function, Scalar};
+use hgl_value_model::native_contracts::{Function, Scalar};
 use std::collections::BTreeMap;
 /// A versioned package descriptor, separate from its implementation image.
 #[derive(Debug, Clone)]

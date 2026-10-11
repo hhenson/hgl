@@ -202,7 +202,7 @@ pub struct Native {
     /// Rust provider method name.
     pub method: String,
     /// Data-only image contract selected through the ordinary library package.
-    pub provider: Option<hgl_types::native_contracts::Image>,
+    pub provider: Option<hgl_value_model::native_contracts::Image>,
     /// Whether the provider returns a fallible result.
     pub throws: bool,
     /// Resolved argument types in declaration order.

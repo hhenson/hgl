@@ -10,6 +10,7 @@ description = "Canonical ordinary value metadata independent of source syntax an
 line-budget = 1200
 
 [package.metadata.hgl.modules]
+native_contracts = { budget = 40, uses = [] }
 ordinary_shape = { budget = 120, uses = ["type_shape"] }
 execution_phase = { budget = 40, uses = [] }
 scalar_shape = { budget = 80, uses = [] }

@@ -175,7 +175,7 @@ pub fn bind(
                 .as_ref()
                 .ok_or("missing native helper executable image contract")?;
             (
-                Some(hgl_types::native_contracts::Image {
+                Some(hgl_source::native_contracts::Image {
                     provider: descriptor.provider.clone(),
                     fingerprint: descriptor.fingerprint.clone(),
                     path: path.clone(),
