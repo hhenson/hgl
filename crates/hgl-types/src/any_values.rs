@@ -9,6 +9,10 @@ use std::{
 mod data;
 pub use data::AnyView;
 
+/// A collision-free compile-time chunk of canonical UTF-8 type identity.
+#[derive(Debug)]
+pub struct IdentityChunk<const BYTES: u128, const LENGTH: usize>;
+
 /// Fallible cold-only conversion with no dependency on the checked value model.
 pub type ColdCapture = fn(AnyView<'_>) -> NodeResult<Box<dyn std::any::Any>>;
 
@@ -112,10 +116,8 @@ impl AnyValue {
     }
     /// Copy only after the caller has checked the complete prepared capacity.
     pub fn copy_prepared(&mut self, source: &Self) {
-        self.data.clear();
-        self.data.extend_from_slice(&source.data);
-        self.descriptors.clear();
-        self.descriptors.extend_from_slice(&source.descriptors);
+        self.data.clone_from(&source.data);
+        self.descriptors.clone_from(&source.descriptors);
         self.plan = source.plan;
     }
     /// Assemble a completely preflighted publication in reserved owning capacity.

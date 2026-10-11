@@ -15,3 +15,8 @@ Each owner retains descriptor references in a separate typed sidecar. Encoded he
 AnyPlan execution callbacks select Store's compiled recursive operations. Its optional capture callback returns an independently owned, type-erased checked carrier only at cold compiler boundaries. AnyValue::capture validates that carrier through a fallible cold downcast; missing or incompatible callbacks are construction errors. No compiler/Model dependency, lookup, or downcast enters evaluation. Static descriptor references outlive every retained owner.
 
 The internal ABI changes: data returns a metadata-preserving AnyView rather than bare bytes; encode_prepared receives an owning AnyValue buffer. AnyRef holds an optional plan and borrowed view; AnyView offers slice, boxed and retained. AnyPlan has no module-local index. Raw encodings are compiler/runtime-private and are not portable serialization.
+
+IdentityChunk<BYTES,LENGTH> is a shared zero-sized compiler identity marker.
+Balanced tuples of exact chunks distinguish canonical names, generic arguments,
+and byte lengths across separately emitted modules. It carries no runtime data;
+its TypeId provides the existing constant-time descriptor identity observation.

@@ -233,9 +233,10 @@ pub fn layouts(plan: &Plan) -> String {
         let native = owned_type(ty);
         let marker = global_type(ty);
         let operation = operation(ty);
+        let identity = crate::layouts::any_identity(ty.source_name().as_bytes());
         let caps = [0, 1, 2].map(|op| hgl_semantics::any_values::capable(ty, op));
         out.push(format!(
-                "static ANY_{n}:hgl_types::AnyPlan=hgl_types::AnyPlan {{execution:&hgl_store::any_values::operations::EXECUTION,capture:Some(any_capture_{n}),identity:std::any::TypeId::of::<{marker}>,operation:{operation},capabilities:{caps:?}}};fn any_write_{n}<B:hgl_types::any_values::AnyBuffer>(v:&{native},out:&mut B) {{{write}}}fn any_read_{n}(data:hgl_types::any_values::AnyView<'_>)->{native} {{{read}}}fn any_size_{n}(v:&{native})->usize {{let mut width=hgl_types::any_values::AnyWidth::default();any_write_{n}(v,&mut width);width.0}}\n"
+                "static ANY_{n}:hgl_types::AnyPlan=hgl_types::AnyPlan {{execution:&hgl_store::any_values::operations::EXECUTION,capture:Some(any_capture_{n}),identity:std::any::TypeId::of::<{identity}>,operation:{operation},capabilities:{caps:?}}};fn any_write_{n}<B:hgl_types::any_values::AnyBuffer>(v:&{native},out:&mut B) {{{write}}}fn any_read_{n}(data:hgl_types::any_values::AnyView<'_>)->{native} {{{read}}}fn any_size_{n}(v:&{native})->usize {{let mut width=hgl_types::any_values::AnyWidth::default();any_write_{n}(v,&mut width);width.0}}\n"
             ));
         let encoded = crate::value_convert::encode(ty, "&native");
         out.push(format!("fn any_capture_{n}(data:hgl_types::any_values::AnyView<'_>)->hgl_types::NodeResult<Box<dyn std::any::Any>> {{let value=(||->Result<hgl_semantics::ir::Value,String>{{let native=any_read_{n}(data);Ok({encoded})}})().map_err(hgl_types::NodeError::new)?;Ok(Box::new(value))}}"));

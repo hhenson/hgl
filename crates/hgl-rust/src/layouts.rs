@@ -70,4 +70,4 @@ pub fn ordinary_storage(ty: &Ty) -> Option<Ty> {
     None
 }
 
-pub(crate) use crate::identifiers::identifier;
+pub(crate) use crate::identifiers::{any_identity, identifier};

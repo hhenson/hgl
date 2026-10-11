@@ -71,6 +71,102 @@ fn native_returned_boxes_use_the_producers_cold_capture() -> Result<(), Box<dyn 
         "mod producer {{{producer} pub fn make(value:i64)->hgl_types::NodeResult<hgl_types::AnyValue>{{Ok({integer})}}}}struct Provider;mod native {{pub fn foreign_box_i64(value:i64)->hgl_types::NodeResult<hgl_types::AnyValue>{{crate::producer::make(value)}}}}{generated}"
     ))
 }
+#[test]
+fn shared_nominal_declarations_have_one_identity_across_emitted_modules()
+-> Result<(), Box<dyn std::error::Error>> {
+    let shared =
+        "module shared\nexport struct Record<T> {value:T}\nexport struct Other {value:i64}";
+    let compile = |source: &str| -> Result<String, String> {
+        Ok(hgl_program::emit_rust(&hgl_program::compile(
+            &[
+                ("main.hgl".into(), source.into()),
+                ("shared.hgl".into(), shared.into()),
+            ],
+            "main",
+        )?))
+    };
+    let producer = compile(
+        "module producer\nuse shared::{Record}\nfn main()->any {when {return any(Record<i64>(value:1))}}",
+    )?;
+    let consumer = compile(
+        "module consumer\nuse shared::{Record,Other}\nfn main()->any {when {return any((Record<atomic<i64>>(value:1),Record<bool>(value:true),Other(value:1),true))}}",
+    )?;
+    let nominal = |name: &str| {
+        hgl_source::Ty::Struct(
+            format!("shared::{name}").into(),
+            vec![("value".into(), hgl_source::Ty::I64)],
+            vec![],
+        )
+    };
+    let record = hgl_rust::any_values::construct(&nominal("Record<i64>"), "(value,)");
+    let other = hgl_rust::any_values::construct(&nominal("Other"), "(value,)");
+    run(&format!(
+        r#"
+mod producer {{{producer} pub fn make(value:i64)->hgl_types::NodeResult<hgl_types::AnyValue>{{Ok({record})}}}}
+mod consumer {{{consumer} pub fn make(value:i64)->hgl_types::NodeResult<hgl_types::AnyValue>{{Ok({record})}} pub fn other(value:i64)->hgl_types::NodeResult<hgl_types::AnyValue>{{Ok({other})}}}}
+fn main(){{
+ let left=producer::make(1).unwrap();let right=consumer::make(1).unwrap();
+ assert!(left.equal(&right).unwrap(),"same imported nominal declaration acquired different identities");
+ assert_eq!(left.key_hash().unwrap(),right.key_hash().unwrap());
+ assert_eq!(left.compare(&right).unwrap(),Some(std::cmp::Ordering::Equal));
+ assert_eq!(left.compare(&consumer::make(2).unwrap()).unwrap(),Some(std::cmp::Ordering::Less));
+ assert!(!left.equal(&consumer::other(1).unwrap()).unwrap());
+ assert_eq!(left.compare(&consumer::other(1).unwrap()).unwrap(),None);
+}}
+"#
+    ))
+}
+#[test]
+fn exact_identity_preserves_generic_arguments_lengths_and_normalization()
+-> Result<(), Box<dyn std::error::Error>> {
+    use hgl_source::Ty;
+    let names = [
+        "identity::Name",
+        "identity::Name\0",
+        "identity::Name\0\0",
+        "identity::Generic<i64>",
+        "identity::Generic<bool>",
+        "identity::Καλημέρα",
+    ];
+    let mut types: Vec<_> = names
+        .iter()
+        .map(|name| Ty::Struct((*name).into(), vec![], vec![]))
+        .collect();
+    types.extend([Ty::I64, Ty::I64.atomic(), Ty::Any]);
+    let plan = hgl_rust::Plan {
+        ordinary_types: types.clone(),
+        ..Default::default()
+    };
+    let generated = hgl_rust::emit(&plan);
+    let mut checks = String::new();
+    for (index, ty) in types[..8].iter().enumerate() {
+        let mut name = String::new();
+        for byte in ty.source_name().bytes() {
+            write!(name, "{byte:03}")?;
+        }
+        writeln!(checks, "let id{index}=(ANY_{name}.identity)();")?;
+    }
+    run(&format!(
+        "mod generated{{{generated}pub fn check(){{{checks}let distinct=[id0,id1,id2,id3,id4,id5,id6];for(i,left)in distinct.iter().enumerate(){{for right in &distinct[i+1..]{{assert_ne!(left,right);}}}}assert_eq!(id6,id7);}}}}fn main(){{generated::check();}}"
+    ))
+}
+#[test]
+fn long_source_names_keep_balanced_shared_identity() -> Result<(), Box<dyn std::error::Error>> {
+    let name = "Long".repeat(1024);
+    let source = format!(
+        "module long_identity\nstruct {name} {{value:i64}}\nfn main()->any {{when {{return any({name}(value:1))}}}}"
+    );
+    let emitted = emit(&source)?;
+    let ty = hgl_source::Ty::Struct(
+        format!("long_identity::{name}").into(),
+        vec![("value".into(), hgl_source::Ty::I64)],
+        vec![],
+    );
+    let value = hgl_rust::any_values::construct(&ty, "(1_i64,)");
+    run(&format!(
+        "mod first{{{emitted}pub fn make()->hgl_types::NodeResult<hgl_types::AnyValue>{{Ok({value})}}}}mod second{{{emitted}pub fn make()->hgl_types::NodeResult<hgl_types::AnyValue>{{Ok({value})}}}}fn main(){{let a=first::make().unwrap();let b=second::make().unwrap();assert!(a.equal(&b).unwrap());assert_eq!(a.key_hash().unwrap(),b.key_hash().unwrap());}}"
+    ))
+}
 fn emit(source: &str) -> Result<String, String> {
     Ok(hgl_program::emit_rust(&hgl_program::compile(
         &[("module.hgl".into(), source.into())],
@@ -89,7 +185,13 @@ fn run(source: &str) -> Result<(), Box<dyn std::error::Error>> {
             .as_nanos()
     ));
     fs::create_dir_all(directory.join("src"))?;
-    let mut manifest = "[package]\nname=\"cross-any\"\nversion=\"0.0.0\"\nedition=\"2024\"\n[workspace]\n[dependencies]\n".to_string();
+    let package = directory
+        .file_name()
+        .ok_or("generated package name")?
+        .to_string_lossy();
+    let mut manifest = format!(
+        "[package]\nname=\"{package}\"\nversion=\"0.0.0\"\nedition=\"2024\"\n[workspace]\n[dependencies]\n"
+    );
     for name in [
         "hgl-types",
         "hgl-source",

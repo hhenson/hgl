@@ -53,3 +53,16 @@ cold capture, native-returned boxes, differing values and capability failures,
 independent prepared descriptor storage, and incompatible cold carriers. Existing
 generated Any allocation and provider-failure tests remain required in debug and
 optimized builds.
+
+## Canonical identity across emitted modules
+
+Module-local Rust nominal marker types cannot identify the same imported HGL
+declaration across independently emitted modules. Descriptor identity therefore
+uses TypeId of shared Types IdentityChunk markers encoding exact canonical UTF-8
+name bytes and explicit chunk lengths. A balanced tuple of chunks bounds Rust
+type nesting logarithmically for long admitted names. This is an injective
+encoding, including generic arguments and trailing zero bytes; it has no hashes,
+registry, lazy initialization or runtime normalization. Existing canonical source
+normalization occurs before emission, so normalized atomic scalar spellings
+retain their common identity. Distinct nominal origins remain distinct even with
+identical payload layouts.
