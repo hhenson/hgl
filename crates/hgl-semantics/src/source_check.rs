@@ -33,7 +33,7 @@ fn check_sources(
         Err(error) => return vec![*error],
     };
     let mut errors: Vec<Diagnostic> = Vec::new();
-    for declaration in &library.declarations {
+    for declaration in library.declarations.iter() {
         if module_only
             && declaration.module != library.root
             && (declaration.test_only || declaration.role == Role::Test)
