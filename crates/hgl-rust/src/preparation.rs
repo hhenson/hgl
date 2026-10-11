@@ -34,6 +34,7 @@ pub(crate) fn native_context(plan: &Plan) -> String {
         let args=n.args.iter().enumerate().map(|(i,t)|format!("let arg{i}=(||->Result<{},String>{{Ok({})}})().map_err(hgl_semantics::value_eval::EvalError::Operation)?;",crate::layouts::owned_type(t),decode(t,&format!("&args[{i}]")))).collect::<Vec<_>>().concat();
         let call_args=n.args.iter().enumerate().map(|(i,t)|if matches!(t,hgl_source::Ty::Native(_)) {format!("arg{i}.view()")}else{format!("{}arg{i}",if *t==hgl_source::Ty::Str {"&"}else{""})}).collect::<Vec<_>>().join(",");
         let call=format!("{}::{}({call_args}){}",hgl_rust_codegen::native_image::image_module(&p.provider),n.method,if n.throws {".map_err(|error|error.code.map_or_else(||hgl_semantics::value_eval::EvalError::Operation(error.message.clone()),|code|hgl_semantics::value_eval::EvalError::Coded(code,error.message.clone())))?"}else{""});
+        let call = if matches!(n.result,hgl_source::Ty::Native(_)) {format!("({call}).retain().map_err(hgl_semantics::value_eval::EvalError::from)?")}else{call};
         format!("{:?}=>{{{args}let result={call};Ok({})}},",n.name,encode(&n.result,if n.result==hgl_source::Ty::Str {"&result.to_owned()"}else{"&result"}))
     }).collect::<Vec<_>>().concat();
     format!(
