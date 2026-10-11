@@ -126,3 +126,19 @@ test {
         assert eval(copied_family,[1,2])==[any(MixedFirst(value:1,items:[1,2])),any(MixedFirst(value:2,items:[1,2]))]
     }
 }
+
+native const fn owner_check(value:bool) throws
+native const fn owner_check(value:bool) throws {}
+test {
+    fn family_comparison_at_stop(value:i64)->i64 {
+        when { return delta_value(value) }
+        stop {
+            let first:MixedChoice=MixedFirst(value:1,items:[1,2])
+            let retained=first
+            let second:MixedChoice=MixedSecond(value:1,items:[1,2])
+            owner_check(first==retained && first!=second && !(first==second))
+        }
+    }
+    test stop_hooks_compare_retained_family_owners {
+        assert eval(family_comparison_at_stop, [1,2]) == [1,2]
+    }}

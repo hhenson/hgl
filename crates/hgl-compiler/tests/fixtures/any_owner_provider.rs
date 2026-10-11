@@ -37,4 +37,8 @@ mod native {
         Ok(())
     }
 
+    pub fn owner_check_bool(value: bool) -> hgl_types::NodeResult {
+        assert!(value, "retained stop family identity");
+        Ok(())
+    }
 }

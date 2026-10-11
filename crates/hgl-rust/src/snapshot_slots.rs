@@ -96,7 +96,7 @@ pub fn local(id: usize, value: &Value, emit: impl Fn(&Value) -> String) -> Strin
         && op == "snapshot"
     {
         format!(
-            "let input={};let mut prepared=_ctx.prepared();let(observation,globals)=prepared.storage.observations();let columns=globals.values_mut();if !observation.bindings.valid(input.id()) {{return Err(hgl_types::NodeError::new(\"ordinary tuple input is invalid\"));}}{}true",
+            "let input={};_ctx.with_observations(|observation,globals|->hgl_types::NodeResult{{let columns=globals.values_mut();if !observation.bindings.valid(input.id()) {{return Err(hgl_types::NodeError::new(\"ordinary tuple input is invalid\"));}}{}Ok(())}})?;true",
             crate::observed::input(input),
             if matches!(input.ty, Ty::Rolling(..)) {
                 crate::observed::capture(&input.ty, "input", "destination")
@@ -184,7 +184,7 @@ fn constructed(value: &Value, destination: &str, emit: &impl Fn(&Value) -> Strin
         let marker = global_type(&crate::snapshots::storage(&child.ty));
         let write = if child.snapshot {
             if let Kind::Unary(op,input) = &child.kind && op == "snapshot" {
-                format!("let input={};let mut prepared=_ctx.prepared();let(observation,globals)=prepared.storage.observations();let columns=globals.values_mut();let destination={child_slot};if !observation.bindings.valid(input.id()) {{return Err(hgl_types::NodeError::new(\"ordinary tuple input is invalid\"));}}{}columns.set_list_len(({target}).fields(),1);",crate::observed::input(input),capture(&child.ty,"input","destination"))
+                format!("let input={};_ctx.with_observations(|observation,globals|->hgl_types::NodeResult{{let columns=globals.values_mut();let destination={child_slot};if !observation.bindings.valid(input.id()) {{return Err(hgl_types::NodeError::new(\"ordinary tuple input is invalid\"));}}{}columns.set_list_len(({target}).fields(),1);Ok(())}})?;",crate::observed::input(input),capture(&child.ty,"input","destination"))
             } else if matches!(child.kind,Kind::Construct(_)) {
                 format!("let destination={{let globals=_ctx.global_state();let columns=globals.values();{child_slot}}};{} _ctx.global_state().values_mut().set_list_len(({target}).fields(),1);",constructed(child,"destination",emit))
             } else {

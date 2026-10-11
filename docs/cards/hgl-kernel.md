@@ -338,4 +338,9 @@ the facade checks ownership/lifetime and performs complete-preflight publication
 This keeps source observation, prepared record append and publication under one
 borrowed capability without adding per-value names or type dispatch.
 
+`Ctx::with_observations(action)` lends immutable temporal observations and mutable
+ordinary global storage to a callback in start, evaluation or stop. It grants no
+publication authority; prepared scalar construction and copying can therefore use
+the same reserved storage in every hook.
+
 On a primary execution/start failure followed by cleanup failure, retain the first primary and attach cleanup to NodeError.cleanup; matching negative assertions can then fail without losing either error.

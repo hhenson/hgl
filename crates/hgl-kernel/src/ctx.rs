@@ -46,6 +46,15 @@ pub struct Ctx<'a> {
 }
 
 impl Ctx<'_> {
+    /// Observe sources and mutate ordinary values without publication authority, in any hook.
+    pub fn with_observations<T>(
+        &mut self,
+        action: impl FnOnce(hgl_store::Observation<'_>, &mut GlobalState) -> T,
+    ) -> T {
+        let mut storage = self.store.prepared();
+        let (observation, globals) = storage.observations();
+        action(observation, globals)
+    }
     /// Typed prepared publication and disjoint source/record destination access.
     pub fn prepared(&mut self) -> hgl_store::PreparedTick<'_, impl hgl_store::Wake> {
         debug_assert!(self.phase == Phase::Eval, "NOD-22: writes only in eval");

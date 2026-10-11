@@ -131,7 +131,7 @@ pub(crate) fn write(plan: &Plan, v: &Value, slot: &str, prelude: &mut Vec<String
 
 pub(crate) fn storage(code: &str) -> String {
     format!(
-        "{{let now=_ctx.evaluation_time();let mut prepared=_ctx.prepared();let(observation,globals)=prepared.storage.observations();let columns=globals.values_mut();{code}}}"
+        "{{let now=_ctx.evaluation_time();_ctx.with_observations(|observation,globals|->hgl_types::NodeResult{{let columns=globals.values_mut();{code}Ok(())}})?;}}"
     )
 }
 

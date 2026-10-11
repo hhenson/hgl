@@ -25,3 +25,5 @@ operand; configuration projections preserve the replay proof and existing slots.
 
 Ordinary family equality over prepared owners reserves two independent comparison boxes and uses the compiled concrete-member codec. Its reads avoid native aggregate extraction and preserve ordinary equality semantics.
 Nested inline comparison operands retain their own prepared owners.
+
+Family owner comparisons are prepared uniformly in start, when and stop hooks. Shutdown comparisons borrow retained owning fields without cloning them.
