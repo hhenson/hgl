@@ -56,7 +56,7 @@ pub fn decode(t: &Ty, expression: &str) -> String {
 /// Encode an independently owned native capture as its exact checked value.
 pub fn encode(t: &Ty, expression: &str) -> String {
     if *t == Ty::Any {
-        return format!("encode_any({expression})");
+        return format!("encode_any({expression})?");
     }
     if matches!(t, Ty::Set(_) | Ty::Map(..)) {
         return format!(
@@ -79,7 +79,7 @@ pub fn encode(t: &Ty, expression: &str) -> String {
     }
     if matches!(t, Ty::Recursive(_)) {
         return format!(
-            "{}::encode_recursive({expression})",
+            "{}::encode_recursive({expression})?",
             crate::layouts::global_type(t)
         );
     }
@@ -92,7 +92,7 @@ pub fn encode(t: &Ty, expression: &str) -> String {
         return delta_encode(origin, expression);
     } else if let Ty::List(child, _) = t {
         format!(
-            "hgl_semantics::ir::Kind::List(v.iter().map(|item|{}).collect())",
+            "hgl_semantics::ir::Kind::List(v.iter().map(|item|Ok({})).collect::<Result<Vec<_>,String>>()?)",
             encode(child, "item")
         )
     } else if matches!(t, Ty::Struct(..) | Ty::Tuple(_)) {

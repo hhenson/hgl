@@ -11,7 +11,7 @@ line-budget = 6860
 
 # Budgets of the modules that were crates of their own (docs/decisions/0004).
 [package.metadata.hgl.modules]
-any_values = { budget = 350, uses = ["global_arena", "global_value", "prepared_value", "prepared_store", "shapes", "observation", "keys"] }
+any_values = { budget = 480, uses = ["global_arena", "global_value", "prepared_value", "prepared_store", "shapes", "observation", "keys"] }
 atomic = { budget = 180, uses = ["list", "scalar_copy", "bindings", "global_value", "prepared_value", "shapes"] }
 binding_build = { budget = 160, uses = ["endpoints"] }
 bindings = { budget = 1100, uses = ["binding_build", "endpoints"] }

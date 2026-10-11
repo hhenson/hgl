@@ -9,31 +9,36 @@ fn identity<T: 'static>() -> TypeId {
     TypeId::of::<T>()
 }
 static INTEGER: AnyPlan = AnyPlan {
-    index: 0,
+    capture: None,
+    execution: &hgl_store::any_values::operations::EXECUTION,
     identity: identity::<i64>,
     operation: AnyOperation::Integer,
     capabilities: [true; 3],
 };
 static LIST: AnyPlan = AnyPlan {
-    index: 1,
+    capture: None,
+    execution: &hgl_store::any_values::operations::EXECUTION,
     identity: identity::<Vec<i64>>,
     operation: AnyOperation::Sequence(&INTEGER, false),
     capabilities: [true; 3],
 };
 static DELTA: AnyPlan = AnyPlan {
-    index: 2,
+    capture: None,
+    execution: &hgl_store::any_values::operations::EXECUTION,
     identity: identity::<(Vec<(i64, i64)>,)>,
     operation: AnyOperation::Data,
     capabilities: [false; 3],
 };
 static NO_ORDER: AnyPlan = AnyPlan {
-    index: 3,
+    capture: None,
+    execution: &hgl_store::any_values::operations::EXECUTION,
     identity: identity::<Vec<String>>,
     operation: AnyOperation::Sequence(&INTEGER, false),
     capabilities: [true, true, false],
 };
 static NO_EQUAL: AnyPlan = AnyPlan {
-    index: 4,
+    capture: None,
+    execution: &hgl_store::any_values::operations::EXECUTION,
     identity: identity::<Vec<(Vec<(i64, i64)>,)>>,
     operation: AnyOperation::Sequence(&DELTA, false),
     capabilities: [false; 3],
@@ -72,7 +77,7 @@ fn aggregate_and_delta_boxes_keep_independent_prepared_contents() -> NodeResult 
     });
     result?;
     assert_eq!(allocations, 0);
-    assert_eq!(delta_saved.read(&columns)?.data(), delta.data());
+    assert_eq!(&*delta_saved.read(&columns)?.data(), &*delta.data());
     assert_eq!(
         (delta_saved.read(&columns)?.plan().unwrap().identity)(),
         identity::<(Vec<(i64, i64)>,)>()
@@ -131,6 +136,66 @@ fn actual_contained_capabilities_are_required_even_for_empty_collections() -> No
             .unwrap_err()
             .code,
         Some("value.capability")
+    );
+    Ok(())
+}
+
+#[test]
+fn nested_descriptor_metadata_is_independent_prepared_and_fallible() -> NodeResult {
+    use hgl_types::any_values::AnyBuffer as _;
+    static BOXED: AnyPlan = AnyPlan {
+        capture: None,
+        execution: &hgl_store::any_values::operations::EXECUTION,
+        identity: identity::<AnyValue>,
+        operation: AnyOperation::Boxed,
+        capabilities: [true; 3],
+    };
+    static WRONG: AnyPlan = AnyPlan {
+        capture: Some(|_| Ok(Box::new(false))),
+        execution: &hgl_store::any_values::operations::EXECUTION,
+        identity: identity::<i64>,
+        operation: AnyOperation::Integer,
+        capabilities: [true; 3],
+    };
+    let foreign = AnyValue::from_encoded(&INTEGER, 1_i64.to_le_bytes().to_vec());
+    let mut data = AnyValue::default();
+    data.descriptor(foreign.plan());
+    data.append(foreign.data());
+    let boxed = AnyValue::from_encoded(&BOXED, data);
+    let mut saved = AnyValue::default();
+    saved.reserve(boxed.data().len())?;
+    let (result, allocations) = count_in(|| -> NodeResult {
+        saved.copy_prepared(&boxed);
+        assert!(saved.equal(&boxed)?);
+        assert_eq!(saved.key_hash()?, boxed.key_hash()?);
+        Ok(())
+    });
+    result?;
+    assert_eq!(allocations, 0);
+    drop(boxed);
+    drop(foreign);
+    let inner = saved.data().boxed();
+    assert_eq!((inner.plan.unwrap().identity)(), identity::<i64>());
+    let mut bad = AnyValue::default();
+    bad.descriptor(Some(&DELTA));
+    bad.write(&[]);
+    let bad = AnyValue::from_encoded(&BOXED, bad);
+    assert!(!saved.equal(&bad)?);
+    assert_eq!(bad.equal(&bad).unwrap_err().code, Some("value.capability"));
+    assert!(
+        saved
+            .capture::<u64>()
+            .unwrap_err()
+            .message
+            .contains("missing cold")
+    );
+    let wrong = AnyValue::from_encoded(&WRONG, 1_i64.to_le_bytes().to_vec());
+    assert!(
+        wrong
+            .capture::<u64>()
+            .unwrap_err()
+            .message
+            .contains("incompatible cold")
     );
     Ok(())
 }

@@ -134,7 +134,7 @@ impl<W: crate::Wake> crate::PreparedTick<'_, W> {
         measure: impl FnOnce(
             crate::Observation<'_>,
         ) -> NodeResult<(Option<&'static hgl_types::AnyPlan>, usize)>,
-        compose: impl FnOnce(&mut Vec<u8>, crate::Observation<'_>),
+        compose: impl FnOnce(&mut AnyValue, crate::Observation<'_>),
     ) -> NodeResult {
         self.authorize(output.id(), output.generation());
         let (plan, width) = measure(self.storage.observations().0)?;
@@ -180,7 +180,7 @@ impl ValueColumns {
         &mut self,
         destination: ValueSlot<Any>,
         measure: impl FnOnce(&Self) -> NodeResult<(Option<&'static hgl_types::AnyPlan>, usize)>,
-        compose: impl FnOnce(&Self, &mut Vec<u8>),
+        compose: impl FnOnce(&Self, &mut AnyValue),
     ) -> NodeResult {
         let (plan, width) = measure(self)?;
         if self.any(destination.fields()).capacity() < width {
@@ -223,3 +223,6 @@ impl<W: crate::Wake> crate::PreparedTick<'_, W> {
         Ok(())
     }
 }
+
+/// Compiled descriptor execution over independently retained encoded owners.
+pub mod operations;

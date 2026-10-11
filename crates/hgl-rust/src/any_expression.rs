@@ -23,7 +23,7 @@ fn body(
     if value.ty == Ty::Any {
         let inner = boxed(plan, argument(value).unwrap_or(value), prelude, emit);
         return format!(
-            "{{let mut width=hgl_types::any_values::AnyWidth::default();let plan={{let out=&mut width;{inner}}};out.write(&(plan.map_or(0,|p|p.index as u64+1)).to_le_bytes());{inner};}}"
+            "{{let mut width=hgl_types::any_values::AnyWidth::default();let plan={{let out=&mut width;{inner}}};out.descriptor(plan);{inner};}}"
         );
     }
     if let Kind::List(items) = &value.kind {

@@ -11,7 +11,7 @@ line-budget = 1200
 
 # Budgets of the modules that were crates of their own (docs/decisions/0004).
 [package.metadata.hgl.modules]
-any_values = { budget = 450, uses = [] }
+any_values = { budget = 320, uses = [] }
 calendar = { budget = 400, uses = [] }
 growing_range = { budget = 100, uses = [] }
 node_error = { budget = 100, uses = [] }

@@ -566,7 +566,7 @@ pub fn emit_prepared_test_body(plan: &Plan) -> String {
             .clone()
             .delta()
             .unwrap_or_else(|_| unreachable!("checked output delta"));
-        out.push(format!("let ticks=store.global_state().get(recording).map_err(|e|e.message)?.into_iter().collect();drop(built);\nlet observed=hgl_testkit::evaluation::observe(ticks,prepared.input_length)?;\nlet (length,ticks)=observed.into_parts(); Ok(hgl_semantics::harness_ir::CapturedEval {{length,ticks:ticks.iter().map(|(i,v)|(*i,{})).collect()}})\n",crate::preparation::encode(&payload,"v")));
+        out.push(format!("let ticks=store.global_state().get(recording).map_err(|e|e.message)?.into_iter().collect();drop(built);\nlet observed=hgl_testkit::evaluation::observe(ticks,prepared.input_length)?;\nlet (length,ticks)=observed.into_parts(); Ok(hgl_semantics::harness_ir::CapturedEval {{length,ticks:ticks.iter().map(|(i,v)|Ok((*i,{}))).collect::<Result<_,String>>()?}})\n",crate::preparation::encode(&payload,"v")));
     } else {
         out.push(
             "Ok(hgl_semantics::harness_ir::CapturedEval {length:prepared.input_length,ticks:Vec::new()})\n"
