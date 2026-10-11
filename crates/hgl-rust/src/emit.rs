@@ -385,15 +385,12 @@ pub fn emit_test_body(plan: &Plan, expected: Option<&[Option<Value>]>) -> String
                 })
                 .collect::<Vec<_>>()
                 .join(",");
-            let comparison = if crate::any_values::contains(&payload) {
+            let comparison = if crate::any_values::contains(&payload)
+                || matches!(payload, Ty::Delta(_) | Ty::Native(_))
+            {
                 format!(
                     "hgl_testkit::evaluation::try_compare_by(&expected,&_observed,|a,b|{})?;",
                     crate::any_values::capture_equal(&payload, "a", "b")
-                )
-            } else if matches!(payload, Ty::Delta(_)) {
-                format!(
-                    "hgl_testkit::evaluation::compare_by(&expected,&_observed,|a,b|{})?;",
-                    crate::deltas::equivalent(&payload, "a", "b")
                 )
             } else {
                 "hgl_testkit::evaluation::compare(&expected,&_observed)?;".into()
@@ -419,7 +416,7 @@ fn native_signature(native: &crate::ir::Native) -> String {
             rust_type(&native.result)
         )
     } else {
-        rust_type(&native.result).into()
+        rust_type(&native.result)
     };
     format!("fn {}({args})->{result}", native.method)
 }
@@ -440,6 +437,20 @@ fn native_images(plan: &Plan) -> String {
             image_module(&provider.provider)
         ));
     }
+    let mut identities = std::collections::BTreeSet::new();
+    for provider in providers.values() {
+        for (scalar, marker) in &provider.scalars {
+            let domain = identities.len();
+            if identities.insert(&scalar.identity) {
+                code.push(format!(
+                    "const NATIVE_DOMAIN{}:usize={domain};type {}={}::{marker};",
+                    crate::native_values::domain(scalar),
+                    crate::native_values::marker(scalar),
+                    image_module(&provider.provider)
+                ));
+            }
+        }
+    }
     code.push("fn validate_native_images()->Result<(),String>{".into());
     for provider in plan
         .natives
@@ -451,7 +462,7 @@ fn native_images(plan: &Plan) -> String {
         for (scalar, marker) in &provider.scalars {
             let caps = ["copy", "text", "equality", "hash", "order", "serialization"]
                 .map(|c| scalar.capabilities.contains(c));
-            code.push(format!("<{module}::{marker} as hgl_store::native_values::NativeType>::CONTRACT.validate({:?},{:?},{:?},{caps:?}).map_err(|e|e.to_string())?;",provider.provider,provider.fingerprint,scalar.identity));
+            code.push(format!("<{module}::{marker} as hgl_store::native_values::NativeType>::CONTRACT.validate({:?},{:?},{:?},{caps:?}).map_err(|e|e.message.clone())?;",provider.provider,provider.fingerprint,scalar.identity));
         }
     }
     code.push("Ok(())}\n".into());
@@ -492,9 +503,9 @@ fn input_guard(n: &Node) -> String {
         .join(" && ")
 }
 
-fn native_arg_type(ty: &Ty) -> &'static str {
+fn native_arg_type(ty: &Ty) -> String {
     if *ty == Ty::Str {
-        "&str"
+        "&str".into()
     } else {
         rust_type(ty)
     }

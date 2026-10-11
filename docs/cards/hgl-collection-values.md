@@ -11,7 +11,9 @@ FnMut(&Value)->Result<Value,E>)->Result<Vec<Value>,E>` independently retains eac
 key, validates and checks duplicates before evaluating its map value. Failure
 returns no partial collection and never executes later expressions.
 
-`equal(&Value,&Value)->bool` recursively compares exact ordinary types and
-concrete family members, with unordered Set/Map entries and ordered lists.
+`equal(&Value,&Value)->Result<bool,EvalError>` reexports authoritative fallible
+owning-value comparison, preserving provider and nested box failures. Cold
+construction uses key_context for provider-equal native identities; source
+checking retains the existing known-key path. The module now belongs to hgl-eval.
 Acceptance: instrumented provider ordering, duplicate short circuit, once-only
 materialization, nested unordered equality and NaN/signed-zero boundaries.

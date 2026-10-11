@@ -40,9 +40,8 @@ pub fn image(source: &str, c: &mut Cursor<'_>) -> Result<Option<String>, Issue> 
             return Err("native provider image requires a Rust source package".into());
         }
         let source = std::path::absolute(source).map_err(|e| Issue::from(e.to_string()))?;
-        Ok(Some(
-            source.with_file_name(path).to_string_lossy().into_owned(),
-        ))
+        let path = source.with_file_name(path);
+        Ok(Some(path.to_string_lossy().into_owned()))
     } else {
         Ok(None)
     }

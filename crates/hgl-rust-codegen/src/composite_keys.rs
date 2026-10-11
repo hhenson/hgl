@@ -9,6 +9,9 @@ pub fn composite(ty: &Ty) -> bool {
 /// Resolve an exact key directly from prepared typed field storage.
 pub fn slot_id(ty: &Ty, slot: &str, marker: fn(&Ty) -> String) -> String {
     let name = marker(ty);
+    if matches!(ty, Ty::Native(_)) {
+        return format!("<{name}>::key_view_id(keys,source.native({slot}))?");
+    }
     if *ty == Ty::Any {
         return format!(
             "<hgl_store::Any as hgl_store::Key>::id(keys,source.any(({slot}).fields()))?"
@@ -30,6 +33,11 @@ pub fn slot_id(ty: &Ty, slot: &str, marker: fn(&Ty) -> String) -> String {
 /// Copy a key's retained components directly into an already reserved typed slot.
 pub fn copy(ty: &Ty, id: &str, slot: &str, marker: fn(&Ty) -> String) -> String {
     let name = marker(ty);
+    if matches!(ty, Ty::Native(_)) {
+        return format!(
+            "{{let value=<{name}>::key_view(keys,{id})?;<{name}>::check_view(columns,{slot},value)?;<{name}>::copy_view(columns,{slot},value);}}"
+        );
+    }
     if composite(ty) {
         format!("{name}::copy_key(keys,{id},columns,{slot})?;")
     } else {

@@ -19,6 +19,13 @@ pub(crate) fn sources(main: &str) -> Vec<(String, String)> {
         "backend-interfaces.hgl".into(),
         std::fs::read_to_string(root.join("native/stdlib/interfaces.hgl")).unwrap(),
     ));
+    out.extend(
+        hgl_program::library_files::sources(
+            &[root.join("native/stdlib/atomic_values.hgl-native")],
+            &[],
+        )
+        .unwrap(),
+    );
     collect(&root.join("external/hgraph_std/hgl/hgraph"), &mut out);
     out
 }

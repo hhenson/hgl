@@ -12,30 +12,35 @@ static INTEGER: AnyPlan = AnyPlan {
     index: 0,
     identity: identity::<i64>,
     operation: AnyOperation::Integer,
+    copy: |data, out| out.write(data),
     capabilities: [true; 3],
 };
 static LIST: AnyPlan = AnyPlan {
     index: 1,
     identity: identity::<Vec<i64>>,
     operation: AnyOperation::Sequence(&INTEGER, false),
+    copy: |data, out| out.write(data),
     capabilities: [true; 3],
 };
 static DELTA: AnyPlan = AnyPlan {
     index: 2,
     identity: identity::<(Vec<(i64, i64)>,)>,
     operation: AnyOperation::Data,
+    copy: |data, out| out.write(data),
     capabilities: [false; 3],
 };
 static NO_ORDER: AnyPlan = AnyPlan {
     index: 3,
     identity: identity::<Vec<String>>,
     operation: AnyOperation::Sequence(&INTEGER, false),
+    copy: |data, out| out.write(data),
     capabilities: [true, true, false],
 };
 static NO_EQUAL: AnyPlan = AnyPlan {
     index: 4,
     identity: identity::<Vec<(Vec<(i64, i64)>,)>>,
     operation: AnyOperation::Sequence(&DELTA, false),
+    copy: |data, out| out.write(data),
     capabilities: [false; 3],
 };
 fn list(values: &[i64]) -> AnyValue {

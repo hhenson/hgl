@@ -92,6 +92,11 @@ pub fn function(c: &mut Cursor<'_>) -> Result<(String, Function), Issue> {
     let throws = c.take("throws");
     c.need("symbol")?;
     let symbol = symbol(c)?;
+    let bound = if c.take("bound") {
+        Some(self::symbol(c)?)
+    } else {
+        None
+    };
     c.need("ownership")?;
     c.need("owned")?;
     c.need("phases")?;
@@ -114,6 +119,7 @@ pub fn function(c: &mut Cursor<'_>) -> Result<(String, Function), Issue> {
             result,
             throws,
             symbol,
+            bound,
             phases,
             effects,
         },

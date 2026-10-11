@@ -18,7 +18,7 @@ fn scan(
             Statement::Return(value) | Statement::Assign(_, value)
                 if value.snapshot
                     && (matches!(value.kind, Kind::Unary(..) | Kind::Construct(_))
-                        || value.ty == Ty::Any
+                        || matches!(value.ty, Ty::Any | Ty::Native(_))
                             && !matches!(value.kind, Kind::Local(_) | Kind::MutableLocal(_))) =>
             {
                 let id = *next;
@@ -28,6 +28,18 @@ fn scan(
                 let mut local = Value::new(value.ty.clone(), Kind::Local(id));
                 local.snapshot = true;
                 *value = local;
+            }
+            Statement::Call(Value {
+                kind: Kind::GlobalSet(_, value),
+                ..
+            }) if matches!(value.ty, Ty::Native(_)) && matches!(value.kind, Kind::Native(..)) => {
+                let id = *next;
+                *next += 1;
+                locals.insert(id, value.ty.clone());
+                value.snapshot = true;
+                result.push(Statement::Let(id, *value.clone()));
+                **value = Value::new(value.ty.clone(), Kind::Local(id));
+                value.snapshot = true;
             }
             Statement::If(_, a, b) => {
                 scan(a, locals, next);
@@ -71,7 +83,22 @@ fn maximum(body: &[Statement]) -> usize {
 
 /// Reserve private local destinations in the emission plan; no source type is changed.
 pub fn prepare(plan: &Plan) -> Plan {
-    let mut plan = crate::any_prepared::prepare(plan);
+    let mut plan = plan.clone();
+    for node in &mut plan.nodes {
+        let mut next = maximum(&node.start).max(maximum(&node.stop)).max(
+            node.handlers
+                .iter()
+                .map(|(_, body)| maximum(body))
+                .max()
+                .unwrap_or(0),
+        );
+        crate::native_owners::statements(&mut node.start, &mut next);
+        crate::native_owners::statements(&mut node.stop, &mut next);
+        for (_, body) in &mut node.handlers {
+            crate::native_owners::statements(body, &mut next);
+        }
+    }
+    let mut plan = crate::any_prepared::prepare(&plan);
     for (node_id, node) in plan.nodes.iter_mut().enumerate() {
         let mut locals = std::collections::BTreeMap::new();
         let mut next = maximum(&node.start).max(maximum(&node.stop)).max(

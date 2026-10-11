@@ -10,3 +10,5 @@ Acceptance: pinned shared Any suites and generated measured probes for family lo
 
 This module now lives in hgl-rust-codegen below executable program assembly;
 its hgl-rust facade path and module ceiling remain unchanged.
+
+Generated copy codecs recursively traverse the existing compiled frames and optional/family tags, invoking the provider copy for every Native leaf. Sizing never invokes copy. Native descriptor operations route equality/hash/order to typed callbacks. Prepared slot encoding borrows typed Native views; it never extracts allocating Native owners.

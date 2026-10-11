@@ -76,6 +76,7 @@ fn canonical_contracts_and_provider_operations_match_the_authored_fixture() -> N
 static RESTRICTED: AnyPlan = AnyPlan {
     index: 0,
     identity: TypeId::of::<TextOnly>,
+    copy: |data, out| out.write(data),
     operation: AnyOperation::Native {
         equal: TextOnly::equal,
         hash: TextOnly::hash,
@@ -94,4 +95,149 @@ fn checked_text_only_boxing_hides_extra_physical_provider_operations() {
     ] {
         assert!(matches!(result, Err(error) if error.code == Some("value.capability")));
     }
+}
+
+#[test]
+fn pure_bounds_and_single_call_publication_preserve_retained_values() -> NodeResult {
+    use hgl_store::{
+        Store, Wake,
+        shapes::{Atomic, Input, Output, Shape},
+    };
+    use hgl_types::{EngineTime, NodeError, NodeId};
+    struct Wakes(usize);
+    impl Wake for Wakes {
+        fn wake(&mut self, _: NodeId) {
+            self.0 += 1;
+        }
+    }
+    type M = Native<Token>;
+    assert_eq!(image::identity_width(&[0])?, 0);
+    assert_eq!(image::identity_width(&[usize::MAX])?, usize::MAX);
+    assert!(image::identity_width(&[]).is_err());
+    let mut store = Store::new();
+    let id = store.add_atomic_output::<M>(NodeId(0));
+    let output = Output::<Atomic<M>>::bind(store.bindings(), id)
+        .map_err(|e| NodeError::new(format!("{e:?}")))?;
+    let input_id = store.add_shaped_input(NodeId(1), Atomic::<M>::shape(), true);
+    let input =
+        Input::bind(store.bindings(), input_id).map_err(|e| NodeError::new(format!("{e:?}")))?;
+    store
+        .bind(input_id, id)
+        .map_err(|e| NodeError::new(format!("{e:?}")))?;
+    let prepared = store.prepared();
+    prepared
+        .atomic
+        .prepare_output::<M>(prepared.bindings, id, &image::identity_width(&[8])?)?;
+    let mut calls = 0;
+    let mut wakes = Wakes(0);
+    let (result, allocations) = hgl_alloc_count::count_in(|| {
+        store
+            .prepared()
+            .tick(EngineTime::from_micros(1), NodeId(0), &mut wakes)
+            .native_result(output, |_, _| {
+                calls += 1;
+                Ok(image::token_str("retained"))
+            })
+    });
+    result?;
+    assert_eq!(allocations, 0);
+    assert_eq!(calls, 1);
+    let retained = store.atomic_get::<M>(input)?;
+    assert!(
+        store
+            .prepared()
+            .tick(EngineTime::from_micros(2), NodeId(0), &mut wakes)
+            .native_result(output, |_, _| {
+                calls += 1;
+                Ok(image::token_str("unsound provider bound: too long"))
+            })
+            .is_err()
+    );
+    assert_eq!(calls, 2);
+    assert_eq!(wakes.0, 1);
+    assert_eq!(
+        image::token_text_native(store.atomic_get::<M>(input)?.view()),
+        "retained"
+    );
+    store
+        .prepared()
+        .tick(EngineTime::from_micros(3), NodeId(0), &mut wakes)
+        .native_result(output, |_, _| {
+            calls += 1;
+            Ok(image::token_str(""))
+        })?;
+    assert_eq!(calls, 3);
+    assert_eq!(
+        image::token_text_native(store.atomic_get::<M>(input)?.view()),
+        ""
+    );
+    drop(store);
+    assert_eq!(image::token_text_native(retained.view()), "retained");
+    Ok(())
+}
+
+#[test]
+fn ordinary_helper_result_uses_a_separate_reserved_owner() -> NodeResult {
+    type M = Native<Token>;
+    let mut globals = hgl_store::GlobalState::default();
+    let source = M::allocate(globals.values_mut(), &32)?;
+    let destination = M::allocate(globals.values_mut(), &8)?;
+    M::copy_view(globals.values_mut(), source, image::token_str("retained"));
+    let mut store = hgl_store::Store::new();
+    let mut prepared = store.prepared();
+    let (observation, _) = prepared.observations();
+    let mut calls = 0;
+    let (result, allocations) = hgl_alloc_count::count_in(|| {
+        globals.native_result(observation, destination, |_, globals| {
+            calls += 1;
+            Ok(globals.values().native(source))
+        })
+    });
+    result?;
+    assert_eq!(allocations, 0);
+    assert_eq!(calls, 1);
+    M::copy_view(globals.values_mut(), source, image::token_str("changed"));
+    assert_eq!(
+        image::token_text_native(globals.values().native(destination)),
+        "retained"
+    );
+    assert!(
+        globals
+            .native_result(observation, destination, |_, _| {
+                calls += 1;
+                Ok(image::token_str("unsound result width exceeds reserve"))
+            })
+            .is_err()
+    );
+    assert_eq!(calls, 2);
+    assert_eq!(
+        image::token_text_native(globals.values().native(destination)),
+        "retained"
+    );
+    let failure = globals
+        .native_result(observation, destination, |_, _| {
+            calls += 1;
+            Err(hgl_types::NodeError::coded(
+                "provider failed",
+                "provider.operation",
+            ))
+        })
+        .unwrap_err();
+    assert_eq!(failure.code, Some("provider.operation"));
+    assert_eq!(calls, 3);
+    assert_eq!(
+        image::token_text_native(globals.values().native(destination)),
+        "retained"
+    );
+    globals.native_result(observation, destination, |_, _| {
+        calls += 1;
+        Ok(image::token_str(""))
+    })?;
+    assert_eq!(calls, 4);
+    assert!(globals.values().native(destination).data().is_empty());
+    assert_eq!(
+        image::token_text_native(globals.values().native(source)),
+        "changed"
+    );
+    Ok(())
 }

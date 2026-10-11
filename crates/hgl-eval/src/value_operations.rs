@@ -31,8 +31,23 @@ impl From<String> for EvalError {
         Self::Operation(message)
     }
 }
-fn unsupported(message: &str) -> EvalError {
+pub(crate) fn unsupported(message: &str) -> EvalError {
     EvalError::Unsupported(message.into())
 }
 mod scalar;
 pub use scalar::{binary, unary};
+
+impl From<Box<hgl_types::NodeError>> for EvalError {
+    fn from(error: Box<hgl_types::NodeError>) -> Self {
+        error.code.map_or_else(
+            || Self::Operation(error.message.clone()),
+            |code| Self::Coded(code, error.message.clone()),
+        )
+    }
+}
+
+impl From<&str> for EvalError {
+    fn from(message: &str) -> Self {
+        Self::Operation(message.into())
+    }
+}

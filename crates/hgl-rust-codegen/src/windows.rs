@@ -37,6 +37,10 @@ pub fn from(ty: &Ty, output: &str, source: &str, slot: &str) -> String {
         &format!("Some({source}),{slot},{output}"),
     )
 }
+/// Retain a prepared global owner as an independent rolling arrival.
+pub fn from_global(ty: &Ty, output: &str, slot: &str) -> String {
+    prepared(ty, "rolling_from", &format!("None,{slot},{output}"))
+}
 /// Direct independently retained arrival forwarding.
 pub fn pass(ty: &Ty, input: &str, output: &str) -> String {
     prepared(ty, "pass_rolling", &format!("{input},{output}"))

@@ -36,12 +36,7 @@ pub fn unary(op: &str, operand: &Value) -> Result<Value, EvalError> {
             .collect::<Result<Vec<_>, _>>()?;
         return hgl_types::bytes(&octets)
             .map(|bytes| value(Literal::Bytes(bytes)))
-            .map_err(|error| {
-                error.code.map_or_else(
-                    || EvalError::Operation(error.message.clone()),
-                    |code| EvalError::Coded(code, error.message.clone()),
-                )
-            });
+            .map_err(EvalError::from);
     }
     let result = match (op, scalar(operand)?) {
         ("!", Literal::Bool(v)) => Literal::Bool(!v),
@@ -79,6 +74,15 @@ pub fn binary(op: &str, a: &Value, b: &Value) -> Result<Value, EvalError> {
         return Ok(value(Literal::Bool(
             crate::any_values::equal_data(a, b)? == (op == "=="),
         )));
+    }
+    if let (Kind::Opaque(a), Kind::Opaque(b)) = (&a.kind, &b.kind) {
+        return if matches!(op, "==" | "!=") {
+            Ok(value(Literal::Bool(
+                (a.operations().equal)(a.data(), b.data())? == (op == "=="),
+            )))
+        } else {
+            comparison(op, (a.operations().compare)(a.data(), b.data())?).map(value)
+        };
     }
     let (a, b) = (scalar(a)?, scalar(b)?);
     if a.ty() == b.ty() && matches!(op, "==" | "!=") && !matches!(a, Literal::Float(_)) {

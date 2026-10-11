@@ -67,6 +67,8 @@ pub enum Ty {
     Recursive(RecursiveType),
     /// A declared nominal enum scalar.
     Enum(EnumType),
+    /// Descriptor-defined ordinary nominal scalar with declared capabilities.
+    Native(crate::native_contracts::Scalar),
     /// Complete ordinary payload behind one temporal boundary.
     Atomic(Box<Self>),
     /// Scalar-keyed temporal map and recursively checked child shape.
@@ -135,6 +137,7 @@ impl Ty {
         match self {
             Self::Rolling(..) => "rolling",
             Self::Enum(_) => "enum",
+            Self::Native(_) => "native",
             Self::I64 => "i64",
             Self::F64 => "f64",
             Self::Bool => "bool",
@@ -230,6 +233,7 @@ impl Ty {
                 format!("rolling<{},{}>", child.source_name(), window.source_name())
             }
             Self::Enum(ty) => ty.origin.clone(),
+            Self::Native(ty) => ty.identity.clone(),
             Self::Struct(identity, _, _) => identity.source_name(),
             Self::Recursive(batch) => batch.identity().source_name(),
             Self::Family(family) => family.identity().source_name(),
@@ -305,6 +309,11 @@ impl Ty {
     }
     /// Exact finite complete keys exclude recursive, family and collection components.
     pub fn collection_key(&self) -> bool {
+        if let Self::Native(scalar) = self {
+            return ["equality", "hash"]
+                .iter()
+                .all(|cap| scalar.capabilities.contains(*cap));
+        }
         !matches!(self, Self::Set(_) | Self::Map(..) | Self::List(..))
             && self.components(Self::collection_key)
     }
@@ -328,6 +337,6 @@ impl Ty {
     }
     /// Whether this is an ordinary scalar leaf, including nominal enums and boxes.
     pub fn scalar(&self) -> bool {
-        matches!(self, Self::Enum(_) | Self::Any) || self.scalar_kind().is_some()
+        matches!(self, Self::Enum(_) | Self::Native(_) | Self::Any) || self.scalar_kind().is_some()
     }
 }

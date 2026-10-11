@@ -1,5 +1,5 @@
 //! Inert portable native scalar and readonly helper contract data.
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 /// Executable image location projected from a completely validated package contract.
 #[derive(Debug, Clone)]
 pub struct Image {
@@ -11,6 +11,8 @@ pub struct Image {
     pub path: String,
     /// Explicit typed target markers paired with their portable checked contracts.
     pub scalars: Vec<(Scalar, String)>,
+    /// Pure cold output-width callbacks indexed by selected target helper symbol.
+    pub bounds: BTreeMap<String, String>,
 }
 /// Owning scalar operations advertised by the portable package contract.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -31,6 +33,8 @@ pub struct Function {
     pub throws: bool,
     /// Selected target symbol, bound before execution.
     pub symbol: String,
+    /// Optional pure cold target callback; not a source helper or execution phase.
+    pub bound: Option<String>,
     /// Explicit execution contexts; never required constant evaluation.
     pub phases: BTreeSet<String>,
     /// Observable implementation effects.

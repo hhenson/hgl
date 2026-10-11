@@ -134,7 +134,8 @@ fn expression(value: &Value, live: &BTreeMap<usize, bool>) -> Result<(), String>
         | Kind::IsPresent(value)
         | Kind::Present(value)
         | Kind::Unary(_, value) => expression(value, live)?,
-        Kind::TemporalLiteral(_)
+        Kind::Opaque(_)
+        | Kind::TemporalLiteral(_)
         | Kind::Captured(..)
         | Kind::Prepared(_)
         | Kind::WiringFailure(_)

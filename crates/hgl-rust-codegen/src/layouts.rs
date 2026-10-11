@@ -30,7 +30,7 @@ pub fn owned_type(ty: &Ty) -> String {
             }
         }));
     }
-    rust_type(ty).into()
+    rust_type(ty)
 }
 
 fn tuple_storage(children: &[Ty]) -> Ty {
@@ -50,7 +50,7 @@ fn tuple_storage(children: &[Ty]) -> Ty {
 pub fn whole_payload(ty: &Ty) -> Option<&Ty> {
     if let Ty::Atomic(payload) = ty {
         Some(payload)
-    } else if matches!(ty, Ty::Any | Ty::Enum(_)) {
+    } else if matches!(ty, Ty::Any | Ty::Enum(_) | Ty::Native(_)) {
         Some(ty)
     } else {
         None

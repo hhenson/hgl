@@ -15,4 +15,7 @@ pub mod time_context;
 pub mod type_shape;
 pub mod type_syntax;
 
+/// Cold owning native data supplied only by a selected provider context.
+pub mod native_value;
+
 pub mod native_contracts;

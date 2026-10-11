@@ -14,6 +14,18 @@ pub fn binary_type(op: &str, a: &Ty, b: &Ty) -> Result<Ty, String> {
     if *a != *b {
         return Err("binary operand type mismatch".into());
     }
+    if let Ty::Native(native) = a {
+        let capability = match op {
+            "==" | "!=" => "equality",
+            "<" | "<=" | ">" | ">=" => "order",
+            _ => return Err(format!("unsupported native scalar operation {op}")),
+        };
+        return native
+            .capabilities
+            .contains(capability)
+            .then_some(Ty::Bool)
+            .ok_or_else(|| format!("native scalar lacks {capability} capability"));
+    }
     let ty = match op {
         "+" if matches!(*a, Ty::Str | Ty::I64 | Ty::F64) => a.clone(),
         "/" if matches!(*a, Ty::I64 | Ty::F64) => Ty::F64,

@@ -55,6 +55,7 @@ fn rewrite(value: &mut Value) {
         | Kind::ObservedLocal(_)
         | Kind::Output
         | Kind::Capability
+        | Kind::Opaque(_)
         | Kind::TemporalLiteral(_)
         | Kind::Captured(..)
         | Kind::Prepared(_)

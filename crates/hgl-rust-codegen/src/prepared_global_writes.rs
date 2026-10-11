@@ -4,7 +4,7 @@ use hgl_semantics::ir::{Kind, Plan, Value};
 use hgl_source::Ty;
 pub(crate) fn set(plan: &Plan, id: usize, v: &Value) -> String {
     if crate::finite_domains::prepared(plan)
-        && (v.ty == Ty::Any || matches!(v.kind, Kind::Construct(_)))
+        && (matches!(v.ty, Ty::Any | Ty::Native(_)) || matches!(v.kind, Kind::Construct(_)))
     {
         let write = if matches!(v.kind, Kind::Construct(_)) {
             replace(plan, v, "destination")

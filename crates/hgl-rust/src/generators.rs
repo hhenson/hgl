@@ -258,6 +258,7 @@ fn slot_publication(ty: &Ty, slot: &str, result: &Ty) -> String {
             | Ty::Recursive(_)
             | Ty::Family(_)
             | Ty::Enum(_)
+            | Ty::Native(_)
             | Ty::List(..)
             | Ty::Set(_)
             | Ty::Map(..)

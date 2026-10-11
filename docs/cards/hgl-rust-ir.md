@@ -117,3 +117,5 @@ argument expressions, preserving selected symbols/types through temporary cold
 checking scopes. Native::invocation assembles that checked call with its frontend
 result type; legacy logger result authority stays unchanged. Image paths and
 signatures remain data, never executable checker callbacks.
+
+Value.cold_call records setup/cold provenance on each checked invocation. It is independent of the canonical interned Native method and is serialized by checked_data. Kind::Opaque contains independently owned provider data only after execution through an explicit host context; source checking cannot produce it.

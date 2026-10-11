@@ -51,14 +51,27 @@ impl StaticValues {
     }
     fn eligible(&self, value: &Value) -> bool {
         let origin = self.key_origin(value);
+        if let Kind::Unary(op, child) = &origin.kind
+            && op == "any"
+        {
+            return self.eligible(child);
+        }
         if let Kind::Construct(fields) = &origin.kind {
             return fields.iter().all(|(_, child)| self.eligible(child));
+        }
+        if let Kind::Native(_, args) = &origin.kind {
+            return origin.cold_call && args.iter().all(|arg| self.eligible(arg));
         }
         matches!(origin.kind, Kind::TemporalLiteral(_))
             || crate::value_constant::context_free(origin)
     }
     fn constant(&self, value: &Value) -> Result<Value, String> {
         let origin = self.key_origin(value);
+        if let Kind::Unary(op, child) = &origin.kind
+            && op == "any"
+        {
+            return Ok(crate::any_values::retain(self.constant(child)?));
+        }
         if let Kind::Construct(fields) = &origin.kind {
             let fields = fields
                 .iter()
@@ -66,7 +79,9 @@ impl StaticValues {
                 .collect::<Result<Vec<_>, String>>()?;
             return Ok(Value::new(origin.ty.clone(), Kind::Construct(fields)));
         }
-        if matches!(origin.kind, Kind::TemporalLiteral(_)) {
+        if matches!(origin.kind, Kind::TemporalLiteral(_) | Kind::Native(..))
+            && self.eligible(origin)
+        {
             return Ok(origin.clone());
         }
         if !crate::value_constant::context_free(origin) {

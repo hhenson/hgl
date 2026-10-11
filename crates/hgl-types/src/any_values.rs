@@ -15,6 +15,8 @@ pub struct AnyPlan {
     pub identity: fn() -> TypeId,
     /// Precompiled operations over this layout.
     pub operation: AnyOperation,
+    /// Compiled owning-copy codec, including provider-defined nested leaves.
+    pub copy: fn(&[u8], &mut dyn AnyBuffer),
     /// Equality, hash and order capability declarations.
     pub capabilities: [bool; 3],
 }
@@ -56,10 +58,20 @@ pub enum AnyOperation {
     Data,
 }
 /// Complete retained bytes and the concrete layout selected before publication.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default)]
 pub struct AnyValue {
     plan: Option<&'static AnyPlan>,
     data: Vec<u8>,
+}
+impl Clone for AnyValue {
+    fn clone(&self) -> Self {
+        let mut retained = Self {
+            plan: None,
+            data: Vec::with_capacity(self.data.len()),
+        };
+        retained.copy_prepared(self);
+        retained
+    }
 }
 impl AnyValue {
     /// Install independently owned data produced by its statically selected codec.
@@ -90,7 +102,9 @@ impl AnyValue {
     /// Copy only after the caller has checked the complete prepared capacity.
     pub fn copy_prepared(&mut self, source: &Self) {
         self.data.clear();
-        self.data.extend_from_slice(&source.data);
+        if let Some(plan) = source.plan {
+            (plan.copy)(&source.data, &mut self.data);
+        }
         self.plan = source.plan;
     }
     /// Assemble a completely preflighted publication in reserved owning capacity.
@@ -388,6 +402,8 @@ pub trait AnyBuffer {
     }
     /// Append exact data; storage callers preflight capacity before entering the codec.
     fn write(&mut self, bytes: &[u8]);
+    /// Append one preflighted provider encoding; sizing must not execute its copy.
+    fn native(&mut self, data: &[u8], copy: fn(&[u8], &mut dyn AnyBuffer));
     /// Finish a frame's width at its reserved header.
     fn width(&mut self, index: usize, width: usize);
     /// Retain a complete child frame without temporary buffers.
@@ -402,6 +418,9 @@ pub trait AnyBuffer {
     }
 }
 impl AnyBuffer for Vec<u8> {
+    fn native(&mut self, data: &[u8], copy: fn(&[u8], &mut dyn AnyBuffer)) {
+        copy(data, self);
+    }
     fn len(&self) -> usize {
         Vec::len(self)
     }
@@ -416,6 +435,9 @@ impl AnyBuffer for Vec<u8> {
 #[derive(Debug, Default)]
 pub struct AnyWidth(pub usize);
 impl AnyBuffer for AnyWidth {
+    fn native(&mut self, data: &[u8], _: fn(&[u8], &mut dyn AnyBuffer)) {
+        self.write(data);
+    }
     fn len(&self) -> usize {
         self.0
     }

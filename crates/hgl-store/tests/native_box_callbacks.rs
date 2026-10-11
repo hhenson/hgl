@@ -1,6 +1,21 @@
 //! Opaque boxed values delegate operations to preselected provider callbacks.
+use hgl_types::any_values::{AnyBuffer, AnyWidth, Frames};
 use hgl_types::{AnyOperation, AnyPlan, AnyValue, NodeError, NodeResult};
-use std::{any::TypeId, cmp::Ordering};
+use std::{
+    any::TypeId,
+    cmp::Ordering,
+    sync::atomic::{AtomicUsize, Ordering::Relaxed},
+};
+static COPIES: AtomicUsize = AtomicUsize::new(0);
+fn copy(data: &[u8], out: &mut dyn AnyBuffer) {
+    COPIES.fetch_add(1, Relaxed);
+    if let Some((first, rest)) = data.split_first() {
+        out.write(&[*first]);
+        for byte in rest {
+            out.write(&[byte.wrapping_add(1)]);
+        }
+    }
+}
 #[derive(Debug)]
 struct Opaque;
 fn identity() -> TypeId {
@@ -23,6 +38,7 @@ fn compare(a: &[u8], b: &[u8]) -> NodeResult<Option<Ordering>> {
 static PLAN: AnyPlan = AnyPlan {
     index: 0,
     identity,
+    copy: |data, out| out.native(data, copy),
     operation: AnyOperation::Native {
         equal,
         hash,
@@ -33,6 +49,7 @@ static PLAN: AnyPlan = AnyPlan {
 static RESTRICTED: AnyPlan = AnyPlan {
     index: 0,
     identity,
+    copy: |data, out| out.native(data, copy),
     operation: AnyOperation::Native {
         equal,
         hash,
@@ -67,4 +84,52 @@ fn checked_capability_mask_hides_extra_physical_operations() {
     ] {
         assert!(matches!(result, Err(error) if error.code == Some("value.capability")));
     }
+}
+
+static NESTED: AnyPlan = AnyPlan {
+    index: 1,
+    identity: TypeId::of::<Vec<Opaque>>,
+    operation: AnyOperation::Sequence(&PLAN, false),
+    copy: |data, out| {
+        for data in Frames(data) {
+            let start = out.len();
+            out.write(&[0; 8]);
+            (PLAN.copy)(data, out);
+            out.width(start, out.len() - start - 8);
+        }
+    },
+    capabilities: [true; 3],
+};
+#[test]
+fn nested_copy_sizing_and_retention_preserve_independent_aliases() -> NodeResult {
+    COPIES.store(0, Relaxed);
+    let mut data = Vec::new();
+    data.frame(|out| out.write(&[3, 0]));
+    data.frame(|out| out.write(&[4, 0]));
+    let source = AnyValue::from_encoded(&NESTED, data);
+    let mut width = AnyWidth::default();
+    (NESTED.copy)(source.data(), &mut width);
+    assert_eq!(width.0, source.data().len());
+    assert_eq!(COPIES.load(Relaxed), 0);
+    let retained = source.retain()?;
+    assert_eq!(COPIES.load(Relaxed), 2);
+    let alias = retained.clone();
+    assert_eq!(COPIES.load(Relaxed), 4);
+    let mut destination = AnyValue::default();
+    destination.reserve(width.0)?;
+    let ((), allocations) = hgl_alloc_count::count_in(|| destination.copy_prepared(&source));
+    assert_eq!(allocations, 0);
+    assert_eq!(COPIES.load(Relaxed), 6);
+    destination.copy_prepared(&AnyValue::default());
+    drop(source);
+    assert!(destination.data().is_empty());
+    assert_eq!(
+        Frames(retained.data()).collect::<Vec<_>>(),
+        [&[3, 1], &[4, 1]]
+    );
+    assert_eq!(Frames(alias.data()).collect::<Vec<_>>(), [&[3, 2], &[4, 2]]);
+    let empty = AnyValue::from_encoded(&PLAN, Vec::new()).retain()?;
+    assert!(empty.data().is_empty());
+    assert_eq!(COPIES.load(Relaxed), 7);
+    Ok(())
 }

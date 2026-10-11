@@ -7,6 +7,12 @@ pub(crate) fn name(ty: &Ty) -> String {
 }
 use hgl_semantics::any_values::fields;
 fn operation(ty: &Ty) -> String {
+    if let Ty::Native(scalar) = ty {
+        let marker = crate::native_values::marker(scalar);
+        return format!(
+            "hgl_types::AnyOperation::Native {{equal:<{marker} as hgl_store::native_values::NativeType>::equal,hash:<{marker} as hgl_store::native_values::NativeType>::hash,compare:<{marker} as hgl_store::native_values::NativeType>::compare}}"
+        );
+    }
     let operation = if *ty == Ty::Any {
         "Boxed(ANY_PLANS)".into()
     } else if matches!(ty, Ty::Delta(_)) {
@@ -109,11 +115,20 @@ fn scalar(ty: &Ty) -> Option<(&'static str, &'static str)> {
     )
 }
 fn codecs(ty: &Ty) -> (String, String) {
+    if let Ty::Native(scalar) = ty {
+        let marker = crate::native_values::marker(scalar);
+        return (
+            crate::native_values::append(scalar, "v.view().data()"),
+            format!(
+                "hgl_store::native_values::NativeView::<{marker}>::from_provider(data).retain().expect(\"validated native encoding\")"
+            ),
+        );
+    }
     if let Some((write, read)) = scalar(ty) {
         return (write.into(), read.into());
     }
     if *ty == Ty::Any {
-        return ("out.write(&(v.plan().map_or(0,|p|p.index as u64+1)).to_le_bytes());out.write(v.data());".into(),"{let id=any_number(&data[..8]);if id==0 {hgl_types::AnyValue::default()} else {hgl_types::AnyValue::from_encoded(ANY_PLANS[id as usize-1],data[8..].to_vec())}}".into());
+        return ("out.write(&(v.plan().map_or(0,|p|p.index as u64+1)).to_le_bytes());if let Some(plan)=v.plan() {(plan.copy)(v.data(),out);}".into(),"{let id=any_number(&data[..8]);if id==0 {hgl_types::AnyValue::default()} else {any_retain(ANY_PLANS[id as usize-1],&data[8..])}}".into());
     }
     if let Ty::Family(family) = ty {
         let write = members(family, |i, ty| {
@@ -201,7 +216,7 @@ fn field_codecs(ty: &Ty) -> (String, String) {
 fn native_box(ty: &Ty) -> String {
     let n = name(ty);
     if *ty == Ty::Any {
-        "out.write(v.data());v.plan()".into()
+        "if let Some(plan)=v.plan() {(plan.copy)(v.data(),out);}v.plan()".into()
     } else if let Ty::Family(family) = ty {
         let arms = members(family, |i, ty| {
             format!(
@@ -232,6 +247,7 @@ pub fn layouts(plan: &Plan) -> String {
     let mut out = vec![format!(
         "static ANY_PLANS:&[&hgl_types::AnyPlan]=&[{table}];fn any_number(data:&[u8])->u64 {{u64::from_le_bytes(data.try_into().expect(\"encoded number\"))}}\n"
     )];
+    out.push("fn any_retain(plan:&'static hgl_types::AnyPlan,data:&[u8])->hgl_types::AnyValue {let mut out=Vec::with_capacity(data.len());(plan.copy)(data,&mut out);hgl_types::AnyValue::from_encoded(plan,out)}fn any_copy_frame(out:&mut dyn hgl_types::any_values::AnyBuffer,copy:impl FnOnce(&mut dyn hgl_types::any_values::AnyBuffer)){let start=out.len();out.write(&[0;8]);copy(out);out.width(start,out.len()-start-8);}".into());
     let mut decode = Vec::new();
     let mut encode = Vec::new();
     for (index, ty) in types.values().enumerate() {
@@ -240,15 +256,16 @@ pub fn layouts(plan: &Plan) -> String {
         let native = owned_type(ty);
         let marker = global_type(ty);
         let operation = operation(ty);
+        let copy = copy_codec(ty);
         let caps = [0, 1, 2].map(|op| hgl_semantics::any_values::capable(ty, op));
         out.push(format!(
-                "static ANY_{n}:hgl_types::AnyPlan=hgl_types::AnyPlan {{index:{index},identity:std::any::TypeId::of::<{marker}>,operation:{operation},capabilities:{caps:?}}};fn any_write_{n}<B:hgl_types::any_values::AnyBuffer>(v:&{native},out:&mut B) {{{write}}}fn any_read_{n}(data:&[u8])->{native} {{{read}}}fn any_size_{n}(v:&{native})->usize {{let mut width=hgl_types::any_values::AnyWidth::default();any_write_{n}(v,&mut width);width.0}}\n"
+                "static ANY_{n}:hgl_types::AnyPlan=hgl_types::AnyPlan {{index:{index},identity:std::any::TypeId::of::<{marker}>,operation:{operation},copy:any_copy_{n},capabilities:{caps:?}}};fn any_copy_{n}(data:&[u8],out:&mut dyn hgl_types::any_values::AnyBuffer) {{{copy}}}fn any_write_{n}<B:hgl_types::any_values::AnyBuffer>(v:&{native},out:&mut B) {{{write}}}fn any_read_{n}(data:&[u8])->{native} {{{read}}}fn any_size_{n}(v:&{native})->usize {{let mut width=hgl_types::any_values::AnyWidth::default();any_write_{n}(v,&mut width);width.0}}\n"
             ));
         let slots = slot_writer(ty);
         let bound = bound(ty);
         let native_boxed = native_box(ty);
         let boxed = if *ty == Ty::Any {
-            "let value=columns.any(slot.fields());out.write(value.data());value.plan()".into()
+            "let value=columns.any(slot.fields());if let Some(plan)=value.plan() {(plan.copy)(value.data(),out);}value.plan()".into()
         } else if let Ty::Family(family) = ty {
             let arms = members(family, |i, ty| {
                 format!(
@@ -356,13 +373,16 @@ fn slot_child(ty: &Ty, positions: &str) -> String {
     }
 }
 fn slot_writer(ty: &Ty) -> String {
+    if let Ty::Native(scalar) = ty {
+        return crate::native_values::append(scalar, "columns.native(slot).data()");
+    }
     let n = name(ty);
     if *ty == Ty::Any {
         return format!("any_write_{n}(columns.any(slot.fields()),out);");
     }
     if scalar(ty).is_some() {
         let scalar = if matches!(ty, Ty::Enum(_)) {
-            "i64"
+            "i64".into()
         } else {
             crate::scalars::rust_type(ty)
         };
@@ -432,7 +452,7 @@ fn bound(ty: &Ty) -> String {
     }
     if matches!(ty, Ty::Any | Ty::TimeZone | Ty::ZonedTime) {
         "8usize.saturating_add(*v)"
-    } else if matches!(ty, Ty::Str | Ty::Bytes) {
+    } else if matches!(ty, Ty::Str | Ty::Bytes | Ty::Native(_)) {
         "*v"
     } else if *ty == Ty::ZonedDateTime {
         "16usize.saturating_add(*v)"
@@ -542,4 +562,55 @@ fn members(family: &hgl_source::FamilyType, emit: impl Fn(usize, &Ty) -> String)
         .map(|(i, (_, ty))| emit(i, ty))
         .collect::<Vec<_>>()
         .concat()
+}
+
+fn copy_codec(ty: &Ty) -> String {
+    if let Ty::Native(scalar) = ty {
+        let marker = crate::native_values::marker(scalar);
+        return format!(
+            "out.native(data,<{marker} as hgl_store::native_values::NativeType>::copy);"
+        );
+    }
+    if *ty == Ty::Any {
+        return "out.write(&data[..8]);let id=any_number(&data[..8]);if id!=0 {(ANY_PLANS[id as usize-1].copy)(&data[8..],out);}".into();
+    }
+    if let Ty::Family(family) = ty {
+        let arms = members(family, |i, ty| {
+            format!("{i}=>any_copy_{}(&data[8..],out),", name(ty))
+        });
+        return format!(
+            "out.write(&data[..8]);match any_number(&data[..8]) {{{arms}_=>unreachable!(\"family member\")}}"
+        );
+    }
+    if let Ty::Delta(origin) = ty {
+        return format!(
+            "any_copy_{}(data,out);",
+            name(&crate::layouts::delta_storage(origin))
+        );
+    }
+    if let Some(child) = crate::collections::element(ty) {
+        return format!(
+            "for data in hgl_types::any_values::Frames(data) {{any_copy_frame(out,|out|any_copy_{}(data,out));}}",
+            name(&child)
+        );
+    }
+    if let Some((fields, optional)) = fields(ty) {
+        let mut code = "let mut frames=hgl_types::any_values::Frames(data);".to_string();
+        for (i, child) in fields.iter().enumerate() {
+            let child = name(child);
+            let copy = if optional.contains(&i) {
+                format!("out.write(&data[..1]);if data[0]!=0 {{any_copy_{child}(&data[1..],out);}}")
+            } else {
+                format!("any_copy_{child}(data,out);")
+            };
+            crate::append(
+                &mut code,
+                format_args!(
+                    "{{let data=frames.next().expect(\"encoded field\");any_copy_frame(out,|out|{{{copy}}});}}"
+                ),
+            );
+        }
+        return code;
+    }
+    "out.write(data);".into()
 }

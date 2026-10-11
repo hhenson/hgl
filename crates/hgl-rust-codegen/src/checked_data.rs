@@ -102,15 +102,17 @@ pub fn value(v: &Value) -> String {
         | Kind::Cache(_)
         | Kind::Query(..)
         | Kind::Output
-        | Kind::Capability => unreachable!("checked ordinary harness expression"),
+        | Kind::Capability
+        | Kind::Opaque(_) => unreachable!("checked ordinary harness expression"),
     };
     format!(
-        "hgl_semantics::ir::Value::new({},hgl_semantics::ir::Kind::{kind})",
+        "hgl_semantics::ir::Value {{cold_call:{},..hgl_semantics::ir::Value::new({},hgl_semantics::ir::Kind::{kind})}}",
+        v.cold_call,
         ty(&v.ty)
     )
 }
 fn native(n: &hgl_semantics::ir::Native) -> String {
-    let provider=n.provider.as_ref().map_or_else(||"None".into(),|p|format!("Some(hgl_source::native_contracts::Image {{provider:{:?}.into(),fingerprint:{:?}.into(),path:{:?}.into(),scalars:{}}})",p.provider,p.fingerprint,p.path,list(&p.scalars,|(s,m)|format!("(hgl_source::native_contracts::Scalar {{identity:{:?}.into(),capabilities:[{}].into_iter().map(String::from).collect()}},{m:?}.into())",s.identity,s.capabilities.iter().map(|c|format!("{c:?}")).collect::<Vec<_>>().join(",")))));
+    let provider=n.provider.as_ref().map_or_else(||"None".into(),|p|format!("Some(hgl_source::native_contracts::Image {{provider:{:?}.into(),fingerprint:{:?}.into(),path:{:?}.into(),bounds:[{}].into_iter().map(|(method,bound):(&str,&str)| (String::from(method),String::from(bound))).collect(),scalars:{}}})",p.provider,p.fingerprint,p.path,p.bounds.iter().map(|(method,bound)|format!("({method:?},{bound:?})")).collect::<Vec<_>>().join(","),list(&p.scalars,|(s,m)|format!("(hgl_source::native_contracts::Scalar {{identity:{:?}.into(),capabilities:[{}].into_iter().map(String::from).collect()}},{m:?}.into())",s.identity,s.capabilities.iter().map(|c|format!("{c:?}")).collect::<Vec<_>>().join(",")))));
     format!(
         "hgl_semantics::ir::Native {{name:{:?}.into(),method:{:?}.into(),provider:{provider},throws:{},args:{},result:{}}}",
         n.name,

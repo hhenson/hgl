@@ -52,6 +52,8 @@ pub fn ty(t: &Ty) -> String {
         )
     } else if let Ty::Recursive(batch) = t {
         format!("Recursive({})", recursive(batch))
+    } else if let Ty::Native(scalar) = t {
+        format!("Native({})", crate::native_values::metadata(scalar))
     } else if let Ty::Enum(e) = t {
         format!("Enum({})", enum_data(e))
     } else if let Ty::Rolling(t, window) = t {

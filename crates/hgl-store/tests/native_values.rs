@@ -18,9 +18,8 @@ impl NativeType for Token {
         }
         Ok(())
     }
-    fn copy(data: &[u8], destination: &mut Vec<u8>) {
-        destination.clear();
-        destination.extend_from_slice(data);
+    fn copy(data: &[u8], destination: &mut dyn hgl_types::any_values::AnyBuffer) {
+        destination.write(data);
     }
     fn text(data: &[u8]) -> NodeResult<String> {
         String::from_utf8(data.to_vec()).map_err(|e| NodeError::new(e.to_string()))

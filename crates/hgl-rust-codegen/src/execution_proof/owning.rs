@@ -24,7 +24,7 @@ fn value(input: &Value, looping: bool) -> bool {
         Kind::Captured(..) => false,
         Kind::Unary(op, _) if op == "bytes" => false,
         Kind::Native(binding, args) => {
-            (!owning(&input.ty) || binding.name == "hgraph.native::as_str")
+            (!owning(&input.ty) || binding.name == "hgraph.native::as_str" || crate::native_results::supported(input))
                 && args.iter().all(|arg| value(arg, looping))
         }
         Kind::ValueCall(args, body) => {
@@ -78,7 +78,7 @@ fn value(input: &Value, looping: bool) -> bool {
         | Kind::GlobalGet(_)
         | Kind::BorrowedLocal(..)
         | Kind::Literal(_)
-        | Kind::TemporalLiteral(_)
+        | Kind::Opaque(_) | Kind::TemporalLiteral(_)
         | Kind::Prepared(_)
         | Kind::Wire(_)
         | Kind::IterationInput(_)

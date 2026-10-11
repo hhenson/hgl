@@ -16,9 +16,9 @@ pub struct Observation<'a> {
     /// Exact retained scalar key identities.
     pub keys: &'a crate::keys::Keys,
 }
-impl Observation<'_> {
+impl<'a> Observation<'a> {
     /// Borrow a valid scalar input without constructing an owning value.
-    pub fn scalar<T: Scalar>(&self, input: InputId) -> NodeResult<&T> {
+    pub fn scalar<T: Scalar>(&self, input: InputId) -> NodeResult<&'a T> {
         if !self.bindings.valid(input) {
             return Err(NodeError::new("prepared input is invalid"));
         }

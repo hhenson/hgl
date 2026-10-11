@@ -39,7 +39,8 @@ pub fn value<'a>(input: &'a Value, visit: &mut impl FnMut(&'a Value) -> bool) {
             value(a, visit);
             value(b, visit);
         }
-        Kind::ObservedLocal(_)
+        Kind::Opaque(_)
+        | Kind::ObservedLocal(_)
         | Kind::WiringFailure(_)
         | Kind::Configuration(_)
         | Kind::GlobalGet(_)
@@ -163,7 +164,8 @@ pub fn value_mut(input: &mut Value, visit: &mut impl FnMut(&mut Value) -> bool) 
             value_mut(a, visit);
             value_mut(b, visit);
         }
-        Kind::ObservedLocal(_)
+        Kind::Opaque(_)
+        | Kind::ObservedLocal(_)
         | Kind::WiringFailure(_)
         | Kind::Configuration(_)
         | Kind::GlobalGet(_)

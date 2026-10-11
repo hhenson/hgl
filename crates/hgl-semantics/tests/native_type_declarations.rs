@@ -79,3 +79,45 @@ fn private_duplicate_and_test_context_native_types_are_rejected() -> Result<(), 
     assert!(library::load(&sources("test { native type Token }", "")).is_err());
     Ok(())
 }
+
+#[test]
+fn native_nominal_resolution_normalizes_atomic_and_delta_without_structural_access()
+-> Result<(), String> {
+    let interface = "module native_nominal\nnative type Token\nnative type Alias\nnative type Other\nnative type TextOnly\n";
+    let descriptor = "native_descriptor 1 target \"hgl-rust-1\"\nmodule native_nominal\nprovider \"fixture\" fingerprint \"v1\"\nscalar Token canonical \"nominal.Token\" capabilities {copy,text,equality,hash,order}\nscalar Alias canonical \"nominal.Token\" capabilities {copy,text,equality,hash,order}\nscalar Other canonical \"nominal.Other\" capabilities {copy,text,equality,hash,order}\nscalar TextOnly canonical \"nominal.TextOnly\" capabilities {copy,text}\n";
+    let library = library::load(&[
+        ("native.hgl".into(), interface.into()),
+        ("native.hgl-native".into(), descriptor.into()),
+    ])?;
+    let resolve =
+        |name: &str| hgl_semantics::value_types::resolve_ordinary(&library, "native_nominal", name);
+    let token = resolve("Token")?;
+    assert_eq!(token, resolve("Alias")?);
+    assert_ne!(token, resolve("Other")?);
+    assert_eq!(token, resolve("atomic<Token>")?);
+    assert_eq!(token, resolve("delta<Token>")?);
+    assert_eq!(token, resolve("delta<atomic<Token>>")?);
+    assert!(token.atomic_payload() && token.publication() && token.collection_key());
+    assert!(token.structure().is_err());
+    assert!(resolve("Token<i64>").is_err());
+    assert!(!resolve("TextOnly")?.collection_key());
+    for op in ["==", "!=", "<", "<=", ">", ">="] {
+        assert_eq!(
+            hgl_semantics::value_operators::binary_type(op, &token, &token)?,
+            hgl_source::Ty::Bool
+        );
+        assert!(
+            hgl_semantics::value_operators::binary_type(
+                op,
+                &resolve("TextOnly")?,
+                &resolve("TextOnly")?
+            )
+            .is_err()
+        );
+        assert!(
+            hgl_semantics::value_operators::binary_type(op, &token, &resolve("Other")?).is_err()
+        );
+    }
+    assert!(hgl_semantics::value_operators::binary_type("+", &token, &token).is_err());
+    Ok(())
+}

@@ -62,3 +62,5 @@ unchanged from hgl-types. hgl-source exposes the portable records and preserves
 its native_descriptor facade. Runtime Store contracts remain independent typed
 ABI operations and gain no dependency on this compiler metadata. Generated
 checked IR uses the source facade; no source/provider spelling changes.
+
+Binding records checked setup/cold phase on the returned Value invocation, not the interned provider method. Pure ABI result-bound functions are separate descriptor metadata and never execute HGL helper bodies during checking or provisioning. Missing bounds reject owning evaluation helpers before code generation.

@@ -22,8 +22,8 @@ pub mod layouts;
 pub mod mutation_bounds;
 pub mod observed;
 mod owner_comparisons;
-pub mod prepared_hooks;
 mod prepared_global_writes;
+pub mod prepared_hooks;
 pub mod prepared_values;
 pub mod pure_bounds;
 pub mod recursive_convert;
@@ -49,3 +49,8 @@ pub fn append(code: &mut String, text: std::fmt::Arguments<'_>) {
 
 /// Pure native target module naming.
 pub mod native_image;
+mod native_owners;
+/// Pure native result bounds and prepared helper publication.
+pub mod native_results;
+/// Static native scalar marker and ABI source emission.
+pub mod native_values;

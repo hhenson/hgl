@@ -25,3 +25,5 @@ window policy. Unsupported representations return None for ordinary emission.
 
 This module now lives in hgl-rust-codegen below executable program assembly;
 its hgl-rust facade path and module ceiling remain unchanged.
+
+from_global publishes an independent rolling arrival from a reserved ordinary owner using rolling_from with the existing global arena. This covers retained Native locals without constructing an intermediate owner.

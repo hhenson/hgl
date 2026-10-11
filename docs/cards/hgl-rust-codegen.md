@@ -30,3 +30,5 @@ flowchart TD
   codegen --> source[hgl-source]
   codegen --> types[hgl-types]
 ```
+
+Native scalar/layout conversion delegates to native_values; prepared owning-result selection and limits delegate to native_results. These modules share only checked metadata and emission, with no executable assembly/provisioning dependency.

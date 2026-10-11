@@ -5,6 +5,13 @@ use std::collections::BTreeMap;
 
 /// Rust marker identifying an exact prepared entry type.
 pub fn global_type(ty: &Ty) -> String {
+    if let Ty::Native(scalar) = ty {
+        return format!(
+            "hgl_store::native_values::Native<{},{{NATIVE_DOMAIN{}}}>",
+            crate::native_values::marker(scalar),
+            crate::identifiers::identifier(&scalar.identity)
+        );
+    }
     if *ty == Ty::Any {
         return "hgl_store::Any".into();
     }
@@ -31,7 +38,7 @@ pub fn global_type(ty: &Ty) -> String {
     if let Ty::Struct(name, _, _) = ty {
         nominal_marker(name)
     } else {
-        rust_type(ty).into()
+        rust_type(ty)
     }
 }
 fn nominal_marker(name: &hgl_source::Nominal) -> String {

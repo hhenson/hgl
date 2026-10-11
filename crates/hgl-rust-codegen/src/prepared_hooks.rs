@@ -8,6 +8,18 @@ pub(crate) fn publication(plan: &Plan, value: &Value, result: Option<&Ty>) -> Op
     if !crate::finite_domains::prepared(plan) || plan.recording.is_none() {
         return None;
     }
+    if value.snapshot && matches!(value.ty, Ty::Native(_)) {
+        let slot = crate::snapshot_slots::projection(value, |v| emit(plan, v));
+        if let Some(ty @ Ty::Rolling(..)) = result {
+            return Some(crate::windows::from_global(ty, "self._output", &slot));
+        }
+        return Some(format!(
+            "_ctx.prepared().atomic_from_global({slot},self._output)?;"
+        ));
+    }
+    if let Some(code) = crate::native_results::publication(value) {
+        return Some(code);
+    }
     if let Some(code) = crate::any_values::publication(value) {
         return Some(code);
     }

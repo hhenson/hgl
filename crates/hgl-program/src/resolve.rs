@@ -11,7 +11,7 @@ use hgl_semantics::static_values::PreparedLexicalScope;
 use hgl_semantics::value_bind::{
     bind, bind_prepared, method_arguments, order_arguments, resolve_type,
 };
-use hgl_semantics::value_check::{ordinary, writable};
+use hgl_semantics::value_check::{binding, ordinary, writable};
 use hgl_semantics::value_eval::atomic_argument;
 use hgl_source::execution_phase::ExecutionPhase as Phase;
 use std::collections::{BTreeMap, BTreeSet};
@@ -596,10 +596,7 @@ impl Checker {
         }
         let id = self.next_wiring_local;
         self.next_wiring_local += 1;
-        env.insert(
-            name.into(),
-            hgl_semantics::value_check::binding(id, &value, mutable, annotated)?,
-        );
+        env.insert(name.into(), binding(id, &value, mutable, annotated)?);
         let value = self.wiring_value(&value)?;
         if matches!(value.kind, Kind::WiringFailure(_)) {
             self.wiring.bind_failed(id, value, mutable);

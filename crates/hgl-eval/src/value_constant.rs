@@ -68,7 +68,8 @@ impl Value {
         crate::ir_visit::value(self, &mut |value| {
             closed &= matches!(
                 value.kind,
-                Kind::Delta(_)
+                Kind::Opaque(_)
+                    | Kind::Delta(_)
                     | Kind::Literal(_)
                     | Kind::Void
                     | Kind::List(_)

@@ -46,8 +46,8 @@ pub trait NativeType: Debug + 'static {
     const CONTRACT: Contract;
     /// Check complete owning retention before changing an existing destination.
     fn preflight(data: &[u8], capacity: usize) -> NodeResult;
-    /// Independently copy after preflight, preserving destination capacity.
-    fn copy(data: &[u8], destination: &mut Vec<u8>);
+    /// Append an independent encoding after preflight, without clearing the caller-owned sink.
+    fn copy(data: &[u8], destination: &mut dyn hgl_types::any_values::AnyBuffer);
     /// Construct independent ordinary text through the declared provider operation.
     fn text(data: &[u8]) -> NodeResult<String>;
     /// Provider equality; an undeclared operation remains unavailable to checked HGL.
@@ -70,6 +70,10 @@ impl<T: NativeType> NativeValue<T> {
             data,
             marker: PhantomData,
         }
+    }
+    /// Move an independently owned encoding across a checked cold capture boundary.
+    pub fn into_owned(self) -> Vec<u8> {
+        self.data
     }
     /// Borrow a readonly provider view only for its consumer's lifetime.
     pub fn view(&self) -> NativeView<'_, T> {
@@ -96,6 +100,12 @@ impl<T: NativeType> Clone for NativeView<'_, T> {
     }
 }
 impl<'a, T: NativeType> NativeView<'a, T> {
+    /// Preserve a readonly view at a generic owning-or-view capture boundary.
+    #[must_use]
+    pub fn view(&self) -> Self {
+        *self
+    }
+
     /// Introduce a readonly provider encoding at a statically selected ABI boundary.
     pub fn from_provider(data: &'a [u8]) -> Self {
         Self {
@@ -106,6 +116,14 @@ impl<'a, T: NativeType> NativeView<'a, T> {
     /// Provider-private encoded data; no HGL field or representation access is introduced.
     pub fn data(&self) -> &'a [u8] {
         self.data
+    }
+    /// Compare exact typed views through the provider's declared operations.
+    pub fn equal(self, other: Self) -> NodeResult<bool> {
+        T::equal(self.data, other.data)
+    }
+    /// Preserve unordered provider results and provider failures.
+    pub fn compare(self, other: Self) -> NodeResult<Option<Ordering>> {
+        T::compare(self.data, other.data)
     }
     /// Materialize an owning result in an executed cold context.
     pub fn retain(self) -> NodeResult<NativeValue<T>> {
@@ -123,8 +141,8 @@ fn retain<T: NativeType>(data: &[u8]) -> NodeResult<NativeValue<T>> {
 }
 /// An exact marker whose opaque buffer positions are selected before execution.
 #[derive(Debug)]
-pub struct Native<T: NativeType>(PhantomData<T>);
-impl<T: NativeType> Native<T> {
+pub struct Native<T: NativeType, const DOMAIN: usize = 0>(PhantomData<T>);
+impl<T: NativeType, const DOMAIN: usize> Native<T, DOMAIN> {
     /// Preflight an owning result supplied through an explicit borrowed provider ABI.
     pub fn check_view(
         columns: &ValueColumns,
@@ -135,19 +153,22 @@ impl<T: NativeType> Native<T> {
     }
     /// Copy a preflighted provider result into its independently owning destination.
     pub fn copy_view(columns: &mut ValueColumns, to: ValueSlot<Self>, view: NativeView<'_, T>) {
-        T::copy(view.data, columns.natives.get_mut(to.fields()));
+        replace::<T>(view.data, columns.natives.get_mut(to.fields()));
     }
 }
 impl ValueColumns {
     /// Read a statically selected native slot without checking a per-value runtime tag.
-    pub fn native<T: NativeType>(&self, slot: ValueSlot<Native<T>>) -> NativeView<'_, T> {
+    pub fn native<T: NativeType, const DOMAIN: usize>(
+        &self,
+        slot: ValueSlot<Native<T, DOMAIN>>,
+    ) -> NativeView<'_, T> {
         NativeView {
             data: self.natives.get(slot.fields()),
             marker: PhantomData,
         }
     }
 }
-impl<T: NativeType> GlobalValue for Native<T> {
+impl<T: NativeType, const DOMAIN: usize> GlobalValue for Native<T, DOMAIN> {
     type Value = NativeValue<T>;
     type Slots = usize;
     const WIDTH: usize = 1;
@@ -183,7 +204,7 @@ impl<T: NativeType> GlobalValue for Native<T> {
         *columns.natives.get_mut(slot) = value.data;
     }
 }
-impl<T: NativeType> PreparedValue for Native<T> {
+impl<T: NativeType, const DOMAIN: usize> PreparedValue for Native<T, DOMAIN> {
     type Bounds = usize;
     fn include(bounds: &mut usize, value: &Self::Value) {
         *bounds = (*bounds).max(value.data.len());
@@ -216,7 +237,7 @@ impl<T: NativeType> PreparedValue for Native<T> {
         )
     }
     fn copy_native(columns: &mut ValueColumns, to: ValueSlot<Self>, value: &Self::Value) {
-        T::copy(&value.data, columns.natives.get_mut(to.fields()));
+        replace::<T>(&value.data, columns.natives.get_mut(to.fields()));
     }
     fn copy_between(
         source: &ValueColumns,
@@ -224,7 +245,7 @@ impl<T: NativeType> PreparedValue for Native<T> {
         destination: &mut ValueColumns,
         to: ValueSlot<Self>,
     ) {
-        T::copy(
+        replace::<T>(
             source.natives.get(from.fields()),
             destination.natives.get_mut(to.fields()),
         );
@@ -233,7 +254,32 @@ impl<T: NativeType> PreparedValue for Native<T> {
         columns
             .natives
             .copy(from.fields(), to.fields(), |source, destination| {
-                T::copy(source, destination);
+                replace::<T>(source, destination);
             });
+    }
+}
+
+fn replace<T: NativeType>(data: &[u8], destination: &mut Vec<u8>) {
+    destination.clear();
+    T::copy(data, destination);
+}
+
+impl crate::GlobalState {
+    /// Retain one helper result in a separate reserved owner, never an argument's slot.
+    pub fn native_result<T: NativeType, const DOMAIN: usize>(
+        &mut self,
+        observation: crate::Observation<'_>,
+        to: ValueSlot<Native<T, DOMAIN>>,
+        execute: impl for<'v> FnOnce(crate::Observation<'v>, &'v Self) -> NodeResult<NativeView<'v, T>>,
+    ) -> NodeResult {
+        let mut destination = std::mem::take(self.values_mut().natives.get_mut(to.fields()));
+        let result = (|| {
+            let value = execute(observation, self)?;
+            T::preflight(value.data(), destination.capacity())?;
+            replace::<T>(value.data(), &mut destination);
+            Ok(())
+        })();
+        *self.values_mut().natives.get_mut(to.fields()) = destination;
+        result
     }
 }

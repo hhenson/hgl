@@ -12,6 +12,8 @@ pub struct Value {
     pub delta_required: bool,
     /// Ordinary retained temporal children use typed optional snapshot storage.
     pub snapshot: bool,
+    /// This invocation was checked for setup or cold execution, never a node hook.
+    pub cold_call: bool,
 }
 impl Value {
     /// Pair a checked expression with its resolved type.
@@ -21,12 +23,15 @@ impl Value {
             kind,
             delta_required: false,
             snapshot: false,
+            cold_call: false,
         }
     }
 }
 /// Checked expressions and frontend-only binding markers.
 #[derive(Debug, Clone)]
 pub enum Kind {
+    /// Cold independently owning native data produced by an explicit provider context.
+    Opaque(hgl_value_model::native_value::NativeValue),
     /// Typed map child endpoint scoped to one modified-entry iteration.
     IterationInput(usize),
     /// Closed harness sequence with dense horizon and only present owned slots.

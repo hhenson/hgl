@@ -52,3 +52,4 @@ pub use hgl_rust_codegen::prepared_hooks;
 use hgl_rust_codegen::constructor_owners;
 
 use hgl_rust_codegen::append;
+use hgl_rust_codegen::native_values;

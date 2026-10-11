@@ -25,7 +25,7 @@ fn identity(ty: &Ty) -> String {
 pub fn shape_marker(ty: &Ty) -> String {
     if matches!(ty, Ty::Rolling(..)) {
         crate::windows::marker(ty)
-    } else if matches!(ty, Ty::Enum(_) | Ty::Any) {
+    } else if matches!(ty, Ty::Enum(_) | Ty::Native(_) | Ty::Any) {
         format!("hgl_store::shapes::Atomic<{}>", global_type(ty))
     } else if let Ty::Atomic(payload) = ty {
         format!("hgl_store::shapes::Atomic<{}>", global_type(payload))
@@ -45,7 +45,7 @@ pub fn shape_marker(ty: &Ty) -> String {
     } else if matches!(ty, Ty::Tuple(_) | Ty::Struct(..)) {
         format!("Shape{}", identity(ty))
     } else {
-        rust_type(ty).into()
+        rust_type(ty)
     }
 }
 fn operations(ty: &Ty) -> String {
@@ -57,6 +57,7 @@ pub fn publish(ty: &Ty, payload: &str) -> String {
         ty,
         Ty::Any
             | Ty::Enum(_)
+            | Ty::Native(_)
             | Ty::Recursive(_)
             | Ty::Family(_)
             | Ty::List(..)
@@ -88,14 +89,6 @@ pub fn observe(ty: &Ty, input: &str) -> String {
         unreachable!("structural observation")
     };
     read(origin, input)
-}
-/// Shape-specific post-run equivalence; source delta equality remains unavailable.
-pub fn equivalent(ty: &Ty, left: &str, right: &str) -> String {
-    if let Ty::Delta(origin) = ty {
-        format!("{}::equivalent({left},{right})", operations(origin))
-    } else {
-        format!("{left} == {right}")
-    }
 }
 /// Read one checked child endpoint using its statically selected transport.
 pub fn read(ty: &Ty, input: &str) -> String {

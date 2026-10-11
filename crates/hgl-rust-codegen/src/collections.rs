@@ -93,6 +93,9 @@ pub fn equal(ty: &Ty, a: &str, b: &str, marker: fn(&Ty) -> String) -> String {
     if *ty == Ty::Any {
         return format!("({a}).equal({b})?");
     }
+    if matches!(ty, Ty::Native(_)) {
+        return format!("({a}).view().equal(({b}).view())?");
+    }
     if matches!(ty, Ty::Recursive(_)) {
         return format!("{}::ordinary_equal({a},{b})?", marker(ty));
     }
@@ -132,10 +135,13 @@ pub fn equal(ty: &Ty, a: &str, b: &str, marker: fn(&Ty) -> String) -> String {
 
 /// Emit an independent owning read using the exact source layout.
 pub fn retained(source: &str, ty: &Ty, global_type: fn(&Ty) -> String) -> String {
-    if matches!(ty, Ty::Nullable(_)) {
-        return format!("({source}).as_ref().map(hgl_store::Scalar::try_clone).transpose()?");
+    if let Ty::Nullable(child) = ty {
+        return format!(
+            "({source}).as_ref().map(|value|Ok::<_,Box<hgl_types::NodeError>>({})).transpose()?",
+            retained("*value", child, global_type)
+        );
     }
-    if hgl_semantics::value_access::aggregate(ty) {
+    if hgl_semantics::value_access::aggregate(ty) || matches!(ty, Ty::Native(_)) {
         return format!(
             "<{} as hgl_store::GlobalValue>::retain(&({source}))?",
             global_type(ty)

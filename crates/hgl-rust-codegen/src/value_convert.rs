@@ -22,6 +22,7 @@ pub fn decode(t: &Ty, expression: &str) -> String {
         );
     }
     let body = match t {
+        Ty::Native(scalar) => crate::native_values::decode(scalar),
         Ty::Enum(_) => "let hgl_semantics::ir::Kind::Literal(hgl_source::Literal::Enum(_,number))=&v.kind else {return Err(\"prepared enum required\".into())}; *number".into(),
         Ty::Delta(origin) => return delta_decode(origin, expression),
         Ty::List(child, _) => format!(
@@ -64,7 +65,9 @@ pub fn encode(t: &Ty, expression: &str) -> String {
             crate::layouts::global_type(t)
         );
     }
-    let kind = if matches!(t, Ty::Enum(_)) {
+    let kind = if let Ty::Native(scalar) = t {
+        crate::native_values::encode(scalar)
+    } else if matches!(t, Ty::Enum(_)) {
         format!(
             "hgl_semantics::ir::Kind::Literal(hgl_source::Literal::Enum({{let hgl_source::Ty::Enum(identity)={} else {{unreachable!()}};identity}},*v))",
             ty(t)
@@ -99,7 +102,7 @@ fn delta_decode(origin: &Ty, expression: &str) -> String {
             format!("parts.iter().filter_map(|p|if let hgl_semantics::ir::DeltaEntry::Keyed(k,_)=p {{Some(k)}} else {{None}}).map(|k|Ok({})).collect::<Result<Vec<_>,String>>()?,parts.iter().filter_map(|p|if let hgl_semantics::ir::DeltaEntry::Keyed(_,v)=p {{Some(v)}} else {{None}}).map(|v|Ok({})).collect::<Result<Vec<_>,String>>()?,parts.iter().filter_map(|p|if let hgl_semantics::ir::DeltaEntry::Remove(k)=p {{Some(k)}} else {{None}}).map(|k|Ok({})).collect::<Result<Vec<_>,String>>()?,",decode(key,"k"),decode(&child,"v"),decode(key,"k"))
         }
         Ty::Tuple(_) | Ty::Struct(..)=>fields(origin).0.iter().enumerate().map(|(i,t)|format!("parts.iter().filter_map(|p|if let hgl_semantics::ir::DeltaEntry::Child(id,v)=p {{if *id=={i} {{Some(v)}} else {{None}}}} else {{None}}).map(|v|Ok({})).collect::<Result<Vec<_>,String>>()?,",decode(&t.clone().delta().unwrap_or_else(|_|unreachable!("checked child")),"v"))).collect::<Vec<_>>().concat(),
-        Ty::Atomic(_) | Ty::Rolling(..) | Ty::Delta(_) | Ty::I64 | Ty::F64 | Ty::Bool | Ty::Str | Ty::Bytes | Ty::Any | Ty::Duration | Ty::Date | Ty::Time | Ty::DateTime | Ty::CivilDateTime | Ty::TimeZone | Ty::Enum(_) | Ty::ZonedTime | Ty::ZonedDateTime | Ty::Ref(_) | Ty::Nullable(_) | Ty::Recursive(_) | Ty::Family(_) | Ty::Void => unreachable!("checked structural delta"),
+        Ty::Atomic(_) | Ty::Rolling(..) | Ty::Delta(_) | Ty::I64 | Ty::F64 | Ty::Bool | Ty::Str | Ty::Bytes | Ty::Any | Ty::Duration | Ty::Date | Ty::Time | Ty::DateTime | Ty::CivilDateTime | Ty::TimeZone | Ty::Enum(_) | Ty::Native(_) | Ty::ZonedTime | Ty::ZonedDateTime | Ty::Ref(_) | Ty::Nullable(_) | Ty::Recursive(_) | Ty::Family(_) | Ty::Void => unreachable!("checked structural delta"),
     };
     format!(
         "{{let hgl_semantics::ir::Kind::Delta(parts)=&({expression}).kind else {{return Err(\"prepared delta required\".into())}}; ({storage})}}"

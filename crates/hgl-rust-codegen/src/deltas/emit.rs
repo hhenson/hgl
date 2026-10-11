@@ -65,15 +65,6 @@ pub(super) fn marker(ty: &Ty) -> String {
             observation(ty)
         ),
     );
-    if !crate::any_values::contains(ty) {
-        append(
-            &mut code,
-            format_args!(
-                "fn equivalent(a:&{value},b:&{value})->bool {{ {} }}\n",
-                equality(ty)
-            ),
-        );
-    }
     append(
         &mut code,
         format_args!(
@@ -205,43 +196,6 @@ fn application(ty: &Ty) -> String {
         Ty::Map(key,child)=>crate::keyed::application(key,Some((&allocation(child),&apply(child,"child","value")))),
         Ty::List(child,Some(n))=>format!("for (key,value) in delta.0.into_iter().zip(delta.1) {{let n=usize::try_from(key).ok().filter(|&n|n<{n}).ok_or_else(||hgl_types::NodeError::new(\"sparse list index out of bounds\"))?; let child=output.index(_ctx.store().bindings(),n); {} }}",apply(child,"child","value")),
         Ty::Struct(..)|Ty::Tuple(_)=>children(ty).iter().enumerate().map(|(i,child)|format!("for value in delta.{i} {{let child=output.field::<{i}>(_ctx.store().bindings()); {}}}",apply(child,"child","value"))).collect::<Vec<_>>().concat(),
-        Ty::Atomic(_) | Ty::Rolling(..) | Ty::Delta(_) | Ty::I64 | Ty::F64 | Ty::Bool | Ty::Str | Ty::Bytes | Ty::Any | Ty::CivilDateTime | Ty::TimeZone | Ty::Enum(_) | Ty::ZonedTime | Ty::ZonedDateTime | Ty::Duration | Ty::Date | Ty::Time | Ty::DateTime | Ty::Ref(_) | Ty::Nullable(_) | Ty::Void | Ty::Recursive(_) | Ty::Family(_)=>unreachable!("structural origin"),
-    }
-}
-
-fn equality(ty: &Ty) -> String {
-    let members = |slot| {
-        format!(
-            "a.{slot}.len()==b.{slot}.len() && a.{slot}.iter().all(|key|b.{slot}.contains(key))"
-        )
-    };
-    if matches!(ty, Ty::Set(_)) {
-        return format!("{} && {}", members(0), members(1));
-    }
-    if let Ty::List(child, _) | Ty::Map(_, child) = ty {
-        let child = super::equivalent(&delta_type(child), "value", "&b.1[index]");
-        let removed = if matches!(ty, Ty::Map(..) | Ty::List(_, None)) {
-            format!(" && {}", members(2))
-        } else {
-            String::new()
-        };
-        return format!(
-            "a.0.len()==b.0.len() && a.0.iter().zip(&a.1).all(|(key,value)|b.0.iter().position(|candidate|candidate==key).is_some_and(|index| {child})){removed}"
-        );
-    }
-    let terms = children(ty)
-        .iter()
-        .enumerate()
-        .map(|(i, child)| {
-            format!(
-                "a.{i}.len()==b.{i}.len() && a.{i}.iter().zip(&b.{i}).all(|(a,b)| {})",
-                super::equivalent(&delta_type(child), "a", "b")
-            )
-        })
-        .collect::<Vec<_>>();
-    if terms.is_empty() {
-        "true".into()
-    } else {
-        terms.join(" && ")
+        Ty::Atomic(_) | Ty::Rolling(..) | Ty::Delta(_) | Ty::I64 | Ty::F64 | Ty::Bool | Ty::Str | Ty::Bytes | Ty::Any | Ty::CivilDateTime | Ty::TimeZone | Ty::Enum(_) | Ty::Native(_) | Ty::ZonedTime | Ty::ZonedDateTime | Ty::Duration | Ty::Date | Ty::Time | Ty::DateTime | Ty::Ref(_) | Ty::Nullable(_) | Ty::Void | Ty::Recursive(_) | Ty::Family(_)=>unreachable!("structural origin"),
     }
 }

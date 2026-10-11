@@ -2,10 +2,8 @@
 use crate::ir::{DeltaEntry, Kind, Native, Statement, Value};
 use crate::value_operations as operators;
 pub use crate::value_operations::EvalError;
+use crate::value_operations::unsupported;
 use hgl_value_model::{Literal, TemporalLiteral, Ty};
-fn unsupported(message: &str) -> EvalError {
-    EvalError::Unsupported(message.into())
-}
 fn bounds() -> EvalError {
     EvalError::Operation("ordinary list index out of bounds".into())
 }
@@ -104,7 +102,9 @@ impl Execution<'_, '_> {
             Kind::Native(binding, arguments) => return self.native(binding, arguments),
             Kind::Delta(parts) => self.delta(parts)?,
             Kind::WiringFailure(message) => return Err(EvalError::Operation(message.clone())),
-            Kind::Captured(..) | Kind::Literal(_) | Kind::Void => return Ok(value.clone()),
+            Kind::Opaque(_) | Kind::Captured(..) | Kind::Literal(_) | Kind::Void => {
+                return Ok(value.clone());
+            }
             Kind::List(items) => self.collection(&value.ty, items)?,
             Kind::Construct(fields) => Kind::Construct(
                 fields
@@ -324,7 +324,7 @@ impl Execution<'_, '_> {
                 DeltaEntry::Child(..) => {}
             }
         }
-        crate::publication_trace::materialized(&parts).map_err(EvalError::Operation)?;
+        crate::publication_trace::materialized(&parts)?;
         Ok(Kind::Delta(parts))
     }
     fn path(&mut self, value: &Value, path: &mut Vec<Projection>) -> Result<usize, EvalError> {

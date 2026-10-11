@@ -365,3 +365,5 @@ payload is ordinary V and root membership/readiness is private rolling state.
 `global_values(&self) -> &ValueColumns` borrows prepared ordinary columns
 without mutation authority. Typed snapshot scalar arguments and projections can
 share this immutable view with temporal scalar observations during native calls.
+
+The native_keys module owns typed prepared key domains; native_results owns prepared single-call result publication. Both depend only on existing runtime storage and typed ABI operations, never compiler metadata.

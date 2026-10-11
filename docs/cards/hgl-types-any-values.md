@@ -9,3 +9,5 @@ Descriptors hold compiled operations and exact type identity, with no name looku
 Cold retain/reserve may allocate. Prepared copy/encoding checks destination capacity first and uses independently reserved storage. Actual comparisons and hashes preserve recursive capabilities, optional presence, unordered collection equality, partial order and non-NaN key rules. Missing capabilities return value.capability.
 
 Acceptance: hgl-store Any allocation/retention tests and generated compiler allocation probes, including boxed structural delta independence and empty container capability failures.
+
+AnyPlan.copy is the statically selected recursive owning-copy codec. AnyBuffer.native appends one provider leaf; Vec executes its provider copy while AnyWidth only counts its width. The caller preflights complete capacity and clears an owner exactly once before append; provider copies never clear sibling data. Clone, retain and prepared copy all use the selected codec, including Native leaves inside boxes and aggregates. Equality/hash/order delegate provider capabilities and propagate their error identifiers.

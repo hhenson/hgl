@@ -29,6 +29,7 @@ fn text_parts(value: &Value, parts: &mut Vec<String>) -> Option<()> {
         | Kind::IsPresent(_)
         | Kind::Present(_)
         | Kind::Literal(_)
+        | Kind::Opaque(_)
         | Kind::TemporalLiteral(_)
         | Kind::Prepared(_)
         | Kind::Wire(_)

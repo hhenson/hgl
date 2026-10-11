@@ -14,7 +14,7 @@ Required-constant execution, signal payloads, borrowing, mutation, generic/defau
 parameter forms and blocking evaluation remain rejected. Fields retain the source
 metadata needed for exact checking; parsing never fabricates a runtime value.
 
-Portable Scalar/Function records live in hgl-types::native_contracts; this source
+Portable Scalar/Function records live in hgl-value-model::native_contracts; this source
 module reexports them and owns their inert token parsing. No executable callback
 or provider image is stored in the records.
 
@@ -22,3 +22,5 @@ A scalar record may end in `marker "RustIdentifier"`. The public `symbol` reader
 validates both helper symbols and scalar target markers. Markers are explicit
 Rust ABI metadata; neither HGL bindings nor canonical identities imply a target
 name. Parsing remains independent of whether the target image exists.
+
+An ordinary helper may declare target-only `bound "RustIdentifier"` metadata after its symbol. The pure callback accepts source argument width bounds and returns a checked result width bound. It must be deterministic, overflow-safe and free of observable helper/constructor execution. The provider result is still preflighted against reserved capacity before publication; an unsound bound fails without overwriting the previous value. This is Rust ABI metadata and adds no HGL spelling.

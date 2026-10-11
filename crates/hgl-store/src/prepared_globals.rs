@@ -23,6 +23,25 @@ impl<W: Wake> PreparedTick<'_, W> {
     }
 }
 impl<W: Wake> PreparedTick<'_, W> {
+    /// Publish from this tick's independently owned global source without aliasing the tick borrow.
+    pub fn atomic_from_global<T: PreparedValue>(
+        &mut self,
+        from: ValueSlot<T>,
+        output: Output<Atomic<T>>,
+    ) -> NodeResult {
+        self.authorize(output.id(), output.generation());
+        let storage = &mut self.storage;
+        let to = storage.atomic.destination(storage.bindings, output)?;
+        T::check_slots(storage.globals.values(), from, storage.atomic.values(), to)?;
+        T::copy_between(
+            storage.globals.values(),
+            from,
+            storage.atomic.values_mut(),
+            to,
+        );
+        self.publish(output.id());
+        Ok(())
+    }
     /// Publish from an independently owned prepared source arena.
     pub fn atomic_from<T: PreparedValue>(
         &mut self,

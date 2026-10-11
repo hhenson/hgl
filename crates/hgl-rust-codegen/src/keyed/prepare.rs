@@ -23,10 +23,12 @@ pub fn preparation(plan: &Plan) -> String {
     code += "fn prepare_key(keys:&mut hgl_store::Keys,value:&hgl_semantics::ir::Value)->Result<(),String> {";
     code += &crate::any_values::key_preparation(plan);
     for ty in crate::layouts::global_types(plan).values() {
-        if let hgl_source::Ty::Struct(name, fields, _) = ty
+        if matches!(ty, hgl_source::Ty::Native(_) | hgl_source::Ty::Struct(..))
             && ty.collection_key()
         {
-            let ty = if name.source_name().starts_with("\0tuple<") {
+            let ty = if let hgl_source::Ty::Struct(name, fields, _) = ty
+                && name.source_name().starts_with("\0tuple<")
+            {
                 hgl_source::Ty::Tuple(fields.iter().map(|(_, ty)| ty.clone()).collect())
             } else {
                 ty.clone()

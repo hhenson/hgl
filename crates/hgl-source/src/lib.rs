@@ -856,4 +856,7 @@ pub mod native_package;
 /// Checked node lifecycle value phases.
 pub use hgl_value_model::execution_phase;
 
+/// Cold opaque native data is supplied only by an explicit execution context.
+pub use hgl_value_model::native_value;
+
 pub use hgl_value_model::native_contracts;

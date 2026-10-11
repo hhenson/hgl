@@ -442,3 +442,6 @@ impl<T: Scalar> Copy for In<T> {}
 impl<T: Scalar> Copy for DictOut<T> {}
 
 impl<T: Scalar> Copy for DictIn<T> {}
+
+mod native_keys;
+mod native_results;

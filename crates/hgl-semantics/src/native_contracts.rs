@@ -169,6 +169,9 @@ pub fn bind(
             if !contract.phases.contains(phase) {
                 return Err(format!("native helper is unavailable in {phase}"));
             }
+            if runtime && result.owning_scalar() && contract.bound.is_none() {
+                return Err("native owning evaluation result requires a pure target bound".into());
+            }
             let descriptor = &library.native_contracts[module];
             let path = descriptor
                 .image
@@ -179,6 +182,16 @@ pub fn bind(
                     provider: descriptor.provider.clone(),
                     fingerprint: descriptor.fingerprint.clone(),
                     path: path.clone(),
+                    bounds: descriptor
+                        .functions
+                        .values()
+                        .filter_map(|function| {
+                            function
+                                .bound
+                                .as_ref()
+                                .map(|bound| (function.symbol.clone(), bound.clone()))
+                        })
+                        .collect(),
                     scalars: descriptor
                         .scalars
                         .iter()
@@ -218,7 +231,9 @@ pub fn bind(
         },
         natives,
     )?;
-    Ok(natives[native].invocation(values, result))
+    let mut invocation = natives[native].invocation(values, result);
+    invocation.cold_call = matches!(phase, "setup" | "cold");
+    Ok(invocation)
 }
 
 fn legacy(library: &Library, declaration: &Decl, signature: &Signature) -> Result<(), String> {
@@ -278,4 +293,12 @@ pub fn intern(
     let id = natives.len();
     natives.push(native);
     Ok(id)
+}
+
+/// Form a canonical ordinary native scalar after exact declaration visibility checks.
+pub fn resolve(library: &Library, declaration: &Decl, applied: bool) -> Result<Ty, Issue> {
+    if applied {
+        return Err("native scalar type arguments are not admitted".into());
+    }
+    Ok(Ty::Native(scalar(library, declaration)?.clone()))
 }

@@ -266,3 +266,8 @@ Additional ordinary value contracts: [Any semantics](hgl-any-values.md), [compil
 
 - [Canonical ordinary value model](hgl-value-model.md)
 - [Checked ordinary execution](hgl-eval.md)
+
+- [Cold native data](hgl-native-cold-values.md)
+- [Native key domains](hgl-native-key-domains.md)
+- [Prepared native results](hgl-native-results.md)
+- [Cold key identity context](hgl-key-context.md)

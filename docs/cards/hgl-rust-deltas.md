@@ -24,14 +24,10 @@ Mutants: fill omitted children from held values; discard removals; evaluate
 fields in declaration order; retain observation at alias declaration; replace
 existing map subtree rather than merge.
 
-`equivalent(ty,left,right) -> String` emits post-run structural comparison.
-Generated equivalent methods ignore constructor ordering for sets and keyed
-sparse entries, compare exact presence and recurse on children; they never fill
-omissions from held state. No general HGL equality operator is admitted.
+Post-run comparison delegates to the existing fallible cold ordinary equal_data after typed capture. It preserves exact sparse presence, unordered keyed entries and provider error identifiers, without adding a source equality operator.
 
 `structural(&Ty) -> bool` identifies structural endpoint emission at compilation.
-The generated delta marker provides allocate, validate, observe, apply and
-post-run equivalent methods. Sparse payload storage is opaque to HGL; generated
+The generated delta marker provides allocate, validate, observe and apply methods. Sparse payload storage is opaque to HGL; generated
 Rust projection code is the only consumer of its internal list fields.
 
 Declared enum source types retain nominal identity through generated i64-backed

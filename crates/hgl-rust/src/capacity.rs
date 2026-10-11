@@ -185,7 +185,8 @@ impl Capacity {
     }
     /// Reserve the fixed textual envelope of built-in scalar formatters.
     pub fn native_limits(&self, plan: &Plan) -> String {
-        crate::pure_bounds::native_limits(plan, || self.index(&Ty::Str))
+        hgl_rust_codegen::native_results::limits(plan, |ty| self.bounds(ty))
+            + &crate::pure_bounds::native_limits(plan, || self.index(&Ty::Str))
             + &crate::pure_bounds::byte_limits(self.types.values(), |ty| self.index(ty))
             + &if self.types.contains_key(&global_type(&Ty::Any)) {
                 crate::any_expression::limits(plan, |ty| self.bounds(ty), self.index(&Ty::Any))

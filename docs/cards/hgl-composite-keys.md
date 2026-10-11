@@ -14,3 +14,8 @@ nominal types, tuple positions and every optional presence bit retained. Require
 missing fields, duplicate/out-of-range positions and mismatched child types fail.
 Signed zero and NaN rules come from scalar-keys. Recursive/family/collection/ref
 components remain unsupported. Callers retain written evaluation order separately.
+
+Native leaves remain deferred in source-known identities. Cold key_context uses
+the same recursive formation with fallible provider identities. Field shape
+metadata comes from the authoritative ordinary-value shape policy. The module
+belongs to hgl-eval and may also use value_eval for its shared error contract.

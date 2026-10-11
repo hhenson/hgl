@@ -12,6 +12,4 @@ the exact concrete member type and independently retained fields. Canonical fami
 values are Construct([(canonical member index, concrete Value)]). concrete(value)
 borrows that payload for exact-tag-first equality and harness comparison.
 
-equal(a,b) compares exact concrete tags and then recursively compares retained
-ordinary fields/lists. This is cold ordinary equality; runtime native family
-representations include the discriminator in their ordinary typed equality.
+equal(a,b) reexports authoritative fallible ordinary equal_data. Exact concrete tags precede recursive provider/box operations; failures retain their ordinary error identifiers. The existing nominal identity controls require exact Ok(true/false) results.

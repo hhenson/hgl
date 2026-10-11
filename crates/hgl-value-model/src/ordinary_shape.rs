@@ -3,6 +3,9 @@ use crate::{FamilyType, Ty};
 /// Static capability declarations; contained boxes retain their claimed capabilities.
 pub fn capable(ty: &Ty, operation: usize) -> bool {
     match ty {
+        Ty::Native(scalar) => ["equality", "hash", "order"]
+            .get(operation)
+            .is_some_and(|cap| scalar.capabilities.contains(*cap)),
         Ty::Delta(_) | Ty::Void | Ty::Ref(_) | Ty::Atomic(_) | Ty::Rolling(..) => false,
         Ty::Set(child) => operation != 2 && capable(child, 0) && capable(child, 1),
         Ty::Map(key, value) => {
@@ -69,6 +72,7 @@ pub fn contains_any(ty: &Ty) -> bool {
             .any(|d| d.fields().iter().any(|(_, ty)| contains_any(ty))),
         Ty::Family(family) => family.members().iter().any(|(_, ty)| contains_any(ty)),
         Ty::Enum(_)
+        | Ty::Native(_)
         | Ty::I64
         | Ty::F64
         | Ty::Bool

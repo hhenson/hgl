@@ -1,7 +1,13 @@
 //! Static source-to-native scalar spellings.
 use hgl_source::{Literal, Ty};
 /// Emit the checked rust type form.
-pub fn rust_type(ty: &Ty) -> &'static str {
+pub fn rust_type(ty: &Ty) -> String {
+    if let Ty::Native(scalar) = ty {
+        return format!(
+            "hgl_store::native_values::NativeValue<{}>",
+            crate::native_values::marker(scalar)
+        );
+    }
     match ty {
         Ty::Enum(_) | Ty::I64 => "i64",
         Ty::Duration => "hgl_types::EngineDelta",
@@ -18,7 +24,8 @@ pub fn rust_type(ty: &Ty) -> &'static str {
         Ty::Bytes => "Vec<u8>",
         Ty::Any => "hgl_types::AnyValue",
         Ty::Void => "()",
-        Ty::Atomic(_)
+        Ty::Native(_)
+        | Ty::Atomic(_)
         | Ty::Rolling(..)
         | Ty::Map(..)
         | Ty::Tuple(_)
@@ -33,6 +40,7 @@ pub fn rust_type(ty: &Ty) -> &'static str {
         Ty::Ref(_) => "hgl_store::Reference",
         Ty::Set(_) => "hgl_store::InputId",
     }
+    .into()
 }
 /// Emit the checked scalar type form.
 pub fn scalar_type(ty: &Ty) -> String {

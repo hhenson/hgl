@@ -32,7 +32,7 @@ fn bindings(body: &mut [Statement]) {
         | Statement::Var(_, v)
         | Statement::Return(v)
         | Statement::Assign(_, v) = s
-            && v.ty == Ty::Any
+            && matches!(v.ty, Ty::Any | Ty::Native(_))
         {
             v.snapshot = true;
         }
@@ -50,7 +50,9 @@ fn mark(value: &mut Value) -> bool {
     {
         value.kind = Kind::Local(id);
     }
-    if value.ty == Ty::Any && matches!(value.kind, Kind::Local(_) | Kind::MutableLocal(_)) {
+    if matches!(value.ty, Ty::Any | Ty::Native(_))
+        && matches!(value.kind, Kind::Local(_) | Kind::MutableLocal(_))
+    {
         value.snapshot = true;
     }
     true
@@ -146,6 +148,9 @@ pub fn write(
         );
     }
     if let Some(code) = copied(plan, value, destination) {
+        return code;
+    }
+    if let Some(code) = crate::native_results::write(value, destination) {
         return code;
     }
     if let Kind::Unary(op, argument) = &value.kind

@@ -52,6 +52,7 @@ fn projected(value: &Value, emit: &dyn Fn(&Value) -> String) -> String {
         | Kind::GlobalGet(_)
         | Kind::BorrowedLocal(..)
         | Kind::Literal(_)
+        | Kind::Opaque(_)
         | Kind::TemporalLiteral(_)
         | Kind::Prepared(_)
         | Kind::Wire(_)

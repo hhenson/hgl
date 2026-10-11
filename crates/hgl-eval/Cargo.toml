@@ -10,14 +10,15 @@ description = "Checked ordinary IR execution without source parsing or name reso
 line-budget = 2000
 
 [package.metadata.hgl.modules]
+key_context = { budget = 80, uses = ["composite_keys", "ir", "value_eval"] }
 any_values = { budget = 420, uses = ["ir", "value_eval", "family_values", "scalar_keys"] }
 ir_visit = { budget = 320, uses = ["ir", "harness_ir"] }
-collection_values = { budget = 200, uses = ["composite_keys", "family_values", "ir", "any_values", "value_eval"] }
-composite_keys = { budget = 150, uses = ["ir", "scalar_keys", "any_values", "family_values"] }
-family_values = { budget = 100, uses = ["ir"] }
+collection_values = { budget = 200, uses = ["composite_keys", "family_values", "ir", "any_values", "value_eval", "key_context"] }
+composite_keys = { budget = 150, uses = ["ir", "scalar_keys", "any_values", "family_values", "value_eval"] }
+family_values = { budget = 100, uses = ["ir", "any_values"] }
 harness_ir = { budget = 200, uses = ["ir", "value_eval"] }
 ir = { budget = 180, uses = [] }
-publication_trace = { budget = 150, uses = ["composite_keys", "ir"] }
+publication_trace = { budget = 150, uses = ["composite_keys", "ir", "key_context", "value_eval"] }
 scalar_keys = { budget = 100, uses = [] }
 value_constant = { budget = 100, uses = ["ir", "ir_visit"] }
 value_eval = { budget = 500, uses = ["value_constant", "collection_values", "publication_trace", "family_values", "ir", "value_operations", "any_values"] }

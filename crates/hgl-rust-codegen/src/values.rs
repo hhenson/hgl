@@ -16,7 +16,9 @@ fn value(plan: &Plan, v: &Value) -> String {
     }
     match &v.kind {
         Kind::Prepared(id) => retained(&format!("prepared{id}"), &v.ty),
-        Kind::TemporalLiteral(_) => unreachable!("preparation expressions cannot reach node hooks"),
+        Kind::Opaque(_) | Kind::TemporalLiteral(_) => {
+            unreachable!("preparation expressions cannot reach node hooks")
+        }
         Kind::WiringFailure(message) => {
             format!("return Err(hgl_types::NodeError::new({message:?}))")
         }
@@ -158,6 +160,13 @@ fn binary(plan: &Plan, result: &Ty, op: &str, a: &Value, b: &Value) -> String {
             &crate::any_prepared::view(plan, b),
         );
     }
+    if matches!(a.ty, Ty::Native(_)) {
+        return crate::any_values::comparison(
+            op,
+            &native_argument(plan, a),
+            &native_argument(plan, b),
+        );
+    }
     if matches!(
         a.ty,
         Ty::Set(_) | Ty::Map(..) | Ty::Family(_) | Ty::Tuple(_)
@@ -234,7 +243,7 @@ pub fn statements(plan: &Plan, body: &[Statement], out: &mut Vec<String>, result
             Statement::Yield(v) => format!("return Ok({});\n", value(plan, v)),
             Statement::Exit => "return Ok(());\n".into(),
             Statement::Let(i,Value {kind:Kind::Query(op,args),..}) | Statement::Var(i,Value {kind:Kind::Query(op,args),..}) if op.starts_with("\0constructor:") => crate::constructor_owners::local(plan,*i,&args[0],op),
-            Statement::Let(i,v) | Statement::Var(i,v) if v.snapshot && v.ty==Ty::Any => crate::any_prepared::local(plan,*i,v,|v|value(plan,v)),
+            Statement::Let(i,v) | Statement::Var(i,v) if v.snapshot && matches!(v.ty,Ty::Any|Ty::Native(_)) => crate::any_prepared::local(plan,*i,v,|v|value(plan,v)),
             Statement::Let(i,v) if v.snapshot => crate::snapshot_slots::local(*i,v, |v| value(plan,v)),
             Statement::Let(i,v) => {
                 let init = atomic_place(plan,v).or_else(||observation(v)).unwrap_or_else(||condition_code(plan,v));
@@ -291,7 +300,7 @@ fn assignment(plan: &Plan, target: &Value, v: &Value) -> String {
             crate::any_prepared::write(plan, v, "destination", |v| value(plan, v))
         );
     }
-    if target.ty == Ty::Any && target.snapshot {
+    if matches!(target.ty, Ty::Any | Ty::Native(_)) && target.snapshot {
         let destination = crate::snapshot_slots::projection(target, |v| value(plan, v));
         return format!(
             "{{let destination={destination};{}}}",
@@ -462,6 +471,17 @@ fn byte_view(plan: &Plan, value: &Value) -> String {
 }
 
 fn native_argument(plan: &Plan, v: &Value) -> String {
+    if matches!(v.ty, Ty::Native(_)) {
+        if let Some((arena, slot)) = crate::source_slots::source(plan, v) {
+            let columns = if arena == "configuration_columns" {
+                "self.configuration_columns".into()
+            } else {
+                format!("_ctx.store().{arena}()")
+            };
+            return format!("{columns}.native({slot})");
+        }
+        return format!("({}).view()", condition_code(plan, v));
+    }
     if v.ty != Ty::Str {
         return condition_code(plan, v);
     }
