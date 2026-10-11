@@ -13,3 +13,8 @@ The normalizer does not move expressions out of control flow or helper scopes;
 existing helper and start/stop boundaries remain unchanged.
 Closed collection recipes retain their literal boundary; staging their nested
 constructors must not invalidate the collection's finite capacity proof.
+
+Only the converted outer family owner bypasses whole-value cold hoisting.
+Nested literal family coercions retain their exact tag and owning children in
+configuration slots; dynamic parent fields still execute once at their original
+position. Ordinary and recursive parent controls cover text and list descendants.

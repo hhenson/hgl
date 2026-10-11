@@ -3,7 +3,9 @@ use crate::ir::{Kind, Plan, Statement, Value};
 use hgl_source::Ty;
 use std::collections::BTreeMap;
 fn hoist(value: &mut Value, configuration: &mut Vec<Value>, owning: &impl Fn(&Ty) -> bool) {
-    if value.closed() && !matches!(value.ty, Ty::Family(_)) && owning(&value.ty) {
+    let closed = value.closed()
+        || matches!(&value.kind, Kind::Unary(op, child) if op == "family" && child.closed());
+    if closed && owning(&value.ty) {
         let id = configuration.len();
         configuration.push(value.clone());
         value.kind = Kind::Configuration(id);
@@ -109,6 +111,14 @@ fn origin(
         return origins[&source].clone();
     }
     *value = convert(value).unwrap_or_else(|| value.clone());
-    hoist(value, configuration, owning);
+    if matches!(value.ty, Ty::Family(_)) {
+        if let Kind::Construct(fields) = &mut value.kind {
+            for (_, child) in fields {
+                hoist(child, configuration, owning);
+            }
+        }
+    } else {
+        hoist(value, configuration, owning);
+    }
     value.clone()
 }
