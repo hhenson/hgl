@@ -12,7 +12,7 @@ line-budget = 8940
 [package.metadata.hgl.modules]
 any_comparisons = { budget = 100, uses = ["any_prepared", "any_values", "values"] }
 constructor_fields = { budget = 100, uses = ["layouts"] }
-any_expression = { budget = 180, uses = ["any_values", "source_slots"] }
+any_expression = { budget = 180, uses = ["any_values", "source_slots", "observed"] }
 identifiers = { budget = 40, uses = [] }
 any_values = { budget = 600, uses = ["deltas", "layouts", "collections", "families", "scalars", "value_convert"] }
 any_prepared = { budget = 250, uses = ["any_comparisons", "execution_proof", "source_slots", "layouts", "any_values", "values", "observed", "any_expression"] }
@@ -32,7 +32,7 @@ key_origins = { budget = 180, uses = [] }
 keyed = { budget = 450, uses = ["checked_data", "key_origins", "layouts", "value_convert", "any_values"] }
 layouts = { budget = 400, uses = ["identifiers", "snapshots", "collections", "composite_keys", "enums", "families", "prepared_values", "scalars", "structs"] }
 mutation_bounds = { budget = 250, uses = [] }
-observed = { budget = 500, uses = ["snapshots", "deltas", "composite_keys", "layouts", "windows"] }
+observed = { budget = 500, uses = ["source_slots", "snapshots", "deltas", "composite_keys", "layouts", "windows"] }
 preparation = { budget = 300, uses = ["checked_data", "collections", "families", "layouts", "recursive_convert", "value_convert", "values"] }
 prepared_values = { budget = 250, uses = [] }
 pure_bounds = { budget = 300, uses = [] }

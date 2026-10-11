@@ -62,6 +62,9 @@ fn text(value: &Value, locals: &BTreeMap<usize, Text>) -> Text {
                 .saturating_add(text(b, locals).width()),
         );
     }
+    if let Kind::Unary(_, child) = &value.kind {
+        return text(child, locals);
+    }
     Text::Width(1)
 }
 fn assign(target: &Value, value: Text, locals: &mut BTreeMap<usize, Text>) {
@@ -125,8 +128,11 @@ fn node_factor(plan: &Plan, index: usize, factors: &mut [Option<usize>]) -> usiz
         .max()
         .unwrap_or(1);
     let mut maximum = 1;
-    text_statements(&node.start, &mut BTreeMap::new(), &mut maximum);
-    for (_, body) in &node.handlers {
+    for body in [&node.start, &node.stop]
+        .into_iter()
+        .chain(node.generator.iter())
+        .chain(node.handlers.iter().map(|(_, body)| body))
+    {
         text_statements(body, &mut BTreeMap::new(), &mut maximum);
     }
     let factor = input.saturating_mul(maximum);

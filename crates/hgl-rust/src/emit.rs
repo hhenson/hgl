@@ -610,7 +610,6 @@ fn capacities(plan: &Plan) -> String {
     code += &capacity.constants(plan, |value| condition_code(plan, value));
     code += &capacity.scalar_sets(plan);
     code += &capacity.native_limits(plan);
-    code += &capacity.text_limits(plan);
     let mut appends = 0usize;
     for node in &plan.nodes {
         hgl_semantics::ir_visit::hooks(node, &mut |v| {

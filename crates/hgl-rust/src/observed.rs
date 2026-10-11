@@ -370,6 +370,7 @@ fn validation(ty: &Ty) -> String {
 
 mod text;
 pub use text::text;
+pub(crate) use text::text_encoding;
 /// Read one checked child endpoint using its statically selected transport.
 pub fn read(ty: &Ty, input: &str, operation: Option<String>) -> String {
     if matches!(ty, Ty::Rolling(..)) {

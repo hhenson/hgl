@@ -60,6 +60,9 @@ fn body(
             .collect::<Vec<_>>()
             .concat();
     }
+    if let Some(code) = crate::observed::text_encoding(value, prelude, emit) {
+        return code;
+    }
     let id = prelude.len();
     let n = crate::any_values::name(&value.ty);
     if let Some((arena, source)) = crate::source_slots::source(plan, value) {
@@ -113,7 +116,9 @@ pub(crate) fn encoding(
     } else {
         value
     };
-    if !matches!(value.kind, Kind::Construct(_) | Kind::List(_)) || value.ty == Ty::Any {
+    if !(matches!(value.kind, Kind::Construct(_) | Kind::List(_)) || value.ty == Ty::Str)
+        || value.ty == Ty::Any
+    {
         return None;
     }
     Some(boxed(plan, value, prelude, emit))

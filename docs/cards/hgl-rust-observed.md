@@ -28,3 +28,10 @@ Empty sparse slot application and pass-through establish invalid destination
 validity. Repeated valid empties are silent. Observation retains present empty
 child entries separately from omission, and configured deltas reuse their
 prepared slots rather than cloning owning sparse storage during evaluation.
+
+`text_encoding` shares immutable text fragments with direct text publication
+and encodes Any frames. Configuration field/list projections use `source_slots`;
+each index is evaluated once and its selected slot is validated before the next
+operand. Immutable bytes are read again only for width measurement and copying,
+without constructing owning text. Unsupported leaves retain the existing
+caller-selected lowering.
