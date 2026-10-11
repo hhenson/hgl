@@ -67,3 +67,7 @@ signature_types returns structured Issues and delegates written reduced delta re
 Checked ordinary defaults are retained in Parameter::value_default. Signature::parameter_names supplies declaration-order binding names. General default checking belongs to hgl-default-values.
 
 May use struct_declarations for the shared declared type-domain check.
+
+`infer_arguments` gathers substitutions from already checked argument types before
+required defaults supply dependent bounds. Final `signature_types` resolution
+retains exact width and type checks; neither pass executes supplied values.

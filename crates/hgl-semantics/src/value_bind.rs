@@ -249,12 +249,21 @@ pub fn constant(value: &Value) -> bool {
     )
 }
 
-/// Infer ordinary nested nominal patterns and resolve the selected signature.
-pub fn signature_types(
+/// Infer generic arguments without resolving dependent sizes or the result type.
+pub fn infer_arguments(
     library: &crate::library::Library,
     module: &str,
     signature: &Signature,
     args: &[(Option<String>, Value)],
+) -> Result<BTreeMap<String, Ty>, hgl_source::Issue> {
+    argument_types(library, module, signature, args, true)
+}
+fn argument_types(
+    library: &crate::library::Library,
+    module: &str,
+    signature: &Signature,
+    args: &[(Option<String>, Value)],
+    inference: bool,
 ) -> Result<BTreeMap<String, Ty>, hgl_source::Issue> {
     let supplied = order_arguments(&signature.parameter_names(), args)?;
     let mut types = BTreeMap::new();
@@ -304,7 +313,12 @@ pub fn signature_types(
             || hgl_source::application(&parameter.ty)
                 .is_some_and(|(base, _)| matches!(base, "delta" | "atomic" | "rolling"))
         {
-            crate::value_types::unify(
+            let unify = if inference {
+                crate::value_types::infer
+            } else {
+                crate::value_types::unify
+            };
+            unify(
                 library,
                 module,
                 &parameter.ty,
@@ -314,6 +328,16 @@ pub fn signature_types(
             )?;
         }
     }
+    Ok(types)
+}
+/// Infer ordinary nested nominal patterns and resolve the selected signature.
+pub fn signature_types(
+    library: &crate::library::Library,
+    module: &str,
+    signature: &Signature,
+    args: &[(Option<String>, Value)],
+) -> Result<BTreeMap<String, Ty>, hgl_source::Issue> {
+    let mut types = argument_types(library, module, signature, args, false)?;
     for name in signature
         .parameters
         .iter()

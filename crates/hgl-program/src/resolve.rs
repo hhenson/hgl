@@ -272,7 +272,9 @@ impl Checker {
         args: &[(Option<String>, Value)],
         source: &str,
     ) -> Result<(Signature, BTreeMap<String, Ty>), Issue> {
-        self.parameter_defaults((module, source), &mut signature, &BTreeMap::new())?;
+        let inferred =
+            hgl_semantics::value_bind::infer_arguments(&self.library, module, &signature, args)?;
+        self.parameter_defaults((module, source), &mut signature, &inferred)?;
         let supplied = order_arguments(&signature.parameter_names(), args)?;
         let env = hgl_semantics::default_values::size_environment(&signature, &supplied, |v| {
             self.static_values.resolve(v).clone()
