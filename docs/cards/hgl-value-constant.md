@@ -15,3 +15,8 @@ external setup locals, and skipped invalid branches in hgl-program regressions.
 
 Delta traversal includes typed Add/Remove keys and both Keyed map operands;
 retained keys obey the same constant/provenance checks as child expressions.
+
+`retain_closed` retains checked closed owning constructor subtrees as immutable
+configuration recipes, using the caller's static ownership predicate. It does not
+evaluate expressions or hooks. Literal family coercions retain their concrete
+payload; dynamic constructor children remain at their source positions.

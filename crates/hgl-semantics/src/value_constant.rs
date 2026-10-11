@@ -1,5 +1,6 @@
 //! Pure lexical classification for checking-time ordinary evaluation.
 use crate::ir::{Kind, Statement, Value};
+use hgl_source::Ty;
 use std::collections::BTreeSet;
 
 /// Whether a complete expression can execute without external values or effects.
@@ -69,4 +70,23 @@ fn block(body: &[Statement], inherited: &BTreeSet<usize>) -> bool {
         | Statement::While(..)
         | Statement::Return(_) => false,
     })
+}
+
+/// Retain closed owning constructor subtrees as immutable configuration recipes.
+pub fn retain_closed(
+    value: &mut Value,
+    configuration: &mut Vec<Value>,
+    owning: &impl Fn(&Ty) -> bool,
+) {
+    let closed = value.closed()
+        || matches!(&value.kind, Kind::Unary(op, child) if op == "family" && child.closed());
+    if closed && owning(&value.ty) {
+        let id = configuration.len();
+        configuration.push(value.clone());
+        value.kind = Kind::Configuration(id);
+    } else if let Kind::Construct(fields) = &mut value.kind {
+        for (_, child) in fields {
+            retain_closed(child, configuration, owning);
+        }
+    }
 }
