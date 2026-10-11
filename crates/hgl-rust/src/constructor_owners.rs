@@ -75,7 +75,7 @@ fn stage(plan: &Plan, value: &Value, slot: &str) -> String {
     )
 }
 
-fn optional_bound(ty: &Ty, bound: String) -> String {
+fn optional_bound(ty: &Ty, bound: &str) -> String {
     if matches!(ty, Ty::Recursive(batch) if batch.definitions().is_empty()) {
         return format!("Some(Box::new({bound}))");
     }
@@ -96,7 +96,7 @@ fn bounds(value: &Value, fallback: &impl Fn(&Ty) -> String) -> String {
                     |v| {
                         let bound = bounds(v, fallback);
                         if optional.contains(&i) {
-                            optional_bound(ty, bound)
+                            optional_bound(ty, &bound)
                         } else {
                             bound
                         }
