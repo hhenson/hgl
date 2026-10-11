@@ -116,11 +116,30 @@ fn growing_list_publications_use_prepared_storage() -> Result<(), Box<dyn std::e
 #[test]
 fn bytes_configured_comparisons_borrow_without_allocating() -> Result<(), Box<dyn std::error::Error>>
 {
-    execute(
-        include_str!("fixtures/bytes_configured_comparisons.hgl").into(),
-        RUNTIME,
-        true,
-    )
+    let (root, suite) = compile(include_str!("fixtures/bytes_configured_comparisons.hgl").into())?;
+    let mut evaluations = 0;
+    // Each checked assertion is independent. One generated evaluation per program
+    // bounds its Windows debug stack without changing authored inputs or assertions.
+    for test in suite.tests {
+        for (position, step) in test.steps.into_iter().enumerate() {
+            let hgl_semantics::harness_ir::Step::Eval(mut evaluation) = step else {
+                return Err("configured comparisons require independent evaluation steps".into());
+            };
+            let plan = suite.plans[evaluation.case].clone();
+            evaluation.case = 0;
+            let selected = hgl_program::Suite {
+                tests: vec![hgl_semantics::harness_ir::Test {
+                    name: format!("{}::{position}", test.name),
+                    steps: vec![hgl_semantics::harness_ir::Step::Eval(evaluation)],
+                }],
+                plans: vec![plan],
+            };
+            execute_suite(&root, &selected, RUNTIME, true)?;
+            evaluations += 1;
+        }
+    }
+    assert_eq!(evaluations, 41, "every authored evaluation executes once");
+    Ok(())
 }
 #[test]
 fn bytes_construction_publication_and_recording_allocate_nothing()
@@ -375,6 +394,12 @@ fn execute(
     runtime: &str,
     measured: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let (root, suite) = compile(source)?;
+    execute_suite(&root, &suite, runtime, measured)
+}
+fn compile(
+    source: String,
+) -> Result<(std::path::PathBuf, hgl_program::Suite), Box<dyn std::error::Error>> {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .ok_or("crate parent")?
@@ -407,6 +432,14 @@ fn execute(
         fs::read_to_string(root.join("native/stdlib/interfaces.hgl"))?,
     ));
     let suite = hgl_program::compile_module_suite(&sources)?;
+    Ok((root.to_path_buf(), suite))
+}
+fn execute_suite(
+    root: &std::path::Path,
+    suite: &hgl_program::Suite,
+    runtime: &str,
+    measured: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
     let dir = std::env::temp_dir().join(format!(
         "hgl-prepared-execution-{}-{}",
         SystemTime::now()
@@ -415,7 +448,7 @@ fn execute(
         NEXT_DIR.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
     fs::create_dir_all(dir.join("src"))?;
-    let mut code = hgl_program::emit_tests(&suite);
+    let mut code = hgl_program::emit_tests(suite);
     if measured {
         code = code
             .replace("hgl_kernel::run_simulation(", "crate::measured_simulation(")

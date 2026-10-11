@@ -48,3 +48,8 @@ operator, with empty, repeated, silent and long byte observations, configuration
 field/index projections, retained copies and ordinary const-function parameters.
 Removing only that configuration place projection makes the exact direct
 comparison allocate and fail the unchanged allocation assertion.
+
+The configuration fixture executes each of its 41 checked eval steps exactly
+once in a separate generated program. This preserves its authored inputs and
+expectations while bounding the Windows debug stack; allocation measurement
+remains unchanged. Other prepared-execution fixtures keep their lexical suites.
