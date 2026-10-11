@@ -97,7 +97,7 @@ fn prepared_parts(
                 "self.configuration_columns.scalar::<String>(expression_text_slot{id}.fields())"
             )))
         })?;
-        retained.push(format!("{{let mut prepared=_ctx.prepared();let(observation,_)=prepared.storage.observations();let _=({}).len();}}", part.checked));
+        retained.push(format!("_ctx.with_observations(|observation,_|->hgl_types::NodeResult{{let _=({}).len();Ok(())}})?;", part.checked));
         Some(part)
     })?;
     prelude.extend(retained);
