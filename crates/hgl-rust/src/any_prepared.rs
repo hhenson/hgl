@@ -67,6 +67,9 @@ pub fn prepare(plan: &Plan) -> Plan {
     for node in &mut plan.nodes {
         let mut globals = std::mem::take(&mut node.globals);
         let mut prepare_payload = |v: &mut Value| {
+            if crate::any_comparisons::prepare(v, &mut globals) {
+                return true;
+            }
             if let Kind::Unary(op, arg) = &mut v.kind
                 && op == "any"
                 && matches!(arg.ty, Ty::Delta(_))
@@ -89,6 +92,7 @@ pub fn prepare(plan: &Plan) -> Plan {
             true
         };
         hgl_semantics::ir_visit::statements_mut(&mut node.start, &mut prepare_payload);
+        hgl_semantics::ir_visit::statements_mut(&mut node.stop, &mut prepare_payload);
         for (_, body) in &mut node.handlers {
             hgl_semantics::ir_visit::statements_mut(body, &mut prepare_payload);
         }

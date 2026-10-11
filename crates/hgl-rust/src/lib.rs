@@ -2,6 +2,7 @@
 //!
 //! The frontend must validate types, indices, method names and execution phases
 //! before constructing this IR. Emission performs no source-language checking.
+mod any_comparisons;
 mod any_expression;
 pub mod any_prepared;
 pub mod any_values;
