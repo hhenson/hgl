@@ -36,7 +36,10 @@ fn cached_projects_preserve_inputs_and_validate_rebuilds() -> Result<(), Box<dyn
     assert!(fresh(&project.path)?);
 
     let old = UNIX_EPOCH + Duration::from_secs(1_600_000_000);
-    fs::File::open(&source)?.set_times(fs::FileTimes::new().set_modified(old))?;
+    fs::OpenOptions::new()
+        .write(true)
+        .open(&source)?
+        .set_times(fs::FileTimes::new().set_modified(old))?;
     generated_cache::write(&source, code)?;
     assert_eq!(fs::metadata(&source)?.modified()?, old);
     assert!(fresh(&project.path)?);
