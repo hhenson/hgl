@@ -161,6 +161,14 @@ fn binary(plan: &Plan, result: &Ty, op: &str, a: &Value, b: &Value) -> String {
         );
     }
     if matches!(a.ty, Ty::Native(_)) {
+        if !crate::execution_proof::prepared(plan) {
+            return format!(
+                "{{let left_owner={};let right_owner={};{}}}",
+                value(plan, a),
+                value(plan, b),
+                crate::any_values::comparison(op, "left_owner.view()", "right_owner.view()")
+            );
+        }
         return crate::any_values::comparison(
             op,
             &native_argument(plan, a),
@@ -246,7 +254,15 @@ pub fn statements(plan: &Plan, body: &[Statement], out: &mut Vec<String>, result
             Statement::Let(i,v) | Statement::Var(i,v) if v.snapshot && matches!(v.ty,Ty::Any|Ty::Native(_)) => crate::any_prepared::local(plan,*i,v,|v|value(plan,v)),
             Statement::Let(i,v) if v.snapshot => crate::snapshot_slots::local(*i,v, |v| value(plan,v)),
             Statement::Let(i,v) => {
-                let init = atomic_place(plan,v).or_else(||observation(v)).unwrap_or_else(||condition_code(plan,v));
+                let init = if matches!(v.ty, Ty::Native(_))
+                    && !crate::execution_proof::prepared(plan)
+                {
+                    condition_code(plan, v)
+                } else {
+                    atomic_place(plan, v)
+                        .or_else(|| observation(v))
+                        .unwrap_or_else(|| condition_code(plan, v))
+                };
                 format!("let local{i} = {init};\n")
             },
             Statement::Borrow(i, v, _) => {
@@ -728,7 +744,7 @@ fn retained(source: &str, ty: &Ty) -> String {
 }
 
 fn native_call(plan: &Plan, binding: &hgl_semantics::ir::Native, args: &[Value]) -> String {
-    format!(
+    let call = format!(
         "{}::{}({}){}",
         binding
             .provider
@@ -742,5 +758,14 @@ fn native_call(plan: &Plan, binding: &hgl_semantics::ir::Native, args: &[Value])
             .collect::<Vec<_>>()
             .join(", "),
         if binding.throws { "?" } else { "" }
-    )
+    );
+    if binding.provider.is_some() && !crate::execution_proof::prepared(plan) {
+        if matches!(binding.result, Ty::Native(_)) {
+            return format!("({call}).retain()?");
+        }
+        if binding.result == Ty::Str {
+            return format!("({call}).to_owned()");
+        }
+    }
+    call
 }

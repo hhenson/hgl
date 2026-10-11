@@ -64,3 +64,14 @@ May use scalars. Direct and pure-helper byte conversion can use finite prepared 
 
 This module now lives in hgl-rust-codegen below executable program assembly;
 its hgl-rust facade path and module ceiling remain unchanged.
+
+The generic adapter materializes descriptor-backed Native and text helper results
+as ordinary owning values at the expression boundary. Native local bindings own
+their retained payloads, and comparison operands remain alive through provider
+comparison. Each semantic helper runs once; provider and copy-preflight errors
+propagate unchanged. This uses the existing generic allocation contract. Only
+prepared plans introduce reserved Native helper-result snapshots and constructor
+operand owners; generic emission does not borrow an uninstalled reserved slot.
+Standalone controls execute two fresh successful graphs and a coded provider
+failure, covering aliases, replacement, nested helper calls, empty values and all
+six comparisons with exact callback counts.

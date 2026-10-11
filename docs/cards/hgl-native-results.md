@@ -16,3 +16,9 @@ metadata is added only afterwards, so bounds remain inert. It has an initial
 Mutable canonical constructor owners and ordinary/boxed alias regressions cover
 the shared storage path. GlobalState::native_result uses a distinct reserved
 temporary, preserving helper input globals until the independent copy completes.
+
+Standalone/generic emission retains borrowed provider results into ordinary owners
+using NativeView::retain or text ownership conversion. Reserved Native snapshots
+and constructor operand staging apply only to prepared plans. Generic comparison
+emission holds both owning operands through the fallible provider operation;
+finite prepared views keep the allocation-free path described above.

@@ -39,7 +39,7 @@ prepared_values = { budget = 250, uses = [] }
 pure_bounds = { budget = 300, uses = [] }
 recursive_convert = { budget = 160, uses = ["checked_data", "layouts"] }
 scalars = { budget = 150, uses = ["native_values", ] }
-snapshot_slots = { budget = 350, uses = ["native_owners", "snapshot_views", "structural_publication", "layouts", "observed", "snapshots", "any_prepared", "windows"] }
+snapshot_slots = { budget = 350, uses = ["execution_proof", "native_owners", "snapshot_views", "structural_publication", "layouts", "observed", "snapshots", "any_prepared", "windows"] }
 snapshot_views = { budget = 160, uses = ["observed", "layouts", "snapshots"] }
 snapshots = { budget = 300, uses = ["layouts", "structural_publication"] }
 source_slots = { budget = 100, uses = ["layouts", "snapshot_slots", "values"] }

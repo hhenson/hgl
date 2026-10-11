@@ -24,11 +24,6 @@ fn sources(body: &str) -> Result<Vec<(String, String)>, String> {
     Ok(sources)
 }
 fn run(body: &str) -> Result<(), Box<dyn std::error::Error>> {
-    static GENERATED: std::sync::Mutex<()> = std::sync::Mutex::new(());
-    let _guard = GENERATED
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let root = root()?;
     let suite = hgl_program::compile_module_suite(&sources(body)?)?;
     assert!(
         !suite.tests.is_empty(),
@@ -41,6 +36,14 @@ fn run(body: &str) -> Result<(), Box<dyn std::error::Error>> {
     let generated = format!(
         "#[global_allocator] static ALLOCATOR:hgl_alloc_count::CountingAllocator=hgl_alloc_count::CountingAllocator;\n{generated}"
     );
+    execute(&generated)
+}
+fn execute(generated: &str) -> Result<(), Box<dyn std::error::Error>> {
+    static GENERATED: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _guard = GENERATED
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let root = root()?;
     let directory = std::env::temp_dir().join(format!(
         "hgl-native-scalar-{}-{}",
         std::process::id(),
@@ -352,4 +355,81 @@ assert eval(text_alias,value:["a",_,""])==[true,_,true]
 assert eval(scalar_alias,value:[1,_,2])==[true,_,true]
 }
 "#)
+}
+
+#[test]
+fn standalone_native_results_and_aliases_use_independent_ordinary_owners()
+-> Result<(), Box<dyn std::error::Error>> {
+    let body = r#"
+fn source()->str {inject alarm
+start {schedule(alarm,0us)}
+when {return "retained"}}
+fn make(value:str)->Token {when {return token(value)}}
+fn consume(value:atomic<Token>) {inject global_state
+when {
+var current=delta_value(value)
+let original=current
+current=token("replacement")
+set(global_state,"saved",original)
+let saved:Token=get(global_state,"saved")
+set(global_state,"text",token_text(original))
+set(global_state,"saved",token(token_text(saved)))
+set(global_state,"replacement",token_text(current))
+set(global_state,"empty",token_text(token("")))
+let matching=token("retained")
+set(global_state,"equal",original==matching && original<=matching && original>=matching && original!=current && original>current && current<original)
+}}
+export fn main() {consume(make(source()))}
+"#;
+    let mut generated = String::new();
+    for (name, body) in [
+        ("success", body.to_owned()),
+        (
+            "failure",
+            body.replace("token(token_text(saved))", "token(\"failure\")"),
+        ),
+    ] {
+        let mut input = sources(&body)?;
+        for (_, text) in &mut input {
+            *text = text.replace(
+                "fn token(text: str) -> Token",
+                "fn token(text: str) -> Token throws",
+            );
+        }
+        let (_, descriptor) = input
+            .iter_mut()
+            .find(|(name, _)| name.ends_with(".hgl-native"))
+            .ok_or("descriptor missing")?;
+        *descriptor = descriptor
+            .replace("->Token symbol", "->Token throws symbol")
+            .replace(
+                "\"atomic_values.rs\"",
+                "\"../../crates/hgl-compiler/tests/fixtures/native_generic_provider.rs\"",
+            );
+        let code = hgl_program::emit_rust(&hgl_program::compile(&input, "main")?);
+        writeln!(generated, "mod {name} {{{code}}}")?;
+    }
+    generated.push_str(r#"
+static CALLS:std::sync::atomic::AtomicUsize=std::sync::atomic::AtomicUsize::new(0);
+fn main() {
+ for failing in [false,false,true] {
+ let mut registry=hgl_describe::Registry::new();
+ let description=if failing {failure::register(&mut registry).unwrap();failure::main(&registry).unwrap()}
+ else {success::register(&mut registry).unwrap();success::main(&registry).unwrap()};
+ let mut store=hgl_store::Store::new();store.global_state().provision();
+ let mut built=hgl_describe::instantiate_complete(&description,&registry,&mut store).unwrap();
+ let run=hgl_kernel::run_simulation(&mut built.graph,&mut store,&hgl_kernel::RunConfig{
+ start_time:hgl_types::EngineTime::MIN_START,end_time:hgl_types::EngineTime::from_micros(10)});
+ if failing {let hgl_kernel::EngineError::Node(error)=run.unwrap_err() else {panic!("provider error lost")};
+ assert_eq!(error.code,Some("native.generic.failure"));}
+ else {run.unwrap();
+ for (key,want) in [("replacement","replacement"),("empty","")] {
+ let handle=store.global_state().bind::<String>(key).unwrap();assert_eq!(store.global_state().get(handle).unwrap(),want);}
+ let equal=store.global_state().bind::<bool>("equal").unwrap();assert!(store.global_state().get(equal).unwrap());}
+ let text=store.global_state().bind::<String>("text").unwrap();assert_eq!(store.global_state().get(text).unwrap(),"retained");
+ }
+ assert_eq!(CALLS.load(std::sync::atomic::Ordering::Relaxed),13);
+}
+"#);
+    execute(&generated)
 }

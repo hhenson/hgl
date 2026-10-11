@@ -8,6 +8,7 @@ fn scan(
     body: &mut Vec<Statement>,
     locals: &mut std::collections::BTreeMap<usize, Ty>,
     next: &mut usize,
+    prepared: bool,
 ) {
     let mut result = Vec::new();
     for mut statement in std::mem::take(body) {
@@ -32,7 +33,10 @@ fn scan(
             Statement::Call(Value {
                 kind: Kind::GlobalSet(_, value),
                 ..
-            }) if matches!(value.ty, Ty::Native(_)) && matches!(value.kind, Kind::Native(..)) => {
+            }) if prepared
+                && matches!(value.ty, Ty::Native(_))
+                && matches!(value.kind, Kind::Native(..)) =>
+            {
                 let id = *next;
                 *next += 1;
                 locals.insert(id, value.ty.clone());
@@ -42,12 +46,12 @@ fn scan(
                 value.snapshot = true;
             }
             Statement::If(_, a, b) => {
-                scan(a, locals, next);
-                scan(b, locals, next);
+                scan(a, locals, next, prepared);
+                scan(b, locals, next, prepared);
             }
             Statement::While(_, b)
             | Statement::For(_, _, b)
-            | Statement::ForItems(_, _, _, _, b) => scan(b, locals, next),
+            | Statement::ForItems(_, _, _, _, b) => scan(b, locals, next, prepared),
             Statement::Exit
             | Statement::Let(..)
             | Statement::Var(..)
@@ -83,19 +87,22 @@ fn maximum(body: &[Statement]) -> usize {
 
 /// Reserve private local destinations in the emission plan; no source type is changed.
 pub fn prepare(plan: &Plan) -> Plan {
+    let prepared = crate::execution_proof::prepared(plan);
     let mut plan = plan.clone();
-    for node in &mut plan.nodes {
-        let mut next = maximum(&node.start).max(maximum(&node.stop)).max(
-            node.handlers
-                .iter()
-                .map(|(_, body)| maximum(body))
-                .max()
-                .unwrap_or(0),
-        );
-        crate::native_owners::statements(&mut node.start, &mut next);
-        crate::native_owners::statements(&mut node.stop, &mut next);
-        for (_, body) in &mut node.handlers {
-            crate::native_owners::statements(body, &mut next);
+    if prepared {
+        for node in &mut plan.nodes {
+            let mut next = maximum(&node.start).max(maximum(&node.stop)).max(
+                node.handlers
+                    .iter()
+                    .map(|(_, body)| maximum(body))
+                    .max()
+                    .unwrap_or(0),
+            );
+            crate::native_owners::statements(&mut node.start, &mut next);
+            crate::native_owners::statements(&mut node.stop, &mut next);
+            for (_, body) in &mut node.handlers {
+                crate::native_owners::statements(body, &mut next);
+            }
         }
     }
     let mut plan = crate::any_prepared::prepare(&plan);
@@ -108,10 +115,10 @@ pub fn prepare(plan: &Plan) -> Plan {
                 .max()
                 .unwrap_or(0),
         );
-        scan(&mut node.start, &mut locals, &mut next);
-        scan(&mut node.stop, &mut locals, &mut next);
+        scan(&mut node.start, &mut locals, &mut next, prepared);
+        scan(&mut node.stop, &mut locals, &mut next, prepared);
         for (_, body) in &mut node.handlers {
-            scan(body, &mut locals, &mut next);
+            scan(body, &mut locals, &mut next, prepared);
         }
         if !locals.is_empty() {
             node.global_state = true;
