@@ -1,4 +1,5 @@
 //! Declaration-owned struct grammar and finite constraints.
+use hgl_source::TypeSpelling;
 use hgl_source::{Cursor, Expr, Token};
 #[derive(Debug, Clone)]
 /// Concrete ordinary struct contract before specialization.
@@ -13,8 +14,10 @@ pub struct RequiredStruct {
     pub fields: Vec<(String, String)>,
     /// Fields whose introducing default is null.
     pub optional: Vec<usize>,
-    /// Declaration-indexed fixed defaults; null marks absence.
+    /// Declaration-indexed ordinary defaults; null marks absence.
     pub defaults: Vec<(usize, Expr)>,
+    /// Effective default's module, original source file and declaring struct identity.
+    pub default_origins: std::collections::BTreeMap<usize, (String, String, String)>,
     /// Supported finite type-domain constraint.
     pub type_domain: Option<(String, Vec<String>)>,
 }
@@ -61,7 +64,7 @@ pub fn parse(tokens: &[Token]) -> Result<RequiredStruct, String> {
             return Err(format!("duplicate struct field {name}"));
         }
         if c.take("=") {
-            let value = scalar_default(c.expr()?)?;
+            let value = c.expr()?;
             if matches!(value.syntax(), Expr::Null) {
                 optional.push(fields.len());
             }
@@ -84,6 +87,7 @@ pub fn parse(tokens: &[Token]) -> Result<RequiredStruct, String> {
         fields,
         optional,
         defaults,
+        default_origins: std::collections::BTreeMap::new(),
         type_domain,
     })
 }
@@ -115,18 +119,6 @@ pub fn parse_domain(
     Ok((parameter, types))
 }
 
-fn scalar_default(expr: Expr) -> Result<Expr, String> {
-    if matches!(
-        expr.syntax(),
-        Expr::Null | Expr::TemporalLiteral(_) | Expr::Name(_)
-    ) {
-        return Ok(expr);
-    }
-    expr.fixed()
-        .map(Expr::Literal)
-        .ok_or_else(|| "struct defaults require supported non-null fixed scalar expressions".into())
-}
-
 fn parameters(c: &mut Cursor<'_>) -> Result<Vec<String>, String> {
     let mut generics = Vec::new();
     if c.take("<") {
@@ -152,4 +144,21 @@ fn parameters(c: &mut Cursor<'_>) -> Result<Vec<String>, String> {
         }
     }
     Ok(generics)
+}
+
+/// Validate an inferred binding against the declaration's finite type domain.
+pub fn check_domain(
+    domain: Option<&(String, Vec<String>)>,
+    bindings: &std::collections::BTreeMap<String, hgl_source::Ty>,
+) -> Result<(), String> {
+    if let Some((parameter, domain)) = domain
+        && !bindings.get(parameter).is_some_and(|ty| {
+            domain
+                .iter()
+                .any(|name| hgl_source::Ty::parse(name).as_ref() == Some(ty))
+        })
+    {
+        return Err(format!("requires {parameter} in {{{}}}", domain.join(", ")));
+    }
+    Ok(())
 }

@@ -1,7 +1,7 @@
 //! Bind checked values to concrete ordinary and temporal signatures.
 use crate::ir::{Kind, Value};
 use crate::library::{Role, Signature};
-use hgl_source::{Cursor, Expr, Ty};
+use hgl_source::{Cursor, Expr, Ty, TypeSpelling};
 use std::collections::{BTreeMap, BTreeSet};
 type Bound = (Vec<Value>, BTreeMap<String, Ty>, Ty);
 /// Check bind at the typed call boundary.
@@ -12,7 +12,7 @@ pub fn bind(
     hint: Option<&Ty>,
     declared: &BTreeMap<String, Ty>,
 ) -> Result<Bound, String> {
-    let mut supplied = order_arguments(&parameter_names(signature), args)?;
+    let mut supplied = order_arguments(&signature.parameter_names(), args)?;
     let mut types = declared.clone();
     let mut values = Vec::new();
     let mut parameter_names = BTreeSet::new();
@@ -22,6 +22,7 @@ pub fn bind(
         }
         let value = supplied
             .remove(&index)
+            .or_else(|| p.value_default.clone())
             .or_else(|| {
                 if let Some(Expr::Literal(l)) = p.default.as_ref().map(Expr::syntax) {
                     Some(Value::new(l.ty(), Kind::Literal(l.clone())))
@@ -52,13 +53,7 @@ pub fn bind(
     {
         types.insert(signature.result.clone(), hint.clone());
     }
-    if let Some((parameter, domain)) = &signature.type_domain
-        && !types
-            .get(parameter)
-            .is_some_and(|ty| domain.iter().any(|t| Ty::parse(t).as_ref() == Some(ty)))
-    {
-        return Err(format!("requires {parameter} in {{{}}}", domain.join(", ")));
-    }
+    crate::struct_declarations::check_domain(signature.type_domain.as_ref(), &types)?;
     let result = resolve_type(&signature.result, &types).ok_or("unresolved result type")?;
     let result = if signature.value_function && !matches!(result, Ty::Atomic(_)) {
         crate::value_access::project(&result)
@@ -261,7 +256,7 @@ pub fn signature_types(
     signature: &Signature,
     args: &[(Option<String>, Value)],
 ) -> Result<BTreeMap<String, Ty>, hgl_source::Issue> {
-    let supplied = order_arguments(&parameter_names(signature), args)?;
+    let supplied = order_arguments(&signature.parameter_names(), args)?;
     let mut types = BTreeMap::new();
     for (index, value) in supplied {
         let parameter = &signature.parameters[index];
@@ -450,7 +445,7 @@ pub fn bind_prepared(
     types: &BTreeMap<String, Ty>,
 ) -> Result<Bound, String> {
     let mut args = args.to_vec();
-    let supplied = order_arguments(&parameter_names(signature), &args)?;
+    let supplied = order_arguments(&signature.parameter_names(), &args)?;
     for (index, parameter) in signature.parameters.iter().enumerate() {
         if !supplied.contains_key(&index)
             && let Some(Expr::TemporalLiteral(value)) = parameter.default.as_ref().map(Expr::syntax)
@@ -513,12 +508,4 @@ pub fn ordered_call(
         ordered.push(values[parameter].take().ok_or("duplicate argument")?);
     }
     Ok((ordered, mapping))
-}
-
-fn parameter_names(signature: &Signature) -> Vec<&str> {
-    signature
-        .parameters
-        .iter()
-        .map(|p| p.name.as_str())
-        .collect()
 }

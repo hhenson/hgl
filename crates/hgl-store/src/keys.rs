@@ -106,6 +106,7 @@ impl<T: PartialEq + Hash> Table<T> {
 /// Run-owned exact typed key domains, populated exclusively before graph startup.
 #[derive(Debug, Default)]
 pub struct Keys {
+    pub(crate) anys: crate::any_values::AnyKeys,
     composites: Vec<Table<Vec<i64>>>,
     bools: Domain,
     integers: Domain,

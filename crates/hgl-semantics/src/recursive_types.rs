@@ -41,15 +41,7 @@ pub fn resolve(
             .cloned()
             .zip(current.arguments.iter().cloned())
             .collect::<BTreeMap<_, _>>();
-        if let Some((parameter, domain)) = &schema.type_domain
-            && !bindings.get(parameter).is_some_and(|ty| {
-                domain
-                    .iter()
-                    .any(|name| Ty::parse(name).as_ref() == Some(ty))
-            })
-        {
-            return Err(format!("requires {parameter} in {{{}}}", domain.join(", ")));
-        }
+        crate::struct_declarations::check_domain(schema.type_domain.as_ref(), &bindings)?;
         let mut fields = Vec::new();
         for (index, (name, pattern)) in schema.fields.iter().enumerate() {
             let ty =
@@ -99,7 +91,8 @@ fn validate_field(
     }
     for (_, value) in schema.defaults.iter().filter(|(field, _)| *field == index) {
         if !matches!(value.syntax(), hgl_source::Expr::Null)
-            && crate::enums::default(library, &decl.module, value)?.ty() != *ty
+            && crate::enums::default(library, &decl.module, value)
+                .is_ok_and(|value| value.ty() != *ty)
         {
             return Err(format!("struct field {name}: default type mismatch"));
         }

@@ -98,3 +98,21 @@ arithmetic()}
 test temporal_arithmetic {
     assert eval(drive_arithmetic,[1,1,1,1,1,1,1,1]) == [_,_,_,1,2,3,4,_]
 }
+
+const fn generator_box_order(value:i64)->bool {
+    let boxed=any(value)
+    let next=any(value+1)
+    return boxed<next
+}
+fn helper_owners()->i64 {
+    var index=4
+    while index<7 {
+        if generator_box_order(index) { yield 1us:index }
+        index+=1
+    }
+}
+fn drive_helper_owners(tick:i64)->i64 {consume(tick)
+helper_owners()}
+test helper_owners_preserve_generator_declarations {
+    assert eval(drive_helper_owners,[1,1,1,1]) == [_,4,5,6]
+}

@@ -35,3 +35,14 @@ then copies into typed storage. Any failure becomes InvalidNodeType before hooks
 start. Native owning configurations remain available for existing condition logic.
 The generated names are configuration_columns and configuration_slotN, matching
 projection's source lifetime contract.
+
+Private source/read helpers project complete global, atomic or configuration storage before retaining native owners. They preserve snapshot optional presence and exact child types; configuration scalar selection does not clone an owning parent.
+
+Exact atomic and canonical borrowed-owner projections take priority over private snapshot views. A prepared Any binding copies its selected source independently; snapshot metadata on the binding does not change the source arena.
+
+Direct typed global reads select the same checked slot as a bound global view.
+Presence is checked before copying; inline Any returns retain an independent
+prepared destination without native owning extraction or a source binding rule.
+
+May use constructor_owners to materialize a private typed staging source at its
+original expression position. Consumers copy only after complete retention.

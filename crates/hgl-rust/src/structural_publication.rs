@@ -1,12 +1,9 @@
 //! Complete ordinary publication, separate from sparse delta application.
+use crate::append;
 use crate::layouts::{global_type, rust_type};
 use hgl_semantics::ir::Value;
 use hgl_source::Ty;
-use std::fmt::Write as _;
-fn append(code: &mut String, args: std::fmt::Arguments<'_>) {
-    code.write_fmt(args)
-        .unwrap_or_else(|_| unreachable!("String formatting"));
-}
+
 fn slot(ty: &Ty, fields: &str, columns: &str) -> String {
     format!(
         "hgl_store::ValueSlot::<{}>::bind(&mut {columns}.prepared_list(({fields}).fields()).first().ok_or_else(||hgl_types::NodeError::new(\"unprepared snapshot child\"))?.as_slice())",
@@ -60,40 +57,13 @@ pub fn native(ty: &Ty, output: &str, value: &str) -> String {
         }
         return code + "}";
     }
-    match ty {
-        Ty::Tuple(_) | Ty::Struct(..) => unreachable!("positional children handled above"),
-        Ty::List(..) | Ty::Map(..) => {
-            unreachable!("native collection publication requires prepared observations")
-        }
-        Ty::Rolling(..)
-        | Ty::Family(_)
-        | Ty::Recursive(_)
-        | Ty::Enum(_)
-        | Ty::Atomic(_)
-        | Ty::Delta(_)
-        | Ty::I64
-        | Ty::F64
-        | Ty::Bool
-        | Ty::Str
-        | Ty::Bytes
-        | Ty::Duration
-        | Ty::Date
-        | Ty::Time
-        | Ty::DateTime
-        | Ty::CivilDateTime
-        | Ty::TimeZone
-        | Ty::ZonedTime
-        | Ty::ZonedDateTime
-        | Ty::Ref(_)
-        | Ty::Set(_)
-        | Ty::Nullable(_)
-        | Ty::Void => {
-            if let Some(ty) = crate::layouts::whole_payload(ty) {
-                format!("_ctx.set_atomic::<{}>({output},{value})?;", global_type(ty))
-            } else {
-                format!("_ctx.set(hgl_store::Store::prepared_output({output}),{value});")
-            }
-        }
+    if matches!(ty, Ty::List(..) | Ty::Map(..)) {
+        unreachable!("native collection publication requires prepared observations");
+    }
+    if let Some(ty) = crate::layouts::whole_payload(ty) {
+        format!("_ctx.set_atomic::<{}>({output},{value})?;", global_type(ty))
+    } else {
+        format!("_ctx.set(hgl_store::Store::prepared_output({output}),{value});")
     }
 }
 /// Apply complete retained children directly from prepared ordinary storage.

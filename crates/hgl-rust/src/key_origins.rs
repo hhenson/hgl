@@ -2,85 +2,41 @@
 use hgl_semantics::ir::{DeltaEntry, Kind, Statement, Value};
 use hgl_semantics::static_values::StaticValues;
 fn collect(value: &Value, keys: &mut Vec<Value>, origins: &StaticValues) {
-    if let Kind::Query(op, args) = &value.kind
-        && op.starts_with("collection_")
-        && matches!(args.first().map(|v| &v.ty), Some(hgl_source::Ty::Map(..)))
-        && let Some(key) = args.get(1)
-        && let Ok((_, Some(key))) = origins.key(key.clone())
-    {
-        keys.push(key);
-    }
-    match &value.kind {
-        Kind::Delta(parts) => {
+    hgl_semantics::ir_visit::value(value, &mut |value| {
+        if let Kind::Query(op, args) = &value.kind
+            && op.starts_with("collection_")
+            && matches!(args.first().map(|v| &v.ty), Some(hgl_source::Ty::Map(..)))
+            && let Some(key) = args.get(1)
+            && let Ok((_, Some(key))) = origins.key(key.clone())
+        {
+            keys.push(key);
+        }
+        if let Kind::Delta(parts) = &value.kind {
             for part in parts {
-                match part {
-                    DeltaEntry::Add(k) | DeltaEntry::Remove(k) | DeltaEntry::Keyed(k, _) => {
-                        if let Ok((_, Some(key))) = origins.key(k.clone()) {
-                            keys.push(key);
-                        }
-                    }
-                    DeltaEntry::Child(..) => {}
-                }
-                for value in part.operands() {
-                    collect(value, keys, origins);
+                if let DeltaEntry::Add(k) | DeltaEntry::Remove(k) | DeltaEntry::Keyed(k, _) = part
+                    && let Ok((_, Some(key))) = origins.key(k.clone())
+                {
+                    keys.push(key);
                 }
             }
         }
-        Kind::List(values) | Kind::Native(_, values) | Kind::Query(_, values) => {
-            for value in values {
-                collect(value, keys, origins);
-            }
-        }
-        Kind::Construct(values) => {
-            for (_, value) in values {
-                collect(value, keys, origins);
-            }
-        }
-        Kind::ValueCall(values, body) => {
-            for value in values {
-                collect(value, keys, origins);
-            }
+        if let Kind::ValueCall(values, body) = &value.kind {
             let mut scope = StaticValues {
                 configuration: origins.configuration.clone(),
                 prepared: origins.prepared.clone(),
                 ..StaticValues::default()
             };
             for (id, value) in values.iter().enumerate() {
+                collect(value, keys, origins);
                 scope.bind(id, origins.resolve(value), false);
             }
             statements(body, keys, &mut scope);
+            return false;
         }
-        Kind::Field(v, _)
-        | Kind::GlobalSet(_, v)
-        | Kind::Length(v)
-        | Kind::Unary(_, v)
-        | Kind::IsPresent(v)
-        | Kind::Present(v) => collect(v, keys, origins),
-        Kind::Index(a, b) | Kind::Push(a, b) | Kind::Binary(_, a, b) => {
-            collect(a, keys, origins);
-            collect(b, keys, origins);
-        }
-        Kind::ObservedLocal(_)
-        | Kind::WiringFailure(_)
-        | Kind::Configuration(_)
-        | Kind::GlobalGet(_)
-        | Kind::BorrowedLocal(..)
-        | Kind::Literal(_)
-        | Kind::TemporalLiteral(_)
-        | Kind::Captured(..)
-        | Kind::Prepared(_)
-        | Kind::Wire(_)
-        | Kind::IterationInput(_)
-        | Kind::Input(..)
-        | Kind::Cache(_)
-        | Kind::GeneratorLocal(_)
-        | Kind::Local(_)
-        | Kind::MutableLocal(_)
-        | Kind::Output
-        | Kind::Capability
-        | Kind::Void => {}
-    }
+        !matches!(value.kind, Kind::Captured(..))
+    });
 }
+
 fn statements(body: &[Statement], keys: &mut Vec<Value>, origins: &mut StaticValues) {
     for statement in body {
         match statement {

@@ -81,6 +81,15 @@ presence survives owning boundaries. This introduces no optional read syntax.
 Internal family widening preserves tuple-valued expression parentheses and exact
 discriminators. Returning immutable configuration payloads uses typed prepared
 slot publication, avoiding an owning clone in the evaluation hook.
+Canonical borrowed family projections delegate to collections::family_field,
+including families nested in owning Struct and List storage. Reads and writes
+address the active member's common field; independent retention preserves the
+family payload when another owner is mutated. Index expressions evaluate once
+before dispatch, and failed access stops later operands.
+Native scalar-only family locals and staged helper arguments retain an exact native type annotation so
+inactive member positions preserve their declared types without canonical
+owning storage. Scalar construction, projection and atomic publication use the
+existing stack-value transport, preserving tags and copies across mutation.
 
 Complete ordinary set/map construction delegates key-first validation to hgl-rust-collections; retention uses the exact GlobalValue marker and comparison is recursively unordered.
 Prepared eval transport is selected as one complete path by
@@ -130,3 +139,7 @@ Prepared output assignments reuse return publication transport without returning
 from the handler; subsequent assignments and mutations retain source order.
 
 May use scalars. Byte comparisons and lengths borrow typed scalar slices, including atomic/global/snapshot projections, instead of retaining owning copies. Prepared byte constructors use a single authorized destination and complete preflight. Ordinary fallback construction retains phase and errors. Borrowed ordinary List indexing uses the existing immutable list::global_index transport, allowing retained byte comparisons without a mutable context borrow.
+
+Prepared publication and ordered global writes delegate to hgl-rust-prepared-hooks. Independently retained Any locals and returns delegate to hgl-rust-any-prepared. Compiled box comparison borrows typed sources, preserving fallible contained capabilities.
+
+Generated-code formatting shares the crate's append sink across emitter modules; the helper performs the same infallible String formatting and introduces no runtime behavior.

@@ -2,6 +2,7 @@ use crate::library::Library;
 use crate::name_check::Scope;
 use crate::source_check::{annotation, inferred};
 use crate::tuple_writes::{assignment, conditional, handler};
+use hgl_source::TypeSpelling;
 use hgl_source::{Cursor, Issue, Ty};
 pub(super) struct Checker<'a> {
     pub library: &'a Library,
@@ -44,13 +45,7 @@ impl Checker<'_> {
         if cursor.take("yield") {
             let span = cursor.span();
             let expression = self.expression(cursor, environment)?;
-            let ty = inferred(self.library, self.module, &expression, &environment.types).map_err(
-                |message| {
-                    let mut issue = Issue::from(message).at(span.clone());
-                    issue.category = "type";
-                    issue
-                },
-            )?;
+            let ty = inferred(self.library, self.module, &expression, &environment.types);
             if let Some(ty) = ty {
                 crate::source_check::yield_time(&ty, span)?;
             }
@@ -135,7 +130,7 @@ impl Checker<'_> {
             self.module,
             &expression,
             &environment.types,
-        )?);
+        ));
         if let Some(ty) = ty {
             environment.types.insert(name, ty);
         }

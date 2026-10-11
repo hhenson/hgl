@@ -202,6 +202,8 @@ impl TsType {
 /// An exact ordinary entry type, including nominal identity and required fields.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum OrdinaryType {
+    /// One owning typed box, independent of its contained shape.
+    Any,
     /// Internal field presence and its ordinary payload; not a source type.
     OptionalField(Box<OrdinaryType>),
     /// Exact nominal target inside a finite optional recursive field.
@@ -326,11 +328,13 @@ pub use growing_range::{
     validate as validate_growing, validate_distinct as validate_growing_distinct,
 };
 
+pub mod any_values;
 pub mod calendar;
 pub mod growing_range;
 pub mod node_error;
 pub mod time_values;
 pub mod window_types;
+pub use any_values::{AnyField, AnyOperation, AnyPlan, AnyValue};
 
 /// Independently retain validated ordinary octets in their evaluation phase.
 pub fn bytes(octets: &[i64]) -> NodeResult<Vec<u8>> {

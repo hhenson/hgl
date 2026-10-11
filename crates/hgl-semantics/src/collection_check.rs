@@ -41,7 +41,9 @@ pub fn constructor_checked(
                 let closed = crate::value_eval::Evaluator::default()
                     .value(&value)
                     .map_err(|e| e.to_string())?;
-                if !known.insert(crate::collection_values::key(&closed)?) {
+                if crate::any_values::validate_key(&closed).is_ok()
+                    && !known.insert(crate::collection_values::key(&closed)?)
+                {
                     return Err("duplicate ordinary collection key or member".into());
                 }
             }

@@ -1,15 +1,11 @@
 //! Statically specialized sparse delta construction, observation and publication.
+use crate::append;
 use crate::layouts::{
     delta_storage, delta_type, global_type, owned_type, rust_type, whole_payload,
 };
 use hgl_semantics::ir::{DeltaEntry, Kind, Plan, Statement, Value};
 use hgl_source::Ty;
 use std::collections::BTreeSet;
-use std::fmt::Write as _;
-fn append(code: &mut String, args: std::fmt::Arguments<'_>) {
-    code.write_fmt(args)
-        .unwrap_or_else(|_| unreachable!("String formatting"));
-}
 
 /// Whether a temporal shape uses structural publication data.
 pub fn structural(ty: &Ty) -> bool {
@@ -27,40 +23,29 @@ fn identity(ty: &Ty) -> String {
 }
 /// Compile-time marker for one exact prepared temporal shape.
 pub fn shape_marker(ty: &Ty) -> String {
-    match ty {
-        Ty::Rolling(..) => crate::windows::marker(ty),
-        Ty::Enum(_) => format!("hgl_store::shapes::Atomic<{}>", global_type(ty)),
-        Ty::Atomic(payload) => format!("hgl_store::shapes::Atomic<{}>", global_type(payload)),
-        Ty::List(child, None) => format!("hgl_store::shapes::Growing<{}>", shape_marker(child)),
-        Ty::List(child, Some(n)) => {
-            format!("hgl_store::shapes::Fixed<{}, {n}>", shape_marker(child))
-        }
-        Ty::Map(key, child) => format!(
+    if matches!(ty, Ty::Rolling(..)) {
+        crate::windows::marker(ty)
+    } else if matches!(ty, Ty::Enum(_) | Ty::Any) {
+        format!("hgl_store::shapes::Atomic<{}>", global_type(ty))
+    } else if let Ty::Atomic(payload) = ty {
+        format!("hgl_store::shapes::Atomic<{}>", global_type(payload))
+    } else if let Ty::List(child, size) = ty {
+        size.map_or_else(
+            || format!("hgl_store::shapes::Growing<{}>", shape_marker(child)),
+            |n| format!("hgl_store::shapes::Fixed<{}, {n}>", shape_marker(child)),
+        )
+    } else if let Ty::Map(key, child) = ty {
+        format!(
             "hgl_store::shapes::Map<{},{}>",
             shape_marker(child),
             global_type(key)
-        ),
-        Ty::Set(key) => format!("hgl_store::shapes::Set<{}>", global_type(key)),
-        Ty::Tuple(_) | Ty::Struct(..) => format!("Shape{}", identity(ty)),
-        Ty::Delta(_)
-        | Ty::I64
-        | Ty::F64
-        | Ty::Bool
-        | Ty::Str
-        | Ty::Bytes
-        | Ty::CivilDateTime
-        | Ty::TimeZone
-        | Ty::ZonedTime
-        | Ty::ZonedDateTime
-        | Ty::Duration
-        | Ty::Date
-        | Ty::Time
-        | Ty::DateTime
-        | Ty::Ref(_)
-        | Ty::Nullable(_)
-        | Ty::Recursive(_)
-        | Ty::Family(_)
-        | Ty::Void => rust_type(ty).into(),
+        )
+    } else if let Ty::Set(key) = ty {
+        format!("hgl_store::shapes::Set<{}>", global_type(key))
+    } else if matches!(ty, Ty::Tuple(_) | Ty::Struct(..)) {
+        format!("Shape{}", identity(ty))
+    } else {
+        rust_type(ty).into()
     }
 }
 fn operations(ty: &Ty) -> String {
@@ -70,7 +55,8 @@ fn operations(ty: &Ty) -> String {
 pub fn publish(ty: &Ty, payload: &str) -> String {
     if matches!(
         ty,
-        Ty::Enum(_)
+        Ty::Any
+            | Ty::Enum(_)
             | Ty::Recursive(_)
             | Ty::Family(_)
             | Ty::List(..)
@@ -272,125 +258,30 @@ fn origin(ty: &Ty, types: &mut BTreeSet<Ty>) {
 }
 
 fn collect(ty: &Ty, types: &mut BTreeSet<Ty>) {
-    match ty {
-        Ty::Delta(ty) => origin(ty, types),
-        Ty::List(child, _) => collect(child, types),
-        Ty::Struct(_, fields, _) => {
-            for (_, child) in fields {
-                collect(child, types);
-            }
+    if let Ty::Delta(ty) = ty {
+        origin(ty, types);
+    } else if let Ty::List(child, _) = ty {
+        collect(child, types);
+    } else if let Ty::Struct(_, fields, _) = ty {
+        for (_, child) in fields {
+            collect(child, types);
         }
-        Ty::Rolling(..)
-        | Ty::Atomic(_)
-        | Ty::Map(..)
-        | Ty::Tuple(_)
-        | Ty::I64
-        | Ty::F64
-        | Ty::Bool
-        | Ty::Str
-        | Ty::Bytes
-        | Ty::CivilDateTime
-        | Ty::TimeZone
-        | Ty::Enum(_)
-        | Ty::ZonedTime
-        | Ty::ZonedDateTime
-        | Ty::Duration
-        | Ty::Date
-        | Ty::Time
-        | Ty::DateTime
-        | Ty::Ref(_)
-        | Ty::Set(_)
-        | Ty::Nullable(_)
-        | Ty::Recursive(_)
-        | Ty::Family(_)
-        | Ty::Void => {}
     }
+}
+
+fn values(value: &Value, types: &mut BTreeSet<Ty>) {
+    hgl_semantics::ir_visit::value(value, &mut |value| {
+        collect(&value.ty, types);
+        !matches!(value.kind, Kind::Captured(..))
+    });
 }
 fn statements(body: &[Statement], types: &mut BTreeSet<Ty>) {
-    for stmt in body {
-        match stmt {
-            Statement::Let(_, v)
-            | Statement::Var(_, v)
-            | Statement::Borrow(_, v, _)
-            | Statement::Return(v)
-            | Statement::Yield(v)
-            | Statement::Call(v) => values(v, types),
-            Statement::TimedYield(a, b) | Statement::Assign(a, b) => {
-                values(a, types);
-                values(b, types);
-            }
-            Statement::While(v, body)
-            | Statement::ForItems(_, _, _, v, body)
-            | Statement::For(_, v, body) => {
-                values(v, types);
-                statements(body, types);
-            }
-            Statement::If(v, a, b) => {
-                values(v, types);
-                statements(a, types);
-                statements(b, types);
-            }
-            Statement::Exit => {}
-        }
-    }
+    hgl_semantics::ir_visit::statements(body, &mut |value| {
+        collect(&value.ty, types);
+        !matches!(value.kind, Kind::Captured(..))
+    });
 }
-fn values(value: &Value, types: &mut BTreeSet<Ty>) {
-    collect(&value.ty, types);
-    match &value.kind {
-        Kind::Delta(entries) => {
-            for entry in entries {
-                for v in entry.operands() {
-                    values(v, types);
-                }
-            }
-        }
-        Kind::Construct(fields) => {
-            for (_, v) in fields {
-                values(v, types);
-            }
-        }
-        Kind::List(items) | Kind::Native(_, items) | Kind::Query(_, items) => {
-            for v in items {
-                values(v, types);
-            }
-        }
-        Kind::ValueCall(args, body) => {
-            for v in args {
-                values(v, types);
-            }
-            statements(body, types);
-        }
-        Kind::Index(a, b) | Kind::Push(a, b) | Kind::Binary(_, a, b) => {
-            values(a, types);
-            values(b, types);
-        }
-        Kind::Length(v)
-        | Kind::Field(v, _)
-        | Kind::GlobalSet(_, v)
-        | Kind::IsPresent(v)
-        | Kind::Present(v)
-        | Kind::Unary(_, v) => values(v, types),
-        Kind::ObservedLocal(_)
-        | Kind::WiringFailure(_)
-        | Kind::Configuration(_)
-        | Kind::GlobalGet(_)
-        | Kind::BorrowedLocal(..)
-        | Kind::Literal(_)
-        | Kind::Wire(_)
-        | Kind::IterationInput(_)
-        | Kind::Input(..)
-        | Kind::Cache(_)
-        | Kind::GeneratorLocal(_)
-        | Kind::Local(_)
-        | Kind::MutableLocal(_)
-        | Kind::Output
-        | Kind::Capability
-        | Kind::TemporalLiteral(_)
-        | Kind::Captured(..)
-        | Kind::Prepared(_)
-        | Kind::Void => {}
-    }
-}
+
 mod emit;
 use emit::marker;
 

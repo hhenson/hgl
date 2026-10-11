@@ -80,82 +80,49 @@ fn block(body: &[Statement], live: &mut BTreeMap<usize, bool>) -> Result<(), Str
     Ok(())
 }
 fn expression(value: &Value, live: &BTreeMap<usize, bool>) -> Result<(), String> {
-    match &value.kind {
-        Kind::GlobalGet(entry) => {
-            conflict(*entry, false, live)?;
-            if matches!(
-                value.ty,
-                Ty::Tuple(_)
-                    | Ty::Recursive(_)
-                    | Ty::Family(_)
-                    | Ty::Struct(..)
-                    | Ty::List(..)
-                    | Ty::Delta(_)
-            ) {
-                return Err("aggregate get requires a typed let or var binding".into());
-            }
+    let mut result = Ok(());
+    crate::ir_visit::value(value, &mut |value| {
+        if result.is_err() {
+            return false;
         }
-        Kind::GlobalSet(entry, value) => {
-            if value.snapshot {
-                helper_argument(value)?;
-            }
-            expression(value, live)?;
-            conflict(*entry, true, live)?;
-        }
-        Kind::Delta(parts) => {
-            for value in parts.iter().flat_map(crate::ir::DeltaEntry::operands) {
-                expression(value, live)?;
-            }
-        }
-        Kind::List(values) => {
-            for value in values {
-                expression(value, live)?;
-            }
-        }
-        Kind::ValueCall(args, body) => {
-            crate::tuple_admission::value_arguments(args)?;
-            call_arguments(args, live)?;
-            block(body, &mut live.clone())?;
-        }
-        Kind::Index(parent, index) | Kind::Push(parent, index) | Kind::Binary(_, parent, index) => {
-            expression(parent, live)?;
-            expression(index, live)?;
-        }
-        Kind::Construct(fields) => {
-            for (_, value) in fields {
-                expression(value, live)?;
-            }
-        }
-        Kind::Native(_, args) | Kind::Query(_, args) => {
-            call_arguments(args, live)?;
-        }
-        Kind::Length(value)
-        | Kind::Field(value, _)
-        | Kind::IsPresent(value)
-        | Kind::Present(value)
-        | Kind::Unary(_, value) => expression(value, live)?,
-        Kind::TemporalLiteral(_)
-        | Kind::Captured(..)
-        | Kind::Prepared(_)
-        | Kind::WiringFailure(_)
-        | Kind::BorrowedLocal(..)
-        | Kind::Literal(_)
-        | Kind::Wire(_)
-        | Kind::IterationInput(_)
-        | Kind::Input(..)
-        | Kind::Configuration(_)
-        | Kind::Cache(_)
-        | Kind::ObservedLocal(_)
-        | Kind::Local(_)
-        | Kind::MutableLocal(_)
-        | Kind::Output
-        | Kind::Capability
-        | Kind::Void => {}
-        Kind::GeneratorLocal(_) => {
-            return Err("backend-only generator local in frontend checking".into());
-        }
-    }
-    Ok(())
+        result = if let Kind::GlobalGet(entry) = value.kind {
+            conflict(entry, false, live).and_then(|()| {
+                if matches!(
+                    value.ty,
+                    Ty::Tuple(_)
+                        | Ty::Recursive(_)
+                        | Ty::Family(_)
+                        | Ty::Struct(..)
+                        | Ty::List(..)
+                        | Ty::Delta(_)
+                ) {
+                    Err("aggregate get requires a typed let or var binding".into())
+                } else {
+                    Ok(())
+                }
+            })
+        } else if let Kind::GlobalSet(entry, child) = &value.kind {
+            (if child.snapshot {
+                helper_argument(child)
+            } else {
+                Ok(())
+            })
+            .and_then(|()| expression(child, live))
+            .and_then(|()| conflict(*entry, true, live))
+        } else if let Kind::ValueCall(args, body) = &value.kind {
+            crate::tuple_admission::value_arguments(args)
+                .and_then(|()| call_arguments(args, live))
+                .and_then(|()| block(body, &mut live.clone()))
+        } else if let Kind::Native(_, args) | Kind::Query(_, args) = &value.kind {
+            call_arguments(args, live)
+        } else if matches!(value.kind, Kind::GeneratorLocal(_)) {
+            Err("backend-only generator local in frontend checking".into())
+        } else {
+            return !matches!(value.kind, Kind::Captured(..));
+        };
+        false
+    });
+    result
 }
 
 /// Check aggregate elements while preserving source-origin callback failures.
@@ -320,7 +287,12 @@ pub fn prepare_node(
     };
 
     for p in &signature.parameters {
-        if p.constant {
+        if p.constant
+            || (signature.value_function
+                && env
+                    .get(&p.name)
+                    .is_some_and(|v| !matches!(v.kind, Kind::Wire(_))))
+        {
             let value = env.get_mut(&p.name).ok_or("missing configuration")?;
             if matches!(value.kind, Kind::Prepared(_))
                 || matches!(
@@ -353,55 +325,7 @@ pub fn prepare_node(
     Ok(node)
 }
 
-/// Resolve the admitted binary table after any numeric operand widening.
-pub fn binary_type(op: &str, a: &Ty, b: &Ty) -> Result<Ty, String> {
-    match (op, a, b) {
-        ("+" | "-", Ty::DateTime, Ty::Duration) | ("+", Ty::Duration, Ty::DateTime) => {
-            return Ok(Ty::DateTime);
-        }
-        ("-", Ty::DateTime, Ty::DateTime) | ("+" | "-", Ty::Duration, Ty::Duration) => {
-            return Ok(Ty::Duration);
-        }
-        _ => {}
-    }
-    if *a != *b {
-        return Err("binary operand type mismatch".into());
-    }
-    let ty = match op {
-        "+" if matches!(*a, Ty::Str | Ty::I64 | Ty::F64) => a.clone(),
-        "/" if matches!(*a, Ty::I64 | Ty::F64) => Ty::F64,
-        "-" | "*" | "%" if matches!(*a, Ty::I64 | Ty::F64) => a.clone(),
-        ">" | "<" | ">=" | "<="
-            if matches!(
-                *a,
-                Ty::I64
-                    | Ty::F64
-                    | Ty::Date
-                    | Ty::DateTime
-                    | Ty::CivilDateTime
-                    | Ty::Time
-                    | Ty::Duration
-                    | Ty::Bytes
-            ) =>
-        {
-            Ty::Bool
-        }
-        "==" | "!=" if matches!(a, Ty::Family(_) | Ty::Set(_) | Ty::Map(..) | Ty::Tuple(_)) => {
-            Ty::Bool
-        }
-        "==" | "!="
-            if !matches!(
-                a.name(),
-                "void" | "set" | "struct" | "list" | "delta" | "map" | "tuple"
-            ) =>
-        {
-            Ty::Bool
-        }
-        "&&" | "||" if *a == Ty::Bool => Ty::Bool,
-        _ => return Err(format!("unsupported binary operation {op}")),
-    };
-    Ok(ty)
-}
+pub use crate::value_operators::binary_type;
 
 pub use crate::value_constant::context_free;
 
@@ -411,4 +335,26 @@ fn call_arguments(args: &[Value], live: &BTreeMap<usize, bool>) -> Result<(), St
         expression(value, live)?;
     }
     Ok(())
+}
+
+/// Preserve canonical expected value types and the existing scalar widening boundary.
+pub fn expected_value(
+    mut value: Value,
+    expected: Option<&Ty>,
+    span: std::ops::Range<usize>,
+) -> Result<Value, hgl_source::Issue> {
+    if expected == Some(&Ty::F64) && value.ty == Ty::I64 {
+        value = Value::new(Ty::F64, Kind::Unary("float".into(), Box::new(value)));
+    }
+    if let Some(ty) = expected
+        && value.ty != *ty
+    {
+        return Err(hgl_source::Issue::coded(
+            "type",
+            "delta.type_mismatch",
+            span,
+            format!("expected {}, got {}", ty.name(), value.ty.name()),
+        ));
+    }
+    Ok(value)
 }

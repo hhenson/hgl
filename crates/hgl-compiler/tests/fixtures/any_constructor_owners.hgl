@@ -1,0 +1,184 @@
+module hgraph.std part mixed_box_probe
+struct MixedChain { value:i64
+    items:list<i64>
+    next:atomic<MixedChain> = null
+}
+test {
+    fn mixed_box(value:i64)->any {
+        when {
+            let chain=MixedChain(value:value,items:[1,2],next:MixedChain(value:value,items:[]))
+            let seen=chain.value
+            if seen >= 0 { return any(chain) } else { return any() }
+        }
+    }
+    test native_read_then_box {
+        assert eval(mixed_box,[1,2])==[
+            any(MixedChain(value:1,items:[1,2],next:MixedChain(value:1,items:[]))),
+            any(MixedChain(value:2,items:[1,2],next:MixedChain(value:2,items:[])))]
+    }
+}
+
+struct OrderedOwner { first:i64
+    second:i64
+    items:list<i64>
+}
+native const fn owner_begin(value:i64) throws
+native const fn owner_begin(value:i64) throws {}
+native const fn owner_mark(value:i64)->i64 throws
+native const fn owner_mark(value:i64)->i64 throws {}
+native const fn owner_finish(value:i64) throws
+native const fn owner_finish(value:i64) throws {}
+test {
+    fn ordered_local(value:i64)->any {
+        start { owner_begin(0) }
+        stop { owner_finish(0) }
+        when {
+            let record=OrderedOwner(second:owner_mark(2),first:owner_mark(1),items:[1,2])
+            let first=record.first
+            if first==1 {return any(record)} else {return any()}
+        }
+    }
+    fn ordered_inline(value:i64)->any {
+        start { owner_begin(0) }
+        stop { owner_finish(0) }
+        when {return any(OrderedOwner(second:owner_mark(2),first:owner_mark(1),items:[1,2]))}
+    }
+    test constructor_operands_run_once_in_written_order {
+        assert eval(ordered_local,[1,2])==[any(OrderedOwner(first:1,second:2,items:[1,2])),any(OrderedOwner(first:1,second:2,items:[1,2]))]
+        assert eval(ordered_inline,[1,2])==[any(OrderedOwner(first:1,second:2,items:[1,2])),any(OrderedOwner(first:1,second:2,items:[1,2]))]
+    }
+}
+
+struct KeptBoxes { initial:any
+    replacement:any
+}
+test {
+    fn retained_owner_field(value:i64)->any {
+        when {
+            let record=KeptBoxes(initial:any(value),replacement:any(value+1))
+            let initial=record.initial
+            var replacement=any(record)
+            replacement=any(value+2)
+            return any(KeptBoxes(initial:initial,replacement:replacement))
+        }
+    }
+    test selected_owner_fields_are_retained_before_another_box_is_replaced {
+        assert eval(retained_owner_field,[1,2])==[
+            any(KeptBoxes(initial:any(1),replacement:any(3))),
+            any(KeptBoxes(initial:any(2),replacement:any(4)))]
+    }
+}
+
+abstract struct MixedChoice { value:i64
+    items:list<i64>
+}
+struct MixedFirst:MixedChoice {}
+test {
+ fn mixed_family(value:i64)->any {
+  when {
+   let choice:MixedChoice=MixedFirst(value:value,items:[1,2])
+   if choice==choice {return any(choice)} else {return any()}
+  }
+ }
+ test mixed_family_owner_is_retained {
+  assert eval(mixed_family,[1,2])==[any(MixedFirst(value:1,items:[1,2])),any(MixedFirst(value:2,items:[1,2]))]
+ }
+}
+
+struct AliasRecord { value:i64
+    items:list<i64>
+}
+test {
+    fn copied_owner(value:i64)->any {
+        when {
+            let record=AliasRecord(value:value,items:[1,2])
+            let copied=record
+            let seen=copied.value
+            if seen>=0 {return any(copied)} else {return any()}
+        }
+    }
+    test ordinary_owner_copies_have_independent_prepared_destinations {
+        assert eval(copied_owner,[1,2])==[any(AliasRecord(value:1,items:[1,2])),any(AliasRecord(value:2,items:[1,2]))]
+    }
+}
+
+struct MixedSecond:MixedChoice {}
+test {
+    fn family_members_equal(value:i64)->bool {
+        when {
+            let first:MixedChoice=MixedFirst(value:value,items:[1,2])
+            let same=first
+            let changed:MixedChoice=MixedFirst(value:value+1,items:[1,2])
+            let second:MixedChoice=MixedSecond(value:value,items:[1,2])
+            return first==same && first!=changed && first!=second && !(first==second)
+        }
+    }
+    fn copied_family(value:i64)->any {
+        when {
+            let first:MixedChoice=MixedFirst(value:value,items:[1,2])
+            let copied=first
+            let seen=copied.value
+            if seen>=0 {return any(copied)} else {return any()}
+        }
+    }
+    test family_copy_keeps_contents_and_concrete_member_identity {
+        assert eval(family_members_equal,[1,2])==[true,true]
+        assert eval(copied_family,[1,2])==[any(MixedFirst(value:1,items:[1,2])),any(MixedFirst(value:2,items:[1,2]))]
+    }
+}
+
+native const fn owner_check(value:bool) throws
+native const fn owner_check(value:bool) throws {}
+test {
+    fn family_comparison_at_stop(value:i64)->i64 {
+        when { return delta_value(value) }
+        stop {
+            let first:MixedChoice=MixedFirst(value:1,items:[1,2])
+            let retained=first
+            let second:MixedChoice=MixedSecond(value:1,items:[1,2])
+            owner_check(first==retained && first!=second && !(first==second))
+        }
+    }
+    test stop_hooks_compare_retained_family_owners {
+        assert eval(family_comparison_at_stop, [1,2]) == [1,2]
+    }}
+
+abstract struct NestedOwningChoice { text:str
+    items:list<i64>
+}
+struct NestedOwningMember:NestedOwningChoice {}
+struct NestedOwningRecord { dynamic:i64
+    choice:NestedOwningChoice
+}
+struct NestedOwningChain { dynamic:i64
+    choice:NestedOwningChoice
+    next:atomic<NestedOwningChain> = null
+}
+test {
+    fn nested_closed_family(value:i64)->any {
+        when {
+            let record=NestedOwningRecord(dynamic:value,
+                choice:NestedOwningMember(text:"retained",items:[1,2]))
+            if record.dynamic==value {return any(record)} else {return any()}
+        }
+    }
+    fn recursive_closed_family(value:i64)->any {
+        when {
+            let record=NestedOwningChain(dynamic:value,
+                choice:NestedOwningMember(text:"outer",items:[1,2]),
+                next:NestedOwningChain(dynamic:value+1,
+                    choice:NestedOwningMember(text:"inner",items:[])))
+            if record.dynamic==value {return any(record)} else {return any()}
+        }
+    }
+    test closed_family_children_of_dynamic_owners_are_prepared_once {
+        assert eval(nested_closed_family,[1,2])==[
+            any(NestedOwningRecord(dynamic:1,choice:NestedOwningMember(text:"retained",items:[1,2]))),
+            any(NestedOwningRecord(dynamic:2,choice:NestedOwningMember(text:"retained",items:[1,2])))]
+        assert eval(recursive_closed_family,[1,2])==[
+            any(NestedOwningChain(dynamic:1,choice:NestedOwningMember(text:"outer",items:[1,2]),
+                next:NestedOwningChain(dynamic:2,choice:NestedOwningMember(text:"inner",items:[])))),
+            any(NestedOwningChain(dynamic:2,choice:NestedOwningMember(text:"outer",items:[1,2]),
+                next:NestedOwningChain(dynamic:3,choice:NestedOwningMember(text:"inner",items:[]))))]
+    }
+}

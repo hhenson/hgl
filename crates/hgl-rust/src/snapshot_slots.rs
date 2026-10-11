@@ -1,105 +1,13 @@
 //! Independent typed tuple locals in prepared ordinary slots.
+use crate::append;
 use crate::layouts::{global_type, rust_type};
-use hgl_semantics::ir::{Kind, Plan, Statement, Value};
+use hgl_semantics::ir::{Kind, Plan, Value};
 use hgl_source::Ty;
-use std::fmt::Write as _;
-fn append(code: &mut String, args: std::fmt::Arguments<'_>) {
-    code.write_fmt(args)
-        .unwrap_or_else(|_| unreachable!("String formatting"));
-}
-fn scan(
-    body: &mut Vec<Statement>,
-    locals: &mut std::collections::BTreeMap<usize, Ty>,
-    next: &mut usize,
-) {
-    let mut result = Vec::new();
-    for mut statement in std::mem::take(body) {
-        match &mut statement {
-            Statement::Let(id, v) if v.snapshot => {
-                locals.insert(*id, v.ty.clone());
-            }
-            Statement::Return(value)
-            | Statement::Assign(
-                Value {
-                    kind: Kind::Output, ..
-                },
-                value,
-            ) if value.snapshot && matches!(value.kind, Kind::Unary(..) | Kind::Construct(_)) => {
-                let id = *next;
-                *next += 1;
-                locals.insert(id, value.ty.clone());
-                result.push(Statement::Let(id, value.clone()));
-                let mut local = Value::new(value.ty.clone(), Kind::Local(id));
-                local.snapshot = true;
-                *value = local;
-            }
-            Statement::If(_, a, b) => {
-                scan(a, locals, next);
-                scan(b, locals, next);
-            }
-            Statement::While(_, b)
-            | Statement::For(_, _, b)
-            | Statement::ForItems(_, _, _, _, b) => scan(b, locals, next),
-            Statement::Exit
-            | Statement::Let(..)
-            | Statement::Var(..)
-            | Statement::Borrow(..)
-            | Statement::Return(_)
-            | Statement::TimedYield(..)
-            | Statement::Yield(_)
-            | Statement::Call(_)
-            | Statement::Assign(..) => {}
-        }
-        result.push(statement);
-    }
-    *body = result;
-}
-fn maximum(body: &[Statement]) -> usize {
-    body.iter()
-        .map(|s| match s {
-            Statement::Let(id, _) | Statement::Var(id, _) | Statement::Borrow(id, _, _) => id + 1,
-            Statement::If(_, a, b) => maximum(a).max(maximum(b)),
-            Statement::While(_, b) => maximum(b),
-            Statement::For(id, _, b) => (id + 1).max(maximum(b)),
-            Statement::ForItems(key, child, _, _, b) => (key + 1).max(child + 1).max(maximum(b)),
-            Statement::Exit
-            | Statement::Return(_)
-            | Statement::TimedYield(..)
-            | Statement::Yield(_)
-            | Statement::Call(_)
-            | Statement::Assign(..) => 0,
-        })
-        .max()
-        .unwrap_or(0)
-}
 
-/// Reserve private local destinations in the emission plan; no source type is changed.
+/// Reserve private destinations before emitting typed local writes.
 pub fn prepare(plan: &Plan) -> Plan {
-    let mut plan = plan.clone();
-    for (node_id, node) in plan.nodes.iter_mut().enumerate() {
-        let mut locals = std::collections::BTreeMap::new();
-        let mut next = maximum(&node.start).max(maximum(&node.stop)).max(
-            node.handlers
-                .iter()
-                .map(|(_, body)| maximum(body))
-                .max()
-                .unwrap_or(0),
-        );
-        scan(&mut node.start, &mut locals, &mut next);
-        scan(&mut node.stop, &mut locals, &mut next);
-        for (_, body) in &mut node.handlers {
-            scan(body, &mut locals, &mut next);
-        }
-        if !locals.is_empty() {
-            node.global_state = true;
-        }
-        for (id, ty) in locals {
-            let key = format!("\0snapshot:{node_id}:{id}");
-            if !node.globals.iter().any(|(k, _)| k == &key) {
-                node.globals.push((key, crate::snapshots::storage(&ty)));
-            }
-        }
-    }
+    let mut plan = crate::any_prepared::prepare(plan);
+    hgl_semantics::snapshot_locals::prepare(&mut plan, crate::snapshots::storage);
     plan
 }
 fn slot(ty: &Ty, fields: &str, columns: &str) -> String {
@@ -188,7 +96,7 @@ pub fn local(id: usize, value: &Value, emit: impl Fn(&Value) -> String) -> Strin
         && op == "snapshot"
     {
         format!(
-            "let input={};let mut prepared=_ctx.prepared();let(observation,globals)=prepared.storage.observations();let columns=globals.values_mut();if !observation.bindings.valid(input.id()) {{return Err(hgl_types::NodeError::new(\"ordinary tuple input is invalid\"));}}{}true",
+            "let input={};_ctx.with_observations(|observation,globals|->hgl_types::NodeResult{{let columns=globals.values_mut();if !observation.bindings.valid(input.id()) {{return Err(hgl_types::NodeError::new(\"ordinary tuple input is invalid\"));}}{}Ok(())}})?;true",
             crate::observed::input(input),
             if matches!(input.ty, Ty::Rolling(..)) {
                 crate::observed::capture(&input.ty, "input", "destination")
@@ -242,10 +150,12 @@ pub fn publication(value: &Value, expression: &str, result: Option<&Ty>) -> Opti
         crate::snapshots::complete(&value.ty, expression)
     };
     let publish = if value.snapshot
-        && value.ty == Ty::Bytes
-        && result.is_some_and(|ty| matches!(ty, Ty::Rolling(child, _) if **child == Ty::Bytes))
+        && matches!(value.ty, Ty::Any | Ty::Bytes)
+        && result.is_some_and(|ty| matches!(ty, Ty::Rolling(..)))
     {
         "_ctx.prepared().rolling_from(None,publication,self._output)?;".into()
+    } else if value.snapshot && value.ty == Ty::Any {
+        "_ctx.prepared().any_from_global(self._output,publication)?;".into()
     } else if value.snapshot
         && !matches!(
             value.ty,
@@ -274,7 +184,7 @@ fn constructed(value: &Value, destination: &str, emit: &impl Fn(&Value) -> Strin
         let marker = global_type(&crate::snapshots::storage(&child.ty));
         let write = if child.snapshot {
             if let Kind::Unary(op,input) = &child.kind && op == "snapshot" {
-                format!("let input={};let mut prepared=_ctx.prepared();let(observation,globals)=prepared.storage.observations();let columns=globals.values_mut();let destination={child_slot};if !observation.bindings.valid(input.id()) {{return Err(hgl_types::NodeError::new(\"ordinary tuple input is invalid\"));}}{}columns.set_list_len(({target}).fields(),1);",crate::observed::input(input),capture(&child.ty,"input","destination"))
+                format!("let input={};_ctx.with_observations(|observation,globals|->hgl_types::NodeResult{{let columns=globals.values_mut();let destination={child_slot};if !observation.bindings.valid(input.id()) {{return Err(hgl_types::NodeError::new(\"ordinary tuple input is invalid\"));}}{}columns.set_list_len(({target}).fields(),1);Ok(())}})?;",crate::observed::input(input),capture(&child.ty,"input","destination"))
             } else if matches!(child.kind,Kind::Construct(_)) {
                 format!("let destination={{let globals=_ctx.global_state();let columns=globals.values();{child_slot}}};{} _ctx.global_state().values_mut().set_list_len(({target}).fields(),1);",constructed(child,"destination",emit))
             } else {

@@ -2,6 +2,7 @@
 use crate::eval_data::TestStep;
 use crate::harness_ir::{Argument, Evaluation, Step};
 use crate::ir::{Kind, Plan, Statement, Value};
+use crate::library::{Decl, Library, Role};
 use crate::static_values::PreparedLexicalScope;
 use hgl_source::{Expr, Issue, Stmt, Ty};
 use std::collections::BTreeSet;
@@ -136,4 +137,42 @@ fn evaluation(
     };
     plans.push(plan);
     Ok(step)
+}
+
+/// Select eval declarations by owner and the target module's lexical helper visibility.
+pub fn eval_declarations(
+    library: &Library,
+    module: &str,
+    name: &str,
+    value_only: bool,
+) -> (String, String, Vec<Decl>) {
+    let (owner, item) = crate::value_types::identity(library, module, name);
+    let helpers = library
+        .declarations
+        .iter()
+        .any(|d| d.module == owner && d.name == item && d.test_only && d.role == Role::Function);
+    let mut declarations: Vec<_> = library
+        .declarations
+        .iter()
+        .filter(|decl| {
+            decl.module == owner
+                && decl.name == item
+                && !matches!(
+                    decl.role,
+                    Role::Implementation | Role::Test | Role::Native | Role::Struct | Role::Enum
+                )
+                && (!value_only || decl.signature().is_ok_and(|s| s.value_function))
+                && (!decl.test_only || owner == module)
+                && (!helpers || owner != module || decl.test_only)
+        })
+        .cloned()
+        .collect();
+    if !value_only
+        && declarations
+            .iter()
+            .any(|d| d.signature().is_ok_and(|s| !s.value_function))
+    {
+        declarations.retain(|d| d.signature().is_ok_and(|s| !s.value_function));
+    }
+    (owner, item, declarations)
 }

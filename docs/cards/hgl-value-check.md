@@ -82,3 +82,9 @@ child-check callbacks. String callers use the same generic entry point.
 Runtime Tuple children delegate prepared ownership admission to tuple_admission.
 
 Ordinary len admits bytes and returns its octet count. Bytes equality and unsigned lexicographic ordering are admitted; indexing, mutation and encoding remain excluded. Existing runtime list-literal admission is unchanged.
+
+binary_type is owned by hgl-value-operators and remains reexported here. Ordinary authority includes Any as an aggregate owning box; extraction and explicit retention preserve global lexical borrow rules.
+
+expected_value shares canonical harness type checks and the existing i64-to-f64 widening boundary. prepare_node retains fixed/default ordinary arguments during value-function lifting while requiring ports for temporal parameters.
+
+Lexical entry-effect checking uses ir_visit for ordinary operand descent. GlobalSet checks its value before its write conflict; helper arguments and bodies retain their independent lexical checks. Captured values remain complete cold leaves. May use ir_visit.

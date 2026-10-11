@@ -15,6 +15,9 @@ pub fn view(value: &Value, emit: impl Fn(&Value) -> String) -> String {
 fn projected(value: &Value, emit: &dyn Fn(&Value) -> String) -> String {
     match &value.kind {
         Kind::Local(id) | Kind::MutableLocal(id) => format!("local{id}"),
+        Kind::GeneratorLocal(id) => {
+            format!("self.generator_local{id}.expect(\"initialized generator local\")")
+        }
         Kind::Field(parent, index) => format!(
             "{{let parent={};let optional=parent.0.fields().{index};let present=parent.1&&!_ctx.store().global_values().list(optional.fields()).is_empty();({},present)}}",
             projected(parent, emit),
@@ -58,7 +61,6 @@ fn projected(value: &Value, emit: &dyn Fn(&Value) -> String) -> String {
         | Kind::IterationInput(_)
         | Kind::Input(..)
         | Kind::Cache(_)
-        | Kind::GeneratorLocal(_)
         | Kind::Output
         | Kind::Capability
         | Kind::Void => unreachable!("prepared snapshot view"),

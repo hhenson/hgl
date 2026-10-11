@@ -1,0 +1,67 @@
+module hgraph.std part retained_family_projections
+
+abstract struct Choice {value:i64
+text:str}
+struct First:Choice {}
+struct Second:Choice {extra:i64}
+struct Envelope {choice:Choice
+choices:list<Choice>}
+native const fn visit(value:i64)->i64 throws
+native const fn visit(value:i64)->i64 throws {}
+
+fn nested(tick:i64,const choice:Choice,const choices:list<Choice>)->i64 {
+    when {
+        let envelope=Envelope(
+            choices:choices,
+            choice:choice)
+        let independent=envelope
+        return independent.choice.value+independent.choices[visit(tick+40)-41].value
+    }
+}
+fn retained(tick:i64)->i64 {
+    inject global_state
+    start {
+        var source=First(value:42,text:"held")
+        let choice:Choice=source
+        source.value=99
+        source.text="changed"
+        set(global_state,"held",choice)
+        set(global_state,"text_held",choice.text=="held")
+    }
+    when {
+        let choice:Choice=get(global_state,"held")
+        let text_held:bool=get(global_state,"text_held")
+        if !text_held {return -1}
+        return choice.value
+    }
+}
+fn borrowed_list(tick:i64,const seed:list<Choice>)->i64 {
+    inject global_state
+    start {set(global_state,"choices",seed)}
+    when {
+        let choices:list<Choice> = get(global_state,"choices")
+        return choices[tick-1].value
+    }
+}
+fn mutate(tick:i64,const seed:Choice)->i64 {
+    inject global_state
+    start {
+        set(global_state,"source",seed)
+        set(global_state,"retained",seed)
+    }
+    when {
+        var source:Choice=get(global_state,"source")
+        source.value+=tick
+        let independent:Choice=get(global_state,"retained")
+        return source.value+independent.value
+    }
+}
+test owning_family_nested {
+    let first:Choice=First(value:10,text:"first")
+    let second:Choice=Second(extra:99,value:20,text:"second")
+    let choices:list<Choice> =[first,second]
+    assert eval(nested,[1,2],choice:second,choices:choices)==[30,40]
+    assert eval(retained,[1,2])==[42,42]
+    assert eval(borrowed_list,[1,2],seed:choices)==[10,20]
+    assert eval(mutate,[1,2],seed:second)==[41,43]
+}

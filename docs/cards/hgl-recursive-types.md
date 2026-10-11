@@ -14,3 +14,5 @@ container, argument-expanded, non-atomic, required and cross-module cycle edges
 fail before concrete formation. Specialization expansion follows only unchanged
 source parameters or closed argument expressions. Canonical exact nominal keys
 bound the queue; every referenced concrete edge resolves in the emitted batch.
+
+May use struct_declarations for the shared declared type-domain check.

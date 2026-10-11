@@ -3,8 +3,8 @@ pub use diagnostics::Issue;
 pub use lex::{Token, lex};
 pub use literals::{Literal, ParsedLiteral, TemporalLiteral};
 pub use type_shape::{
-    EnumType, FamilyType, Nominal, NominalDefinition, RecursiveType, Ty, Window, WindowKind,
-    application, delta_argument,
+    EnumType, FamilyType, Nominal, NominalDefinition, RecursiveType, Ty, TypeSpelling, Window,
+    WindowKind, application, delta_argument,
 };
 #[derive(Debug, Clone)]
 /// An expression before name and type resolution.
@@ -51,6 +51,22 @@ impl Expr {
             value.syntax()
         } else {
             self
+        }
+    }
+    /// Immediate expression operands in source order; absent cells have no operand.
+    pub fn children(&self) -> Vec<&Self> {
+        match self.syntax() {
+            Self::Lambda(_, _, child) | Self::Property(child, _) | Self::Unary(_, child) => {
+                vec![child]
+            }
+            Self::Index(a, b) | Self::Binary(_, a, b) => vec![a, b],
+            Self::Call(_, args) | Self::Applied(_, args) => {
+                args.iter().map(|(_, child)| child).collect()
+            }
+            Self::Sequence(items) | Self::Tuple(items) => items.iter().flatten().collect(),
+            Self::Sparse(items) => items.iter().flat_map(|(a, b)| [a, b]).collect(),
+            Self::Null | Self::Literal(_) | Self::TemporalLiteral(_) | Self::Name(_) => Vec::new(),
+            Self::Located(..) => unreachable!("syntax strips origins"),
         }
     }
     /// Original source range, or no range for synthesized expressions.
@@ -817,10 +833,15 @@ fn type_admitted(name: &str, ordinary: bool) -> bool {
     args.iter().all(|arg| type_admitted(arg, child_ordinary))
 }
 
-pub mod diagnostics;
+pub use hgl_value_model::diagnostics;
+pub use hgl_value_model::ir;
 pub mod lex;
 pub mod literals;
-pub mod nominal_batch;
-pub mod time_context;
+pub use hgl_value_model::nominal_batch;
+pub use hgl_value_model::time_context;
 pub mod type_shape;
 pub mod type_syntax;
+
+pub use hgl_value_model::ordinary_shape;
+/// Cold builtin scalar metadata preserves owning and nominal leaf boundaries.
+pub use hgl_value_model::scalar_shape;

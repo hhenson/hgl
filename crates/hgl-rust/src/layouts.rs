@@ -4,23 +4,18 @@ mod delta;
 mod globals;
 pub use crate::families::{family_coerce, family_member, family_storage};
 pub use delta::{delta_storage, delta_type};
-pub use globals::{global_markers, global_schema, global_type, global_types};
+pub use globals::{global_markers, global_schema, global_type, global_types, harness_types};
 
 pub use crate::scalars::{rust_type, scalar_type};
 /// Rust owned representation of a concrete ordinary type.
 pub fn owned_type(ty: &Ty) -> String {
-    if let Ty::Family(family) = ty {
-        return owned_type(&family_storage(family));
+    if let Some(storage) = ordinary_storage(ty) {
+        return owned_type(&storage);
     }
     if matches!(ty, Ty::Recursive(_)) {
         return format!("Owned{}", global_type(ty));
     }
-    if let Ty::Tuple(children) = ty {
-        return owned_type(&tuple_storage(children));
-    }
-    if let Ty::Delta(origin) = ty {
-        return owned_type(&delta_storage(origin));
-    }
+
     if let Some(element) = crate::collections::element(ty) {
         return format!("Vec<{}>", owned_type(&element));
     }
@@ -54,9 +49,25 @@ fn tuple_storage(children: &[Ty]) -> Ty {
 pub fn whole_payload(ty: &Ty) -> Option<&Ty> {
     if let Ty::Atomic(payload) = ty {
         Some(payload)
-    } else if matches!(ty, Ty::Enum(_)) {
+    } else if matches!(ty, Ty::Any | Ty::Enum(_)) {
         Some(ty)
     } else {
         None
     }
 }
+
+/// Lower source-only storage wrappers through their shared ordinary representation.
+pub fn ordinary_storage(ty: &Ty) -> Option<Ty> {
+    if let Ty::Family(family) = ty {
+        return Some(family_storage(family));
+    }
+    if let Ty::Tuple(children) = ty {
+        return Some(tuple_storage(children));
+    }
+    if let Ty::Delta(origin) = ty {
+        return Some(delta_storage(origin));
+    }
+    None
+}
+
+pub(crate) use crate::identifiers::{any_identity, identifier};

@@ -1,11 +1,8 @@
 //! Exact ordinary collection layout and ordered constructor emission.
+use crate::append;
 use hgl_semantics::ir::{Kind, Value};
-use hgl_source::Ty;
-use std::fmt::Write as _;
-fn append(code: &mut String, args: std::fmt::Arguments<'_>) {
-    code.write_fmt(args)
-        .unwrap_or_else(|_| unreachable!("String formatting"));
-}
+use hgl_source::{FamilyType, Ty};
+
 /// Homogeneous retained element; maps retain complete typed key/value pairs.
 pub fn element(ty: &Ty) -> Option<Ty> {
     if let Ty::List(child, _) | Ty::Set(child) = ty {
@@ -76,7 +73,8 @@ pub fn construct(
         append(
             &mut code,
             format_args!(
-                "if items.iter().any(|item|{field}==&key) {{return Err(hgl_types::NodeError::new(\"duplicate ordinary collection key or member\"));}}"
+                "if items.iter().try_fold(false,|found,item|Ok::<bool,Box<hgl_types::NodeError>>(found||{}))? {{return Err(hgl_types::NodeError::new(\"duplicate ordinary collection key or member\"));}}",
+                equal(&key.ty, field, "&key", crate::layouts::global_type)
             ),
         );
         if let Some(child) = child {
@@ -92,8 +90,11 @@ pub fn construct(
 }
 /// Recursive native equality with unordered complete set and map children.
 pub fn equal(ty: &Ty, a: &str, b: &str, marker: fn(&Ty) -> String) -> String {
+    if *ty == Ty::Any {
+        return format!("({a}).equal({b})?");
+    }
     if matches!(ty, Ty::Recursive(_)) {
-        return format!("{}::ordinary_equal({a},{b})", marker(ty));
+        return format!("{}::ordinary_equal({a},{b})?", marker(ty));
     }
     if let Ty::Family(family) = ty {
         return equal(&crate::families::family_storage(family), a, b, marker);
@@ -102,22 +103,18 @@ pub fn equal(ty: &Ty, a: &str, b: &str, marker: fn(&Ty) -> String) -> String {
         let compare = equal(&item, "left", "right", marker);
         return if matches!(ty, Ty::Set(_) | Ty::Map(..)) {
             format!(
-                "({a}).len()==({b}).len() && ({a}).iter().all(|left|({b}).iter().any(|right|{compare}))"
+                "({a}).len()==({b}).len() && ({a}).iter().try_fold(true,|same,left|Ok::<bool,Box<hgl_types::NodeError>>(same&&({b}).iter().try_fold(false,|found,right|Ok::<bool,Box<hgl_types::NodeError>>(found||{compare}))?))?"
             )
         } else {
             format!(
-                "({a}).len()==({b}).len() && ({a}).iter().zip(({b}).iter()).all(|(left,right)|{compare})"
+                "({a}).len()==({b}).len() && ({a}).iter().zip(({b}).iter()).try_fold(true,|same,(left,right)|Ok::<bool,Box<hgl_types::NodeError>>(same&&{compare}))?"
             )
         };
     }
-    let (fields, optional) = if let Ty::Tuple(fields) = ty {
-        (fields.iter().collect::<Vec<_>>(), &[][..])
-    } else if let Ty::Struct(_, fields, optional) = ty {
-        (
-            fields.iter().map(|(_, ty)| ty).collect(),
-            optional.as_slice(),
-        )
-    } else {
+    let Some((fields, optional)) = matches!(ty, Ty::Tuple(_) | Ty::Struct(..))
+        .then(|| hgl_source::ordinary_shape::fields(ty))
+        .flatten()
+    else {
         return format!("({a})==({b})");
     };
     let checks = fields.iter().enumerate().map(|(i, t)| {
@@ -138,17 +135,7 @@ pub fn retained(source: &str, ty: &Ty, global_type: fn(&Ty) -> String) -> String
     if matches!(ty, Ty::Nullable(_)) {
         return format!("({source}).as_ref().map(hgl_store::Scalar::try_clone).transpose()?");
     }
-    if matches!(
-        ty,
-        Ty::Tuple(_)
-            | Ty::List(..)
-            | Ty::Set(_)
-            | Ty::Map(..)
-            | Ty::Delta(_)
-            | Ty::Recursive(_)
-            | Ty::Family(_)
-            | Ty::Struct(..)
-    ) {
+    if hgl_semantics::value_access::aggregate(ty) {
         return format!(
             "<{} as hgl_store::GlobalValue>::retain(&({source}))?",
             global_type(ty)
@@ -165,19 +152,18 @@ pub fn retained(source: &str, ty: &Ty, global_type: fn(&Ty) -> String) -> String
 }
 
 fn key_checks(ty: &Ty, value: &str) -> String {
+    if *ty == Ty::Any {
+        return format!("({value}).key_hash()?;");
+    }
     if *ty == Ty::F64 {
         return format!(
             "if ({value}).is_nan() {{return Err(hgl_types::NodeError::new(\"NaN collection key\"));}}"
         );
     }
-    let (fields, optional) = if let Ty::Tuple(fields) = ty {
-        (fields.iter().collect::<Vec<_>>(), &[][..])
-    } else if let Ty::Struct(_, fields, optional) = ty {
-        (
-            fields.iter().map(|(_, ty)| ty).collect(),
-            optional.as_slice(),
-        )
-    } else {
+    let Some((fields, optional)) = matches!(ty, Ty::Tuple(_) | Ty::Struct(..))
+        .then(|| hgl_source::ordinary_shape::fields(ty))
+        .flatten()
+    else {
         return String::new();
     };
     fields
@@ -197,7 +183,7 @@ fn key_checks(ty: &Ty, value: &str) -> String {
 /// Project an inherited family field through its exact retained member tag.
 /// # Panics
 /// Panics when supplied IR lacks the checked common field or concrete members.
-pub fn family_field(family: &hgl_source::FamilyType, index: usize, source: &str) -> String {
+pub fn family_field(family: &FamilyType, index: usize, source: &str, slot: bool) -> String {
     let (_, fields, _) = family.members()[0]
         .1
         .structure()
@@ -212,12 +198,23 @@ pub fn family_field(family: &hgl_source::FamilyType, index: usize, source: &str)
             .iter()
             .position(|(field, _)| field == name)
             .unwrap_or_else(|| unreachable!("checked common family field"));
-        append(
-            &mut arms,
-            format_args!(
-                "{tag}=>&parent.{}.as_ref().expect(\"family member\").{index},",
+        let field = if slot {
+            format!(
+                "hgl_store::ValueSlot::<{}>::bind(&mut columns.list(parent.fields().{}.fields()).first().expect(\"family member\").as_slice()).fields().{index}",
+                crate::layouts::global_type(ty),
                 tag + 1
-            ),
+            )
+        } else {
+            format!(
+                "&parent.{}.as_ref().expect(\"family member\").{index}",
+                tag + 1
+            )
+        };
+        append(&mut arms, format_args!("{tag}=>{field},"));
+    }
+    if slot {
+        return format!(
+            "{{let parent={source};let columns=_ctx.store().global_values();match parent.fields().0.read(columns)? {{{arms}_=>unreachable!(\"checked family tag\")}}}}"
         );
     }
     format!(

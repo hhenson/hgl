@@ -16,6 +16,7 @@
 //! entry. Only [`Store::bind`] reports an unknown id, because the builder
 //! calls it with ids read from a description.
 
+pub use any_values::Any;
 pub use rolling::{Rolling, WindowShape};
 use std::marker::PhantomData;
 
@@ -31,6 +32,7 @@ pub use bindings::{BindError, InputId, Kind, OutputId, Reference, ScopeId, Wake}
 pub use columns::{Columns, Scalar};
 pub use keys::{Key, Keys};
 pub use prepared_store::{Observation, PreparedStorage, PreparedTick};
+pub mod any_values;
 pub mod atomic;
 mod atomic_publication;
 pub mod binding_build;

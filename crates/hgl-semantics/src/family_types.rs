@@ -2,6 +2,7 @@
 use crate::inheritance::Pattern;
 use crate::library::{Decl, Library, Role};
 use crate::struct_names::declaration;
+use hgl_source::TypeSpelling;
 use hgl_source::{FamilyType, Nominal, Ty};
 use std::collections::{BTreeMap, BTreeSet};
 /// Resolve an inherited field without changing declaration-owned name scopes.

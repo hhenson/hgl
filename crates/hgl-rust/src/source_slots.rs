@@ -42,3 +42,15 @@ pub fn initialize(
     }
     code.concat()
 }
+
+mod direct;
+pub(crate) use direct::{read, source};
+
+/// Prepared source arena spelling shared by typed retaining writes.
+pub(crate) fn columns(arena: &str) -> &'static str {
+    match arena {
+        "global_values" => "columns",
+        "atomic_values" => "observation.atomic.values()",
+        _ => "&self.configuration_columns",
+    }
+}

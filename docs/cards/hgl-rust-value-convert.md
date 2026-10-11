@@ -15,3 +15,5 @@ Acceptance: existing prepared captures and shared atomic container debug/release
 runs; conversion occurs outside hot evaluation and never replays provider recipes.
 
 Bytes encode and decode as exact Literal::Bytes and Vec<u8>; constructor materialization precedes replay capture conversion. No text encoding or implicit conversion exists.
+
+Scalar codec spelling uses the shared scalars emitter; admitted delta shapes share their existing validation and observation paths.

@@ -1,0 +1,23 @@
+module hgraph.std part stage67_order
+struct Stage67Pair { first:i64
+ second:i64 }
+native const fn stage_mark(value:i64)->i64 throws
+native const fn stage_mark(value:i64)->i64 throws {}
+native const fn stage_fail(value:i64)->i64 throws
+native const fn stage_fail(value:i64)->i64 throws {}
+native const fn stage_finish(value:i64) throws
+native const fn stage_finish(value:i64) throws {}
+fn stage_order(value:i64)->any {
+ stop {stage_finish(21)}
+ when {return any(Stage67Pair(second:stage_mark(2),first:stage_mark(1)))}
+}
+fn stage_failure(value:i64)->any {
+ stop {stage_finish(2)}
+ when {return any(Stage67Pair(second:stage_fail(2),first:stage_mark(1)))}
+}
+test named_box_operands_follow_written_order {
+ assert eval(stage_order,[1])==[any(Stage67Pair(first:1,second:2))]
+}
+test failing_box_operand_prevents_later_operand {
+ assert raises("yield.negative_duration") {eval(stage_failure,[1])}
+}

@@ -1,0 +1,290 @@
+module hgraph.std part any_prepared_regressions
+
+abstract struct Choice { value: i64 }
+struct First: Choice { }
+struct BoxField { box: any }
+struct Boxes { items: list<any> }
+struct Fields { items: list<BoxField> }
+
+test {
+    fn box_family(value: i64) -> any {
+        when {
+            let choice: Choice = First(value: value)
+            return any(choice)
+        }
+    }
+    test family_local_boxes_the_actual_concrete_member {
+        assert eval(box_family, [1, _, 2]) == [any(First(value: 1)), _, any(First(value: 2))]
+    }
+
+    fn append_box(value: i64) -> any {
+        inject global_state
+        start { set(global_state, "boxes", Boxes(items: []).items) }
+        when {
+            var boxes: list<any> = get(global_state, "boxes")
+            push(boxes, any(value))
+            return any(boxes[len(boxes) - 1])
+        }
+    }
+    fn append_field(value: i64) -> any {
+        inject global_state
+        start { set(global_state, "fields", Fields(items: []).items) }
+        when {
+            var fields: list<BoxField> = get(global_state, "fields")
+            push(fields, BoxField(box: any(value)))
+            return any(fields[len(fields) - 1].box)
+        }
+    }
+    test inline_boxes_and_nested_fields_use_prepared_append_storage {
+        assert eval(append_box, [1, _, 2]) == [any(1), _, any(2)]
+        assert eval(append_field, [1, _, 2]) == [any(1), _, any(2)]
+    }
+    fn append_flattened_box(value: any) -> any {
+        inject global_state
+        start { set(global_state, "boxes", Boxes(items: []).items) }
+        when {
+            var boxes: list<any> = get(global_state, "boxes")
+            push(boxes, any(value))
+            return any(boxes[len(boxes) - 1])
+        }
+    }
+    fn append_complete_list(value: atomic<list<i64>>) -> any {
+        inject global_state
+        start { set(global_state, "boxes", Boxes(items: []).items) }
+        when {
+            var boxes: list<any> = get(global_state, "boxes")
+            push(boxes, any(value))
+            return any(boxes[len(boxes) - 1])
+        }
+    }
+    const fn empty_integers() -> list<i64> { return [] }
+    const fn pair() -> list<i64> { return [1, 2] }
+    test inline_boxing_borrows_complete_aggregate_and_flattened_inputs {
+        assert eval(append_flattened_box, [any(), _, any(1)]) == [any(), _, any(1)]
+        assert eval(append_complete_list, [[1, 2], _, []]) == [any(pair()), _, any(empty_integers())]
+    }
+}
+
+struct DynamicChain {
+    value: i64
+    items: list<i64>
+    next: atomic<DynamicChain> = null
+}
+struct Replacement { current: any
+    previous: any
+}
+struct DeepFields { items: list<DeepField> }
+struct DeepField { first: any
+    second: any
+    text: str
+}
+test {
+    fn roll_box(value: i64) -> rolling<any, 2> { when { return any(value) } }
+    fn roll_local(value: i64) -> rolling<any, 2> {
+        when { let box = any(value)
+            return box
+        }
+    }
+    test rolling_boxes_are_prepared_arrivals {
+        assert eval(roll_box, [1, 2]) == [any(1), any(2)]
+        assert eval(roll_local, [1, 2]) == [any(1), any(2)]
+    }
+    fn box_dynamic_recursive(value: i64) -> any {
+        when { return any(DynamicChain(value: value, items: [1, 2],
+            next: DynamicChain(value: value, items: []))) }
+    }
+    test recursive_constructor_box_is_prepared {
+        assert eval(box_dynamic_recursive, [1, 2]) == [
+            any(DynamicChain(value: 1, items: [1, 2], next: DynamicChain(value: 1, items: []))),
+            any(DynamicChain(value: 2, items: [1, 2], next: DynamicChain(value: 2, items: [])))]
+    }
+    fn box_local_recursive(value: i64) -> any {
+        when {
+            let chain=DynamicChain(value:value,items:[1,2],next:DynamicChain(value:value,items:[]))
+            return any(chain)
+        }
+    }
+    test recursive_local_box_is_prepared {
+        assert eval(box_local_recursive,[1,2])==[
+            any(DynamicChain(value:1,items:[1,2],next:DynamicChain(value:1,items:[]))),
+            any(DynamicChain(value:2,items:[1,2],next:DynamicChain(value:2,items:[])))]
+    }
+    fn replace_with_nested_box(value: i64) -> any {
+        when {
+            var box = any(value)
+            let retained = box
+            box = any(BoxField(box: box))
+            return any(Replacement(current: box, previous: retained))
+        }
+    }
+    test compound_box_replacement_retains_its_source {
+        assert eval(replace_with_nested_box, [1, 2]) == [
+            any(Replacement(current: any(BoxField(box: any(1))), previous: any(1))),
+            any(Replacement(current: any(BoxField(box: any(2))), previous: any(2)))]
+    }
+    fn append_deep_fields(value: i64) -> any {
+        inject global_state
+        start { set(global_state, "deep", DeepFields(items: []).items) }
+        when {
+            var fields: list<DeepField> = get(global_state, "deep")
+            push(fields, DeepField(first: any(DynamicChain(value: value, items: [1, 2])),
+                second: any(BoxField(box: any(value + 1))), text: "retained"))
+            return any(fields[len(fields) - 1])
+        }
+    }
+    test appended_constructors_keep_distinct_leaf_operands {
+        assert eval(append_deep_fields, [1, 2]) == [
+            any(DeepField(first: any(DynamicChain(value: 1, items: [1, 2])),
+                second: any(BoxField(box: any(2))), text: "retained")),
+            any(DeepField(first: any(DynamicChain(value: 2, items: [1, 2])),
+                second: any(BoxField(box: any(3))), text: "retained"))]
+    }
+}
+
+test {
+    fn retain_box_input(value: any) -> any {
+        when { let retained = value
+            return retained
+        }
+    }
+    fn roll_box_input(value: any) -> rolling<any, 2> { when { return value } }
+    fn retain_rolling_box(value: rolling<any, 2>) -> any {
+        when { let retained = delta_value(value)
+            return retained
+        }
+    }
+    test readable_box_inputs_and_rolling_captures_use_independent_prepared_slots {
+        assert eval(retain_box_input, [any(1), _, any(2)]) == [any(1), _, any(2)]
+        assert eval(roll_box_input, [any(1), _, any(2)]) == [any(1), _, any(2)]
+        assert eval(retain_rolling_box, [any(1), _, any(2)]) == [any(1), _, any(2)]
+    }
+}
+
+test {
+    fn retain_box_field(value: atomic<BoxField>) -> any {
+        when { let retained = delta_value(value).box
+            return retained
+        }
+    }
+    fn retain_rolling_arrival(value: rolling<any, 2>) -> rolling<any, 2> {
+        when { let retained = delta_value(value)
+            return retained
+        }
+    }
+    test selected_boxes_and_retained_arrivals_keep_prepared_ownership {
+        assert eval(retain_box_field, [BoxField(box: any(1)), _, BoxField(box: any(2))]) == [any(1), _, any(2)]
+        assert eval(retain_rolling_arrival, [any(1), _, any(2)]) == [any(1), _, any(2)]
+    }
+}
+
+struct OptionalReplacement { required:i64
+    optional:i64 = null
+}
+test {
+    fn replace_optional(value:i64)->any {
+        inject global_state
+        start { set(global_state, "optional_replacement", OptionalReplacement(required:1, optional:2)) }
+        when {
+            var target:OptionalReplacement=get(global_state, "optional_replacement")
+            if value == 1 { target=OptionalReplacement(required:value) }
+            else { target=OptionalReplacement(required:value, optional:0) }
+            return any(target)
+        }
+    }
+    test omitted_optional_constructor_fields_clear_existing_presence {
+        assert eval(replace_optional, [1,2,1]) == [
+            any(OptionalReplacement(required:1)),
+            any(OptionalReplacement(required:2, optional:0)),
+            any(OptionalReplacement(required:1))]
+    }
+}
+
+native const fn helper_begin(value:i64) throws
+native const fn helper_begin(value:i64) throws {}
+native const fn helper_mark(value:i64)->i64 throws
+native const fn helper_mark(value:i64)->i64 throws {}
+native const fn helper_finish(value:i64) throws
+native const fn helper_finish(value:i64) throws {}
+
+const fn helper_box_equal(value:i64, expected:i64)->bool {
+    let boxed=any(value)
+    let expected_box=any(expected)
+    return boxed==expected_box
+}
+const fn nested_helper_box(value:i64)->bool {
+    let boxed=any(value+10)
+    let outer_expected=any(value+10)
+    if value>0 {
+        let boxed=any(value+20)
+        let inner_expected=any(value+20)
+        return helper_box_equal(value,value) && boxed==inner_expected
+    }
+    return boxed==outer_expected
+}
+test {
+    fn helper_boxes(value:i64)->bool {
+        start { helper_begin(0) }
+        stop { helper_finish(0) }
+        when {
+            let boxed=any(value+100)
+            let expected_box=any(value+100)
+            let first=helper_box_equal(value,value)
+            let second=helper_box_equal(value+1,value)
+            let ordered=helper_box_equal(helper_mark(2),helper_mark(1))
+            return !ordered && first && !second && nested_helper_box(value) && boxed==expected_box
+        }
+    }
+    test helper_box_owners_keep_callsite_and_lexical_identity {
+        assert eval(helper_boxes,[1,-2,3])==[true,true,true]
+    }
+}
+
+test {
+    fn direct_global_box(value:i64)->any {
+        inject global_state
+        when {
+            set(global_state,key:"direct_box",value:any(value))
+            return get(global_state,key:"direct_box")
+        }
+    }
+    fn direct_global_aggregate(value:i64)->any {
+        inject global_state
+        when {
+            set(global_state,key:"direct_aggregate",value:any(BoxField(box:any(value))))
+            return get(global_state,key:"direct_aggregate")
+        }
+    }
+    test direct_typed_global_owning_returns {
+        assert eval(direct_global_box,[1,_,2]) == [any(1),_,any(2)]
+        assert eval(direct_global_aggregate,[1,_,2]) == [any(BoxField(box:any(1))),_,any(BoxField(box:any(2)))]
+    }
+}
+
+const fn inline_box_equal(value:i64, expected:i64)->bool {
+    let boxed=any(value)
+    return boxed==any(expected)
+}
+test {
+    fn inline_box_comparison(value:i64)->bool {
+        when { return inline_box_equal(value,value) }
+    }
+    test inline_any_comparison_operand_is_prepared {
+        assert eval(inline_box_comparison,[1,-2,3])==[true,true,true]
+    }
+}
+
+test {
+    fn inline_ordered_operands(value:i64)->bool {
+        start { helper_begin(0) }
+        stop { helper_finish(0) }
+        when {
+            let ordered=any(helper_mark(2))>any(helper_mark(1))
+            let same=inline_box_equal(value,value) && any(value)<=any(value) && any(value)>=any(value)
+            let different=any(value)<any(value+1) && any(value)!=any(value+1) && any(value)!=any(1.0)
+            return ordered && same && different && !(any(value)<any(1.0)) && any()<any(value)
+        }
+    }
+    test inline_any_comparisons_retain_operands_once_in_order {
+        assert eval(inline_ordered_operands,[1,-2,3])==[true,true,true]
+    }
+}

@@ -1,7 +1,7 @@
 //! Exact checked type metadata for cold Rust source serialization.
 use crate::enums::metadata as enum_data;
 use hgl_source::Ty;
-fn list<T>(items: &[T], f: impl Fn(&T) -> String) -> String {
+pub(crate) fn list<T>(items: &[T], f: impl Fn(&T) -> String) -> String {
     format!(
         "vec![{}]",
         items.iter().map(f).collect::<Vec<_>>().join(",")
@@ -39,8 +39,8 @@ fn recursive(batch: &hgl_source::RecursiveType) -> String {
 }
 /// Emit exact checked source type metadata.
 pub fn ty(t: &Ty) -> String {
-    let inner = match t {
-        Ty::Family(f) => format!(
+    let inner = if let Ty::Family(f) = t {
+        format!(
             "Family(hgl_source::FamilyType::new({},{},{}).unwrap_or_else(|_|unreachable!(\"checked family\")))",
             nominal(f.identity()),
             list(f.ancestors(), nominal),
@@ -49,43 +49,43 @@ pub fn ty(t: &Ty) -> String {
                 nominal(id),
                 ty(t)
             ))
-        ),
-        Ty::Recursive(batch) => format!("Recursive({})", recursive(batch)),
-        Ty::Enum(e) => format!("Enum({})", enum_data(e)),
-        Ty::Rolling(t, window) => format!(
+        )
+    } else if let Ty::Recursive(batch) = t {
+        format!("Recursive({})", recursive(batch))
+    } else if let Ty::Enum(e) = t {
+        format!("Enum({})", enum_data(e))
+    } else if let Ty::Rolling(t, window) = t {
+        format!(
             "Rolling(Box::new({}),hgl_source::Window::new(hgl_source::WindowKind::{:?},{},{}).expect(\"checked window\"))",
             ty(t),
             window.kind(),
             window.maximum(),
             window.minimum()
-        ),
-        Ty::Atomic(t) => format!("Atomic(Box::new({}))", ty(t)),
-        Ty::Ref(t) => format!("Ref(Box::new({}))", ty(t)),
-        Ty::Nullable(t) => format!("Nullable(Box::new({}))", ty(t)),
-        Ty::Set(t) => format!("Set(Box::new({}))", ty(t)),
-        Ty::Delta(t) => format!("Delta(Box::new({}))", ty(t)),
-        Ty::Map(k, v) => format!("Map(Box::new({}),Box::new({}))", ty(k), ty(v)),
-        Ty::List(t, n) => format!("List(Box::new({}),{n:?})", ty(t)),
-        Ty::Tuple(ts) => format!("Tuple({})", list(ts, ty)),
-        Ty::Struct(n, fields, optional) => format!(
+        )
+    } else if let Ty::Atomic(t) = t {
+        format!("Atomic(Box::new({}))", ty(t))
+    } else if let Ty::Ref(t) = t {
+        format!("Ref(Box::new({}))", ty(t))
+    } else if let Ty::Nullable(t) = t {
+        format!("Nullable(Box::new({}))", ty(t))
+    } else if let Ty::Set(t) = t {
+        format!("Set(Box::new({}))", ty(t))
+    } else if let Ty::Delta(t) = t {
+        format!("Delta(Box::new({}))", ty(t))
+    } else if let Ty::Map(k, v) = t {
+        format!("Map(Box::new({}),Box::new({}))", ty(k), ty(v))
+    } else if let Ty::List(t, n) = t {
+        format!("List(Box::new({}),{n:?})", ty(t))
+    } else if let Ty::Tuple(ts) = t {
+        format!("Tuple({})", list(ts, ty))
+    } else if let Ty::Struct(n, fields, optional) = t {
+        format!(
             "Struct({},{},vec!{optional:?})",
             nominal(n),
             list(fields, |(name, t)| format!("({name:?}.into(),{})", ty(t)))
-        ),
-        Ty::I64
-        | Ty::F64
-        | Ty::Bool
-        | Ty::Str
-        | Ty::Bytes
-        | Ty::Date
-        | Ty::Time
-        | Ty::DateTime
-        | Ty::Duration
-        | Ty::CivilDateTime
-        | Ty::TimeZone
-        | Ty::ZonedTime
-        | Ty::ZonedDateTime
-        | Ty::Void => format!("{t:?}"),
+        )
+    } else {
+        format!("{t:?}")
     };
     format!("hgl_source::Ty::{inner}")
 }

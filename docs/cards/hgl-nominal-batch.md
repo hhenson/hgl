@@ -1,6 +1,6 @@
 # Card: hgl-nominal-batch
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `nominal_batch` module of `hgl-source` (`crates/hgl-source/src/nominal_batch.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `nominal_batch` module of `hgl-value-model` (`crates/hgl-value-model/src/nominal_batch.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
 Immutable finite nominal definition ownership, independent of source syntax and
 runtime representation. No dependencies; budget 160 source lines.

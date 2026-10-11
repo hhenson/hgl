@@ -21,52 +21,39 @@ fn optional(ty: &Ty) -> Ty {
 }
 /// Private emission-only storage; canonical HGL tuple identity never changes.
 pub fn storage(ty: &Ty) -> Ty {
-    match ty {
-        Ty::Tuple(children) => Ty::Struct(
-            format!("\0snapshot<{}>", ty.source_name()).into(),
-            children
-                .iter()
-                .enumerate()
-                .map(|(i, child)| (i.to_string(), storage(child)))
-                .collect(),
-            (0..children.len()).collect(),
-        ),
-        Ty::Struct(_, fields, _) => Ty::Struct(
+    if matches!(ty, Ty::Tuple(_) | Ty::Struct(..)) {
+        let name = if matches!(ty, Ty::Tuple(_)) {
+            format!("\0snapshot<{}>", ty.source_name()).into()
+        } else {
             hgl_source::type_shape::Nominal {
                 origin: "\0snapshot-struct".into(),
                 arguments: vec![ty.clone()],
-            },
+            }
+        };
+        let fields = if let Ty::Struct(_, fields, _) = ty {
+            fields.clone()
+        } else {
+            children(ty)
+                .unwrap_or_default()
+                .iter()
+                .enumerate()
+                .map(|(i, child)| (i.to_string(), (*child).clone()))
+                .collect()
+        };
+        Ty::Struct(
+            name,
             fields
                 .iter()
                 .map(|(name, child)| (name.clone(), storage(child)))
                 .collect(),
             (0..fields.len()).collect(),
-        ),
-        Ty::List(child, size) => Ty::List(Box::new(optional(child)), *size),
-        Ty::Map(key, child) => Ty::Map(key.clone(), Box::new(optional(child))),
-        Ty::Rolling(..)
-        | Ty::Family(_)
-        | Ty::Recursive(_)
-        | Ty::Enum(_)
-        | Ty::Atomic(_)
-        | Ty::Delta(_)
-        | Ty::I64
-        | Ty::F64
-        | Ty::Bool
-        | Ty::Str
-        | Ty::Bytes
-        | Ty::Duration
-        | Ty::Date
-        | Ty::Time
-        | Ty::DateTime
-        | Ty::CivilDateTime
-        | Ty::TimeZone
-        | Ty::ZonedTime
-        | Ty::ZonedDateTime
-        | Ty::Ref(_)
-        | Ty::Set(_)
-        | Ty::Nullable(_)
-        | Ty::Void => ty.clone(),
+        )
+    } else if let Ty::List(child, size) = ty {
+        Ty::List(Box::new(optional(child)), *size)
+    } else if let Ty::Map(key, child) = ty {
+        Ty::Map(key.clone(), Box::new(optional(child)))
+    } else {
+        ty.clone()
     }
 }
 fn reserve(collection: &str, count: &str) -> String {
@@ -92,41 +79,20 @@ pub fn complete(ty: &Ty, value: &str) -> String {
             .join(",");
         return format!("{{let value={value};({fields},)}}");
     }
-    match ty {
-        Ty::List(child, _) => format!(
+    if let Ty::List(child, _) = ty {
+        format!(
             "{{let source={value};let mut values=Vec::new();{}for value in source {{values.push((Some({}),));}}values}}",
             reserve("values", "source.len()"),
             complete(child, "value")
-        ),
-        Ty::Map(_, child) => format!(
+        )
+    } else if let Ty::Map(_, child) = ty {
+        format!(
             "{{let source={value};let mut values=Vec::new();{}for (key,value) in source {{values.push((key,(Some({}),)));}}values}}",
             reserve("values", "source.len()"),
             complete(child, "value")
-        ),
-        Ty::Tuple(_) | Ty::Struct(..) => unreachable!("positional children handled above"),
-        Ty::Rolling(..)
-        | Ty::Family(_)
-        | Ty::Recursive(_)
-        | Ty::Enum(_)
-        | Ty::Atomic(_)
-        | Ty::Delta(_)
-        | Ty::I64
-        | Ty::F64
-        | Ty::Bool
-        | Ty::Str
-        | Ty::Bytes
-        | Ty::Duration
-        | Ty::Date
-        | Ty::Time
-        | Ty::DateTime
-        | Ty::CivilDateTime
-        | Ty::TimeZone
-        | Ty::ZonedTime
-        | Ty::ZonedDateTime
-        | Ty::Ref(_)
-        | Ty::Set(_)
-        | Ty::Nullable(_)
-        | Ty::Void => value.into(),
+        )
+    } else {
+        value.into()
     }
 }
 /// Publish a complete native value through the structural publication owner.
@@ -184,8 +150,8 @@ pub fn bounds(
                     .join(",")
             );
         }
-        match ty {
-            Ty::List(child, size) => format!(
+        if let Ty::List(child, size) = ty {
+            format!(
                 "hgl_store::ListBounds {{len:{},element:PreparedBounds{} {{field0:Some({})}}}}",
                 size.map_or_else(|| domain(ty), |n| n.to_string()),
                 global_type(&if let Ty::List(wrapper, _) = storage(ty) {
@@ -194,45 +160,22 @@ pub fn bounds(
                     unreachable!()
                 }),
                 build(child, scalar, domain)
-            ),
-            Ty::Map(key, child) => {
-                let Ty::Map(_, wrapper) = storage(ty) else {
-                    unreachable!()
-                };
-                let pair = Ty::Tuple(vec![(**key).clone(), (*wrapper).clone()]);
-                format!(
-                    "hgl_store::ListBounds {{len:{},element:PreparedBounds{} {{field0:{},field1:PreparedBounds{} {{field0:Some({})}}}}}}",
-                    domain(ty),
-                    global_type(&pair),
-                    scalar(key),
-                    global_type(&wrapper),
-                    build(child, scalar, domain)
-                )
-            }
-            Ty::Tuple(_) | Ty::Struct(..) => unreachable!("positional children handled above"),
-            Ty::Rolling(..)
-            | Ty::Family(_)
-            | Ty::Recursive(_)
-            | Ty::Enum(_)
-            | Ty::Atomic(_)
-            | Ty::Delta(_)
-            | Ty::I64
-            | Ty::F64
-            | Ty::Bool
-            | Ty::Str
-            | Ty::Bytes
-            | Ty::Duration
-            | Ty::Date
-            | Ty::Time
-            | Ty::DateTime
-            | Ty::CivilDateTime
-            | Ty::TimeZone
-            | Ty::ZonedTime
-            | Ty::ZonedDateTime
-            | Ty::Ref(_)
-            | Ty::Set(_)
-            | Ty::Nullable(_)
-            | Ty::Void => scalar(ty),
+            )
+        } else if let Ty::Map(key, child) = ty {
+            let Ty::Map(_, wrapper) = storage(ty) else {
+                unreachable!()
+            };
+            let pair = Ty::Tuple(vec![(**key).clone(), (*wrapper).clone()]);
+            format!(
+                "hgl_store::ListBounds {{len:{},element:PreparedBounds{} {{field0:{},field1:PreparedBounds{} {{field0:Some({})}}}}}}",
+                domain(ty),
+                global_type(&pair),
+                scalar(key),
+                global_type(&wrapper),
+                build(child, scalar, domain)
+            )
+        } else {
+            scalar(ty)
         }
     }
     original(ty).map(|ty| build(&ty, &scalar, &domain))

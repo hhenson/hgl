@@ -11,12 +11,15 @@ pub fn compile_module_suite(sources: &[(String, String)]) -> Result<Suite, Strin
     suite(sources, true)
 }
 fn suite(sources: &[(String, String)], module_only: bool) -> Result<Suite, String> {
-    let errors = hgl_semantics::source_check::with_module_semantics(sources, |_, _| Ok(()));
-    if module_only {
-        hgl_source::diagnostics::ensure(errors)?;
+    let check = |library: &index::Library, decl: &index::Decl| {
+        resolve::validate_defaults(library.clone(), decl)
+    };
+    let errors = if module_only {
+        hgl_semantics::source_check::with_module_semantics(sources, check)
     } else {
-        hgl_semantics::source_check::ensure_sources(sources)?;
-    }
+        hgl_semantics::source_check::with_semantics(sources, check)
+    };
+    hgl_source::diagnostics::ensure(errors)?;
     let library = index::load(sources)?;
     hgl_semantics::enums::validate(&library)?;
     let mut suite = Suite::default();
@@ -49,7 +52,7 @@ pub fn compile_tests(sources: &[(String, String)]) -> Result<Suite, String> {
 }
 /// Emit ordered test setup, prepared graph factories and owning capture comparison.
 pub fn emit_tests(suite: &Suite) -> String {
-    let mut out = vec![emit::shared_layouts(&suite.plans)];
+    let mut out = vec![emit::shared_test_layouts(&suite.plans, &suite.tests)];
     for (i, plan) in suite.plans.iter().enumerate() {
         out.push(format!(
             "mod case{i} {{ use super::*;\n{}\n{}\n}}\n",

@@ -42,6 +42,8 @@ committing the ring arrival. The reserved buffer is moved temporarily, retaining
 capacity, and the callback observes independent source storage. Failed capacity
 checks leave the prior window and publication metadata unchanged.
 
+`PreparedTick::rolling_from(None,...)` borrows an already reserved global owner and copies its exact typed payload into independent arrival storage before publishing.
+
 `bytes<S,W>(bindings,output,(now,wake),copy)` supplies a reserved byte arrival
 destination to a callback that completes all fallible preflight before mutation.
 Only a successful copy commits the arrival. Atomic octet conversion uses this

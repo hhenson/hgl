@@ -1,9 +1,6 @@
 //! Typed structural publication transport between independently prepared destinations.
-use std::fmt::Write as _;
-fn append(out: &mut String, args: std::fmt::Arguments<'_>) {
-    out.write_fmt(args)
-        .unwrap_or_else(|_| unreachable!("String formatting"));
-}
+use crate::append;
+
 use crate::layouts::{delta_type, global_type, rust_type, whole_payload};
 use hgl_semantics::ir::{Kind, Value};
 use hgl_source::Ty;
@@ -17,13 +14,7 @@ fn marker(ty: &Ty) -> String {
     global_type(&delta_type(ty))
 }
 fn fields(ty: &Ty) -> Vec<&Ty> {
-    if let Ty::Struct(_, fields, _) = ty {
-        return fields.iter().map(|(_, ty)| ty).collect();
-    }
-    if let Ty::Tuple(fields) = ty {
-        return fields.iter().collect();
-    }
-    Vec::new()
+    crate::snapshots::children(ty).unwrap_or_default()
 }
 
 fn element(ty: &Ty, list: &str, index: &str, columns: &str) -> String {
@@ -379,6 +370,8 @@ fn validation(ty: &Ty) -> String {
 
 mod text;
 pub use text::text;
+pub(crate) use text::text_assignment;
+pub(crate) use text::text_encoding;
 /// Read one checked child endpoint using its statically selected transport.
 pub fn read(ty: &Ty, input: &str, operation: Option<String>) -> String {
     if matches!(ty, Ty::Rolling(..)) {

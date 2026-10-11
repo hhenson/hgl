@@ -72,3 +72,5 @@ Shared marker emission assigns composite key domain ordinals once across the
 complete shared plan set. Each exact marker's preparation provisions its own
 ordinal in independently built stores, preserving identity across discovery and
 insertion order. Per-plan code never recomputes those domain ordinals.
+
+Any payload collection includes all reachable admitted ordinary types, not only nominal storage. harness_types collects cold box payloads through the shared checked harness visitor. ordinary_storage exposes backend storage wrappers. Private marker identities share hgl-rust-identifiers; scalar metadata delegates to Ty::scalar_kind.

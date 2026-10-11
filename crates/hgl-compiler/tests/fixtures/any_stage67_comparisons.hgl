@@ -1,0 +1,29 @@
+module hgraph.std part stage67_comparisons
+fn stage_inline_equal(value:i64)->bool {when {return any(value)==any(1)}}
+fn stage_inline_less(value:i64)->bool {when {return any(value)<any(2)}}
+fn stage_inline_not_equal(value:i64)->bool {when {return any(value)!=any(2)}}
+fn stage_inline_less_equal(value:i64)->bool {when {return any(value)<=any(2)}}
+fn stage_inline_greater(value:i64)->bool {when {return any(value)>any(2)}}
+fn stage_inline_greater_equal(value:i64)->bool {when {return any(value)>=any(2)}}
+fn stage_inline_nested(value:i64)->bool {when {return any(any(value)==any(1))==any(true)}}
+fn stage_compare_order(value:i64)->bool {
+ stop {stage_finish(21)}
+ when {return any(stage_mark(2))>any(stage_mark(1))}
+}
+fn stage_compare_failure(value:i64)->bool {
+ stop {stage_finish(2)}
+ when {return any(stage_fail(2))==any(stage_mark(1))}
+}
+test inline_box_comparisons_do_not_retain_allocating_owners {
+ assert eval(stage_inline_equal,[1,2,3])==[true,false,false]
+ assert eval(stage_inline_less,[1,2,3])==[true,false,false]
+ assert eval(stage_inline_not_equal,[1,2,3])==[true,false,true]
+ assert eval(stage_inline_less_equal,[1,2,3])==[true,true,false]
+ assert eval(stage_inline_greater,[1,2,3])==[false,false,true]
+ assert eval(stage_inline_greater_equal,[1,2,3])==[false,true,true]
+ assert eval(stage_inline_nested,[1,2])==[true,false]
+ assert eval(stage_compare_order,[1])==[true]
+}
+test inline_box_comparison_failure_stops_right_operand {
+ assert raises("yield.negative_duration") {eval(stage_compare_failure,[1])}
+}

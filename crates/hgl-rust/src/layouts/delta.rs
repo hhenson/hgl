@@ -2,56 +2,39 @@ use hgl_source::Ty;
 /// Private typed ordinary storage for sparse data of an exact structural origin.
 pub fn delta_storage(origin: &Ty) -> Ty {
     let list = |ty| Ty::List(Box::new(ty), None);
-    let fields = match origin {
-        Ty::Set(key) => vec![
+    let fields = if let Ty::Set(key) = origin {
+        vec![
             ("added".into(), list((**key).clone())),
             ("removed".into(), list((**key).clone())),
-        ],
-        Ty::List(child, Some(_)) => vec![
+        ]
+    } else if let Ty::List(child, size) = origin {
+        let mut fields = vec![
             ("keys".into(), list(Ty::I64)),
             ("values".into(), list(delta_type(child))),
-        ],
-        Ty::List(child, None) => vec![
-            ("keys".into(), list(Ty::I64)),
-            ("values".into(), list(delta_type(child))),
-            ("removed".into(), list(Ty::I64)),
-        ],
-        Ty::Map(key, child) => vec![
+        ];
+        if size.is_none() {
+            fields.push(("removed".into(), list(Ty::I64)));
+        }
+        fields
+    } else if let Ty::Map(key, child) = origin {
+        vec![
             ("keys".into(), list((**key).clone())),
             ("values".into(), list(delta_type(child))),
             ("removed".into(), list((**key).clone())),
-        ],
-        Ty::Tuple(children) => children
+        ]
+    } else if let Ty::Tuple(children) = origin {
+        children
             .iter()
             .enumerate()
             .map(|(i, child)| (i.to_string(), list(delta_type(child))))
-            .collect(),
-        Ty::Struct(_, fields, _) => fields
+            .collect()
+    } else if let Ty::Struct(_, fields, _) = origin {
+        fields
             .iter()
             .map(|(name, child)| (name.clone(), list(delta_type(child))))
-            .collect(),
-        Ty::Rolling(..)
-        | Ty::Atomic(_)
-        | Ty::Delta(_)
-        | Ty::I64
-        | Ty::F64
-        | Ty::Bool
-        | Ty::Str
-        | Ty::Bytes
-        | Ty::CivilDateTime
-        | Ty::TimeZone
-        | Ty::Enum(_)
-        | Ty::ZonedTime
-        | Ty::ZonedDateTime
-        | Ty::Duration
-        | Ty::Date
-        | Ty::Time
-        | Ty::DateTime
-        | Ty::Ref(_)
-        | Ty::Nullable(_)
-        | Ty::Recursive(_)
-        | Ty::Family(_)
-        | Ty::Void => unreachable!("checked structural delta origin"),
+            .collect()
+    } else {
+        unreachable!("checked structural delta origin")
     };
     // A NUL cannot occur in an HGL declaration name; synthetic identities cannot alias user structs.
     Ty::Struct(

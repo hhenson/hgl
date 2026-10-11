@@ -43,3 +43,7 @@ Link to the hgraph RFC or decision record, once there is one.
 
 A decision that is later reversed is not deleted: mark it
 `superseded by <link>` and write the new one.
+
+[0005 — Any descriptor ownership](0005-any-descriptor-ownership.md) keeps retained
+descriptors independent of generated module tables and assigns recursive encoded
+operation execution to Store within the existing combined module allowance.

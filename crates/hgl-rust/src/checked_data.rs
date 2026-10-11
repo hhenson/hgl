@@ -1,15 +1,10 @@
 //! Cold typed conversion and checked lexical test emission.
 use crate::enums::metadata as enum_data;
+use crate::type_data::list;
+pub use crate::type_data::ty;
 use hgl_semantics::harness_ir::{Argument, Step, Test};
 use hgl_semantics::ir::{DeltaEntry, Kind, Statement, Value};
 use hgl_source::{Literal, TemporalLiteral};
-fn list<T>(items: &[T], f: impl Fn(&T) -> String) -> String {
-    format!(
-        "vec![{}]",
-        items.iter().map(f).collect::<Vec<_>>().join(",")
-    )
-}
-pub use crate::type_data::ty;
 fn literal(l: &Literal) -> String {
     let inner = match l {
         Literal::Enum(e, number) => format!("Enum({}, {number})", enum_data(e)),

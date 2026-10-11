@@ -8,16 +8,11 @@ fn fields(ty: &Ty) -> Vec<Ty> {
     if let Ty::Family(family) = ty {
         return fields(&crate::layouts::family_storage(family));
     }
-    if let Ty::Struct(_, fields, _) = ty {
-        return fields.iter().map(|(_, ty)| ty.clone()).collect();
-    }
-    if let Ty::Tuple(fields) = ty {
-        return fields.clone();
-    }
     if let Ty::Delta(origin) = ty {
         return fields(&delta_storage(origin));
     }
-    Vec::new()
+    crate::snapshots::children(ty)
+        .map_or_else(Vec::new, |fields| fields.into_iter().cloned().collect())
 }
 
 fn collect(ty: &Ty, types: &mut BTreeMap<String, Ty>) {
@@ -45,6 +40,14 @@ impl Capacity {
             for value in &node.configuration {
                 collect(&value.ty, &mut types);
             }
+            hgl_semantics::ir_visit::hooks(node, &mut |value| {
+                if let hgl_semantics::ir::Kind::Unary(op, child) = &value.kind
+                    && op == "any"
+                {
+                    collect(&child.ty, &mut types);
+                }
+                true
+            });
             for (_, ty) in &node.globals {
                 collect(ty, &mut types);
             }
@@ -184,6 +187,17 @@ impl Capacity {
     pub fn native_limits(&self, plan: &Plan) -> String {
         crate::pure_bounds::native_limits(plan, || self.index(&Ty::Str))
             + &crate::pure_bounds::byte_limits(self.types.values(), |ty| self.index(ty))
+            + &self.text_limits(plan)
+            + &if self.types.contains_key(&global_type(&Ty::Any)) {
+                crate::any_expression::limits(plan, |ty| self.bounds(ty), self.index(&Ty::Any))
+                    + &crate::any_values::limits(
+                        self.types.values(),
+                        |ty| self.bounds(ty),
+                        self.index(&Ty::Any),
+                    )
+            } else {
+                String::new()
+            }
     }
     /// Widen retained text for checked pure concatenation expressions.
     pub fn text_limits(&self, plan: &Plan) -> String {
@@ -341,51 +355,46 @@ impl Capacity {
                 global_type(payload)
             );
         }
-        match ty {
-            Ty::Map(_, child) | Ty::List(child,None) => format!(
-                "{{let output={id};let domain={domain};let keys=domain.children.keys().copied().collect::<Vec<_>>();store.prepare_collection(output,&keys,|store,owner|store.add_shaped_output(owner,<{} as hgl_store::shapes::Shape>::shape()));for (&key,domain) in &domain.children {{let child=store.prepared().bindings.prepared_output(output,key).expect(\"prepared domain child\");{}}}}}",crate::deltas::shape_marker(child),self.output_with(child,"child","domain")
-            ),
-            Ty::Set(key) => {
-                let pooled=self.scalar_sets.contains(key);
-                let index=self.index(&delta_type(ty));
-                let keys=if pooled {format!("(0..capacity.pool{index}).map(|n|i64::try_from(n).expect(\"bounded key capacity\")).collect::<Vec<_>>()")} else {"domain.children.keys().copied().collect::<Vec<_>>()".into()};
-                let prepare=if pooled {"store.prepared().bindings.prepare_pool(output);"}else{""};
-                format!("{{let output={id};let domain={domain};let keys={keys};store.prepare_collection(output,&keys,|store,owner|store.add_output::<bool>(owner).id());{prepare}}}")
-            },
-            Ty::List(child, Some(_)) => format!(
+        if let Ty::Map(_, child) | Ty::List(child, None) = ty {
+            format!(
+                "{{let output={id};let domain={domain};let keys=domain.children.keys().copied().collect::<Vec<_>>();store.prepare_collection(output,&keys,|store,owner|store.add_shaped_output(owner,<{} as hgl_store::shapes::Shape>::shape()));for (&key,domain) in &domain.children {{let child=store.prepared().bindings.prepared_output(output,key).expect(\"prepared domain child\");{}}}}}",
+                crate::deltas::shape_marker(child),
+                self.output_with(child, "child", "domain")
+            )
+        } else if let Ty::Set(key) = ty {
+            let pooled = self.scalar_sets.contains(key);
+            let index = self.index(&delta_type(ty));
+            let keys = if pooled {
+                format!(
+                    "(0..capacity.pool{index}).map(|n|i64::try_from(n).expect(\"bounded key capacity\")).collect::<Vec<_>>()"
+                )
+            } else {
+                "domain.children.keys().copied().collect::<Vec<_>>()".into()
+            };
+            let prepare = if pooled {
+                "store.prepared().bindings.prepare_pool(output);"
+            } else {
+                ""
+            };
+            format!(
+                "{{let output={id};let domain={domain};let keys={keys};store.prepare_collection(output,&keys,|store,owner|store.add_output::<bool>(owner).id());{prepare}}}"
+            )
+        } else if let Ty::List(child, Some(_)) = ty {
+            format!(
                 "{{let output={id};let domain={domain};for index in 0..store.bindings().output(output).fixed.len() {{let child=store.bindings().output(output).fixed[index];let domain=domain.children.get(&(index as i64)).unwrap_or(&empty);{}}}}}",
-                self.output_with(child, "child","domain")
-            ),
-            Ty::Struct(..) | Ty::Tuple(_) => fields(ty).iter().enumerate().map(|(i,child)| format!(
+                self.output_with(child, "child", "domain")
+            )
+        } else if matches!(ty, Ty::Struct(..) | Ty::Tuple(_)) {
+            fields(ty).iter().enumerate().map(|(i,child)| format!(
                 "{{let child=store.bindings().output({id}).fixed[{i}];let domain=({domain}).children.get(&{i}).unwrap_or(&empty);{}}}",
                 self.output_with(child, "child", "domain")
-            )).collect::<Vec<_>>().concat(),
-            Ty::Enum(_)
-            | Ty::Atomic(_)
-            | Ty::Rolling(..)
-            | Ty::Delta(_)
-            | Ty::I64
-            | Ty::F64
-            | Ty::Bool
-            | Ty::Str
-            | Ty::Bytes
-            | Ty::Duration
-            | Ty::Date
-            | Ty::Time
-            | Ty::DateTime
-            | Ty::CivilDateTime
-            | Ty::TimeZone
-            | Ty::ZonedTime
-            | Ty::ZonedDateTime
-            | Ty::Ref(_)
-            | Ty::Nullable(_)
-            | Ty::Recursive(_)
-            | Ty::Family(_)
-            | Ty::Void => format!(
+            )).collect::<Vec<_>>().concat()
+        } else {
+            format!(
                 "store.prepared().prepare_scalar::<{}>({id},{})?;",
                 global_type(ty),
                 self.bounds(ty)
-            ),
+            )
         }
     }
 }

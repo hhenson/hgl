@@ -108,3 +108,5 @@ an error even if the first entry would match the expected value.
 Observation::into_parts(self) -> (usize, Vec<(usize, T)>) transfers the dense
 logical length and sparse owned captures without allocating silent cells.
 The ordered source harness uses these parts after graph teardown.
+
+try_compare_by is the fallible capture comparison boundary. Successful comparisons preserve existing owning snapshots; value.capability from contained Any comparison remains an execution failure rather than becoming a false assertion.

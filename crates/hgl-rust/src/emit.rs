@@ -1,9 +1,6 @@
+use crate::append;
 use crate::ir::{Kind, Node, Plan, Value};
-use std::fmt::Write as _;
-fn append(out: &mut String, args: std::fmt::Arguments<'_>) {
-    out.write_fmt(args)
-        .unwrap_or_else(|_| unreachable!("String formatting"));
-}
+
 use crate::generators::Generator;
 use crate::values::{
     condition_code, global_markers, global_schema, global_type, literal, owned_type, query,
@@ -248,17 +245,23 @@ pub fn emit_shared(plan: &Plan) -> String {
 }
 /// Share exact nominal layouts across independently constructed evaluation cases.
 pub fn shared_layouts(plans: &[Plan]) -> String {
+    shared_test_layouts(plans, &[])
+}
+/// Share payload codecs with surrounding lexical test preparation.
+pub fn shared_test_layouts(plans: &[Plan], tests: &[hgl_semantics::harness_ir::Test]) -> String {
     let nodes = plans
         .iter()
         .flat_map(|plan| crate::snapshot_slots::prepare(plan).nodes.into_iter())
         .collect();
     let types = Plan {
         nodes,
+        ordinary_types: crate::layouts::harness_types(tests).into_values().collect(),
         ..Plan::default()
     };
     global_markers(&types)
         + &crate::preparation::recursive_markers(&types)
         + &crate::deltas::markers(&types)
+        + &crate::any_values::layouts(&types)
 }
 fn emit_inner(plan: &Plan, layouts: bool) -> String {
     let prepared = crate::families::prepare(plan);
@@ -299,6 +302,7 @@ fn emit_inner(plan: &Plan, layouts: bool) -> String {
         out.push(global_markers(plan));
         out.push(crate::preparation::recursive_markers(plan));
         out.push(crate::deltas::markers(plan));
+        out.push(crate::any_values::layouts(plan));
     }
     for (i, n) in plan.nodes.iter().enumerate() {
         node(plan, n, i, &mut out);
@@ -324,13 +328,7 @@ fn emit_inner(plan: &Plan, layouts: bool) -> String {
     out.concat()
 }
 
-/// Emit execution and observation of one checked eval plan.
-pub fn emit_test_body(plan: &Plan, expected: Option<&[Option<Value>]>) -> String {
-    let prepared = crate::families::prepare(plan);
-    let normalized = crate::snapshot_slots::prepare(&crate::direct_deltas::prepare(&prepared));
-    let plan = &normalized;
-    let mut out = vec![crate::keyed::preparation(plan), capacities(plan)];
-    register_prepared(plan, &mut out);
+fn test_native_adapters(plan: &Plan, out: &mut Vec<String>) {
     if !plan.natives.is_empty() {
         out.push("impl Native for crate::Provider {\n".into());
     }
@@ -356,6 +354,15 @@ pub fn emit_test_body(plan: &Plan, expected: Option<&[Option<Value>]>) -> String
     if !plan.natives.is_empty() {
         out.push("}\n".into());
     }
+}
+/// Emit execution and observation of one checked eval plan.
+pub fn emit_test_body(plan: &Plan, expected: Option<&[Option<Value>]>) -> String {
+    let prepared = crate::families::prepare(plan);
+    let normalized = crate::snapshot_slots::prepare(&crate::direct_deltas::prepare(&prepared));
+    let plan = &normalized;
+    let mut out = vec![crate::keyed::preparation(plan), capacities(plan)];
+    register_prepared(plan, &mut out);
+    test_native_adapters(plan, &mut out);
     out.push("pub fn test()->Result<(),String> {\nlet mut registry=hgl_describe::Registry::new();\nlet configurations=prepare_configurations(&[])?;register_prepared(&mut registry,&configurations)?;\nlet graph=main(&registry).map_err(|e|format!(\"{e:?}\"))?;\n".into());
     if plan.construction_error.is_some() {
         out.push("Ok(())\n}\n".into());
@@ -391,7 +398,12 @@ pub fn emit_test_body(plan: &Plan, expected: Option<&[Option<Value>]>) -> String
                 })
                 .collect::<Vec<_>>()
                 .join(",");
-            let comparison = if matches!(payload, Ty::Delta(_)) {
+            let comparison = if crate::any_values::contains(&payload) {
+                format!(
+                    "hgl_testkit::evaluation::try_compare_by(&expected,&_observed,|a,b|{})?;",
+                    crate::any_values::capture_equal(&payload, "a", "b")
+                )
+            } else if matches!(payload, Ty::Delta(_)) {
                 format!(
                     "hgl_testkit::evaluation::compare_by(&expected,&_observed,|a,b|{})?;",
                     crate::deltas::equivalent(&payload, "a", "b")
@@ -460,59 +472,14 @@ fn native_arg_type(ty: &Ty) -> &'static str {
 }
 
 fn prepared_values(value: &Value, out: &mut std::collections::BTreeMap<usize, Ty>) {
-    match &value.kind {
-        Kind::Prepared(id) => {
-            out.insert(*id, value.ty.clone());
+    hgl_semantics::ir_visit::value(value, &mut |value| {
+        if let Kind::Prepared(id) = value.kind {
+            out.insert(id, value.ty.clone());
         }
-        Kind::List(values) | Kind::ValueCall(values, _) => {
-            for v in values {
-                prepared_values(v, out);
-            }
-        }
-        Kind::Construct(fields) => {
-            for (_, v) in fields {
-                prepared_values(v, out);
-            }
-        }
-        Kind::Delta(parts) => {
-            for p in parts {
-                for v in p.operands() {
-                    prepared_values(v, out);
-                }
-            }
-        }
-        Kind::Field(v, _)
-        | Kind::Length(v)
-        | Kind::Unary(_, v)
-        | Kind::IsPresent(v)
-        | Kind::Present(v) => prepared_values(v, out),
-        Kind::Index(a, b) | Kind::Push(a, b) | Kind::Binary(_, a, b) => {
-            prepared_values(a, out);
-            prepared_values(b, out);
-        }
-        Kind::Captured(..)
-        | Kind::Literal(_)
-        | Kind::TemporalLiteral(_)
-        | Kind::WiringFailure(_)
-        | Kind::ObservedLocal(_)
-        | Kind::Configuration(_)
-        | Kind::GlobalGet(_)
-        | Kind::BorrowedLocal(..)
-        | Kind::GlobalSet(..)
-        | Kind::GeneratorLocal(_)
-        | Kind::Wire(_)
-        | Kind::IterationInput(_)
-        | Kind::Input(..)
-        | Kind::Cache(_)
-        | Kind::Local(_)
-        | Kind::MutableLocal(_)
-        | Kind::Native(..)
-        | Kind::Query(..)
-        | Kind::Output
-        | Kind::Capability
-        | Kind::Void => {}
-    }
+        true
+    });
 }
+
 fn node_prepared(node: &Node) -> bool {
     let mut values = std::collections::BTreeMap::new();
     for v in &node.configuration {
@@ -599,7 +566,7 @@ pub fn emit_prepared_test_body(plan: &Plan) -> String {
             .clone()
             .delta()
             .unwrap_or_else(|_| unreachable!("checked output delta"));
-        out.push(format!("let ticks=store.global_state().get(recording).map_err(|e|e.message)?.into_iter().collect();drop(built);\nlet observed=hgl_testkit::evaluation::observe(ticks,prepared.input_length)?;\nlet (length,ticks)=observed.into_parts(); Ok(hgl_semantics::harness_ir::CapturedEval {{length,ticks:ticks.iter().map(|(i,v)|(*i,{})).collect()}})\n",crate::preparation::encode(&payload,"v")));
+        out.push(format!("let ticks=store.global_state().get(recording).map_err(|e|e.message)?.into_iter().collect();drop(built);\nlet observed=hgl_testkit::evaluation::observe(ticks,prepared.input_length)?;\nlet (length,ticks)=observed.into_parts(); Ok(hgl_semantics::harness_ir::CapturedEval {{length,ticks:ticks.iter().map(|(i,v)|Ok((*i,{}))).collect::<Result<_,String>>()?}})\n",crate::preparation::encode(&payload,"v")));
     } else {
         out.push(
             "Ok(hgl_semantics::harness_ir::CapturedEval {length:prepared.input_length,ticks:Vec::new()})\n"
@@ -643,20 +610,24 @@ fn capacities(plan: &Plan) -> String {
     code += &capacity.constants(plan, |value| condition_code(plan, value));
     code += &capacity.scalar_sets(plan);
     code += &capacity.native_limits(plan);
-    code += &capacity.text_limits(plan);
+    let mut appends = 0usize;
+    for node in &plan.nodes {
+        hgl_semantics::ir_visit::hooks(node, &mut |v| {
+            appends += usize::from(matches!(v.kind, Kind::Push(..)));
+            true
+        });
+    }
     for node in &plan.nodes {
         for (key, ty) in &node.globals {
             append(
                 &mut code,
-                format_args!("{{let mut bounds={};", capacity.bounds(ty)),
+                format_args!(
+                    "{{let mut bounds={};",
+                    crate::constructor_owners::global_bounds(plan, key, |ty| capacity.bounds(ty))
+                        .unwrap_or_else(|| capacity.bounds(ty))
+                ),
             );
-            if plan
-                .recording
-                .as_ref()
-                .is_some_and(|(record, _)| record == key)
-            {
-                code += "bounds.len=cycles.saturating_add(1);";
-            }
+            code += &crate::pure_bounds::global_growth(plan, key, ty, appends);
             append(
                 &mut code,
                 format_args!(

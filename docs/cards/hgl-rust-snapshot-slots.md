@@ -77,3 +77,9 @@ assignments then use the same scalar/rolling byte destination selection.
 Endpoint-backed byte fields use owned snapshot capture. An invalid direct temporal
 child retains its validity failure; a retained absent child raises value.unset_read
 only when its payload is consumed.
+
+Scan nested ordinary helper bodies for prepared destinations using callsite-unique
+local IDs; reserve synthetic return/assignment slots above every helper declaration.
+
+Cold local reservation delegates to semantics::snapshot_locals with the existing
+snapshot storage-type callback; typed capture and publication emission stay here.

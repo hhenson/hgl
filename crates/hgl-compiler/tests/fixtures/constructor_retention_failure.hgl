@@ -1,0 +1,41 @@
+module hgraph.std part constructor_retention_failure
+struct PreflightFirst { first:str
+    later:i64
+}
+struct PreflightReplacement { first:i64
+    second:str
+    later:i64
+}
+native const fn preflight_later(value:i64)->i64 throws
+native const fn preflight_later(value:i64)->i64 throws {}
+native const fn preflight_first(value:i64)->i64 throws
+native const fn preflight_first(value:i64)->i64 throws {}
+native const fn preflight_finish(value:bool) throws
+native const fn preflight_finish(value:bool) throws {}
+test {
+    fn first_failure(value:i64)->any {
+        when {
+            let owner=PreflightFirst(first:"retained",later:preflight_later(value))
+            return any(owner)
+        }
+    }
+    fn replacement_failure(value:i64)->any {
+        inject global_state
+        start {set(global_state,"original",PreflightReplacement(first:17,second:"old",later:0))}
+        stop {
+            let owner:PreflightReplacement=get(global_state,"original")
+            preflight_finish(owner.first==17 && owner.second=="old")
+        }
+        when {
+            var owner:PreflightReplacement=get(global_state,"original")
+            owner=PreflightReplacement(first:preflight_first(value),second:"replacement",later:preflight_later(value))
+            return any(owner)
+        }
+    }
+    test early_retention_precedes_later_effect {
+        eval(first_failure,[1])
+    }
+    test failed_replacement_leaves_destination_unchanged {
+        eval(replacement_failure,[1])
+    }
+}

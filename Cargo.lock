@@ -74,6 +74,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "hgl-eval"
+version = "0.0.0"
+dependencies = [
+ "hgl-types",
+ "hgl-value-model",
+]
+
+[[package]]
 name = "hgl-kernel"
 version = "0.0.0"
 dependencies = [
@@ -104,6 +112,7 @@ dependencies = [
 name = "hgl-semantics"
 version = "0.0.0"
 dependencies = [
+ "hgl-eval",
  "hgl-source",
  "hgl-types",
 ]
@@ -113,7 +122,7 @@ name = "hgl-source"
 version = "0.0.0"
 dependencies = [
  "hgl-types",
- "jiff",
+ "hgl-value-model",
 ]
 
 [[package]]
@@ -151,6 +160,14 @@ dependencies = [
 [[package]]
 name = "hgl-types"
 version = "0.0.0"
+
+[[package]]
+name = "hgl-value-model"
+version = "0.0.0"
+dependencies = [
+ "hgl-types",
+ "jiff",
+]
 
 [[package]]
 name = "jiff"

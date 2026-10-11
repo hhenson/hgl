@@ -180,61 +180,17 @@ fn statements(body: &[Statement], locals: &mut Locals, visit: &mut impl FnMut(&V
     }
 }
 fn values(value: &Value, locals: &Locals, visit: &mut impl FnMut(&Value, &Locals)) {
-    visit(value, locals);
-    match &value.kind {
-        Kind::Delta(parts) => {
-            for part in parts {
-                for v in part.operands() {
-                    values(v, locals, visit);
-                }
-            }
-        }
-        Kind::List(items) | Kind::Query(_, items) | Kind::Native(_, items) => {
-            for v in items {
-                values(v, locals, visit);
-            }
-        }
-        Kind::Construct(items) => {
-            for (_, v) in items {
-                values(v, locals, visit);
-            }
-        }
-        Kind::ValueCall(args, body) => {
+    hgl_semantics::ir_visit::value(value, &mut |value| {
+        visit(value, locals);
+        if let Kind::ValueCall(args, body) = &value.kind {
             let mut scope = Locals::new();
             for (id, arg) in args.iter().enumerate() {
                 values(arg, locals, visit);
                 scope.insert(id, resolve(arg, locals).clone());
             }
             statements(body, &mut scope, visit);
+            return false;
         }
-        Kind::Field(v, _)
-        | Kind::Length(v)
-        | Kind::Unary(_, v)
-        | Kind::IsPresent(v)
-        | Kind::Present(v)
-        | Kind::GlobalSet(_, v) => values(v, locals, visit),
-        Kind::Index(a, b) | Kind::Push(a, b) | Kind::Binary(_, a, b) => {
-            values(a, locals, visit);
-            values(b, locals, visit);
-        }
-        Kind::ObservedLocal(_)
-        | Kind::WiringFailure(_)
-        | Kind::Configuration(_)
-        | Kind::GlobalGet(_)
-        | Kind::BorrowedLocal(..)
-        | Kind::Literal(_)
-        | Kind::TemporalLiteral(_)
-        | Kind::Captured(..)
-        | Kind::Prepared(_)
-        | Kind::Wire(_)
-        | Kind::IterationInput(_)
-        | Kind::Input(..)
-        | Kind::Cache(_)
-        | Kind::GeneratorLocal(_)
-        | Kind::Local(_)
-        | Kind::MutableLocal(_)
-        | Kind::Output
-        | Kind::Capability
-        | Kind::Void => {}
-    }
+        !matches!(value.kind, Kind::Captured(..))
+    });
 }

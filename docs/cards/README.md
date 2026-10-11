@@ -23,6 +23,9 @@ size and enforces the "may use" list from the crate's
 
 | Card | Now | Of |
 |---|---|---|
+| [hgl-ordinary-shape](hgl-ordinary-shape.md) | module `ordinary_shape` | `hgl-value-model` |
+| [hgl-constructor-owners](hgl-constructor-owners.md) | module `constructor_owners` | `hgl-semantics` |
+| [hgl-rust-constructor-owners](hgl-rust-constructor-owners.md) | module `constructor_owners` | `hgl-rust` |
 | `hgl-bench-twin` | binary `twin` | `hgl-bench` |
 | [hgl-atomic](hgl-atomic.md) | module `atomic` | `hgl-store` |
 | [hgl-binding-build](hgl-binding-build.md) | module `binding_build` | `hgl-store` |
@@ -30,19 +33,19 @@ size and enforces the "may use" list from the crate's
 | [hgl-body-check](hgl-body-check.md) | module `body_check` | `hgl-semantics` |
 | [hgl-calendar](hgl-calendar.md) | module `calendar` | `hgl-types` |
 | [hgl-collection-check](hgl-collection-check.md) | module `collection_check` | `hgl-semantics` |
-| [hgl-collection-values](hgl-collection-values.md) | module `collection_values` | `hgl-semantics` |
+| [hgl-collection-values](hgl-collection-values.md) | module `collection_values` | `hgl-eval` |
 | [hgl-columns](hgl-columns.md) | module `columns` | `hgl-store` |
-| [hgl-composite-keys](hgl-composite-keys.md) | module `composite_keys` | `hgl-semantics` |
+| [hgl-composite-keys](hgl-composite-keys.md) | module `composite_keys` | `hgl-eval` |
 | [hgl-deadlines](hgl-deadlines.md) | module `deadlines` | `hgl-kernel` |
 | [hgl-delta-check](hgl-delta-check.md) | module `delta_check` | `hgl-semantics` |
-| [hgl-diagnostics](hgl-diagnostics.md) | module `diagnostics` | `hgl-source` |
+| [hgl-diagnostics](hgl-diagnostics.md) | module `diagnostics` | `hgl-value-model` |
 | [hgl-documentation](hgl-documentation.md) | module `documentation` | `hgl-program` |
 | [hgl-endpoint-check](hgl-endpoint-check.md) | module `endpoint_check` | `hgl-semantics` |
 | [hgl-endpoints](hgl-endpoints.md) | module `endpoints` | `hgl-store` |
 | [hgl-enums](hgl-enums.md) | module `enums` | `hgl-semantics` |
 | [hgl-eval-data](hgl-eval-data.md) | module `eval_data` | `hgl-semantics` |
 | [hgl-family-types](hgl-family-types.md) | module `family_types` | `hgl-semantics` |
-| [hgl-family-values](hgl-family-values.md) | module `family_values` | `hgl-semantics` |
+| [hgl-family-values](hgl-family-values.md) | module `family_values` | `hgl-eval` |
 | [hgl-fixed-bench](hgl-fixed-bench.md) | binary `fixed` | `hgl-bench` |
 | [hgl-flow-check](hgl-flow-check.md) | module `flow_check` | `hgl-semantics` |
 | [hgl-global](hgl-global.md) | module `global` | `hgl-store` |
@@ -51,7 +54,7 @@ size and enforces the "may use" list from the crate's
 | [hgl-growing-range](hgl-growing-range.md) | module `growing_range` | `hgl-types` |
 | [hgl-harness](hgl-harness.md) | module `harness` | `hgl-semantics` |
 | [hgl-harness-check](hgl-harness-check.md) | module `harness_check` | `hgl-semantics` |
-| [hgl-harness-ir](hgl-harness-ir.md) | module `harness_ir` | `hgl-semantics` |
+| [hgl-harness-ir](hgl-harness-ir.md) | module `harness_ir` | `hgl-eval` |
 | [hgl-inheritance](hgl-inheritance.md) | module `inheritance` | `hgl-semantics` |
 | [hgl-keys](hgl-keys.md) | module `keys` | `hgl-store` |
 | [hgl-lex](hgl-lex.md) | module `lex` | `hgl-source` |
@@ -59,21 +62,21 @@ size and enforces the "may use" list from the crate's
 | [hgl-library-files](hgl-library-files.md) | module `library_files` | `hgl-program` |
 | [hgl-list](hgl-list.md) | module `list` | `hgl-store` |
 | [hgl-list-storage](hgl-list-storage.md) | module `list_storage` | `hgl-store` |
-| [hgl-literals](hgl-literals.md) | module `literals` | `hgl-source` |
+| [hgl-literals](hgl-literals.md) | module `literals` | `hgl-value-model` + `hgl-source` |
 | [hgl-local-check](hgl-local-check.md) | module `local_check` | `hgl-semantics` |
 | [hgl-member-table](hgl-member-table.md) | module `member_table` | `hgl-store` |
 | [hgl-name-check](hgl-name-check.md) | module `name_check` | `hgl-semantics` |
 | [hgl-native](hgl-native.md) | module `native` | `hgl-stdlib` |
 | [hgl-nested](hgl-nested.md) | module `nested` | `hgl-kernel` |
 | [hgl-node-error](hgl-node-error.md) | module `node_error` | `hgl-types` |
-| [hgl-nominal-batch](hgl-nominal-batch.md) | module `nominal_batch` | `hgl-source` |
+| [hgl-nominal-batch](hgl-nominal-batch.md) | module `nominal_batch` | `hgl-value-model` |
 | [hgl-observation](hgl-observation.md) | module `observation` | `hgl-store` |
 | [hgl-optional](hgl-optional.md) | module `optional` | `hgl-store` |
 | [hgl-plan](hgl-plan.md) | module `plan` | `hgl-describe` |
 | [hgl-prepared-store](hgl-prepared-store.md) | module `prepared_store` | `hgl-store` |
 | [hgl-prepared-value](hgl-prepared-value.md) | module `prepared_value` | `hgl-store` |
 | [hgl-proto-nodes](hgl-proto-nodes.md) | module `proto_nodes` | `hgl-testkit` |
-| [hgl-publication-trace](hgl-publication-trace.md) | module `publication_trace` | `hgl-semantics` |
+| [hgl-publication-trace](hgl-publication-trace.md) | module `publication_trace` | `hgl-eval` |
 | [hgl-recursive-types](hgl-recursive-types.md) | module `recursive_types` | `hgl-semantics` |
 | [hgl-recursive-value](hgl-recursive-value.md) | module `recursive_value` | `hgl-store` |
 | [hgl-reject](hgl-reject.md) | module `reject` | `hgl-compiler` |
@@ -89,7 +92,7 @@ size and enforces the "may use" list from the crate's
 | [hgl-rust-families](hgl-rust-families.md) | module `families` | `hgl-rust` |
 | [hgl-rust-finite-domains](hgl-rust-finite-domains.md) | module `finite_domains` | `hgl-rust` |
 | [hgl-rust-generators](hgl-rust-generators.md) | module `generators` | `hgl-rust` |
-| [hgl-rust-ir](hgl-rust-ir.md) | module `ir` | `hgl-semantics` |
+| [hgl-rust-ir](hgl-rust-ir.md) | module `ir` | `hgl-value-model` |
 | [hgl-rust-key-origins](hgl-rust-key-origins.md) | module `key_origins` | `hgl-rust` |
 | [hgl-rust-keyed](hgl-rust-keyed.md) | module `keyed` | `hgl-rust` |
 | [hgl-rust-layouts](hgl-rust-layouts.md) | module `layouts` | `hgl-rust` |
@@ -107,7 +110,7 @@ size and enforces the "may use" list from the crate's
 | [hgl-rust-values](hgl-rust-values.md) | module `values` | `hgl-rust` |
 | [hgl-rust-windows](hgl-rust-windows.md) | module `windows` | `hgl-rust` |
 | [hgl-scalar-copy](hgl-scalar-copy.md) | module `scalar_copy` | `hgl-store` |
-| [hgl-scalar-keys](hgl-scalar-keys.md) | module `scalar_keys` | `hgl-semantics` |
+| [hgl-scalar-keys](hgl-scalar-keys.md) | module `scalar_keys` | `hgl-eval` |
 | [hgl-shape-obligations](hgl-shape-obligations.md) | module `shape_obligations` | `hgl-semantics` |
 | [hgl-shapes](hgl-shapes.md) | module `shapes` | `hgl-store` |
 | [hgl-source-check](hgl-source-check.md) | module `source_check` | `hgl-semantics` |
@@ -120,16 +123,16 @@ size and enforces the "may use" list from the crate's
 | [hgl-test-annotations](hgl-test-annotations.md) | module `test_annotations` | `hgl-compiler` |
 | [hgl-test-runner](hgl-test-runner.md) | module `test_runner` | `hgl-compiler` |
 | [hgl-test-units](hgl-test-units.md) | module `test_units` | `hgl-compiler` |
-| [hgl-time-context](hgl-time-context.md) | module `time_context` | `hgl-source` |
+| [hgl-time-context](hgl-time-context.md) | module `time_context` | `hgl-value-model` |
 | [hgl-time-values](hgl-time-values.md) | module `time_values` | `hgl-types` |
-| [hgl-type-shape](hgl-type-shape.md) | module `type_shape` | `hgl-source` |
+| [hgl-type-shape](hgl-type-shape.md) | module `type_shape` | `hgl-value-model` + `hgl-source` |
 | [hgl-type-sizes](hgl-type-sizes.md) | module `type_sizes` | `hgl-semantics` |
 | [hgl-type-syntax](hgl-type-syntax.md) | module `type_syntax` | `hgl-source` |
 | [hgl-value-access](hgl-value-access.md) | module `value_access` | `hgl-semantics` |
 | [hgl-value-bind](hgl-value-bind.md) | module `value_bind` | `hgl-semantics` |
 | [hgl-value-check](hgl-value-check.md) | module `value_check` | `hgl-semantics` |
-| [hgl-value-constant](hgl-value-constant.md) | module `value_constant` | `hgl-semantics` |
-| [hgl-value-eval](hgl-value-eval.md) | module `value_eval` | `hgl-semantics` |
+| [hgl-value-constant](hgl-value-constant.md) | module `value_constant` | `hgl-eval` |
+| [hgl-value-eval](hgl-value-eval.md) | module `value_eval` | `hgl-eval` |
 | [hgl-value-lists](hgl-value-lists.md) | module `value_lists` | `hgl-store` |
 | [hgl-value-operations](hgl-value-operations.md) | module `value_operations` | `hgl-semantics` |
 | [hgl-value-types](hgl-value-types.md) | module `value_types` | `hgl-semantics` |
@@ -252,6 +255,17 @@ own-output source compatibility.
 complete publication, fixed child validity and exact Map membership reconciliation.
 Snapshot layouts and cold capacities remain with their existing owners.
 
+Additional ordinary value contracts: [Any semantics](hgl-any-values.md), [compiled box vocabulary](hgl-types-any-values.md), [Any storage](hgl-store-any-values.md), [Any emission](hgl-rust-any-values.md), [prepared box owners](hgl-rust-any-prepared.md), [constructor frame encoding](hgl-rust-any-expression.md), [exclusive boxing uses](hgl-boxed-uses.md), [prepared hook writes](hgl-rust-prepared-hooks.md), [private identifiers](hgl-rust-identifiers.md), [checked IR traversal](hgl-ir-visit.md), [required ordinary defaults](hgl-default-values.md), [constructor checking](hgl-value-constructors.md), [operator typing](hgl-value-operators.md), and [builtin scalar metadata](hgl-scalar-shape.md).
+
+- [Constructor field emission](hgl-rust-constructor-fields.md).
+
+- [Helper callsite storage identities](hgl-call-locals.md).
+
+- [Cold snapshot destination planning](hgl-snapshot-locals.md).
+
 Line counts and numerical targets in these cards are informational under
 [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md).
 Module dependency lists remain enforced; size alone never fails CI.
+- [hgl-value-model](hgl-value-model.md): ordinary metadata below source parsing and checking.
+
+- [hgl-eval](hgl-eval.md): checked ordinary IR and harness value execution.

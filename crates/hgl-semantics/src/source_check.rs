@@ -203,44 +203,27 @@ fn annotation(tokens: &[Token]) -> Result<(), Issue> {
     })
 }
 fn closed(expression: &Expr) -> bool {
-    match expression.syntax() {
-        Expr::Located(..) => unreachable!("syntax strips source origins"),
-        Expr::Literal(_) => true,
-        Expr::Unary(_, value) => closed(value),
-        Expr::Binary(_, left, right) => closed(left) && closed(right),
-        Expr::Lambda(..)
-        | Expr::Null
-        | Expr::Property(..)
-        | Expr::Index(..)
-        | Expr::TemporalLiteral(_)
-        | Expr::Name(_)
-        | Expr::Sequence(_)
-        | Expr::Sparse(_)
-        | Expr::Tuple(_)
-        | Expr::Call(..)
-        | Expr::Applied(..) => false,
-    }
+    matches!(
+        expression.syntax(),
+        Expr::Literal(_) | Expr::Unary(..) | Expr::Binary(..)
+    ) && expression.children().into_iter().all(closed)
 }
+
 fn inferred(
     library: &Library,
     module: &str,
     expression: &Expr,
     environment: &BTreeMap<String, Ty>,
-) -> Result<Option<Ty>, String> {
+) -> Option<Ty> {
     match expression.syntax() {
         Expr::Located(..) => unreachable!("syntax strips source origins"),
-        Expr::Literal(value) => Ok(Some(value.ty())),
-        Expr::Name(name) => Ok(environment.get(name).cloned()),
+        Expr::Literal(value) => Some(value.ty()),
+        Expr::Name(name) => environment.get(name).cloned(),
         Expr::Unary(_, value) => inferred(library, module, value, environment),
         Expr::Binary(op, left, right) => {
             let left = inferred(library, module, left, environment)?;
             let right = inferred(library, module, right, environment)?;
-            match (left, right) {
-                (Some(left), Some(right)) => {
-                    Ok(crate::value_check::binary_type(op, &left, &right).ok())
-                }
-                _ => Ok(None),
-            }
+            crate::value_check::binary_type(op, &left, &right).ok()
         }
         Expr::Call(name, _) => {
             let target = library
@@ -263,28 +246,26 @@ fn inferred(
                 })
                 .collect::<Vec<_>>();
             let common = results.first().cloned().flatten();
-            Ok(if results.iter().all(|ty| *ty == common) {
-                common
-            } else {
-                None
-            })
+            results
+                .iter()
+                .all(|ty| *ty == common)
+                .then_some(common)
+                .flatten()
         }
         Expr::Property(parent, property)
             if matches!(parent.as_ref().syntax(), Expr::Name(name) if name == "clock" && !environment.contains_key(name))
                 && (property == "evaluation_time" || property == "now") =>
         {
-            Ok(Some(Ty::DateTime))
+            Some(Ty::DateTime)
         }
         Expr::Property(parent, name) => {
-            let Some(parent) = inferred(library, module, parent, environment)? else {
-                return Ok(None);
-            };
-            Ok(parent.structure().ok().and_then(|(_, fields, _)| {
+            let parent = inferred(library, module, parent, environment)?;
+            parent.structure().ok().and_then(|(_, fields, _)| {
                 fields
                     .iter()
                     .find(|(field, _)| field == name)
                     .map(|(_, ty)| ty.clone())
-            }))
+            })
         }
         Expr::Lambda(..)
         | Expr::TemporalLiteral(_)
@@ -293,7 +274,7 @@ fn inferred(
         | Expr::Sequence(_)
         | Expr::Sparse(_)
         | Expr::Tuple(_)
-        | Expr::Applied(..) => Ok(None),
+        | Expr::Applied(..) => None,
     }
 }
 
@@ -340,14 +321,7 @@ pub fn argument_hint(
     if declarations.next().is_some() {
         return None;
     }
-    let parameter = if let Some(label) = label {
-        signature
-            .parameters
-            .iter()
-            .find(|parameter| parameter.name == label)?
-    } else {
-        signature.parameters.get(index)?
-    };
+    let parameter = crate::eval_data::parameter(&signature, index, label).ok()?;
     let mut bindings = BTreeMap::new();
     for (position, (label, value)) in earlier.iter().enumerate() {
         let parameter = crate::eval_data::parameter(&signature, position, label.as_deref()).ok()?;

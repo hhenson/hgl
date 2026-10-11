@@ -38,6 +38,9 @@ fn shared_abstract_cases_execute_without_tick_allocations() -> Result<(), Box<dy
     )
 }
 fn run_shared(source: &str, measure: bool) -> Result<(), Box<dyn std::error::Error>> {
+    run_source(source, measure, "")
+}
+fn run_source(source: &str, measure: bool, native: &str) -> Result<(), Box<dyn std::error::Error>> {
     use std::{fmt::Write as _, fs, process::Command, time::SystemTime};
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
@@ -72,6 +75,7 @@ fn measured_simulation(graph:&mut hgl_kernel::Graph, store:&mut hgl_store::Store
 "#);
     }
     code.push_str("struct Provider;\n");
+    code.push_str(native);
     fs::write(dir.join("src/main.rs"), code)?;
     let mut manifest = String::from(
         "[package]\nname=\"abstract-test\"\nversion=\"0.0.0\"\nedition=\"2024\"\n[workspace]\n[dependencies]\n",
@@ -154,6 +158,53 @@ test {
     let result = compile_tests(&sources(&source));
     assert!(result.is_ok(), "{result:?}");
     run_shared(&source, true)
+}
+
+#[test]
+fn owning_family_scalar_projection_uses_the_concrete_member()
+-> Result<(), Box<dyn std::error::Error>> {
+    run_shared(
+        "module hgraph.std part owning_family_scalar\nabstract struct Choice {value:i64\ntext:str}\nstruct First:Choice {}\nstruct Second:Choice {}\nfn first(tick:i64)->i64 {when {let choice:Choice=First(value:42,text:\"held\")\nreturn choice.value}}\nfn second(tick:i64)->i64 {when {let choice:Choice=Second(value:77,text:\"held\")\nreturn choice.value}}\ntest owning_family_scalar {assert eval(first,[1,2])==[42,42]\nassert eval(second,[1,2])==[77,77]}",
+        true,
+    )
+}
+
+#[test]
+fn owning_family_boolean_projection_has_the_declared_type() -> Result<(), Box<dyn std::error::Error>>
+{
+    run_shared(
+        "module hgraph.std part owning_family_boolean\nabstract struct Choice {value:bool\ntext:str}\nstruct First:Choice {}\nstruct Second:Choice {}\nfn first(tick:i64)->bool {when {let choice:Choice=First(value:true,text:\"held\")\nreturn choice.value}}\nfn second(tick:i64)->bool {when {let choice:Choice=Second(value:false,text:\"held\")\nreturn choice.value}}\ntest owning_family_boolean {assert eval(first,[1,2])==[true,true]\nassert eval(second,[1,2])==[false,false]}",
+        true,
+    )
+}
+
+#[test]
+fn owning_family_nested_projections_preserve_retention_and_order()
+-> Result<(), Box<dyn std::error::Error>> {
+    run_source(
+        include_str!("fixtures/retained_family_projections.hgl"),
+        true,
+        "mod native {pub fn visit_i64(value:i64)->Result<i64,Box<hgl_types::NodeError>> {static CALLS:std::sync::atomic::AtomicUsize=std::sync::atomic::AtomicUsize::new(0);let call=CALLS.fetch_add(1,std::sync::atomic::Ordering::SeqCst);assert_eq!(value,41+call as i64);Ok(value)}}",
+    )
+}
+
+#[test]
+fn owning_family_failed_index_stops_later_callbacks() -> Result<(), Box<dyn std::error::Error>> {
+    run_source(
+        "module hgraph.std part retained_family_failure\nabstract struct Choice {value:i64\ntext:str}\nstruct First:Choice {}\nstruct Envelope {choices:list<Choice>}\nnative const fn later(value:i64)->i64 throws\nnative const fn later(value:i64)->i64 throws {}\nnative const fn fail_index(value:i64)->i64 throws\nnative const fn fail_index(value:i64)->i64 throws {}\nfn broken(tick:i64,const choices:list<Choice>)->i64 {when {let envelope=Envelope(choices:choices)\nreturn envelope.choices[fail_index(tick)].value+later(tick)}}\ntest first_failure {let first:Choice=First(value:42,text:\"held\")\nlet choices:list<Choice> =[first]\nassert raises(\"value.capability\") {eval(broken,[3],choices:choices)}}",
+        false,
+        "mod native {pub fn fail_index_i64(value:i64)->Result<i64,Box<hgl_types::NodeError>> {static CALLS:std::sync::atomic::AtomicUsize=std::sync::atomic::AtomicUsize::new(0);assert_eq!(CALLS.fetch_add(1,std::sync::atomic::Ordering::SeqCst),0);assert_eq!(value,3);Err(hgl_types::NodeError::coded(\"index failure\",\"value.capability\"))} pub fn later_i64(_:i64)->Result<i64,Box<hgl_types::NodeError>> {panic!(\"callback after failed family projection\")}}",
+    )
+}
+
+#[test]
+fn scalar_only_family_constructors_keep_tags_and_payloads() -> Result<(), Box<dyn std::error::Error>>
+{
+    run_source(
+        include_str!("fixtures/scalar_family_constructors.hgl"),
+        true,
+        "mod native {pub fn once_i64(value:i64)->Result<i64,Box<hgl_types::NodeError>> {static CALLS:std::sync::atomic::AtomicUsize=std::sync::atomic::AtomicUsize::new(0);let call=CALLS.fetch_add(1,std::sync::atomic::Ordering::SeqCst);assert!(call<4);assert_eq!(value,41+(call%2) as i64);Ok(value)}}",
+    )
 }
 
 #[test]

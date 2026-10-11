@@ -1,6 +1,7 @@
 //! Sparse ordinary formation validates the whole schema and preserves payload order.
 use hgl_semantics::delta_check::{Part, constructor};
 use hgl_semantics::ir::{Kind, Value};
+use hgl_source::TypeSpelling;
 fn fixed(value: Literal) -> (Value, Option<Value>) {
     (
         Value::new(value.ty(), Kind::Literal(value.clone())),

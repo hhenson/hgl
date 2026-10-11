@@ -1,4 +1,5 @@
 //! Pinned ordinary publication delta type and syntax contracts.
+use hgl_source::TypeSpelling;
 use hgl_source::type_shape::Ty;
 #[test]
 fn exact_derived_shapes_and_scalar_reduction() {

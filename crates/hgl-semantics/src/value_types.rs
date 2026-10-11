@@ -3,6 +3,7 @@ use crate::library::{Decl, Library};
 pub use crate::struct_names::{declaration, identity};
 use crate::type_sizes;
 use crate::value_check::ordinary;
+use hgl_source::TypeSpelling;
 use hgl_source::{Nominal, Ty, application, delta_argument};
 use std::collections::{BTreeMap, BTreeSet};
 mod family;
@@ -157,15 +158,7 @@ pub fn specialize(
         .into_iter()
         .zip(arguments.clone())
         .collect::<BTreeMap<_, _>>();
-    if let Some((parameter, domain)) = schema.type_domain
-        && !bindings.get(&parameter).is_some_and(|ty| {
-            domain
-                .iter()
-                .any(|name| Ty::parse(name).as_ref() == Some(ty))
-        })
-    {
-        return Err(format!("requires {parameter} in {{{}}}", domain.join(", ")));
-    }
+    crate::struct_declarations::check_domain(schema.type_domain.as_ref(), &bindings)?;
     let origin = format!("{}::{}", decl.module, decl.name);
     if !active.insert(origin.clone()) {
         return Err("recursive ordinary structs are not supported".into());
@@ -178,8 +171,8 @@ pub fn specialize(
         }
         for (_, value) in schema.defaults.iter().filter(|(field, _)| *field == index) {
             if !matches!(value.syntax(), hgl_source::Expr::Null)
-                && crate::enums::default(library, &decl.module, value)?.ty()
-                    != crate::value_access::project(&ty)
+                && crate::enums::default(library, &decl.module, value)
+                    .is_ok_and(|value| value.ty() != crate::value_access::project(&ty))
             {
                 return Err(format!("struct field {name}: default type mismatch"));
             }

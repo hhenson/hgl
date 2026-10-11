@@ -1,4 +1,5 @@
 //! Canonical source spellings preserve scalar identities and composite boundaries.
+use hgl_source::TypeSpelling;
 use hgl_source::type_shape::Ty;
 
 #[test]
