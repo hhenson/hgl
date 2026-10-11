@@ -67,3 +67,11 @@ arrival into its independent prepared ring. Statement emission carries an option
 result type through nested blocks; ordinary helper bodies have no temporal result.
 
 Negative duration and non-increasing yield failures attach their normative stable codes at the checking operation, after operand evaluation.
+
+Finite Any bindings retain independent prepared slots through the resume machine.
+Pending box publications retain the source arena together with their typed slot;
+resumption publishes the saved payload before running the next statement. The
+module uses `any_prepared` for writes and `snapshot_slots` for lexical projections.
+Any yield expressions stage time before payload retention, preserving one-time
+operand evaluation and failure ordering. Immutable replay slots remain borrowed
+from configuration and keep their existing finite replay proof.

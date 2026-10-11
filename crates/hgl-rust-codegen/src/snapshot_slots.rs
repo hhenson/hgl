@@ -1,7 +1,7 @@
 //! Independent typed tuple locals in prepared ordinary slots.
 use crate::append;
 use crate::layouts::{global_type, rust_type};
-use hgl_semantics::ir::{Kind, Plan, Statement, Value};
+use hgl_semantics::ir::{Kind, Node, Plan, Statement, Value};
 use hgl_source::Ty;
 
 fn scan(
@@ -16,12 +16,26 @@ fn scan(
             Statement::Let(id, v) | Statement::Var(id, v) if v.snapshot => {
                 locals.insert(*id, v.ty.clone());
             }
-            Statement::Return(value) | Statement::Assign(_, value)
+            Statement::Return(value)
+            | Statement::Assign(_, value)
+            | Statement::TimedYield(_, value)
                 if value.snapshot
                     && (matches!(value.kind, Kind::Unary(..) | Kind::Construct(_))
                         || matches!(value.ty, Ty::Any | Ty::Native(_))
                             && !matches!(value.kind, Kind::Local(_) | Kind::MutableLocal(_))) =>
             {
+                if let Statement::TimedYield(time, _) = &mut statement {
+                    let id = *next;
+                    *next += 1;
+                    result.push(Statement::Let(id, time.clone()));
+                    *time = Value::new(time.ty.clone(), Kind::Local(id));
+                }
+                let (Statement::Return(value)
+                | Statement::Assign(_, value)
+                | Statement::TimedYield(_, value)) = &mut statement
+                else {
+                    unreachable!("snapshot value statement");
+                };
                 let id = *next;
                 *next += 1;
                 locals.insert(id, value.ty.clone());
@@ -85,19 +99,26 @@ fn maximum(body: &[Statement]) -> usize {
         .unwrap_or(0)
 }
 
+fn node_maximum(node: &Node) -> usize {
+    [&node.start, &node.stop]
+        .into_iter()
+        .chain(node.handlers.iter().map(|(_, body)| body))
+        .chain(node.generator.iter())
+        .map(|body| maximum(body))
+        .max()
+        .unwrap_or(0)
+}
+
 /// Reserve private local destinations in the emission plan; no source type is changed.
 pub fn prepare(plan: &Plan) -> Plan {
     let prepared = crate::execution_proof::prepared(plan);
     let mut plan = plan.clone();
     if prepared {
         for node in &mut plan.nodes {
-            let mut next = maximum(&node.start).max(maximum(&node.stop)).max(
-                node.handlers
-                    .iter()
-                    .map(|(_, body)| maximum(body))
-                    .max()
-                    .unwrap_or(0),
-            );
+            let mut next = node_maximum(node);
+            for body in node.generator.iter_mut() {
+                crate::native_owners::statements(body, &mut next);
+            }
             crate::native_owners::statements(&mut node.start, &mut next);
             crate::native_owners::statements(&mut node.stop, &mut next);
             for (_, body) in &mut node.handlers {
@@ -108,13 +129,10 @@ pub fn prepare(plan: &Plan) -> Plan {
     let mut plan = crate::any_prepared::prepare(&plan);
     for (node_id, node) in plan.nodes.iter_mut().enumerate() {
         let mut locals = std::collections::BTreeMap::new();
-        let mut next = maximum(&node.start).max(maximum(&node.stop)).max(
-            node.handlers
-                .iter()
-                .map(|(_, body)| maximum(body))
-                .max()
-                .unwrap_or(0),
-        );
+        let mut next = node_maximum(node);
+        for body in node.generator.iter_mut() {
+            scan(body, &mut locals, &mut next, prepared);
+        }
         scan(&mut node.start, &mut locals, &mut next, prepared);
         scan(&mut node.stop, &mut locals, &mut next, prepared);
         for (_, body) in &mut node.handlers {

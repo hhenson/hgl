@@ -25,3 +25,6 @@ Any comparison preparation visits nested operands and every lifecycle hook,
 including stop. Both private operands retain in written order through the existing
 readonly observation facade; a failed left operand skips the right. All six
 comparison operations retain their descriptor capabilities and failure behavior.
+Preparation includes generator bodies, with Any locals reserved by the existing
+snapshot-local pass. Direct boxed yield payloads are retained after the time
+operand; configuration projections preserve the replay proof and existing slots.

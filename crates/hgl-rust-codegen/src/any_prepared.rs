@@ -36,6 +36,12 @@ fn bindings(body: &mut [Statement]) {
         {
             v.snapshot = true;
         }
+        if let Statement::TimedYield(_, v) = s
+            && v.ty == Ty::Any
+            && crate::source_slots::projection(v, |_| String::new()).is_none()
+        {
+            v.snapshot = true;
+        }
     });
 }
 fn mark(value: &mut Value) -> bool {
@@ -95,18 +101,16 @@ pub fn prepare(plan: &Plan) -> Plan {
             }
             true
         };
-        hgl_semantics::ir_visit::statements_mut(&mut node.start, &mut prepare_payload);
-        hgl_semantics::ir_visit::statements_mut(&mut node.stop, &mut prepare_payload);
-        for (_, body) in &mut node.handlers {
+        for body in [&mut node.start, &mut node.stop]
+            .into_iter()
+            .chain(node.handlers.iter_mut().map(|(_, body)| body))
+            .chain(node.generator.iter_mut())
+        {
             hgl_semantics::ir_visit::statements_mut(body, &mut prepare_payload);
+            bindings(body);
         }
         node.globals = globals;
         node.global_state |= !node.globals.is_empty();
-        bindings(&mut node.start);
-        bindings(&mut node.stop);
-        for (_, body) in &mut node.handlers {
-            bindings(body);
-        }
         hgl_semantics::ir_visit::hooks_mut(node, &mut |v| mark(v));
     }
     plan

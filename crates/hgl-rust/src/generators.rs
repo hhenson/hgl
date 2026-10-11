@@ -18,7 +18,7 @@ enum Block {
 pub struct Generator {
     entry: usize,
     blocks: Vec<Block>,
-    locals: BTreeMap<usize, Ty>,
+    locals: BTreeMap<usize, (Ty, bool)>,
 }
 impl Generator {
     /// Lower a checked generator body; ordinary helper bodies stay lexical.
@@ -46,7 +46,7 @@ impl Generator {
         let block = match statement {
             Statement::Exit => return 0,
             Statement::Let(id, value) | Statement::Var(id, value) => {
-                self.locals.insert(*id, value.ty.clone());
+                self.locals.insert(*id, (value.ty.clone(), value.snapshot));
                 Block::Bind(*id, hoist::value(value), next)
             }
             Statement::Call(value) => Block::Execute(Statement::Call(hoist::value(value)), next),
@@ -77,39 +77,30 @@ impl Generator {
         self.block(block)
     }
     fn has_slots(&self) -> bool {
-        self.blocks.iter().any(|block| {
-            if let Block::Yield(_, value, _) = block {
-                crate::source_slots::projection(value, |_| String::new()).is_some()
-            } else {
-                false
-            }
-        })
+        self.blocks.iter().any(|block| matches!(block, Block::Yield(_, value, _)
+            if value.snapshot || crate::source_slots::projection(value, |_| String::new()).is_some()))
     }
     /// Emit concrete fields for the resume position, pending scalar and locals.
     pub fn fields(&self, result: &Ty) -> String {
         let mut code = vec![format!(
             "generator_pc: usize,\ngenerator_previous: Option<hgl_types::EngineTime>,\ngenerator_pending: Option<{}>,\n",
-            owned_type(
-                &result
-                    .clone()
-                    .delta()
-                    .unwrap_or_else(|_| unreachable!("checked generator result"))
-            )
+            owned_type(&payload_type(result))
         )];
         if self.has_slots() {
-            let payload = result
-                .clone()
-                .delta()
-                .unwrap_or_else(|_| unreachable!("checked generator result"));
+            let payload = payload_type(result);
             code.push(format!(
-                "generator_pending_slot: Option<hgl_store::ValueSlot<{}>>,\n",
+                "generator_pending_slot: Option<(hgl_store::ValueSlot<{}>, bool)>,\n",
                 global_type(&payload)
             ));
         }
-        for (id, ty) in &self.locals {
+        for (id, (ty, snapshot)) in &self.locals {
             code.push(format!(
                 "generator_local{id}: Option<{}>,\n",
-                owned_type(ty)
+                if *snapshot {
+                    format!("(hgl_store::ValueSlot<{}>,bool)", global_type(ty))
+                } else {
+                    owned_type(ty)
+                }
             ));
         }
         code.concat()
@@ -153,25 +144,16 @@ impl Generator {
         let publication = if matches!(result, Ty::Rolling(..)) {
             crate::windows::apply(result, "self._output", "publication")
         } else {
-            crate::deltas::publish(
-                &result
-                    .clone()
-                    .delta()
-                    .unwrap_or_else(|_| unreachable!("checked generator result")),
-                "publication",
-            )
+            crate::deltas::publish(&payload_type(result), "publication")
         };
         let mut code = vec![format!(
             "if let Some(publication) = self.generator_pending.take() {{ {publication} }}\n",
         )];
         if self.has_slots() {
-            let payload = result
-                .clone()
-                .delta()
-                .unwrap_or_else(|_| unreachable!("checked generator result"));
+            let payload = payload_type(result);
             code.push(format!(
-                "if let Some(publication)=self.generator_pending_slot.take() {{ {} }}\n",
-                slot_publication(&payload, "publication", result)
+                "if let Some((publication,global))=self.generator_pending_slot.take() {{ {} }}\n",
+                slot_publication(&payload, "publication", result, "global")
             ));
         }
         code.push("loop { match self.generator_pc {\n".into());
@@ -189,6 +171,10 @@ impl Generator {
                 code.push(self.clear_locals());
                 code.push("self.generator_pc = 0; return Ok(());\n".into());
             }
+            Block::Bind(id, value, next) if value.snapshot && matches!(value.ty,Ty::Any|Ty::Native(_)) => code.push(format!(
+                "{}self.generator_local{id}=Some(local{id});self.generator_pc={next};",
+                crate::any_prepared::local(plan,*id,value,|v|condition_code(plan,v))
+            )),
             Block::Bind(id, value, next) => code.push(format!(
                 "let value = {}; self.generator_local{id} = Some(value); self.generator_pc = {next};\n",
                 condition_code(plan, value)
@@ -215,7 +201,15 @@ fn timed_yield(plan: &Plan, time: &Value, payload: &Value, next: usize, result: 
         "time"
     };
     let projection = if crate::finite_domains::prepared(plan) {
-        crate::source_slots::projection(payload, |value| condition_code(plan, value))
+        if payload.snapshot {
+            Some((
+                crate::snapshot_slots::projection(payload, |v| condition_code(plan, v)),
+                true,
+            ))
+        } else {
+            crate::source_slots::projection(payload, |value| condition_code(plan, value))
+                .map(|slot| (slot, false))
+        }
     } else {
         None
     };
@@ -231,10 +225,10 @@ fn timed_yield(plan: &Plan, time: &Value, payload: &Value, next: usize, result: 
                 "generator_pending",
             )
         },
-        |slot| {
+        |(slot, global)| {
             (
-                slot,
-                slot_publication(&payload.ty, "payload", result),
+                format!("({slot},{global})"),
+                slot_publication(&payload.ty, "payload.0", result, "payload.1"),
                 "generator_pending_slot",
             )
         },
@@ -245,7 +239,24 @@ fn timed_yield(plan: &Plan, time: &Value, payload: &Value, next: usize, result: 
         value
     )
 }
-fn slot_publication(ty: &Ty, slot: &str, result: &Ty) -> String {
+fn slot_publication(ty: &Ty, slot: &str, result: &Ty, global: &str) -> String {
+    if matches!(ty, Ty::Any | Ty::Native(_)) {
+        let marker = global_type(ty);
+        let (owned, configured) = if matches!(result, Ty::Rolling(..)) {
+            (
+                format!("_ctx.prepared().rolling_from(None,{slot},self._output)?;"),
+                crate::windows::from(result, "self._output", "&self.configuration_columns", slot),
+            )
+        } else {
+            (
+                format!("_ctx.prepared().atomic_from_global::<{marker}>({slot},self._output)?;"),
+                format!(
+                    "_ctx.prepared().atomic_from::<{marker}>(&self.configuration_columns,{slot},self._output)?;"
+                ),
+            )
+        };
+        return format!("if {global} {{{owned}}} else {{{configured}}}");
+    }
     if matches!(result, Ty::Rolling(..)) {
         return crate::windows::from(result, "self._output", "&self.configuration_columns", slot);
     }
@@ -273,4 +284,11 @@ fn slot_publication(ty: &Ty, slot: &str, result: &Ty) -> String {
             "_ctx.prepared().scalar::<{marker}>(self._output.id(),self._output.generation(),self.configuration_columns.scalar::<{marker}>(({slot}).fields()))?;"
         )
     }
+}
+
+fn payload_type(result: &Ty) -> Ty {
+    result
+        .clone()
+        .delta()
+        .unwrap_or_else(|_| unreachable!("checked generator result"))
 }

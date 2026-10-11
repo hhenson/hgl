@@ -1,0 +1,91 @@
+module hgraph.std part any_generator_bindings
+fn generator_consume(tick:i64) {when {}}
+fn boxed_generator()->any {
+    let original=any(1)
+    var current=any(2)
+    yield 0us:original
+    yield 2us:current
+    current=any(3)
+    yield 1us:current
+    yield 1us:original
+}
+fn drive_boxed_generator(tick:i64)->any {generator_consume(tick)
+boxed_generator()}
+test finite_generator_box_bindings_are_prepared {
+    assert eval(drive_boxed_generator,[1,1,1,1,1,1]) == [any(1),_,any(2),any(3),any(1),_]
+}
+
+fn inline_boxed_generator()->any {
+    yield 0us:any(1)
+    yield 2us:any("later")
+}
+fn drive_inline_boxed_generator(tick:i64)->any {generator_consume(tick)
+inline_boxed_generator()}
+test inline_generator_boxes_are_prepared {
+    assert eval(drive_inline_boxed_generator,[1,1,1,1]) == [any(1),_,any("later"),_]
+}
+
+native const fn generator_begin(value:i64) throws
+native const fn generator_begin(value:i64) throws {}
+native const fn generator_mark(value:i64)->i64 throws
+native const fn generator_mark(value:i64)->i64 throws {}
+native const fn generator_time(value:i64)->duration throws
+native const fn generator_time(value:i64)->duration throws {}
+native const fn generator_finish(value:i64) throws
+native const fn generator_finish(value:i64) throws {}
+fn generator_watch(tick:i64,const expected:i64) {
+    start { generator_begin(0) }
+    stop { generator_finish(expected) }
+    when {}
+}
+struct GeneratorPair { first:i64
+second:i64 }
+fn ordered_boxed_generator()->any {
+    let initial=any(GeneratorPair(second:generator_mark(2),first:generator_mark(1)))
+    var current=any(generator_mark(3))
+    yield generator_time(4):initial
+    current=any(generator_mark(5))
+    yield generator_time(6):current
+}
+fn drive_ordered_generator(tick:i64)->any {generator_watch(tick,213456)
+ordered_boxed_generator()}
+test generator_operands_run_once_and_resume_in_order {
+    assert eval(drive_ordered_generator,[1,1,1,1]) == [_,any(GeneratorPair(first:1,second:2)),any(5),_]
+}
+fn failing_boxed_generator()->any {
+    var current=any(generator_mark(1))
+    current=any(generator_mark(2))
+    yield generator_time(-3):any(generator_mark(4))
+    current=any(generator_mark(5))
+    yield 1us:current
+}
+fn drive_failing_generator(tick:i64)->any {generator_watch(tick,1234)
+failing_boxed_generator()}
+test generator_failure_keeps_prior_effects_and_stops_later_ones {
+    assert raises("yield.negative_duration") {eval(drive_failing_generator,[1,1])}
+}
+
+fn compared_boxed_generator()->any {
+    var current=any(1)
+    if current==any(1) {yield 0us:current}
+    current=any("changed")
+    if current!=any(1) {yield 2us:current}
+}
+fn drive_compared_generator(tick:i64)->any {generator_consume(tick)
+compared_boxed_generator()}
+test generator_box_replacement_changes_contained_type {
+    assert eval(drive_compared_generator,[1,1,1,1]) == [any(1),_,any("changed"),_]
+}
+
+native const fn generator_reject_time(value:i64)->duration throws
+native const fn generator_reject_time(value:i64)->duration throws {}
+fn time_failure_generator()->any {
+    let first=any(generator_mark(1))
+    yield generator_reject_time(7):any(generator_mark(8))
+    yield 1us:first
+}
+fn drive_time_failure_generator(tick:i64)->any {generator_watch(tick,17)
+time_failure_generator()}
+test generator_time_operand_failure_precedes_payload {
+    assert raises("yield.negative_duration") {eval(drive_time_failure_generator,[1,1])}
+}
