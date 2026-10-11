@@ -1,6 +1,6 @@
 //! Pure lexical classification for checking-time ordinary evaluation.
 use crate::ir::{Kind, Statement, Value};
-use hgl_source::Ty;
+use hgl_value_model::Ty;
 use std::collections::BTreeSet;
 
 /// Whether a complete expression can execute without external values or effects.

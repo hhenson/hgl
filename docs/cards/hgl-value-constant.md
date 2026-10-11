@@ -1,9 +1,9 @@
 # Card: hgl-value-constant
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `value_constant` module of `hgl-semantics` (`crates/hgl-semantics/src/value_constant.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes `hgl-eval::value_constant`, re-exported by `hgl-semantics::value_constant`. It uses checked IR and ordinary type metadata; source size is informational.
 
 Pure classification of checked ordinary expressions eligible for constant
-checking. Uses hgl-rust-ir; initial budget 100 source lines. Public
+checking and immutable recipe retention. Public
 `context_free(&Value) -> bool` recognizes evaluator-supported closed expressions
 and lexical ValueCall argument/local scopes. It rejects external locals,
 contextual recipes, prepared configuration, native/capability/global/endpoint
