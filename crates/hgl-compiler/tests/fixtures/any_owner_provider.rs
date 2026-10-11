@@ -23,4 +23,20 @@ mod native {
         STARTED.store(0, Ordering::SeqCst);
         Ok(())
     }
+
+static STAGE_TRACE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+pub fn stage_mark_i64(value:i64)->hgl_types::NodeResult<i64> {
+    use std::sync::atomic::Ordering;
+    STAGE_TRACE.fetch_update(Ordering::SeqCst,Ordering::SeqCst,|old|Some(old*10+value as usize)).unwrap();
+    Ok(value)
+}
+pub fn stage_fail_i64(value:i64)->hgl_types::NodeResult<i64> {
+    stage_mark_i64(value)?;
+    Err(hgl_types::NodeError::coded("deliberate operand failure","yield.negative_duration"))
+}
+pub fn stage_finish_i64(expected:i64)->hgl_types::NodeResult {
+    assert_eq!(STAGE_TRACE.swap(0,std::sync::atomic::Ordering::SeqCst),expected as usize,"operand order/once/failure barrier");
+    Ok(())
+}
+
 }
