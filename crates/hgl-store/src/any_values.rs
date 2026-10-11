@@ -8,14 +8,14 @@ pub struct Any;
 impl ValueColumns {
     /// Observe the complete held box through a typed ordinary slot.
     pub fn any(&self, slot: usize) -> &AnyValue {
-        self.anys.get(slot)
+        &self.anys.get(slot).0
     }
     /// Mutate only an authorized owning destination.
     pub fn any_mut(&mut self, slot: usize) -> &mut AnyValue {
-        self.anys.get_mut(slot)
+        &mut self.anys.get_mut(slot).0
     }
     pub(crate) fn insert_any(&mut self, value: AnyValue) -> usize {
-        self.anys.insert(value)
+        self.anys.insert((value, AnyValue::default()))
     }
 }
 impl GlobalValue for Any {
@@ -65,7 +65,9 @@ impl PreparedValue for Any {
         let mut capacity = Capacity::default();
         capacity.any();
         columns.reserve(&capacity)?;
-        Ok(ValueSlot::from_fields(columns.insert_any(value)))
+        let slot = columns.insert_any(value);
+        columns.anys.get_mut(slot).1.reserve(*bounds)?;
+        Ok(ValueSlot::from_fields(slot))
     }
     fn check_native(columns: &ValueColumns, to: ValueSlot<Self>, value: &AnyValue) -> NodeResult {
         columns
@@ -95,7 +97,7 @@ impl PreparedValue for Any {
     fn copy_within(columns: &mut ValueColumns, from: ValueSlot<Self>, to: ValueSlot<Self>) {
         let (from, to) = (from.fields(), to.fields());
         columns.anys.copy(from, to, |source, destination| {
-            destination.copy_prepared(source);
+            destination.0.copy_prepared(&source.0);
         });
     }
 }
@@ -114,14 +116,9 @@ impl<W: crate::Wake> crate::PreparedTick<'_, W> {
         let storage = &mut self.storage;
         let (plan, width) = measure(storage.observations().0)?;
         let destination = storage.atomic.destination(storage.bindings, output)?;
-        storage
-            .atomic
-            .values()
-            .any(destination.fields())
-            .check_capacity(width)?;
-        let mut value = std::mem::take(storage.atomic.values_mut().any_mut(destination.fields()));
+        let mut value = storage.atomic.values_mut().begin_any(destination, width)?;
         value.encode_prepared(plan, |data| compose(data, storage.observations().0));
-        *storage.atomic.values_mut().any_mut(destination.fields()) = value;
+        storage.atomic.values_mut().finish_any(destination, value);
         storage.bindings.publish(output.id(), self.now, self.wake);
         Ok(())
     }
@@ -131,6 +128,16 @@ mod keys;
 pub(crate) use keys::AnyKeys;
 
 impl ValueColumns {
+    fn begin_any(&mut self, destination: ValueSlot<Any>, width: usize) -> NodeResult<AnyValue> {
+        let spare = &mut self.anys.get_mut(destination.fields()).1;
+        spare.check_capacity(width)?;
+        Ok(std::mem::take(spare))
+    }
+    fn finish_any(&mut self, destination: ValueSlot<Any>, mut value: AnyValue) {
+        let (current, spare) = self.anys.get_mut(destination.fields());
+        std::mem::swap(current, &mut value);
+        *spare = value;
+    }
     /// Encode an independent global owner after complete typed measurement succeeds.
     pub fn compose_any(
         &mut self,
@@ -139,10 +146,9 @@ impl ValueColumns {
         compose: impl FnOnce(&Self, &mut AnyValue),
     ) -> NodeResult {
         let (plan, width) = measure(self)?;
-        self.any(destination.fields()).check_capacity(width)?;
-        let mut value = std::mem::take(self.any_mut(destination.fields()));
+        let mut value = self.begin_any(destination, width)?;
         value.encode_prepared(plan, |data| compose(self, data));
-        *self.any_mut(destination.fields()) = value;
+        self.finish_any(destination, value);
         Ok(())
     }
 }

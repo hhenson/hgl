@@ -3,7 +3,7 @@ use crate::values::{atomic_place, borrowed_place};
 use hgl_semantics::ir::{Kind, Plan, Value};
 /// Select immutable typed ordinary storage without retaining an intermediate owner.
 pub(crate) fn source(plan: &Plan, value: &Value) -> Option<(&'static str, String)> {
-    if matches!(value.ty, hgl_source::Ty::Native(_))
+    if matches!(value.ty, hgl_source::Ty::Any | hgl_source::Ty::Native(_))
         && let Kind::GlobalGet(id) = value.kind
     {
         return Some((
