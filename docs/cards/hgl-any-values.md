@@ -14,3 +14,7 @@ Opaque contained native values use statically selected provider equality/hash/or
 callbacks. Checked capability masks are tested before those callbacks, so physical
 provider operations cannot widen HGL capabilities. Encoded native data is never
 compared by engine byte or address equality.
+
+Pure boxed-value execution and static metadata facade live in hgl-eval::any_values.
+Source `checked` boxing admission remains in hgl-semantics and reexports the lower
+operations. The lower layer cannot depend on the source parser or semantic checker.

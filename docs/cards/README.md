@@ -265,3 +265,4 @@ Additional ordinary value contracts: [Any semantics](hgl-any-values.md), [compil
 - [Node execution phases](hgl-execution-phase.md)
 
 - [Canonical ordinary value model](hgl-value-model.md)
+- [Checked ordinary execution](hgl-eval.md)

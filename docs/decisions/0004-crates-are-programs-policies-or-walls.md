@@ -82,3 +82,14 @@ materialization from reading parser syntax or discovering native implementation
 images. Public source paths remain facade reexports. The new model ceiling is
 1200, each moved module keeps its prior ceiling, and no existing crate ceiling
 is increased.
+
+## Enforced checked execution boundary
+
+hgl-eval owns checked IR and ordinary execution, with only hgl-value-model and
+hgl-types dependencies. Both this layer and remaining semantic admission exceed
+1000 lines. Source constructor/boxing/delta admission remains in semantics,
+which reexports the lower IR and operation paths for existing consumers. Thus an
+ordinary execution operation cannot consult source declarations or discovery as
+an implicit fallback. The new aggregate ceiling is 2000, moved module ceilings
+remain unchanged, and existing crate ceilings are not increased. This is the
+second reason-3 boundary; it adds no third-party dependency.

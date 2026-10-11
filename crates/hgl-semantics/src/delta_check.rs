@@ -265,25 +265,7 @@ pub fn values(
         })
         .collect()
 }
-/// Validate exact duplicate and overlap identities after cold materialization.
-pub fn materialized(parts: &[DeltaEntry]) -> Result<(), String> {
-    let mut added = BTreeSet::new();
-    let mut removed = BTreeSet::new();
-    for part in parts {
-        let (value, keys) = match part {
-            DeltaEntry::Add(value) | DeltaEntry::Keyed(value, _) => (value, &mut added),
-            DeltaEntry::Remove(value) => (value, &mut removed),
-            DeltaEntry::Child(..) => continue,
-        };
-        if !keys.insert(key(value)?) {
-            return Err("duplicate delta key/member".into());
-        }
-    }
-    if added.intersection(&removed).next().is_some() {
-        return Err("delta additions/upserts overlap removals".into());
-    }
-    Ok(())
-}
+pub use hgl_eval::publication_trace::materialized;
 /// Check publication access after phase and argument evaluation.
 pub fn delta_value(value: Value, facts: &BTreeSet<(String, usize)>) -> Result<Value, String> {
     let Kind::Input(id, false) = value.kind else {

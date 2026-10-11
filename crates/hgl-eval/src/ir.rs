@@ -1,5 +1,5 @@
 //! Checked compiler/backend data boundary; source validation belongs to the frontend.
-use hgl_source::{Literal, Ty};
+use hgl_value_model::{Literal, Ty};
 
 /// A typed expression after frontend resolution.
 #[derive(Debug, Clone)]
@@ -66,7 +66,7 @@ pub enum Kind {
     /// A compile-time scalar literal.
     Literal(Literal),
     /// A provider-dependent recipe executed during ordered preparation.
-    TemporalLiteral(hgl_source::TemporalLiteral),
+    TemporalLiteral(hgl_value_model::TemporalLiteral),
     /// Cold prepared configuration binding; never a node-hook expression.
     Prepared(usize),
     /// Graph wiring marker containing the producing node index.

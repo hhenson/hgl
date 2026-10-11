@@ -1,6 +1,6 @@
 use crate::ir::{Kind, Value};
 use crate::value_operations::{EvalError, unsupported};
-use hgl_source::Literal;
+use hgl_value_model::Literal;
 use std::cmp::Ordering;
 
 fn scalar(value: &Value) -> Result<&Literal, EvalError> {
@@ -65,15 +65,15 @@ fn as_float(value: i64) -> f64 {
 }
 /// Evaluate a checked ordinary scalar or family equality operation.
 pub fn binary(op: &str, a: &Value, b: &Value) -> Result<Value, EvalError> {
-    if a.ty == hgl_source::Ty::Any {
+    if a.ty == hgl_value_model::Ty::Any {
         return crate::any_values::binary(op, a, b);
     }
     if matches!(
         a.ty,
-        hgl_source::Ty::Set(_)
-            | hgl_source::Ty::Map(..)
-            | hgl_source::Ty::Family(_)
-            | hgl_source::Ty::Tuple(_)
+        hgl_value_model::Ty::Set(_)
+            | hgl_value_model::Ty::Map(..)
+            | hgl_value_model::Ty::Family(_)
+            | hgl_value_model::Ty::Tuple(_)
     ) && matches!(op, "==" | "!=")
     {
         return Ok(value(Literal::Bool(

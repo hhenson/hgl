@@ -1,6 +1,6 @@
 //! Ordered checked test setup and independently owned graph inputs.
 use crate::ir::{Statement, Value};
-use hgl_source::Ty;
+use hgl_value_model::Ty;
 
 /// One lexical test scope, independent of fresh graph lifetimes.
 #[derive(Debug)]

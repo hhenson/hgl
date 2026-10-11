@@ -74,6 +74,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "hgl-eval"
+version = "0.0.0"
+dependencies = [
+ "hgl-types",
+ "hgl-value-model",
+]
+
+[[package]]
 name = "hgl-kernel"
 version = "0.0.0"
 dependencies = [
@@ -104,6 +112,7 @@ dependencies = [
 name = "hgl-semantics"
 version = "0.0.0"
 dependencies = [
+ "hgl-eval",
  "hgl-source",
  "hgl-types",
 ]
