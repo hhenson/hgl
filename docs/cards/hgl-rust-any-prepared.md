@@ -20,3 +20,8 @@ Ordinary family equality over prepared owners reserves two independent compariso
 
 This module now lives in hgl-rust-codegen below executable program assembly;
 its hgl-rust facade path and module ceiling remain unchanged.
+
+Any comparison preparation visits nested operands and every lifecycle hook,
+including stop. Both private operands retain in written order through the existing
+readonly observation facade; a failed left operand skips the right. All six
+comparison operations retain their descriptor capabilities and failure behavior.

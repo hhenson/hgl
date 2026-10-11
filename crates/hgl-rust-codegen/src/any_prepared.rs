@@ -72,7 +72,7 @@ pub fn prepare(plan: &Plan) -> Plan {
         let mut globals = std::mem::take(&mut node.globals);
         let mut prepare_payload = |v: &mut Value| {
             if crate::owner_comparisons::prepare(original, v, &mut globals, node_id) {
-                return false;
+                return true;
             }
             if let Kind::Unary(op, arg) = &mut v.kind
                 && op == "any"
@@ -96,6 +96,7 @@ pub fn prepare(plan: &Plan) -> Plan {
             true
         };
         hgl_semantics::ir_visit::statements_mut(&mut node.start, &mut prepare_payload);
+        hgl_semantics::ir_visit::statements_mut(&mut node.stop, &mut prepare_payload);
         for (_, body) in &mut node.handlers {
             hgl_semantics::ir_visit::statements_mut(body, &mut prepare_payload);
         }
