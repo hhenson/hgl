@@ -2,6 +2,8 @@
 use hgl_program::{compile_tests, emit_tests};
 #[path = "support/checked_batches.rs"]
 mod checked_batches;
+#[path = "support/generated_cache.rs"]
+mod generated_cache;
 
 // Two tests can start within the same clock tick, and on Windows a second test
 // in the same directory then fights the first for its executable.
@@ -285,7 +287,7 @@ fn actual_stdlib_and_harness_regressions_run_on_rust() -> Result<(), Box<dyn std
     ));
     fs::create_dir_all(dir.join("src"))?;
     manifest(&root, &dir)?;
-    standard_batches(&dir, &sources, &summary)?;
+    standard_batches(&root, &sources, &summary)?;
     module(
         &dir,
         "regression",
@@ -340,7 +342,7 @@ fn collection_payload_failure_precedes_membership_precondition()
     Ok(())
 }
 fn standard_batches(
-    dir: &Path,
+    root: &Path,
     sources: &[(String, String)],
     expected: &ExpectedSummary,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -352,7 +354,14 @@ fn standard_batches(
         .collect::<Vec<_>>();
     let mut observed = Vec::new();
     let mut evaluations = 0;
-    for batch in checked_batches::split(compile_tests(sources)?, 8) {
+    for (index, batch) in checked_batches::split(compile_tests(sources)?, 8)
+        .into_iter()
+        .enumerate()
+    {
+        let project = generated_cache::Project::open(root, index)?;
+        let dir = &project.path;
+        manifest(root, dir)?;
+        generated_cache::workspace_lock(root, dir)?;
         let selected = batch
             .tests
             .iter()
@@ -530,7 +539,7 @@ fn image_main<'a>(dir: &Path, names: impl Iterator<Item = &'a str>) -> std::io::
         writeln!(calls, "Some({name:?})=>{name}::main(),")
             .unwrap_or_else(|_| unreachable!("String formatting"));
     }
-    fs::write(
+    generated_cache::write(
         dir.join("src/main.rs"),
         format!(
             "struct Provider;\nmod native {{pub use hgl_stdlib::std_native::*;}}\n{modules}fn main() {{match std::env::args().nth(1).as_deref() {{{calls}_=>panic!(\"unknown test image\")}}}}"
@@ -844,7 +853,7 @@ test fresh_global_store {
 }
 
 fn module(dir: &Path, name: &str, code: &str) -> std::io::Result<()> {
-    fs::write(
+    generated_cache::write(
         dir.join(format!("src/{name}.rs")),
         code.replace("fn main() {", "pub fn main() {"),
     )
@@ -869,7 +878,7 @@ fn manifest(root: &Path, dir: &Path) -> std::io::Result<()> {
             .replace('"', "\\\"");
         lines.push(format!("{name}={{path=\"{path}\"}}"));
     }
-    fs::write(
+    generated_cache::write(
         dir.join("Cargo.toml"),
         unique_package(&lines.join("\n"), dir),
     )

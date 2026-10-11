@@ -54,6 +54,13 @@ can itself include compilation of generated HGL programs. Explicit `-p` or
 `--package` selections replace the default workspace selection; `--exclude`
 continues to apply to the workspace.
 
+The shared HGL corpus uses stable generated projects under
+`target/source-test-projects`. It is checked and emitted on every run; unchanged
+Rust files keep their timestamps, and Cargo validates each build before execution.
+Changed workspace lockfiles seed the generated lockfiles. CI retains these
+projects and their executables, while per-batch file locks prevent concurrent
+writers from changing a program between its build and execution.
+
 ### Building on the Linux validation host
 
 Performance figures only count from the owner's private Linux validation
