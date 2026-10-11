@@ -16,6 +16,7 @@ use std::env;
 use std::ffi::{OsStr, OsString};
 use std::path::Path;
 use std::process::{Command, ExitCode, Stdio};
+use std::time::Instant;
 
 /// One check: the cargo arguments that run it and the environment it needs.
 struct Gate {
@@ -57,7 +58,7 @@ const GATES: &[Gate] = &[
     },
     Gate {
         name: "test",
-        args: &["test", "--workspace", "--quiet"],
+        args: &["test", "--workspace"],
         env: &[],
         optional: false,
         capped: true,
@@ -67,7 +68,7 @@ const GATES: &[Gate] = &[
     // ci-release profile is release without its link-time optimisation.
     Gate {
         name: "test ci-release",
-        args: &["test", "--workspace", "--profile", "ci-release", "--quiet"],
+        args: &["test", "--workspace", "--profile", "ci-release"],
         env: &[],
         optional: false,
         capped: true,
@@ -155,11 +156,16 @@ fn ci(args: &[String]) -> ExitCode {
     let wanted = |name: &str| selected.is_empty() || selected.iter().any(|chosen| chosen == name);
     let cargo = env::var_os("CARGO").unwrap_or_else(|| OsString::from("cargo"));
     let gates: Vec<&Gate> = GATES.iter().filter(|gate| wanted(gate.name)).collect();
-    let outcomes: Vec<Outcome> = gates.iter().map(|gate| run(&cargo, gate, extra)).collect();
+    let outcomes: Vec<Outcome> = gates
+        .iter()
+        .map(|gate| timed(gate.name, || run(&cargo, gate, extra)))
+        .collect();
 
     let budget = wanted("budget").then(|| {
-        println!("== budget");
-        budgets()
+        timed("budget", || {
+            println!("== budget");
+            budgets()
+        })
     });
 
     println!();
@@ -212,13 +218,23 @@ fn report_size(name: &str, lines: usize, target: Option<usize>) {
     println!("{name:<24}{lines:>5} lines ({target})");
 }
 
+fn timed(name: &str, action: impl FnOnce() -> Outcome) -> Outcome {
+    let start = Instant::now();
+    let outcome = action();
+    println!(
+        "-- {name}: {} ({:.2}s)",
+        outcome.label(),
+        start.elapsed().as_secs_f64()
+    );
+    outcome
+}
+
 fn run(cargo: &OsStr, gate: &Gate, extra: &[String]) -> Outcome {
     if gate.optional && !installed(cargo, gate) {
         return Outcome::Skipped;
     }
     println!("== {}", gate.name);
-    let status = command(cargo, gate)
-        .args(extra)
+    let status = command(cargo, gate, extra)
         .envs(gate.env.iter().copied())
         .status();
     if status.is_ok_and(|status| status.success()) {
@@ -233,10 +249,20 @@ fn run(cargo: &OsStr, gate: &Gate, extra: &[String]) -> Outcome {
 /// instead of taking the machine down with it. Building and running the tests
 /// fits well inside the cap. macOS cannot set the limit, so there every gate
 /// runs uncapped.
-fn command(cargo: &OsStr, gate: &Gate) -> Command {
+fn command(cargo: &OsStr, gate: &Gate, extra: &[String]) -> Command {
+    let selected = extra
+        .iter()
+        .take_while(|arg| arg.as_str() != "--")
+        .any(|arg| arg == "--package" || arg.starts_with("--package=") || arg.starts_with("-p"));
+    let args = gate
+        .args
+        .iter()
+        .copied()
+        .filter(|arg| *arg != "--workspace" || !selected);
+
     if !gate.capped || !cfg!(target_os = "linux") {
         let mut direct = Command::new(cargo);
-        direct.args(gate.args);
+        direct.args(args).args(extra);
         return direct;
     }
     // `bash -c SCRIPT NAME ARGS...` leaves the arguments in `"$@"`.
@@ -246,7 +272,8 @@ fn command(cargo: &OsStr, gate: &Gate) -> Command {
         .arg(format!("ulimit -v {ADDRESS_SPACE_KB}; exec \"$@\""))
         .arg("xtask")
         .arg(cargo)
-        .args(gate.args);
+        .args(args)
+        .args(extra);
     shell
 }
 
@@ -261,4 +288,52 @@ fn installed(cargo: &OsStr, gate: &Gate) -> bool {
         .stderr(Stdio::null())
         .status()
         .is_ok_and(|status| status.success())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn arguments(extra: &[&str]) -> Vec<OsString> {
+        let gate = GATES.iter().find(|gate| gate.name == "test").unwrap();
+        let extra = extra
+            .iter()
+            .map(|arg| (*arg).to_owned())
+            .collect::<Vec<_>>();
+        command(OsStr::new("cargo"), gate, &extra)
+            .get_args()
+            .map(OsStr::to_owned)
+            .collect()
+    }
+
+    #[test]
+    fn package_shards_do_not_also_select_the_workspace() {
+        for selector in [
+            vec!["-p", "hgl-types"],
+            vec!["--package", "hgl-types"],
+            vec!["--package=hgl-types"],
+            vec!["-phgl-types"],
+        ] {
+            let args = arguments(&selector);
+            assert!(!args.iter().any(|arg| arg == "--workspace"), "{args:?}");
+            assert!(args.ends_with(&selector.iter().map(OsString::from).collect::<Vec<_>>()));
+        }
+    }
+
+    #[test]
+    fn default_and_explicit_workspace_selection_are_preserved() {
+        for extra in [
+            vec![],
+            vec!["--exclude", "hgl-program"],
+            vec!["-p", "hgl-types", "--workspace"],
+            vec!["--", "-p"],
+        ] {
+            let args = arguments(&extra);
+            assert_eq!(
+                args.iter().filter(|arg| *arg == "--workspace").count(),
+                1,
+                "{args:?}"
+            );
+        }
+    }
 }
