@@ -9,3 +9,9 @@ Private AnyKeys owns a cold compiled domain of exact boxes, actual fallible equa
 Acceptance: independent retained aggregate and boxed delta owners; measured allocation-free typed copy, comparison and key lookup; shared sparse, atomic, rolling and replay/record Any tests.
 
 operations::EXECUTION provides the descriptor's equality, partial ordering and hash callbacks. It executes existing recursive field, sequence, family and box layouts with capability and NaN checks. Nested boxes dispatch their independently retained descriptor references, without consulting a consumer module table.
+
+Each prepared Any position reserves a second independent encoding buffer under
+the same finite byte and descriptor bound. Measurement and composition read the
+installed owner until the replacement is complete; only then does a swap commit
+it. The old owner becomes the next spare, so repeated self-composition needs no
+hot allocation or payload copy. Atomic publication uses the same transaction.

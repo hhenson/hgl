@@ -1,0 +1,52 @@
+module hgraph.std part any_self_composition
+struct AliasField { box:any }
+struct AliasSnapshot { before:any
+ after:any }
+struct AliasOrder { left:i64
+ box:any
+ right:i64 }
+native const fn alias_mark(value:i64)->i64 throws
+native const fn alias_mark(value:i64)->i64 throws {}
+native const fn alias_fail(value:i64)->i64 throws
+native const fn alias_fail(value:i64)->i64 throws {}
+native const fn alias_finish(value:i64) throws
+native const fn alias_finish(value:i64) throws {}
+native const fn alias_verify(value:any) throws
+native const fn alias_verify(value:any) throws {}
+fn self_composed(value:i64)->any {
+ inject global_state
+ when {
+  set(global_state,"x",any(value))
+  set(global_state,"x",any(AliasField(box:get(global_state,key:"x"))))
+  return any(AliasSnapshot(before:any(value),after:get(global_state,key:"x")))
+ }
+}
+fn ordered_composition(value:i64)->any {
+ inject global_state
+ stop {alias_finish(2121)}
+ when {
+  set(global_state,"x",any(value))
+  set(global_state,"x",any(AliasOrder(right:alias_mark(2),box:get(global_state,key:"x"),left:alias_mark(1))))
+  return get(global_state,key:"x")
+ }
+}
+fn failed_composition(value:i64)->any {
+ inject global_state
+ stop {let current:any=get(global_state,key:"x")
+ alias_verify(any(current))
+ alias_finish(2)}
+ when {
+  set(global_state,"x",any(7))
+  set(global_state,"x",any(AliasOrder(right:alias_fail(2),box:get(global_state,key:"x"),left:alias_mark(1))))
+  return get(global_state,key:"x")
+ }
+}
+test same_entry_composition_retains_independent_snapshots {
+ assert eval(self_composed,[1,_,2])==[any(AliasSnapshot(before:any(1),after:any(AliasField(box:any(1))))),_,any(AliasSnapshot(before:any(2),after:any(AliasField(box:any(2)))))]
+}
+test same_entry_operands_execute_once_in_written_order {
+ assert eval(ordered_composition,[1,2])==[any(AliasOrder(left:1,box:any(1),right:2)),any(AliasOrder(left:1,box:any(2),right:2))]
+}
+test failed_same_entry_composition_stops_after_earlier_effects {
+ assert raises("yield.negative_duration") {eval(failed_composition,[1])}
+}

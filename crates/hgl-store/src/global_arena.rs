@@ -29,7 +29,7 @@ impl Capacity {
 /// Private payloads remain in type-specific columns; all handles are stable indices.
 #[derive(Debug, Default)]
 pub struct Columns {
-    pub(crate) anys: Vec<hgl_types::AnyValue>,
+    pub(crate) anys: Vec<(hgl_types::AnyValue, hgl_types::AnyValue)>,
     pub(crate) free_anys: Vec<usize>,
     values: crate::columns::Columns,
     free: [Vec<usize>; 13],
