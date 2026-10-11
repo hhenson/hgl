@@ -5,6 +5,28 @@ pub use crate::type_data::ty;
 use hgl_semantics::harness_ir::{Argument, Step, Test};
 use hgl_semantics::ir::{DeltaEntry, Kind, Statement, Value};
 use hgl_source::{Literal, TemporalLiteral};
+// Collection builders keep cold literal width out of a named test's debug frame.
+fn rows<T>(items: &[T], element: &str, emit: impl Fn(&T) -> String) -> String {
+    if items.len() <= 8 {
+        return list(items, emit);
+    }
+    let mut functions = String::new();
+    let mut calls = String::new();
+    for (i, item) in items.iter().enumerate() {
+        crate::append(
+            &mut functions,
+            format_args!(
+                "#[inline(never)] fn row{i}(rows:&mut Vec<{element}>) {{rows.push({});}}",
+                emit(item)
+            ),
+        );
+        crate::append(&mut calls, format_args!("row{i}(&mut rows);"));
+    }
+    format!(
+        "{{{functions}let mut rows=Vec::with_capacity({});{calls}rows}}",
+        items.len()
+    )
+}
 fn literal(l: &Literal) -> String {
     let inner = match l {
         Literal::Enum(e, number) => format!("Enum({}, {number})", enum_data(e)),
@@ -56,24 +78,34 @@ pub fn value(v: &Value) -> String {
         Kind::Native(binding, args) => format!(
             "Native(Box::new({}),{})",
             native(binding),
-            list(args, value)
+            rows(args, "hgl_semantics::ir::Value", value)
         ),
         Kind::Captured(n, vs) => format!(
             "Captured({n},{})",
-            list(vs, |(i, v)| format!("({i},{})", value(v)))
+            rows(vs, "(usize,hgl_semantics::ir::Value)", |(i, v)| format!(
+                "({i},{})",
+                value(v)
+            ))
         ),
         Kind::IsPresent(v) => format!("IsPresent(Box::new({}))", value(v)),
         Kind::Present(v) => format!("Present(Box::new({}))", value(v)),
         Kind::Literal(l) => format!("Literal({})", literal(l)),
         Kind::TemporalLiteral(r) => format!("TemporalLiteral({})", recipe(r)),
-        Kind::Delta(ps) => format!("Delta({})", list(ps, part)),
-        Kind::List(vs) => format!("List({})", list(vs, value)),
+        Kind::Delta(ps) => format!("Delta({})", rows(ps, "hgl_semantics::ir::DeltaEntry", part)),
+        Kind::List(vs) => format!("List({})", rows(vs, "hgl_semantics::ir::Value", value)),
         Kind::Construct(fs) => format!(
             "Construct({})",
-            list(fs, |(i, v)| format!("({i},{})", value(v)))
+            rows(fs, "(usize,hgl_semantics::ir::Value)", |(i, v)| format!(
+                "({i},{})",
+                value(v)
+            ))
         ),
         Kind::ValueCall(args, body) => {
-            format!("ValueCall({},{})", list(args, value), list(body, statement))
+            format!(
+                "ValueCall({},{})",
+                rows(args, "hgl_semantics::ir::Value", value),
+                rows(body, "hgl_semantics::ir::Statement", statement)
+            )
         }
         Kind::Field(v, i) => format!("Field(Box::new({}),{i})", value(v)),
         Kind::Index(a, b) => format!("Index(Box::new({}),Box::new({}))", value(a), value(b)),
@@ -133,8 +165,8 @@ fn statement(s: &Statement) -> String {
         Statement::If(v, a, b) => format!(
             "If({},{},{})",
             value(v),
-            list(a, statement),
-            list(b, statement)
+            rows(a, "hgl_semantics::ir::Statement", statement),
+            rows(b, "hgl_semantics::ir::Statement", statement)
         ),
         Statement::Borrow(..)
         | Statement::Return(_)
@@ -146,7 +178,7 @@ fn statement(s: &Statement) -> String {
     format!("hgl_semantics::ir::Statement::{s}")
 }
 fn slots(vs: &[Option<Value>]) -> String {
-    list(vs, |v| {
+    rows(vs, "Option<hgl_semantics::ir::Value>", |v| {
         v.as_ref()
             .map_or_else(|| "None".into(), |v| format!("Some({})", value(v)))
     })
@@ -180,7 +212,11 @@ fn evaluation(e: &hgl_semantics::harness_ir::Evaluation) -> String {
     format!(
         "hgl_semantics::harness_ir::Evaluation {{case:{},arguments:{},expected:{}}}",
         e.case,
-        list(&e.arguments, argument),
+        rows(
+            &e.arguments,
+            "hgl_semantics::harness_ir::Argument",
+            argument
+        ),
         e.expected
             .as_ref()
             .map_or_else(|| "None".into(), |vs| format!("Some({})", slots(vs)))
@@ -188,12 +224,20 @@ fn evaluation(e: &hgl_semantics::harness_ir::Evaluation) -> String {
 }
 fn step(s: &Step) -> String {
     let s = match s {
-        Step::Raises(code, body) => format!("Raises({code:?}.into(),{})", list(body, step)),
+        Step::Raises(code, body) => format!(
+            "Raises({code:?}.into(),{})",
+            rows(body, "hgl_semantics::harness_ir::Step", step)
+        ),
         Step::Ordinary(s) => format!("Ordinary({})", statement(s)),
         Step::Assert(v) => format!("Assert({})", value(v)),
         Step::Eval(e) => format!("Eval({})", evaluation(e)),
         Step::BindEval(id, t, e) => format!("BindEval({id},{},{})", ty(t), evaluation(e)),
-        Step::If(v, a, b) => format!("If({},{},{})", value(v), list(a, step), list(b, step)),
+        Step::If(v, a, b) => format!(
+            "If({},{},{})",
+            value(v),
+            rows(a, "hgl_semantics::harness_ir::Step", step),
+            rows(b, "hgl_semantics::harness_ir::Step", step)
+        ),
     };
     format!("hgl_semantics::harness_ir::Step::{s}")
 }
@@ -202,6 +246,6 @@ pub fn test(test: &Test) -> String {
     format!(
         "hgl_semantics::harness_ir::Test {{name:{:?}.into(),steps:{}}}",
         test.name,
-        list(&test.steps, step)
+        rows(&test.steps, "hgl_semantics::harness_ir::Step", step)
     )
 }

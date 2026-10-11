@@ -479,6 +479,36 @@ fn finite_owning_publications_use_prepared_storage() -> Result<(), Box<dyn std::
     )
 }
 #[test]
+fn wide_cold_data_preserves_one_lexical_test_scope() -> Result<(), Box<dyn std::error::Error>> {
+    let rows = (0..96).map(|i| i.to_string()).collect::<Vec<_>>().join(",");
+    let increments = "count+=1\n".repeat(12);
+    execute(
+        format!(
+            r#"module cold_data_scope
+fn echo(value:i64)->i64 {{when {{return value}}}}
+fn consume(value:i64) {{when {{}}}}
+fn rejected()->i64 {{yield -1us:1}}
+fn fail(value:i64)->i64 {{consume(value)
+rejected()}}
+test complete_scope {{
+var count=0
+{increments}
+if count==12 {{count+=1}}
+assert count==13
+let values:list<i64> = [{rows}]
+assert eval(echo,values)==[{rows}]
+assert raises("yield.negative_duration") {{eval(fail,[1])}}
+assert count==13
+assert values[95]==95
+assert eval(echo,values)==[{rows}]
+}}
+"#
+        ),
+        RUNTIME,
+        true,
+    )
+}
+#[test]
 fn unknown_finite_bounds_keep_existing_evaluation_semantics()
 -> Result<(), Box<dyn std::error::Error>> {
     execute(COMPATIBILITY.into(), COMPATIBILITY_RUNTIME, false)
