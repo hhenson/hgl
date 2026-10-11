@@ -1,6 +1,6 @@
 # Card: hgl-ordinary-shape
 
-The ordinary_shape module of hgl-value-model owns static ordinary shape metadata. It uses type_shape; initial budget 120 lines within the unchanged model crate cap.
+The ordinary_shape module of hgl-value-model owns static ordinary shape metadata. It uses type_shape; optional reporting target 120 lines.
 
 Public surface: capable, fields, contains_any and family_storage. Capability recursion follows declared child types even for empty values. fields preserves declaration order and optional positions; recursive and family definitions retain exact canonical identity. These helpers perform no evaluation, provider loading or runtime type lookup.
 

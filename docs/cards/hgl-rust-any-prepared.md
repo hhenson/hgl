@@ -1,6 +1,6 @@
 # Card: hgl-rust-any-prepared
 
-The any_prepared emitter reserves separate box destinations for finite prepared lexical owners. It may use execution_proof, source_slots, layouts, observed, any_values, any_expression, constructor_owners, owner_comparisons, prepared_hooks and values; initial budget 250 lines. Crate budget remains unchanged.
+The any_prepared emitter reserves separate box destinations for finite prepared lexical owners. It may use execution_proof, source_slots, layouts, observed, any_values, any_expression, constructor_owners, owner_comparisons, prepared_hooks and values; optional reporting target 250 lines.
 
 Public surface: prepare, write and local; private view borrows retained complete box data for compiled comparison. Preparation preserves lexical entry borrow authority and retains Any locals/returns independently. Helper formal-local scopes are distinct. Structural delta observation scratch uses a private typed destination and encodes the observation without applying it to an endpoint.
 

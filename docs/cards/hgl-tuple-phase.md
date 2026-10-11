@@ -1,8 +1,7 @@
 # Card: hgl-tuple-phase
 
 Check Tuple construction phase at constant source boundaries before runtime
-specialization. The tuple_phase module has an initial 100 source-line budget
-within the unchanged hgl-semantics limit; it uses Library, name_check visibility and struct_names.
+specialization. The tuple_phase module has an optional reporting target of 100 source lines; it uses Library, name_check visibility and struct_names.
 
 Public surface: `depends`, `constant`, `call`, `signature`.
 Known temporal parameters, their ordinary aliases and assignments, state/cache bindings, and injected clock/out/global_state payloads
