@@ -28,7 +28,7 @@ enums = { budget = 180, uses = ["prepared_values", "identifiers"] }
 execution_proof = { budget = 250, uses = ["scalars", "value_calls", "direct_deltas", "mutation_bounds"] }
 families = { budget = 200, uses = ["type_data", "any_values"] }
 finite_domains = { budget = 250, uses = ["execution_proof", "layouts", "mutation_bounds"] }
-generators = { budget = 500, uses = ["observed", "snapshot_slots", "any_prepared", "deltas", "finite_domains", "source_slots", "values", "windows"] }
+generators = { budget = 500, uses = ["observed", "constructor_owners", "snapshot_slots", "any_prepared", "deltas", "finite_domains", "source_slots", "values", "windows"] }
 key_origins = { budget = 180, uses = [] }
 keyed = { budget = 450, uses = ["checked_data", "key_origins", "layouts", "value_convert", "any_values"] }
 layouts = { budget = 400, uses = ["identifiers", "snapshots", "collections", "composite_keys", "enums", "families", "prepared_values", "scalars", "structs"] }

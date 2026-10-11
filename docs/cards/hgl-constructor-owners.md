@@ -21,3 +21,7 @@ position. Ordinary and recursive parent controls cover text and list descendants
 
 Closed subtree selection and retention delegate to value_constant; this module
 retains lexical owner identity, expression position and finite constructor origins.
+
+Local owner discovery includes generator bodies and their nested control flow.
+Generator locals use the same independent destinations and ordered initialization
+as hook locals; preparation never executes their operands or advances resumption.

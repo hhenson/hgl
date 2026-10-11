@@ -29,6 +29,7 @@ pub fn prepare(
         for body in std::iter::once(&mut node.start)
             .chain(std::iter::once(&mut node.stop))
             .chain(node.handlers.iter_mut().map(|(_, body)| body))
+            .chain(node.generator.iter_mut())
         {
             crate::ir_visit::nodes_mut(body, &mut |s| {
                 if let Statement::Let(id, value) = s

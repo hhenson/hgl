@@ -79,3 +79,9 @@ from configuration and keep their existing finite replay proof.
 Configuration-backed Any publications use observed::apply, the same typed
 Any/rolling transport as other prepared publications. Global pending owners
 retain their explicit arena tag and use the global publication path.
+
+Canonical constructor locals retain their existing private prepared owners across
+suspension. The resume machine binds static typed destination handles, using
+constructor_owners, rather than native aggregate fields. Only reaching the original
+bind block initializes an owner; ordinary projections and boxing read the same
+retained value without repeating operands or reconstructing an owning aggregate.

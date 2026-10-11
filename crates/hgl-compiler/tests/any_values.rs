@@ -25,6 +25,19 @@ fn generated_any_evaluation_uses_reserved_owning_buffers() -> Result<(), Box<dyn
 }
 
 #[test]
+fn generator_constructor_locals_use_reserved_owners() -> Result<(), Box<dyn std::error::Error>> {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()?;
+    run(
+        &root,
+        &[root.join("crates/hgl-compiler/tests/fixtures/any_generator_constructor_owners.hgl")],
+        None,
+        |source| source,
+    )
+}
+
+#[test]
 fn constructor_retention_failure_precedes_later_effects() -> Result<(), Box<dyn std::error::Error>>
 {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))

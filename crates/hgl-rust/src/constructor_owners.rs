@@ -34,14 +34,19 @@ pub(crate) fn family(value: &Value) -> Option<Value> {
 pub(crate) fn local(plan: &Plan, id: usize, value: &Value, key: &str) -> String {
     format!("let local{id}={};", retained(plan, value, key))
 }
-fn retained(plan: &Plan, value: &Value, key: &str) -> String {
+/// Recover the statically selected private destination without running its initializer.
+pub(crate) fn destination(plan: &Plan, key: &str) -> String {
     let entry = plan
         .nodes
         .iter()
         .find_map(|node| node.globals.iter().position(|(k, _)| k == key))
         .unwrap_or_else(|| unreachable!("compiled constructor owner"));
+    format!("_ctx.global_state().destination(self.global{entry})")
+}
+fn retained(plan: &Plan, value: &Value, key: &str) -> String {
     format!(
-        "{{let destination=_ctx.global_state().destination(self.global{entry});{}destination}}",
+        "{{let destination={};{}destination}}",
+        destination(plan, key),
         stage(plan, value, "destination")
     )
 }
