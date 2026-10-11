@@ -7,6 +7,18 @@ local construction, field access, transparent unary wrappers and assignment to
 bound concatenation byte width relative to retained source widths across start,
 stop, handlers and generator bodies. It invokes no hooks, ordinary helpers,
 native providers or constructors; its result is a storage bound, never a value.
+Checked ordinary call bodies use a fresh parameter-bound environment derived
+from their arguments. Nested expressions, guards and internal helper locals
+contribute their maximum storage width even when the call returns a non-owning
+scalar. Parameter bounds retain constructed field shapes. Call analysis does not
+change the separate finite-execution proof or admit recurrent owning growth.
+
+The fixed native formatter envelope is multiplied by checked concatenation
+widths before reserving boxes. Formatting still uses the existing native String
+path: this capacity guarantee does not claim allocation-free native formatters.
+Authored single-input long-value regressions avoid unrelated list frame widths
+masking a missing bound, and preserve the separate computed-input text
+zero-allocation controls.
 
 Multipliers compose along actual node dependencies; independent branches combine
 by maximum. The whole-adapter proof excludes unknown owning growth before these

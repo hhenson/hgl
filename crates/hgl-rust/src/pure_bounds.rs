@@ -38,6 +38,16 @@ fn text(value: &Value, locals: &BTreeMap<usize, Text>) -> Text {
     if let Some(origin) = crate::constructor_owners::origin(value) {
         return text(origin, locals);
     }
+    if let Kind::ValueCall(args, body) = &value.kind {
+        let mut parameters: BTreeMap<_, _> = args
+            .iter()
+            .enumerate()
+            .map(|(id, arg)| (id, text(arg, locals)))
+            .collect();
+        let mut maximum = parameters.values().map(Text::width).max().unwrap_or(1);
+        text_statements(body, &mut parameters, &mut maximum);
+        return Text::Width(maximum);
+    }
     if let Kind::Local(id) | Kind::MutableLocal(id) | Kind::GeneratorLocal(id) = &value.kind {
         return locals.get(id).cloned().unwrap_or(Text::Width(1));
     }
@@ -68,7 +78,16 @@ fn text(value: &Value, locals: &BTreeMap<usize, Text>) -> Text {
     if let Kind::Unary(_, child) = &value.kind {
         return text(child, locals);
     }
-    Text::Width(1)
+    let mut bound = Text::Width(1);
+    let mut root = true;
+    hgl_semantics::ir_visit::value(value, &mut |child| {
+        if std::mem::take(&mut root) {
+            return true;
+        }
+        bound.merge(text(child, locals));
+        false
+    });
+    bound
 }
 fn assign(target: &Value, value: Text, locals: &mut BTreeMap<usize, Text>) {
     if let Kind::MutableLocal(id) | Kind::GeneratorLocal(id) = target.kind {
@@ -85,7 +104,9 @@ fn assign(target: &Value, value: Text, locals: &mut BTreeMap<usize, Text>) {
 fn text_statements(body: &[Statement], locals: &mut BTreeMap<usize, Text>, maximum: &mut usize) {
     for statement in body {
         match statement {
-            Statement::Let(id, value) | Statement::Var(id, value) => {
+            Statement::Let(id, value)
+            | Statement::Var(id, value)
+            | Statement::Borrow(id, value, _) => {
                 let bound = text(value, locals);
                 *maximum = (*maximum).max(bound.width());
                 locals.insert(*id, bound);
@@ -95,13 +116,16 @@ fn text_statements(body: &[Statement], locals: &mut BTreeMap<usize, Text>, maxim
                 *maximum = (*maximum).max(bound.width());
                 assign(target, bound, locals);
             }
-            Statement::Return(value)
-            | Statement::Yield(value)
-            | Statement::Call(value)
-            | Statement::TimedYield(_, value) => {
+            Statement::Return(value) | Statement::Yield(value) | Statement::Call(value) => {
                 *maximum = (*maximum).max(text(value, locals).width());
             }
-            Statement::If(_, yes, no) => {
+            Statement::TimedYield(time, value) => {
+                *maximum = (*maximum)
+                    .max(text(time, locals).width())
+                    .max(text(value, locals).width());
+            }
+            Statement::If(condition, yes, no) => {
+                *maximum = (*maximum).max(text(condition, locals).width());
                 let mut left = locals.clone();
                 let mut right = locals.clone();
                 text_statements(yes, &mut left, maximum);
@@ -110,12 +134,13 @@ fn text_statements(body: &[Statement], locals: &mut BTreeMap<usize, Text>, maxim
                     locals.entry(id).or_insert(Text::Width(1)).merge(bound);
                 }
             }
-            Statement::ForItems(_, _, _, _, body)
-            | Statement::For(_, _, body)
-            | Statement::While(_, body) => {
+            Statement::ForItems(_, _, _, condition, body)
+            | Statement::For(_, condition, body)
+            | Statement::While(condition, body) => {
+                *maximum = (*maximum).max(text(condition, locals).width());
                 text_statements(body, &mut locals.clone(), maximum);
             }
-            Statement::Borrow(..) | Statement::Exit => {}
+            Statement::Exit => {}
         }
     }
 }
