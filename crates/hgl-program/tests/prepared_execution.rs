@@ -548,7 +548,7 @@ fn execute_suite(
             .replace("hgl_kernel::run_simulation(", "crate::measured_simulation(")
             .replace(
                 "store.prepare_collection_inputs();",
-                "crate::verify_pool(&mut store,&built,&graph);store.prepare_collection_inputs();",
+                "crate::verify_pool(&mut store,&built,&graph,&registry);store.prepare_collection_inputs();",
             );
     } else {
         assert!(
@@ -659,7 +659,7 @@ static KEY_CALLS:std::sync::atomic::AtomicUsize=std::sync::atomic::AtomicUsize::
 static KEY_STARTS:std::sync::atomic::AtomicUsize=std::sync::atomic::AtomicUsize::new(0);
 static CONFIGURATION_CALLS:std::sync::atomic::AtomicUsize=std::sync::atomic::AtomicUsize::new(0);
 #[global_allocator] static ALLOCATOR:hgl_alloc_count::CountingAllocator=hgl_alloc_count::CountingAllocator;
-fn verify_pool(store:&mut hgl_store::Store,built:&hgl_describe::BuiltGraph,graph:&hgl_describe::GraphDescription) {
+fn verify_pool(store:&mut hgl_store::Store,built:&hgl_describe::BuiltGraph,graph:&hgl_describe::GraphDescription,registry:&hgl_describe::Registry) {
  for (name,expected) in [("::bounded_members#",15),("::nested_bounded_members#",18)] {
  if let Some(index)=graph.nodes.iter().position(|node|node.implementation.contains(name)) {let output=built.outputs[index].expect("bounded mutation output");assert_eq!(store.bindings().output(output).members.prepared.len(),expected,"constant induction bound");}
  }
@@ -677,16 +677,27 @@ fn verify_pool(store:&mut hgl_store::Store,built:&hgl_describe::BuiltGraph,graph
  while let Some((_,child))=store.bindings().output(node).members.prepared.first() {depth+=1;node=*child;}
  let descendants=built.outputs.iter().flatten().map(|id|count(store,*id)).sum::<usize>();
  assert_eq!(descendants,2*(1+n*depth),"finite topology must preserve per-parent reachability");
- let (scalars,lists)=store.global_state().values().slot_counts();let rows=6*n+1;
+ let entries=graph.nodes.iter().flat_map(|node|&registry.node_type(&node.implementation).expect("registered node").global_entries).collect::<Vec<_>>();
+ let recordings=entries.iter().filter(|(key,_)|key.starts_with("eval.recording.")).collect::<Vec<_>>();
+ let owners=entries.iter().filter(|(key,_)|key.starts_with("\0constructor:")).collect::<Vec<_>>();
+ assert_eq!(recordings.len(),1);assert_eq!(owners.len(),1,"one independent recorder append staging owner");
+ let hgl_types::OrdinaryType::List(row,_) = &recordings[0].1 else {panic!("recording list");};
+ assert_eq!(&owners[0].1,row.as_ref(),"staging must retain exactly one complete recording row");
+ fn empty_lists(ty:&hgl_types::OrdinaryType)->usize {match ty {hgl_types::OrdinaryType::Scalar(_)=>0,hgl_types::OrdinaryType::List(..)=>1,hgl_types::OrdinaryType::Struct(_,fields)=>fields.iter().map(|(_,ty)|empty_lists(ty)).sum(),_=>panic!("scaling row schema")}}
+ let staging_roots=empty_lists(row);assert_eq!(staging_roots,3,"upsert keys, upsert values and removed keys");
+ // Replay and input horizons reserve 6*N+1 recording rows; append staging reserves one independent row.
+ let (scalars,lists)=store.global_state().values().slot_counts();let rows=6*n+1+owners.len();
  assert!(scalars<=rows*(depth+3)+1,"record scalar pool grew beyond finite recipe bounds: {scalars}");
- assert!(lists<=rows*3*depth+2,"record list pool grew beyond finite recipe bounds: {lists}");
+ // Cold replacement holds the empty staging roots until its prepared descendants exist, reusing the retired recording root.
+ assert!(lists<=rows*3*depth+1+staging_roots,"record list pool grew beyond finite recipe bounds: {lists}");
  println!("prepared scaling N={n} depth={depth}: temporal endpoints={descendants}, record scalar slots={scalars}, record list slots={lists}");
 }
 fn measured_simulation(graph:&mut hgl_kernel::Graph, store:&mut hgl_store::Store, config:&hgl_kernel::RunConfig)->Result<u64,hgl_kernel::EngineError> {
  graph.start(store,config.start_time).map_err(hgl_kernel::EngineError::Node)?;
+ let reserved=store.global_state().values().slot_counts();
  let mut cycles=0; let mut total=0; let mut now=config.start_time;
  while !graph.stop_requested() {let next=graph.next_scheduled_time();if next>=config.end_time {break;}now=next;
- let (result,count)=hgl_alloc_count::count_in(||graph.evaluate(store,now));result.map_err(hgl_kernel::EngineError::Node)?;total+=count;cycles+=1;}
+ let (result,count)=hgl_alloc_count::count_in(||graph.evaluate(store,now));result.map_err(hgl_kernel::EngineError::Node)?;assert_eq!(store.global_state().values().slot_counts(),reserved,"prepared global pools grew during evaluation");total+=count;cycles+=1;}
  graph.stop(store,now).map_err(hgl_kernel::EngineError::Node)?;
  assert_eq!(total,0,"complete generated publication and recording allocated across {cycles} cycles");Ok(cycles)
 }
