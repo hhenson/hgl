@@ -42,3 +42,7 @@ Exact atomic and canonical borrowed-owner projections take priority over private
 
 This module now lives in hgl-rust-codegen below executable program assembly;
 its hgl-rust facade path and module ceiling remain unchanged.
+
+
+May use constructor_owners to materialize a private typed staging source at its
+original expression position. Consumers copy only after complete retention.

@@ -7,3 +7,10 @@ Public surface: prepare, with statically selected ownership and canonical conver
 Acceptance: a recursive local can be projected ordinarily and then boxed without native intermediate allocation; provider operands execute once in written order, and selected boxed fields remain independent after another box changes.
 
 The constructor_growth sibling (initial ceiling 40, uses ir and ir_visit) identifies mutable roots whose children are pushed. Those roots retain the existing dynamic storage policy because initial constructor bounds do not prove descendant growth. No HGL admission changes. constructor_owners uses this metadata; its ceiling and the crate ceiling remain unchanged. The existing ordinary nested-list growth controls cover this boundary.
+
+
+Owning constructor expressions in evaluation handlers also receive independent
+private entries, so assignment and append consume a complete staged value.
+Each source operand is evaluated and retained before the next operand begins.
+The normalizer does not move expressions out of control flow or helper scopes;
+existing helper and start/stop boundaries remain unchanged.

@@ -1,6 +1,6 @@
 # Card: hgl-value-constant
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `value_constant` module of `hgl-semantics` (`crates/hgl-semantics/src/value_constant.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `value_constant` module of `hgl-eval` (`crates/hgl-eval/src/value_constant.rs`), reexported through `hgl-semantics`; `cargo xtask ci` reports its size and enforces its "may use" list.
 
 Pure classification of checked ordinary expressions eligible for constant
 checking. Uses hgl-rust-ir and the shared ir_visit traversal; initial budget 100 source lines. Value::closed lives here alongside context_free and recognizes only independently owning literal/void/list/constructor/captured/delta forms whose descendants are also closed. Native/provider recipes remain deferred. Public
@@ -19,3 +19,8 @@ provider calls are rejected as required constants without execution.
 
 Delta traversal includes typed Add/Remove keys and both Keyed map operands;
 retained keys obey the same constant/provenance checks as child expressions.
+
+`retain_closed` retains independently closed owning constructor subtrees as
+immutable configuration recipes, preserving nested family owners. It classifies
+IR without executing provider or constructor bodies. Native recipes remain
+deferred and preserve their checked invocation phase.

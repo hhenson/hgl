@@ -81,4 +81,18 @@ pub fn helper_finish_i64(_: i64) -> hgl_types::NodeResult {
     Ok(())
 }
 
+    static PREFLIGHT_CALLS: AtomicUsize = AtomicUsize::new(0);
+    pub fn preflight_later_i64(_: i64) -> hgl_types::NodeResult<i64> {
+        panic!("later operand executed before failed retention");
+    }
+    pub fn preflight_first_i64(value: i64) -> hgl_types::NodeResult<i64> {
+        assert_eq!(PREFLIGHT_CALLS.fetch_add(1, Ordering::SeqCst), 0);
+        Ok(value)
+    }
+    pub fn preflight_finish_bool(unchanged: bool) -> hgl_types::NodeResult {
+        assert!(unchanged, "failed constructor modified existing destination");
+        assert_eq!(PREFLIGHT_CALLS.swap(0, Ordering::SeqCst), 1);
+        Ok(())
+    }
+
 }

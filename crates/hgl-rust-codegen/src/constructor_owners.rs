@@ -1,5 +1,5 @@
 //! Ordinary constructor locals own canonical reserved slots before any projection or boxing.
-use crate::layouts::global_type;
+use crate::{constructor_fields::schema, layouts::global_type};
 use hgl_semantics::ir::{Kind, Plan, Value};
 use hgl_source::{Literal, Ty};
 /// Canonical fixed family fields preserve a checked concrete member without native construction.
@@ -30,21 +30,51 @@ pub(crate) fn family(value: &Value) -> Option<Value> {
         ]),
     ))
 }
-fn schema(ty: &Ty) -> Ty {
-    crate::layouts::ordinary_storage(ty).unwrap_or_else(|| ty.clone())
-}
 /// Emit a single ordered write into an independently preflighted canonical owner.
 pub(crate) fn local(plan: &Plan, id: usize, value: &Value, key: &str) -> String {
+    format!("let local{id}={};", retained(plan, value, key))
+}
+fn retained(plan: &Plan, value: &Value, key: &str) -> String {
     let entry = plan
         .nodes
         .iter()
         .find_map(|node| node.globals.iter().position(|(k, _)| k == key))
         .unwrap_or_else(|| unreachable!("compiled constructor owner"));
     format!(
-        "let local{id}={{let destination=_ctx.global_state().destination(self.global{entry});{}destination}};",
-        crate::prepared_hooks::replace(plan, value, "destination")
+        "{{let destination=_ctx.global_state().destination(self.global{entry});{}destination}}",
+        stage(plan, value, "destination")
     )
 }
+/// Evaluate an expression's private staging owner without publishing a replacement early.
+pub(crate) fn source(plan: &Plan, value: &Value) -> Option<String> {
+    let Kind::Query(key, args) = &value.kind else {
+        return None;
+    };
+    if !key.starts_with("\0constructor:") {
+        return None;
+    }
+    Some(retained(plan, &args[0], key))
+}
+
+/// Retain each operand into a private owner before the next operand executes.
+fn stage(plan: &Plan, value: &Value, slot: &str) -> String {
+    if let Some(code) = crate::constructor_fields::fields(
+        value,
+        slot,
+        |v, s| stage(plan, v, s),
+        crate::prepared_hooks::storage,
+    ) {
+        return code;
+    }
+    let mut prelude = Vec::new();
+    let code = crate::prepared_hooks::write(plan, value, slot, &mut prelude);
+    format!(
+        "{{{}{}}}",
+        prelude.concat(),
+        crate::prepared_hooks::storage(&code)
+    )
+}
+
 fn optional_bound(ty: &Ty, bound: String) -> String {
     let bound = if matches!(ty, Ty::Recursive(batch) if batch.definitions().is_empty()) {
         format!("Box::new({bound})")
@@ -103,66 +133,6 @@ pub fn global_bounds(plan: &Plan, key: &str, fallback: impl Fn(&Ty) -> String) -
         });
     }
     result
-}
-
-fn child_slot(marker: &str, parent: &str) -> String {
-    format!(
-        "hgl_store::ValueSlot::<{marker}>::bind(&mut columns.prepared_list(({parent}).fields()).first().ok_or_else(||hgl_types::NodeError::new(\"unprepared constructor child\"))?.as_slice())"
-    )
-}
-/// Write declared optional/recursive fields while preserving supplied operand order.
-pub(crate) fn fields(
-    v: &Value,
-    slot: &str,
-    mut write: impl FnMut(&Value, &str) -> String,
-) -> Option<String> {
-    let Kind::Construct(fields) = &v.kind else {
-        return None;
-    };
-    let schema = schema(&v.ty);
-    let optional = schema
-        .structure()
-        .map_or(&[][..], |(_, _, optional)| optional);
-    let mut code = String::new();
-    for i in optional
-        .iter()
-        .filter(|i| !fields.iter().any(|(id, _)| id == *i))
-    {
-        crate::append(
-            &mut code,
-            format_args!("columns.set_list_len(({slot}).fields().{i}.fields(),0);"),
-        );
-    }
-    for (i, value) in fields {
-        let target = format!("({slot}).fields().{i}");
-        if optional.contains(i) {
-            let (_, schema, _) = schema
-                .structure()
-                .unwrap_or_else(|_| unreachable!("declared optional constructor field"));
-            let edge =
-                matches!(&schema[*i].1, Ty::Recursive(batch) if batch.definitions().is_empty());
-            let marker = global_type(&value.ty);
-            let field = if edge {
-                format!("hgl_store::Recursive<{marker}>")
-            } else {
-                marker.clone()
-            };
-            let child = child_slot(&field, &target);
-            let child = if edge {
-                child_slot(&marker, &child)
-            } else {
-                child
-            };
-            code += &write(value, &child);
-            crate::append(
-                &mut code,
-                format_args!("columns.set_list_len(({target}).fields(),1);"),
-            );
-        } else {
-            code += &write(value, &target);
-        }
-    }
-    Some(code)
 }
 
 /// Recover the checked finite constructor shape, including copied and boxed family owners.

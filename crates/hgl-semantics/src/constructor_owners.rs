@@ -2,17 +2,6 @@
 use crate::ir::{Kind, Plan, Statement, Value};
 use hgl_source::Ty;
 use std::collections::BTreeMap;
-fn hoist(value: &mut Value, configuration: &mut Vec<Value>, owning: &impl Fn(&Ty) -> bool) {
-    if value.closed() && !matches!(value.ty, Ty::Family(_)) && owning(&value.ty) {
-        let id = configuration.len();
-        configuration.push(value.clone());
-        value.kind = Kind::Configuration(id);
-    } else if let Kind::Construct(fields) = &mut value.kind {
-        for (_, child) in fields {
-            hoist(child, configuration, owning);
-        }
-    }
-}
 fn references(value: &mut Value, owners: &BTreeMap<usize, usize>) -> bool {
     if let Kind::Local(id) | Kind::MutableLocal(id) = value.kind
         && let Some(entry) = owners.get(&id)
@@ -47,7 +36,7 @@ pub fn prepare(
                 if let Statement::Assign(target, value) = s
                     && matches!(target.kind,Kind::MutableLocal(id) if owners.contains_key(&id))
                 {
-                    hoist(value, &mut node.configuration, &owning);
+                    crate::value_constant::retain_closed(value, &mut node.configuration, &owning);
                 }
                 if let Statement::Let(id, value) | Statement::Var(id, value) = s
                     && matches!(value.ty, Ty::Struct(..) | Ty::Recursive(_) | Ty::Family(_))
@@ -75,6 +64,28 @@ pub fn prepare(
             node.global_state = true;
         }
         crate::ir_visit::hooks_mut(node, &mut |v| references(v, &owners));
+        for (_, body) in &mut node.handlers {
+            crate::ir_visit::statements_mut(body, &mut |v| {
+                if matches!(&v.kind, Kind::Query(op, _) if op.starts_with("\0constructor:")) {
+                    return false;
+                }
+                if matches!(v.kind, Kind::List(_)) && v.closed() {
+                    return false;
+                }
+                if matches!(v.kind, Kind::Construct(_))
+                    && matches!(v.ty, Ty::Struct(..) | Ty::Recursive(_))
+                    && owning(&v.ty)
+                {
+                    let key = format!("\0constructor:{node_id}:expression:{}", node.globals.len());
+                    node.globals.push((key.clone(), v.ty.clone()));
+                    crate::value_constant::retain_closed(v, &mut node.configuration, &owning);
+                    *v = Value::new(v.ty.clone(), Kind::Query(key, vec![v.clone()]));
+                    return false;
+                }
+                !matches!(v.kind, Kind::Captured(..) | Kind::ValueCall(..))
+            });
+        }
+        node.global_state |= !node.globals.is_empty();
     }
     plan
 }
@@ -90,6 +101,14 @@ fn origin(
         return origins[&source].clone();
     }
     *value = convert(value).unwrap_or_else(|| value.clone());
-    hoist(value, configuration, owning);
+    if matches!(value.ty, Ty::Family(_)) {
+        if let Kind::Construct(fields) = &mut value.kind {
+            for (_, child) in fields {
+                crate::value_constant::retain_closed(child, configuration, owning);
+            }
+        }
+    } else {
+        crate::value_constant::retain_closed(value, configuration, owning);
+    }
     value.clone()
 }

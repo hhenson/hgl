@@ -9,6 +9,7 @@ pub mod checked_data;
 pub mod cold_transport;
 pub mod collections;
 pub mod composite_keys;
+mod constructor_fields;
 /// Checked constructor ownership and reservation expressions.
 pub mod constructor_owners;
 pub mod deltas;

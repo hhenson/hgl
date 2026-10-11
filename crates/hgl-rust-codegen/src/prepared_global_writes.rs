@@ -3,10 +3,12 @@ use crate::{layouts::global_type, prepared_hooks::replace, values::condition_cod
 use hgl_semantics::ir::{Kind, Plan, Value};
 use hgl_source::Ty;
 pub(crate) fn set(plan: &Plan, id: usize, v: &Value) -> String {
+    let constructor =
+        matches!(v.kind, Kind::Construct(_)) || crate::constructor_owners::origin(v).is_some();
     if crate::finite_domains::prepared(plan)
-        && (matches!(v.ty, Ty::Any | Ty::Native(_)) || matches!(v.kind, Kind::Construct(_)))
+        && (matches!(v.ty, Ty::Any | Ty::Native(_)) || constructor)
     {
-        let write = if matches!(v.kind, Kind::Construct(_)) {
+        let write = if constructor {
             replace(plan, v, "destination")
         } else {
             crate::any_prepared::write(plan, v, "destination", |v| emit(plan, v))

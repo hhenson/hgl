@@ -3,6 +3,9 @@ use crate::values::{atomic_place, borrowed_place};
 use hgl_semantics::ir::{Kind, Plan, Value};
 /// Select immutable typed ordinary storage without retaining an intermediate owner.
 pub(crate) fn source(plan: &Plan, value: &Value) -> Option<(&'static str, String)> {
+    if let Some(source) = crate::constructor_owners::source(plan, value) {
+        return Some(("global_values", source));
+    }
     if matches!(value.ty, hgl_source::Ty::Any | hgl_source::Ty::Native(_))
         && let Kind::GlobalGet(id) = value.kind
     {
@@ -47,6 +50,11 @@ pub(crate) fn source(plan: &Plan, value: &Value) -> Option<(&'static str, String
 
 /// Read a typed configuration or atomic projection without retaining its parent.
 pub(crate) fn read(plan: &Plan, v: &Value, emit: impl Fn(&Value) -> String) -> Option<String> {
+    if let Some(slot) = crate::constructor_owners::source(plan, v) {
+        return Some(format!(
+            "{{let source={slot};source.read(_ctx.store().global_values())?}}"
+        ));
+    }
     if let Some(slot) = crate::source_slots::projection(v, emit) {
         return Some(format!("({slot}).read(&self.configuration_columns)?"));
     }
