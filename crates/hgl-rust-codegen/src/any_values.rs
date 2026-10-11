@@ -238,7 +238,7 @@ pub fn layouts(plan: &Plan) -> String {
         .into_iter()
         .filter(|(_, ty)| hgl_semantics::value_access::ordinary(ty))
         .collect::<std::collections::BTreeMap<_, _>>();
-    if !types.values().any(|ty| *ty == Ty::Any) {
+    if plan.wiring.is_empty() && !types.values().any(|ty| *ty == Ty::Any) {
         return String::new();
     }
     let mut out=vec!["use hgl_types::any_values::number as any_number;fn any_retain(plan:&'static hgl_types::AnyPlan,data:hgl_types::any_values::AnyView<'_>)->hgl_types::NodeResult<hgl_types::AnyValue>{let mut width=hgl_types::any_values::AnyWidth::default();(plan.copy)(data,&mut width);let size=width.finish()?;let mut out=hgl_types::AnyValue::default();out.reserve(size)?;(plan.copy)(data,&mut out);Ok(hgl_types::AnyValue::from_encoded(plan,out))}fn any_copy_frame(out:&mut dyn hgl_types::any_values::AnyBuffer,copy:impl FnOnce(&mut dyn hgl_types::any_values::AnyBuffer)){let start=out.len();out.write(&[0;8]);copy(out);out.width(start,out.len()-start-8);}".into()];

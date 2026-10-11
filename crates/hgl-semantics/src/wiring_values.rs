@@ -90,12 +90,10 @@ pub fn statement(
             }
             Statement::Assign(target, v) => {
                 let v = value(evaluator, plan, v)?;
-                let local = Value::new(v.ty.clone(), Kind::Local(usize::MAX));
-                let applied = evaluator.scoped(|scope| {
-                    scope.bind_checked(usize::MAX, v, false);
-                    scope.statement(&Statement::Assign(target.clone(), local))
-                });
-                return result(plan, applied, |_| None).map(|_| ());
+                if matches!(target.kind, Kind::MutableLocal(_)) {
+                    return replace(evaluator, plan, target, v);
+                }
+                return crate::wiring_mutation::apply(evaluator, plan, target, &v, false);
             }
             Statement::If(condition, yes, no) => {
                 let condition = value(evaluator, plan, condition)?;
@@ -110,6 +108,9 @@ pub fn statement(
                 });
             }
             Statement::Call(v) => {
+                if let Kind::Push(target, item) = &v.kind {
+                    return crate::wiring_mutation::apply(evaluator, plan, target, item, true);
+                }
                 value(evaluator, plan, v)?;
                 return Ok(());
             }
@@ -124,5 +125,19 @@ pub fn statement(
         }
     }
     let applied = evaluator.statement(input);
+    result(plan, applied, |_| None).map(|_| ())
+}
+
+pub(crate) fn replace(
+    evaluator: &mut Evaluator,
+    plan: &mut Plan,
+    target: &Value,
+    value: Value,
+) -> Result<(), Issue> {
+    let local = Value::new(value.ty.clone(), Kind::Local(usize::MAX));
+    let applied = evaluator.scoped(|scope| {
+        scope.bind_checked(usize::MAX, value, false);
+        scope.statement(&Statement::Assign(target.clone(), local))
+    });
     result(plan, applied, |_| None).map(|_| ())
 }

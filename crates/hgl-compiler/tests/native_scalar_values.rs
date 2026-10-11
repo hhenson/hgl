@@ -587,3 +587,143 @@ fn native_wiring_context_preserves_actual_node_invocation_phases() -> Result<(),
     }
     Ok(())
 }
+
+#[test]
+fn standalone_cold_aggregate_and_any_descriptions_preserve_owners()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut generated = String::new();
+    let mut checks = String::new();
+    for (name, ty, initial, replacement, calls, failure_calls) in cold_aggregate_cases() {
+        for failure in [false, true] {
+            let name = format!("{name}_{}", if failure { "failure" } else { "success" });
+            let replacement = if failure {
+                replacement.replace("replacement", "failure")
+            } else {
+                replacement.into()
+            };
+            let body = format!(
+                r#"
+struct Pair {{first:Token
+second:Token}}
+struct State {{items:list<Pair>}}
+fn consume(const first:{ty},const second:{ty}) {{inject global_state,alarm
+start {{schedule(alarm,0us)}}
+when {{set(global_state,"first",any(first))
+set(global_state,"second",any(second))}}}}
+export fn main() {{var current:{ty} ={initial}
+let retained=current
+current={replacement}
+consume(first:retained,second:current)}}
+"#
+            );
+            let body = if name.starts_with("recursive_") {
+                body.replace(&format!("current={replacement}"), &format!("current.items[0].first={replacement}\npush(current.items,Pair(first:token(\"tail\"),second:token(\"\")))"))
+            } else {
+                body
+            };
+            let mut input = sources(&body)?;
+            for (_, text) in &mut input {
+                *text = text.replace(
+                    "fn token(text: str) -> Token",
+                    "fn token(text: str) -> Token throws",
+                );
+            }
+            let (_, descriptor) = input
+                .iter_mut()
+                .find(|(name, _)| name.ends_with(".hgl-native"))
+                .ok_or("descriptor missing")?;
+            *descriptor = descriptor
+                .replace("->Token symbol", "->Token throws symbol")
+                .replace(
+                    "\"atomic_values.rs\"",
+                    "\"../../crates/hgl-compiler/tests/fixtures/native_generic_provider.rs\"",
+                )
+                .replace(",serialization", "");
+            let plan = hgl_program::compile(&input, "main")?;
+            let marker = "hgl_store::Any";
+            let capture = "value.capture::<hgl_semantics::ir::Value>().map_err(|e|e.message)?";
+            writeln!(
+                generated,
+                "mod {name} {{{} pub fn inspect(store:&mut hgl_store::Store)->Result<(),String>{{for (key,want) in [(\"first\",b\"retained\".as_slice()),(\"second\",b\"replacement\".as_slice())] {{let key=store.global_state().bind::<{marker}>(key).map_err(|e|e.message)?;let value=store.global_state().get(key).map_err(|e|e.message)?;let captured={capture};let mut found=false;hgl_semantics::ir_visit::value(&captured,&mut |v|{{if let hgl_semantics::ir::Kind::Opaque(value)=&v.kind {{found|=value.data()==want;}}true}});assert!(found,\"retained native payload changed\");}}Ok(())}}}}",
+                hgl_program::emit_rust(&plan)
+            )?;
+            if failure {
+                writeln!(
+                    checks,
+                    "{{let mut registry=hgl_describe::Registry::new();{name}::register(&mut registry).unwrap();let before=CALLS.load(std::sync::atomic::Ordering::Relaxed);assert!(format!(\"{{:?}}\",{name}::main(&registry).unwrap_err()).contains(\"native.generic.failure\"));assert_eq!(CALLS.load(std::sync::atomic::Ordering::Relaxed)-before,{failure_calls});}}"
+                )?;
+            } else {
+                writeln!(
+                    checks,
+                    "{{let mut registry=hgl_describe::Registry::new();{name}::register(&mut registry).unwrap();let before=CALLS.load(std::sync::atomic::Ordering::Relaxed);let graph={name}::main(&registry).unwrap();assert_eq!(CALLS.load(std::sync::atomic::Ordering::Relaxed)-before,{calls});for registry in [&registry,&registry.clone()] {{for graph in [&graph,&graph.clone()] {{let mut store=hgl_store::Store::new();store.global_state().provision();let mut built=hgl_describe::instantiate_complete(graph,registry,&mut store).unwrap();hgl_kernel::run_simulation(&mut built.graph,&mut store,&hgl_kernel::RunConfig{{start_time:hgl_types::EngineTime::MIN_START,end_time:hgl_types::EngineTime::from_micros(10)}}).unwrap();{name}::inspect(&mut store).unwrap();}}}}assert_eq!(CALLS.load(std::sync::atomic::Ordering::Relaxed)-before,{calls});}}"
+                )?;
+            }
+        }
+    }
+    writeln!(
+        generated,
+        "static CALLS:std::sync::atomic::AtomicUsize=std::sync::atomic::AtomicUsize::new(0);fn main(){{{checks}}}"
+    )?;
+    execute(&generated)
+}
+
+type ColdAggregateCase = (
+    &'static str,
+    &'static str,
+    &'static str,
+    &'static str,
+    usize,
+    usize,
+);
+fn cold_aggregate_cases() -> [ColdAggregateCase; 6] {
+    [
+        (
+            "recursive",
+            "State",
+            "State(items:[Pair(first:token(\"retained\"),second:token(\"\"))])",
+            "token(\"replacement\")",
+            5,
+            3,
+        ),
+        (
+            "pair",
+            "Pair",
+            "Pair(first:token(\"retained\"),second:token(\"\"))",
+            "Pair(first:token(\"replacement\"),second:token(\"later\"))",
+            4,
+            3,
+        ),
+        (
+            "list",
+            "list<Token>",
+            "[token(\"retained\"),token(\"\") ]",
+            "[token(\"replacement\") ]",
+            3,
+            3,
+        ),
+        (
+            "tuple",
+            "tuple<Token,str>",
+            "(token(\"retained\"),\"first\")",
+            "(token(\"replacement\"),\"second\")",
+            2,
+            2,
+        ),
+        (
+            "boxed",
+            "any",
+            "any(token(\"retained\"))",
+            "any(token(\"replacement\"))",
+            2,
+            2,
+        ),
+        (
+            "boxed_pair",
+            "any",
+            "any(Pair(first:token(\"retained\"),second:token(\"\")))",
+            "any(Pair(first:token(\"replacement\"),second:token(\"later\")))",
+            4,
+            3,
+        ),
+    ]
+}

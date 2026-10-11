@@ -55,7 +55,8 @@ wiring_locals = { budget = 300, uses = ["ir", "local_check", "value_access", "va
 
 structural_admission = { budget = 100, uses = ["ir", "tuple_values", "endpoint_check"] }
 
-wiring_values = { budget = 160, uses = ["ir", "ir_visit", "value_eval"] }
+wiring_mutation = { budget = 100, uses = ["ir_visit", "ir", "value_eval", "wiring_values"] }
+wiring_values = { budget = 160, uses = ["wiring_mutation", "ir", "ir_visit", "value_eval"] }
 
 [dependencies]
 hgl-eval = { path = "../hgl-eval" }

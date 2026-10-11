@@ -382,3 +382,101 @@ fn native_fixture() -> Result<NativeFixture, Box<dyn std::error::Error>> {
         provider_file,
     })
 }
+
+#[test]
+fn cold_carriers_retain_unknown_foreign_any_descriptors() -> Result<(), Box<dyn std::error::Error>>
+{
+    let NativeFixture {
+        dependencies,
+        provider_file,
+    } = native_fixture()?;
+    let long_name = format!("Foreign{}", "x".repeat(4096));
+    let mut producer_sources = dependencies.clone();
+    producer_sources.insert(0,("producer.hgl".into(),format!("module producer\nuse hgraph.std::{{token}}\nstruct {long_name} {{payload:any}}\nfn main()->any {{when {{return any({long_name}(payload:any(token(\"foreign\"))))}}}}")));
+    let producer = hgl_program::emit_rust(&hgl_program::compile(&producer_sources, "main")?);
+    let foreign = hgl_source::Ty::Struct(
+        format!("producer::{long_name}").into(),
+        vec![("payload".into(), hgl_source::Ty::Any)],
+        vec![],
+    );
+    let token = native_constructor("Token")?;
+    let make = hgl_rust::any_values::construct(&foreign, &format!("({token},)"));
+    let mut consumer_sources = dependencies;
+    consumer_sources.insert(0,("consumer.hgl".into(),"module consumer\nstruct Holder {value:any}\nfn main()->any {when {return any(Holder(value:any(true)))}}".into()));
+    let consumer = hgl_program::emit_rust(&hgl_program::compile(&consumer_sources, "main")?);
+    let holder = hgl_source::Ty::Struct(
+        "consumer::Holder".into(),
+        vec![("value".into(), hgl_source::Ty::Any)],
+        vec![],
+    );
+    let wrap = hgl_rust::any_values::construct(&holder, "(value,)");
+    let support = hgl_rust::cold_transport::support();
+    let encode = hgl_rust::cold_transport::encode(&hgl_source::Ty::Any, "value");
+    let decode = hgl_rust::cold_transport::decode(&hgl_source::Ty::Any, "bytes", "registry");
+    let result = run(&format!(
+        r#"
+static REJECT:std::sync::atomic::AtomicBool=std::sync::atomic::AtomicBool::new(false);
+static COPIES:std::sync::atomic::AtomicUsize=std::sync::atomic::AtomicUsize::new(0);
+mod producer {{{producer} pub fn make(value:&str)->hgl_types::NodeResult<hgl_types::AnyValue>{{Ok({make})}}}}
+mod consumer {{{consumer}{support}
+ pub fn wrap(value:hgl_types::AnyValue)->hgl_types::NodeResult<hgl_types::AnyValue>{{Ok({wrap})}}
+ pub fn pack(value:hgl_types::AnyValue,registry:&hgl_describe::Registry)->hgl_types::NodeResult<Vec<u8>>{{Ok({encode})}}
+ pub fn unpack(bytes:&[u8],registry:&hgl_describe::Registry)->hgl_types::NodeResult<hgl_types::AnyValue>{{Ok({decode})}}
+}}
+fn main()->hgl_types::NodeResult {{
+ let registry=hgl_describe::Registry::new();let mut retained=Vec::new();
+ for value in ["retained","replacement",""] {{
+ let owner=consumer::wrap(producer::make(value)?)?;
+ let expected=owner.retain()?;
+ let bytes=consumer::pack(owner,&registry)?;
+ for registry in [&registry,&registry.clone()] {{for bytes in [&bytes,&bytes.clone()] {{
+ let decoded=consumer::unpack(bytes,registry)?;assert!(decoded.equal(&expected)?);
+ let captured=decoded.capture::<hgl_semantics::ir::Value>()?;let mut found=false;
+ hgl_semantics::ir_visit::value(&captured,&mut |v|{{if let hgl_semantics::ir::Kind::Opaque(native)=&v.kind {{found|=native.data()==value.as_bytes();}}true}});assert!(found);
+ }}}}
+ let unrelated=hgl_describe::Registry::new();let copies=COPIES.load(std::sync::atomic::Ordering::Relaxed);
+ let error=consumer::unpack(&bytes,&unrelated).unwrap_err();assert_eq!(error.code,None);assert!(error.message.contains("cold descriptor belongs to another registry"));
+ assert_eq!(COPIES.load(std::sync::atomic::Ordering::Relaxed),copies);
+ REJECT.store(true,std::sync::atomic::Ordering::Relaxed);
+ assert_eq!(consumer::unpack(&bytes,&registry).unwrap_err().code,Some("native.copy.failure"));
+ assert_eq!(COPIES.load(std::sync::atomic::Ordering::Relaxed),copies);
+ assert_eq!(consumer::pack(expected,&registry).unwrap_err().code,Some("native.copy.failure"));
+ assert_eq!(COPIES.load(std::sync::atomic::Ordering::Relaxed),copies);
+ REJECT.store(false,std::sync::atomic::Ordering::Relaxed);
+ retained.push(bytes);
+ }}
+ let surviving=registry.clone();drop(registry);
+ for bytes in retained {{consumer::unpack(&bytes,&surviving)?;}}
+ Ok(())
+}}
+"#
+    ));
+    fs::remove_file(provider_file)?;
+    result
+}
+
+#[test]
+fn cold_foreign_any_source_profiles_remain_explicit() -> Result<(), Box<dyn std::error::Error>> {
+    let NativeFixture {
+        dependencies,
+        provider_file,
+    } = native_fixture()?;
+    for descriptor in [false, true] {
+        let mut sources = dependencies.clone();
+        sources.insert(0,("consumer.hgl".into(),"module consumer\nuse hgraph.std::{foreign}\nexport fn main(){let value=foreign(\"value\")}".into()));
+        sources.push(("foreign.hgl".into(),"module hgraph.std part foreign\nnative const fn foreign(value:str)->any throws\nnative const fn foreign(value:str)->any throws {}".into()));
+        let expected = if descriptor {
+            sources.iter_mut().find(|(name,_)|name.ends_with(".hgl-native")).ok_or("descriptor")?.1.push_str("\nvalue foreign(value:str)->any throws symbol \"foreign_str\" ownership owned phases {cold} effects {allocation}\n");
+            "native descriptor requires an exact canonical scalar value type: any"
+        } else {
+            "native value calls in composition are not yet supported"
+        };
+        assert!(
+            hgl_program::compile(&sources, "main")
+                .unwrap_err()
+                .contains(expected)
+        );
+    }
+    fs::remove_file(provider_file)?;
+    Ok(())
+}

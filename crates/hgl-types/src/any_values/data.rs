@@ -16,6 +16,10 @@ impl Deref for AnyView<'_> {
     }
 }
 impl<'a> AnyView<'a> {
+    /// Borrow a checked compiled encoding with its independently resolved descriptor context.
+    pub fn from_encoded(bytes: &'a [u8], descriptors: &'a [&'static AnyPlan]) -> Self {
+        Self { bytes, descriptors }
+    }
     /// Restrict payload bytes without discarding their descriptor context.
     #[must_use]
     pub fn slice(&self, range: std::ops::Range<usize>) -> Self {

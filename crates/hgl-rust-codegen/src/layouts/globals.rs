@@ -69,6 +69,9 @@ pub fn global_types(plan: &Plan) -> BTreeMap<String, Ty> {
     for ty in &plan.ordinary_types {
         collect(ty, &mut types);
     }
+    for value in &plan.wiring {
+        value_types(value, &mut types);
+    }
     for node in &plan.nodes {
         for ty in std::iter::once(&node.result).chain(node.inputs.iter().map(|(_, _, ty)| ty)) {
             if ty.publication() {

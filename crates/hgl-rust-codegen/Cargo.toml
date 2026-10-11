@@ -9,6 +9,7 @@ publish.workspace = true
 line-budget = 8940
 
 [package.metadata.hgl.modules]
+cold_transport = { budget = 160, uses = ["any_values", "layouts"] }
 any_expression_leaves = { budget = 50, uses = ["layouts", "any_values", "source_slots"] }
 prepared_global_writes = { budget = 60, uses = ["layouts", "prepared_hooks", "values", "any_prepared", "finite_domains", "snapshot_slots"] }
 native_owners = { budget = 80, uses = [] }

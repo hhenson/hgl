@@ -115,10 +115,7 @@ impl AnyValue {
     }
     /// Borrow encoded owning storage within the consumer's existing lifetime.
     pub fn data(&self) -> AnyView<'_> {
-        AnyView {
-            bytes: &self.data,
-            descriptors: &self.descriptors,
-        }
+        AnyView::from_encoded(&self.data, &self.descriptors)
     }
     /// Reserve owning capacity before hooks execute.
     pub fn reserve(&mut self, size: usize) -> NodeResult {

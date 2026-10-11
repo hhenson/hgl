@@ -13,7 +13,7 @@ capacity = { budget = 400, uses = ["snapshots", "collections", "deltas", "finite
 generators = { budget = 500, uses = ["deltas", "finite_domains", "source_slots", "values", "windows"] }
 preparation = { budget = 300, uses = ["checked_data", "collections", "families", "layouts", "recursive_convert", "value_convert", "values"] }
 
-cold_wiring = { budget = 160, uses = ["checked_data", "native_values", "preparation", "values"] }
+cold_wiring = { budget = 160, uses = ["cold_transport", "checked_data", "native_values", "preparation", "values"] }
 
 [dependencies]
 hgl-rust-codegen = { path = "../hgl-rust-codegen" }

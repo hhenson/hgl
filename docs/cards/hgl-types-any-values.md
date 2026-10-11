@@ -29,3 +29,9 @@ first preflight failure. Cold readers preserve provider errors as NodeResult.
 AnyView.field, number and index expose bounded compiled data vocabulary.
 Frames.equal_by and compare_by iterate frames through caller-supplied fallible
 predicates; descriptor selection and operation semantics remain in Store.
+
+
+`AnyView::from_encoded(bytes, descriptors)` borrows an existing checked compiled
+encoding with its independently resolved descriptor context. The caller supplies
+metadata only after validating its cold carrier identity; the view owns nothing
+and executes no callbacks. `AnyValue::data` uses the same constructor.
