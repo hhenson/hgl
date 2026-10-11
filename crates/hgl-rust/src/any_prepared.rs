@@ -64,12 +64,11 @@ fn mark(value: &mut Value) -> bool {
     true
 }
 /// Reserve owning Any locals separately from borrowed entry handles.
-pub fn prepare(plan: &Plan) -> Plan {
-    if !crate::execution_proof::prepared(plan) {
-        return plan.clone();
+pub fn prepare(original: &Plan) -> Plan {
+    if !crate::execution_proof::prepared(original) {
+        return original.clone();
     }
-    let original = plan;
-    let mut plan = plan.clone();
+    let mut plan = original.clone();
     hgl_semantics::call_locals::prepare(&mut plan);
     let mut plan = hgl_semantics::constructor_owners::prepare(
         &plan,
