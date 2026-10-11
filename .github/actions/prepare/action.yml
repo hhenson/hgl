@@ -36,9 +36,9 @@ runs:
           target/source-tests/**/deps/*.a
           target/source-test-projects
           target/source-tests/debug/eval-regressions-corpus-batch-*
-          target/source-tests/debug/deps/eval_regressions_corpus_batch-*
+          target/source-tests/debug/deps/eval_regressions_corpus_batch_*
           target/source-tests/release/eval-regressions-corpus-batch-*
-          target/source-tests/release/deps/eval_regressions_corpus_batch-*
+          target/source-tests/release/deps/eval_regressions_corpus_batch_*
           target/ci-source-mtimes.json
           experiments/compiler-tools/target/debug
         key: workspace-v3-${{ runner.os }}-${{ runner.arch }}-${{ inputs.stage }}-${{ steps.build-environment.outputs.key }}-${{ github.sha }}
