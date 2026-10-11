@@ -110,7 +110,7 @@ pub fn value(v: &Value) -> String {
     )
 }
 fn native(n: &hgl_semantics::ir::Native) -> String {
-    let provider=n.provider.as_ref().map_or_else(||"None".into(),|p|format!("Some(hgl_types::native_contracts::Image {{provider:{:?}.into(),fingerprint:{:?}.into(),path:{:?}.into()}})",p.provider,p.fingerprint,p.path));
+    let provider=n.provider.as_ref().map_or_else(||"None".into(),|p|format!("Some(hgl_types::native_contracts::Image {{provider:{:?}.into(),fingerprint:{:?}.into(),path:{:?}.into(),scalars:{}}})",p.provider,p.fingerprint,p.path,list(&p.scalars,|(s,m)|format!("(hgl_types::native_contracts::Scalar {{identity:{:?}.into(),capabilities:[{}].into_iter().map(String::from).collect()}},{m:?}.into())",s.identity,s.capabilities.iter().map(|c|format!("{c:?}")).collect::<Vec<_>>().join(",")))));
     format!(
         "hgl_semantics::ir::Native {{name:{:?}.into(),method:{:?}.into(),provider:{provider},throws:{},args:{},result:{}}}",
         n.name,

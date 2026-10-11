@@ -449,6 +449,11 @@ fn native_images(plan: &Plan) -> String {
     {
         let module = image_module(&provider.provider);
         code.push(format!("if {module}::PROVIDER!={:?} || {module}::FINGERPRINT!={:?} {{return Err(\"native descriptor/provider identity or fingerprint mismatch\".into());}}",provider.provider,provider.fingerprint));
+        for (scalar, marker) in &provider.scalars {
+            let caps = ["copy", "text", "equality", "hash", "order", "serialization"]
+                .map(|c| scalar.capabilities.contains(c));
+            code.push(format!("<{module}::{marker} as hgl_store::native_values::NativeType>::CONTRACT.validate({:?},{:?},{:?},{caps:?}).map_err(|e|e.to_string())?;",provider.provider,provider.fingerprint,scalar.identity));
+        }
     }
     code.push("Ok(())}\n".into());
     code.concat()

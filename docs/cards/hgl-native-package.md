@@ -10,3 +10,8 @@ header parses version-1 package identity and records; image resolves an optional
 Rust target path relative to the descriptor using path data without opening code.
 validate_aliases requires one exact capability contract for each canonical identity.
 Semantic Library loading and checking retain one validated representation.
+
+`Descriptor.markers` retains the optional explicit target identifier of each
+scalar declaration. It is separate from portable canonical identity/capabilities;
+changing an import alias never changes the ordinary nominal identity. Missing
+markers remain representable for descriptor-only declaration checking.

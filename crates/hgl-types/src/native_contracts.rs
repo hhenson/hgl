@@ -9,6 +9,8 @@ pub struct Image {
     pub fingerprint: String,
     /// Resolved statically compiled target source location.
     pub path: String,
+    /// Explicit typed target markers paired with their portable checked contracts.
+    pub scalars: Vec<(Scalar, String)>,
 }
 /// Owning scalar operations advertised by the portable package contract.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]

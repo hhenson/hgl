@@ -1,3 +1,8 @@
 # Card: hgl-native-contract-data
 
 The native_contracts module of hgl-types contains inert portable Scalar and Function descriptor records and Image, the immutable provider/fingerprint/path projection produced after complete Library validation. Its budget is 40 lines within the unchanged types cap; no internal module dependencies. Source parsing and semantic Library validation share these exact records without depending on a provider implementation. Canonical identities, declared capabilities, exact signatures, symbols, ownership phases and effects remain data; no code is loaded or executed. Image is compiled binding data, never an alternative interface discovery or checking path.
+
+Image also carries each checked scalar's portable contract and explicit Rust
+marker identifier. Generated preflight validates the selected marker's provider,
+fingerprint, canonical identity and required capability mask before execution.
+Executable binding requires the marker; descriptor-only source checking does not.

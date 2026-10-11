@@ -15,6 +15,8 @@ pub struct Descriptor {
     pub image: Option<String>,
     /// Native declaration bindings in the ordinary module namespace.
     pub scalars: BTreeMap<String, Scalar>,
+    /// Explicit target markers for typed executable scalar bindings.
+    pub markers: BTreeMap<String, String>,
     /// Exact helper bindings keyed by their source declaration name.
     pub functions: BTreeMap<String, Function>,
 }
@@ -68,6 +70,7 @@ pub fn header(source: &str, c: &mut Cursor<'_>) -> Result<Descriptor, Issue> {
         fingerprint,
         image,
         scalars: BTreeMap::new(),
+        markers: BTreeMap::new(),
         functions: BTreeMap::new(),
     })
 }

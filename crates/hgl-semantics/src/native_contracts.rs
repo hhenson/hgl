@@ -20,6 +20,11 @@ pub fn parse(source: &str, input: &str) -> Result<Descriptor, Issue> {
     while !c.at("") {
         if c.take("scalar") {
             let (name, scalar) = hgl_source::native_descriptor::scalar(&mut c)?;
+            if c.take("marker") {
+                descriptor
+                    .markers
+                    .insert(name.clone(), hgl_source::native_descriptor::symbol(&mut c)?);
+            }
             if descriptor.scalars.insert(name, scalar).is_some() {
                 return Err("duplicate native scalar descriptor binding".into());
             }
@@ -174,6 +179,16 @@ pub fn bind(
                     provider: descriptor.provider.clone(),
                     fingerprint: descriptor.fingerprint.clone(),
                     path: path.clone(),
+                    scalars: descriptor
+                        .scalars
+                        .iter()
+                        .map(|(name, scalar)| {
+                            let marker = descriptor.markers.get(name).ok_or_else(|| {
+                                format!("missing native scalar target marker: {name}")
+                            })?;
+                            Ok((scalar.clone(), marker.clone()))
+                        })
+                        .collect::<Result<_, String>>()?,
                 }),
                 contract.symbol.clone(),
             )

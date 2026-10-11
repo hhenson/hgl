@@ -91,14 +91,7 @@ pub fn function(c: &mut Cursor<'_>) -> Result<(String, Function), Issue> {
     let result = value_type(c)?;
     let throws = c.take("throws");
     c.need("symbol")?;
-    let symbol = text(c)?;
-    if !symbol
-        .bytes()
-        .enumerate()
-        .all(|(i, b)| b == b'_' || b.is_ascii_alphabetic() || (i > 0 && b.is_ascii_digit()))
-    {
-        return Err("native descriptor symbol requires a Rust identifier".into());
-    }
+    let symbol = symbol(c)?;
     c.need("ownership")?;
     c.need("owned")?;
     c.need("phases")?;
@@ -125,4 +118,17 @@ pub fn function(c: &mut Cursor<'_>) -> Result<(String, Function), Issue> {
             effects,
         },
     ))
+}
+
+/// Parse an explicit Rust target identifier without inferring it from source names.
+pub fn symbol(c: &mut Cursor<'_>) -> Result<String, Issue> {
+    let symbol = text(c)?;
+    if !symbol
+        .bytes()
+        .enumerate()
+        .all(|(i, b)| b == b'_' || b.is_ascii_alphabetic() || (i > 0 && b.is_ascii_digit()))
+    {
+        return Err("native descriptor symbol requires a Rust identifier".into());
+    }
+    Ok(symbol)
 }

@@ -17,3 +17,8 @@ metadata needed for exact checking; parsing never fabricates a runtime value.
 Portable Scalar/Function records live in hgl-types::native_contracts; this source
 module reexports them and owns their inert token parsing. No executable callback
 or provider image is stored in the records.
+
+A scalar record may end in `marker "RustIdentifier"`. The public `symbol` reader
+validates both helper symbols and scalar target markers. Markers are explicit
+Rust ABI metadata; neither HGL bindings nor canonical identities imply a target
+name. Parsing remains independent of whether the target image exists.

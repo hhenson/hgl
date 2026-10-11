@@ -49,3 +49,9 @@ same semantic path. No checker-time execution is introduced by the separation.
 The authored fixture sidecar resides in native/stdlib beside the default target
 interfaces. Ordinary library discovery selects it once; fixture-specific API tests
 use that same root, so shared Std declarations require no bespoke test injection.
+
+Executable package binding projects each scalar's explicit target marker along
+with its portable contract. A missing marker rejects that executable binding;
+the checker never guesses a Rust type name from an HGL alias or canonical string.
+The generated image gate checks the marker's full native ABI contract before
+setup, cold preparation or runtime helper execution.

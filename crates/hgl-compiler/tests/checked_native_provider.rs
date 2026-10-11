@@ -167,3 +167,43 @@ fn selected_provider_executes_without_tick_allocations_and_rejects_mismatched_im
     fs::remove_dir_all(directory)?;
     Ok(())
 }
+
+#[test]
+fn executable_scalar_marker_is_required_and_preflighted() -> Result<(), String> {
+    let mut sources = sources()?;
+    let (_, interface) = sources
+        .iter_mut()
+        .find(|(p, _)| p.ends_with("interface.hgl"))
+        .ok_or("interface missing")?;
+    interface.push_str("\nexport native type Token\n");
+    let (_, descriptor) = sources
+        .iter_mut()
+        .find(|(p, _)| p.ends_with(".hgl-native"))
+        .ok_or("descriptor missing")?;
+    descriptor.push_str(
+        "\nscalar Token canonical \"canonical.Token\" capabilities {copy,text,equality}\n",
+    );
+    let error = hgl_program::compile_module_suite(&sources)
+        .err()
+        .ok_or("missing marker admitted")?;
+    assert!(
+        error.contains("missing native scalar target marker"),
+        "{error}"
+    );
+    let (_, descriptor) = sources
+        .iter_mut()
+        .find(|(p, _)| p.ends_with(".hgl-native"))
+        .ok_or("descriptor missing")?;
+    *descriptor = descriptor.replace(
+        "capabilities {copy,text,equality}",
+        "capabilities {copy,text,equality} marker \"ProviderToken\"",
+    );
+    let suite = hgl_program::compile_module_suite(&sources)?;
+    let generated = hgl_program::emit_tests(&suite);
+    assert!(
+        generated
+            .contains("ProviderToken as hgl_store::native_values::NativeType>::CONTRACT.validate")
+    );
+    assert!(generated.contains("\"canonical.Token\",[true, true, true, false, false, false]"));
+    Ok(())
+}

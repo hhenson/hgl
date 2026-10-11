@@ -179,3 +179,36 @@ fn checked_metadata_sets_value_mode_only_on_exact_native_declarations() -> Resul
     }
     Ok(())
 }
+
+#[test]
+fn scalar_target_markers_are_explicit_inert_backend_bindings() -> Result<(), String> {
+    let marker = SCALAR.trim_end().to_owned() + " marker \"OpaqueToken\"\n";
+    let descriptor = format!("{HEADER}{marker}").replace(
+        "fingerprint \"contract-v1\"",
+        "fingerprint \"contract-v1\" image \"missing.rs\"",
+    );
+    let parsed = native_contracts::parse("provider.hgl-native", &descriptor)?;
+    assert_eq!(parsed.markers["Token"], "OpaqueToken");
+    assert_eq!(parsed.scalars["Token"].identity, "existing.Token");
+    assert!(
+        parsed
+            .image
+            .as_ref()
+            .is_some_and(|p| p.ends_with("missing.rs"))
+    );
+    assert!(
+        native_contracts::parse("provider.hgl-native", &format!("{HEADER}{SCALAR}"))?
+            .markers
+            .is_empty()
+    );
+    for invalid in ["", "crate::Token", "Token()", "0Token"] {
+        assert!(
+            native_contracts::parse(
+                "provider.hgl-native",
+                &descriptor.replace("OpaqueToken", invalid)
+            )
+            .is_err()
+        );
+    }
+    Ok(())
+}
