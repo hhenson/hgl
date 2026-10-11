@@ -36,6 +36,7 @@ pub fn prepare(
 ) -> Plan {
     let mut plan = plan.clone();
     for (node_id, node) in plan.nodes.iter_mut().enumerate() {
+        let growing = crate::constructor_growth::locals(node);
         let mut owners = BTreeMap::new();
         let mut origins = BTreeMap::<usize, Value>::new();
         for body in std::iter::once(&mut node.start)
@@ -53,6 +54,7 @@ pub fn prepare(
                     && (matches!(value.kind, Kind::Construct(_))
                         || matches!(&value.kind, Kind::Unary(op, _) if op=="family")
                         || matches!(value.kind,Kind::Local(id)|Kind::MutableLocal(id) if origins.contains_key(&id)))
+                    && !growing.contains(id)
                     && owning(&value.ty)
                 {
                     let origin =

@@ -6,6 +6,7 @@ pub mod boxed_uses;
 pub mod collection_check;
 pub use hgl_eval::collection_values;
 pub use hgl_eval::composite_keys;
+mod constructor_growth;
 pub mod constructor_owners;
 pub mod delta_check;
 pub mod endpoint_check;
