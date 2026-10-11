@@ -238,3 +238,24 @@ test {
         assert eval(helper_boxes,[1,-2,3])==[true,true,true]
     }
 }
+
+test {
+    fn direct_global_box(value:i64)->any {
+        inject global_state
+        when {
+            set(global_state,key:"direct_box",value:any(value))
+            return get(global_state,key:"direct_box")
+        }
+    }
+    fn direct_global_aggregate(value:i64)->any {
+        inject global_state
+        when {
+            set(global_state,key:"direct_aggregate",value:any(BoxField(box:any(value))))
+            return get(global_state,key:"direct_aggregate")
+        }
+    }
+    test direct_typed_global_owning_returns {
+        assert eval(direct_global_box,[1,_,2]) == [any(1),_,any(2)]
+        assert eval(direct_global_aggregate,[1,_,2]) == [any(BoxField(box:any(1))),_,any(BoxField(box:any(2)))]
+    }
+}

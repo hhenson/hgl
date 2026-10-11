@@ -521,6 +521,9 @@ fn capability_call(plan: &Plan, op: &str, args: &[Value]) -> String {
 }
 
 pub(crate) fn borrowed_place(plan: &Plan, value: &Value) -> Option<String> {
+    if let Kind::GlobalGet(id) = value.kind {
+        return Some(format!("_ctx.global_state().borrow(self.global{id})?"));
+    }
     if let Kind::BorrowedLocal(id, _, _) = value.kind {
         return Some(format!("local{id}"));
     }
