@@ -116,26 +116,6 @@ pub fn prepare(original: &Plan) -> Plan {
     }
     plan
 }
-fn copied(plan: &Plan, value: &Value, destination: &str) -> Option<String> {
-    let (columns, source) = crate::source_slots::source(plan, value)?;
-    let marker = crate::layouts::global_type(&value.ty);
-    let source_columns = if columns == "global_values" {
-        "columns"
-    } else {
-        crate::source_slots::columns(columns)
-    };
-    let copy = if columns == "global_values" {
-        format!("copy_within(columns,source,{destination})")
-    } else {
-        format!("copy_between({source_columns},source,columns,{destination})")
-    };
-    let copied = format!(
-        "<{marker} as hgl_store::PreparedValue>::check_slots({source_columns},source,columns,{destination})?;<{marker} as hgl_store::PreparedValue>::{copy};"
-    );
-    Some(format!(
-        "let source={source};_ctx.with_observations(|observation,globals|->hgl_types::NodeResult{{let columns=globals.values_mut();{copied}Ok(())}})?;"
-    ))
-}
 /// Retain complete boxes before any borrowed source can be replaced.
 pub fn write(
     plan: &Plan,
@@ -153,8 +133,8 @@ pub fn write(
             "let now=_ctx.evaluation_time();_ctx.with_observations(|observation,globals|->hgl_types::NodeResult{{let columns=globals.values_mut();{capture}Ok(())}})?;"
         );
     }
-    if let Some(code) = copied(plan, value, destination) {
-        return code;
+    if crate::source_slots::source(plan, value).is_some() {
+        return crate::prepared_hooks::replace(plan, value, destination);
     }
     if let Kind::Unary(op, argument) = &value.kind
         && op == "any"

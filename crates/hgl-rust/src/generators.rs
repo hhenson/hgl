@@ -241,18 +241,12 @@ fn timed_yield(plan: &Plan, time: &Value, payload: &Value, next: usize, result: 
 }
 fn slot_publication(ty: &Ty, slot: &str, result: &Ty, global: &str) -> String {
     if *ty == Ty::Any {
-        let (owned, configured) = if matches!(result, Ty::Rolling(..)) {
-            (
-                format!("_ctx.prepared().rolling_from(None,{slot},self._output)?;"),
-                crate::windows::from(result, "self._output", "&self.configuration_columns", slot),
-            )
+        let configured =
+            crate::observed::apply(result, "self._output", "&self.configuration_columns", slot);
+        let owned = if matches!(result, Ty::Rolling(..)) {
+            format!("_ctx.prepared().rolling_from(None,{slot},self._output)?;")
         } else {
-            (
-                format!("_ctx.prepared().any_from_global(self._output,{slot})?;"),
-                format!(
-                    "_ctx.prepared().atomic_from::<hgl_store::Any>(&self.configuration_columns,{slot},self._output)?;"
-                ),
-            )
+            format!("_ctx.prepared().any_from_global(self._output,{slot})?;")
         };
         return format!("if {global} {{{owned}}} else {{{configured}}}");
     }

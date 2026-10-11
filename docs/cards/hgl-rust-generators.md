@@ -75,3 +75,7 @@ module uses `any_prepared` for writes and `snapshot_slots` for lexical projectio
 Any yield expressions stage time before payload retention, preserving one-time
 operand evaluation and failure ordering. Immutable replay slots remain borrowed
 from configuration and keep their existing finite replay proof.
+
+Configuration-backed Any publications use observed::apply, the same typed
+Any/rolling transport as other prepared publications. Global pending owners
+retain their explicit arena tag and use the global publication path.
