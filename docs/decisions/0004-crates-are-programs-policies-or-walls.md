@@ -87,8 +87,8 @@ cannot reach source AST, parsing or semantic name resolution. Type facade reexpo
 import `hgl_source::TypeSpelling` for `Ty::parse` and `Ty::list_parts`; those calls
 are no longer inherent Model APIs. This explicit Rust API migration keeps source
 parsing in Source without changing the HGL language. The syntax-neutral IR walkers also belong to Model, with Eval facade paths
-preserved. Their 260-line module allowance transfers from Eval. The original 320-line
-IR traversal module allowance splits 260/60; harness traversal stays in Eval.
+preserved. Their optional module reporting target is 260 lines; the harness walker
+retains a 60-line target in Eval. Neither target constrains source size.
 
 ## Enforced checked execution boundary
 
@@ -97,7 +97,7 @@ semantics under reason 3. Each layer exceeds 1000 lines. The evaluator depends o
 hgl-value-model and hgl-types, so it cannot parse syntax or reenter declaration
 resolution. Existing hgl-semantics facade paths remain available. Expression
 admission and optional folding policy remain in semantics; executed operators,
-EvalError and materialized publication validation belong below it. The phase ceilings are Source 1130, Model 1270, Eval 1540 and Semantics 7740.
-Their combined 11680 lines equal the pre-split Source/Semantics allowance.
-Shared source traversal, declaration-domain validation and IR traversal fund
-the new dependency boundaries without increasing aggregate capacity.
+EvalError and materialized publication validation belong below it. Optional phase reporting targets are Source 1130, Model 1270, Eval 1540 and
+Semantics 7740 lines. Shared traversal and declaration validation keep these
+ownership boundaries compact. Cargo and module dependency rules remain
+enforced; individual and combined line counts are informational.

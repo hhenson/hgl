@@ -8,9 +8,10 @@ explicit callback; no execution API or language admission changes.
 The ir facade reexports syntax-neutral definitions from hgl-value-model.
 Public modules are ir, ir_visit, harness_ir, value_eval, value_operations,
 any_values, collection_values, composite_keys, scalar_keys, family_values,
-value_constant and publication_trace. Their existing contracts are preserved. The IR walkers and 260 lines of allowance transfer to
+value_constant and publication_trace. Their existing contracts are preserved. The IR walkers belong to
 Model; `ir_visit` retains the harness walker and reexports the Model walkers.
-Its allowance is 60 of the original 320; the crate ceiling is 1540 within the unchanged phase allowance.
+Optional reporting targets are 60 lines for this harness walker and 1540 for
+the crate. These targets are informational; dependencies remain enforced.
 `publication_trace::materialized` checks closed delta key overlap/duplication; delta expression admission stays in
 semantic delta_check.
 

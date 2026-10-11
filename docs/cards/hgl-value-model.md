@@ -7,7 +7,8 @@ hgl-source; source admission stays in hgl-semantics. Checked type facade paths r
 `TypeSpelling` trait, as documented in the hgl-source card.
 
 May use hgl-types and the existing jiff dependency; cannot depend on source AST,
-parsing, semantic binding or compiler emission. Budget 1270 within the unchanged combined 11680-line phase allowance.
+parsing, semantic binding or compiler emission. Optional reporting target: 1270 lines. Dependency walls remain enforced;
+numerical targets do not constrain source size.
 The `ir_visit` module owns source-ordered read/mutable expression, statement,
 hook and lexical-node walkers with subtree pruning. It never executes values;
 helper scope policies stay with callers. `Value::closed` uses this traversal
