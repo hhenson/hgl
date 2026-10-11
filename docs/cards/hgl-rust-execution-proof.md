@@ -52,10 +52,13 @@ value_calls. A used owning text formal has no finite helper slot preparation;
 it cannot establish a zero-allocation transport proof.
 
 `owning_argument(&Ty)` checks native helper argument storage recursively through
-Tuple, Struct, nullable and atomic children, using the existing scalar owning
+Tuple, Struct, closed-family member, nullable and atomic children, using the existing scalar owning
 classification for leaves. This cold proof distinguishes fixed positional
-arguments from text or collection descendants; it changes no runtime layout or
-return/mutation proof. value_calls combines it with structured literal-use proof.
+arguments from text or collection descendants; it changes no canonical type or
+return/mutation semantics. value_calls combines it with structured literal-use proof.
+Scalar-only families use the existing native stack-value and prepared atomic
+publication paths; a family with any owning member keeps canonical prepared
+constructor ownership. Member tags and independent copy semantics are unchanged.
 
 Invalidating a constant-key map child retains no child payload, including a
 structural child; it uses the same finite membership domain as scalar invalidation.

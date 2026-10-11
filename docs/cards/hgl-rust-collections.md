@@ -23,7 +23,7 @@ Constructor key validation walks finite tuple/concrete struct fields, preserving
 
 Native equality preserves optional field presence and family discriminators. Recursive descendants invoke generated typed marker comparison methods, so recursion follows only finite present payloads and never allocates or expands schemas during emission.
 
-family_field maps only declared family/common field identities through each retained member schema. iteration_start traverses retained map/list membership or modified keys without copying keys; missing removed children are skipped for the modified selector. Child locals retain exact endpoint types and scalar payload reads use typed transport.
+family_field maps only declared family/common field identities through each retained member schema. Its slot flag selects either native payload projection or a canonical typed slot: canonical parents evaluate once, read their retained tag, and return the active member's declared field slot without materializing the owning family. iteration_start traverses retained map/list membership or modified keys without copying keys; missing removed children are skipped for the modified selector. Child locals retain exact endpoint types and scalar payload reads use typed transport.
 
 Fixed-list items traversal selects declared dense child projections independently
 of keyed membership. Its modified filter reads each child's endpoint modification

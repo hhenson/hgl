@@ -1,7 +1,7 @@
 //! Exact ordinary collection layout and ordered constructor emission.
 use crate::append;
 use hgl_semantics::ir::{Kind, Value};
-use hgl_source::Ty;
+use hgl_source::{FamilyType, Ty};
 
 /// Homogeneous retained element; maps retain complete typed key/value pairs.
 pub fn element(ty: &Ty) -> Option<Ty> {
@@ -186,7 +186,7 @@ fn key_checks(ty: &Ty, value: &str) -> String {
 /// Project an inherited family field through its exact retained member tag.
 /// # Panics
 /// Panics when supplied IR lacks the checked common field or concrete members.
-pub fn family_field(family: &hgl_source::FamilyType, index: usize, source: &str) -> String {
+pub fn family_field(family: &FamilyType, index: usize, source: &str, slot: bool) -> String {
     let (_, fields, _) = family.members()[0]
         .1
         .structure()
@@ -201,12 +201,23 @@ pub fn family_field(family: &hgl_source::FamilyType, index: usize, source: &str)
             .iter()
             .position(|(field, _)| field == name)
             .unwrap_or_else(|| unreachable!("checked common family field"));
-        append(
-            &mut arms,
-            format_args!(
-                "{tag}=>&parent.{}.as_ref().expect(\"family member\").{index},",
+        let field = if slot {
+            format!(
+                "hgl_store::ValueSlot::<{}>::bind(&mut columns.list(parent.fields().{}.fields()).first().expect(\"family member\").as_slice()).fields().{index}",
+                crate::layouts::global_type(ty),
                 tag + 1
-            ),
+            )
+        } else {
+            format!(
+                "&parent.{}.as_ref().expect(\"family member\").{index}",
+                tag + 1
+            )
+        };
+        append(&mut arms, format_args!("{tag}=>{field},"));
+    }
+    if slot {
+        return format!(
+            "{{let parent={source};let columns=_ctx.store().global_values();match parent.fields().0.read(columns)? {{{arms}_=>unreachable!(\"checked family tag\")}}}}"
         );
     }
     format!(

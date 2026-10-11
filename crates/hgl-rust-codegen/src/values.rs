@@ -139,7 +139,7 @@ pub(crate) fn place(plan: &Plan, v: &Value) -> String {
     }
     if let Kind::Field(parent, index) = &v.kind {
         if let Ty::Family(family) = &parent.ty {
-            return crate::collections::family_field(family, *index, &place(plan, parent));
+            return crate::collections::family_field(family, *index, &place(plan, parent), false);
         }
         if parent.snapshot {
             return format!(
@@ -254,16 +254,14 @@ pub fn statements(plan: &Plan, body: &[Statement], out: &mut Vec<String>, result
             Statement::Let(i,v) | Statement::Var(i,v) if v.snapshot && matches!(v.ty,Ty::Any|Ty::Native(_)) => crate::any_prepared::local(plan,*i,v,|v|value(plan,v)),
             Statement::Let(i,v) if v.snapshot => crate::snapshot_slots::local(*i,v, |v| value(plan,v)),
             Statement::Let(i,v) => {
-                let init = if matches!(v.ty, Ty::Native(_))
-                    && !crate::execution_proof::prepared(plan)
-                {
-                    condition_code(plan, v)
+                let slot = if matches!(v.ty, Ty::Native(_)) && !crate::execution_proof::prepared(plan) {
+                    None
                 } else {
-                    atomic_place(plan, v)
-                        .or_else(|| observation(v))
-                        .unwrap_or_else(|| condition_code(plan, v))
+                    atomic_place(plan,v).or_else(||observation(v))
                 };
-                format!("let local{i} = {init};\n")
+                let annotation=if slot.is_none()&&matches!(v.ty,Ty::Family(_)) {format!(":{}",owned_type(&v.ty))} else {String::new()};
+                let init = slot.unwrap_or_else(||condition_code(plan,v));
+                format!("let local{i}{annotation} = {init};\n")
             },
             Statement::Borrow(i, v, _) => {
                 let source = if let Kind::GlobalGet(entry) = v.kind {
@@ -562,7 +560,12 @@ pub(crate) fn borrowed_place(plan: &Plan, value: &Value) -> Option<String> {
         return borrowed_place(plan, parent).map(|parent| format!("{{ let parent = {parent}; let index = {}; hgl_store::list::global_index(_ctx.store().global_values(), parent, index)? }}", self::value(plan, index)));
     }
     if let Kind::Field(parent, field) = &value.kind {
-        return borrowed_place(plan, parent).map(|parent| format!("({parent}).fields().{field}"));
+        return borrowed_place(plan, parent).map(|source| {
+            if let Ty::Family(family) = &parent.ty {
+                return crate::collections::family_field(family, *field, &source, true);
+            }
+            format!("({source}).fields().{field}")
+        });
     }
     None
 }
@@ -629,8 +632,11 @@ fn push(plan: &Plan, parent: &Value, item: &Value) -> String {
 fn direct_call(plan: &Plan, result: &Ty, args: &[Value], body: &[Statement]) -> String {
     let mut code = vec!["{ ".into()];
     for (i, arg) in args.iter().enumerate() {
+        let annotation = matches!(arg.ty, Ty::Family(_))
+            .then(|| format!(":{}", owned_type(&arg.ty)))
+            .unwrap_or_default();
         code.push(format!(
-            "let argument{i} = {};",
+            "let argument{i}{annotation} = {};",
             crate::value_calls::argument(arg, i, body, |v| value(plan, v))
         ));
     }

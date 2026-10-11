@@ -1,0 +1,63 @@
+module hgraph.std part scalar_family
+abstract struct Choice {value:i64}
+struct First:Choice {}
+struct Second:Choice {}
+abstract struct Flag {value:bool}
+struct Yes:Flag {}
+struct No:Flag {}
+native const fn once(value:i64)->i64 throws
+native const fn once(value:i64)->i64 throws {}
+
+fn fixed(tick:i64)->i64 {
+    when {
+        let choice:Choice=First(value:42)
+        return choice.value
+    }
+}
+fn dynamic(tick:i64)->i64 {
+    when {
+        var original=Second(value:once(tick+40))
+        let choice:Choice=original
+        original.value+=10
+        return choice.value+original.value
+    }
+}
+fn flag(tick:i64)->bool {
+    when {
+        let choice:Flag=No(value:tick==2)
+        return choice.value
+    }
+}
+fn first_member(tick:i64)->atomic<Choice> {
+    when {
+        let choice:Choice=First(value:42)
+        return choice
+    }
+}
+fn second_member(tick:i64)->atomic<Choice> {
+    when {
+        var original=Second(value:once(tick+40))
+        let choice:Choice=original
+        original.value+=10
+        return choice
+    }
+}
+fn observed(value:atomic<Choice>)->atomic<Choice> {
+    when {
+        let copy=delta_value(value)
+        return copy
+    }
+}
+const fn extract(choice:Choice)->i64 {return choice.value}
+fn helper(tick:i64)->i64 {
+    when {return extract(Second(value:tick+40))}
+}
+test scalar_family {
+    assert eval(fixed,[1,2])==[42,42]
+    assert eval(dynamic,[1,2])==[92,94]
+    assert eval(flag,[1,2])==[false,true]
+    assert eval(first_member,[1,2])==[First(value:42),First(value:42)]
+    assert eval(second_member,[1,2])==[Second(value:41),Second(value:42)]
+    assert eval(observed,[First(value:42),Second(value:42)])==[First(value:42),Second(value:42)]
+    assert eval(helper,[1,2])==[41,42]
+}
