@@ -5,3 +5,6 @@ The any_expression emitter compiles ordinary constructor trees into frames writt
 Internal surface: encoding, compose and limits. Leaves retain their static typed source or evaluate once before mutation. Complete constructor fields, optional presence and recursive child constructors require no intermediate native lists or boxes. Width planning counts checked expression structure and ordinary cold leaf bounds without executing providers or hooks. Nested Any constructors flatten at the box boundary and retain a descriptor within an ordinary field.
 
 Acceptance: generated recursive constructor with owning list and present child, measured after preparation; retained boxed sources and compound mutable box replacement remain independent.
+
+Named constructor operands prepare in source order before fields are emitted in
+layout order. Each operand runs once; failure prevents later operands.
