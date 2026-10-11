@@ -113,7 +113,7 @@ name = "hgl-source"
 version = "0.0.0"
 dependencies = [
  "hgl-types",
- "jiff",
+ "hgl-value-model",
 ]
 
 [[package]]
@@ -151,6 +151,14 @@ dependencies = [
 [[package]]
 name = "hgl-types"
 version = "0.0.0"
+
+[[package]]
+name = "hgl-value-model"
+version = "0.0.0"
+dependencies = [
+ "hgl-types",
+ "jiff",
+]
 
 [[package]]
 name = "jiff"

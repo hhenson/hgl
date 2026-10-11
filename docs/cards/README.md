@@ -266,3 +266,4 @@ Additional ordinary value contracts: [Any semantics](hgl-any-values.md), [compil
 Line counts and numerical targets in these cards are informational under
 [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md).
 Module dependency lists remain enforced; size alone never fails CI.
+- [hgl-value-model](hgl-value-model.md): ordinary metadata below source parsing and checking.

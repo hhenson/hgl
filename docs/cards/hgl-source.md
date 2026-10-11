@@ -115,3 +115,6 @@ Expr::Located retains expression and optional named argument origins; syntax, sp
 
 `Ty::scalar()` identifies ordinary scalar leaves, including nominal enums;
 composites and temporal wrappers return false.
+
+Ordinary metadata modules are facade reexports from hgl-value-model. Source syntax,
+lexing and admission remain here; canonical metadata cannot depend on them.
