@@ -4,7 +4,7 @@ Lexer and body syntax shared by library indexing and graph checking. Uses only
 `hgl-calendar`, `hgl-type-shape` and `hgl-lex`; budget 700 lines. No runtime dependency.
 
 Surface: `Token { text, span }`, `lex(&str) -> Result<Vec<Token>, String>`;
-`Ty` and `Ty::{parse,name}`; `Literal` and `Literal::ty`; `Expr` and
+`Ty`, `Ty::name` and `TypeSpelling::{parse,list_parts}`; `Literal` and `Literal::ty`; `Expr` and
 `Expr::{fixed,handler_guard}`; `Stmt`; `Cursor { tokens, pos }` with `new`, `peek`, `at`,
 `take`, `need`, `consume`, `lines`, `name`, `type_name`, `expr`, `block`.
 The enums describe literals, names, calls, unary/binary expressions, dense
@@ -118,3 +118,19 @@ composites and temporal wrappers return false.
 
 Ordinary metadata modules are facade reexports from hgl-value-model. Source syntax,
 lexing and admission remain here; canonical metadata cannot depend on them.
+
+Rust API migration: type spelling parsing is provided by the Source-owned
+`TypeSpelling` trait, not inherent methods on Model's `Ty`. Existing callers
+must add `use hgl_source::TypeSpelling` (or call the trait explicitly). This is a
+Rust source compatibility change; HGL parsing and type identities are unchanged.
+For example:
+
+```rust
+use hgl_source::{Ty, TypeSpelling};
+assert_eq!(Ty::parse("i64"), Some(Ty::I64));
+```
+
+Numeric source parsing stays at `hgl_source::literals::numeric`. Model-only
+consumers retain metadata and checked IR access, but have no source parser API.
+The external-consumer regression compiles the migrated Source call and Model
+metadata usage, then verifies that Model-only parsing calls fail to compile.

@@ -5,8 +5,8 @@ The `literals` model is in `crates/hgl-value-model/src/literals.rs`; source pars
 Source scalar values and unresolved provider-dependent literal recipes. Uses
 hgl-calendar, hgl-type-shape and hgl-time-values; budget 250 source lines.
 
-Own the existing Literal enum and numeric token conversion, re-exported by
-hgl-source. Add Literal::CivilDateTime(i64), TimeZone(ZoneId),
+Model owns the retained Literal enum, re-exported by hgl-source. Numeric token
+conversion remains at `hgl_source::literals::numeric`, outside Model. Add Literal::CivilDateTime(i64), TimeZone(ZoneId),
 ZonedDateTime(ZonedDateTime) and ZonedTime(ZonedTime); Literal::ty returns the
 exact source type.
 TemporalLiteral::{TimeZone(String), ZonedDateTime { instant_micros: i64,

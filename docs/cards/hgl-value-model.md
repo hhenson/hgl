@@ -3,7 +3,8 @@
 Syntax-neutral ordinary metadata, checked IR definitions and contextual scalar
 materialization. Owns diagnostics, retained literal forms, nominal and ordinary
 shapes, time context and checked IR. Source spelling and literal parsers stay in
-hgl-source; source admission stays in hgl-semantics. Existing facade paths remain.
+hgl-source; source admission stays in hgl-semantics. Checked type facade paths remain; parsing callers must migrate to the Source
+`TypeSpelling` trait, as documented in the hgl-source card.
 
 May use hgl-types and the existing jiff dependency; cannot depend on source AST,
 parsing, semantic binding or compiler emission. Budget 1200. Existing moved

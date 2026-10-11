@@ -83,6 +83,8 @@ and contextual scalar materialization under reason 3. Source type-spelling and
 literal parsers remain in hgl-source. The source crate and model each exceed
 1000 lines under xtask's code-line count; the execution layer also exceeds 1000.
 The model depends only on hgl-types and the existing jiff dependency, so it
-cannot reach source AST, parsing or semantic name resolution. Facade reexports
-preserve existing clients. The model ceiling is 1200; moved module ceilings are
+cannot reach source AST, parsing or semantic name resolution. Type facade reexports preserve checked type identity. Rust parsing callers must
+import `hgl_source::TypeSpelling` for `Ty::parse` and `Ty::list_parts`; those calls
+are no longer inherent Model APIs. This explicit Rust API migration keeps source
+parsing in Source without changing the HGL language. The model ceiling is 1200; moved module ceilings are
 split or transferred without increasing any crate or module ceiling.
