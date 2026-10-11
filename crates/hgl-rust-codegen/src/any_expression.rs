@@ -63,6 +63,9 @@ fn body(
             .collect::<Vec<_>>()
             .concat();
     }
+    if let Some(code) = crate::observed::text_encoding(value, prelude, emit) {
+        return code;
+    }
     format!(
         "{};",
         crate::any_expression_leaves::emit(plan, value, prelude, emit, false)
@@ -99,7 +102,9 @@ pub(crate) fn encoding(
     } else {
         value
     };
-    if !matches!(value.kind, Kind::Construct(_) | Kind::List(_)) || value.ty == Ty::Any {
+    if !(matches!(value.kind, Kind::Construct(_) | Kind::List(_)) || value.ty == Ty::Str)
+        || value.ty == Ty::Any
+    {
         return None;
     }
     Some(boxed(plan, value, prelude, emit))

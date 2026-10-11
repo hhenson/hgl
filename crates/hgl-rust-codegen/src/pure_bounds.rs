@@ -35,6 +35,9 @@ impl Text {
     }
 }
 fn text(value: &Value, locals: &BTreeMap<usize, Text>) -> Text {
+    if let Some(value) = crate::constructor_owners::origin(value) {
+        return text(value, locals);
+    }
     if let Kind::Local(id) | Kind::MutableLocal(id) | Kind::GeneratorLocal(id) = &value.kind {
         return locals.get(id).cloned().unwrap_or(Text::Width(1));
     }
@@ -61,6 +64,9 @@ fn text(value: &Value, locals: &BTreeMap<usize, Text>) -> Text {
                 .width()
                 .saturating_add(text(b, locals).width()),
         );
+    }
+    if let Kind::Unary(_, child) = &value.kind {
+        return text(child, locals);
     }
     Text::Width(1)
 }
@@ -125,8 +131,11 @@ fn node_factor(plan: &Plan, index: usize, factors: &mut [Option<usize>]) -> usiz
         .max()
         .unwrap_or(1);
     let mut maximum = 1;
-    text_statements(&node.start, &mut BTreeMap::new(), &mut maximum);
-    for (_, body) in &node.handlers {
+    for body in [&node.start, &node.stop]
+        .into_iter()
+        .chain(node.generator.iter())
+        .chain(node.handlers.iter().map(|(_, body)| body))
+    {
         text_statements(body, &mut BTreeMap::new(), &mut maximum);
     }
     let factor = input.saturating_mul(maximum);

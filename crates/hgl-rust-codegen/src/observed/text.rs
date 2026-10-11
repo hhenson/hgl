@@ -1,52 +1,57 @@
 use hgl_semantics::ir::{Kind, Value};
 use hgl_source::Ty;
 
-fn text_parts(value: &Value, parts: &mut Vec<String>) -> Option<()> {
-    match &value.kind {
-        Kind::Binary(op, a, b) if op == "+" && value.ty == Ty::Str => {
-            text_parts(a, parts)?;
-            text_parts(b, parts)?;
+struct TextPart {
+    checked: String,
+    validated: String,
+}
+impl TextPart {
+    fn immutable(value: String) -> Self {
+        Self {
+            checked: value.clone(),
+            validated: value,
         }
-        Kind::Input(id, _) if value.ty == Ty::Str => parts.push(format!(
-            "observation.scalar::<String>(self.input{id}.id())?"
-        )),
-        Kind::Literal(hgl_source::Literal::Str(value)) => parts.push(format!("{value:?}")),
-        Kind::Query(op, args) if op == "delta_value" => text_parts(args.first()?, parts)?,
-        Kind::Delta(_)
-        | Kind::ObservedLocal(_)
-        | Kind::WiringFailure(_)
-        | Kind::List(_)
-        | Kind::Index(..)
-        | Kind::Length(_)
-        | Kind::Push(..)
-        | Kind::ValueCall(..)
-        | Kind::Configuration(_)
-        | Kind::Construct(_)
-        | Kind::Field(..)
-        | Kind::GlobalGet(_)
-        | Kind::BorrowedLocal(..)
-        | Kind::GlobalSet(..)
-        | Kind::IsPresent(_)
-        | Kind::Present(_)
-        | Kind::Literal(_)
-        | Kind::Opaque(_)
-        | Kind::TemporalLiteral(_)
-        | Kind::Prepared(_)
-        | Kind::Wire(_)
-        | Kind::IterationInput(_)
-        | Kind::Input(..)
-        | Kind::Cache(_)
-        | Kind::GeneratorLocal(_)
-        | Kind::Local(_)
-        | Kind::MutableLocal(_)
-        | Kind::Native(..)
-        | Kind::Binary(..)
-        | Kind::Unary(..)
-        | Kind::Query(..)
-        | Kind::Output
-        | Kind::Capability
-        | Kind::Captured(..)
-        | Kind::Void => return None,
+    }
+}
+fn text_leaf(value: &Value) -> Option<TextPart> {
+    if let Kind::Input(id, _) = value.kind {
+        let read = format!("observation.scalar::<String>(self.input{id}.id())");
+        Some(TextPart {
+            checked: format!("{read}?"),
+            validated: format!(
+                "{read}.unwrap_or_else(|_|unreachable!(\"validated immutable input\"))"
+            ),
+        })
+    } else if let Kind::Configuration(id) = value.kind {
+        Some(TextPart::immutable(format!(
+            "self.configuration_columns.scalar::<String>(self.configuration_slot{id}.fields())"
+        )))
+    } else if let Kind::Literal(hgl_source::Literal::Str(value)) = &value.kind {
+        Some(TextPart::immutable(format!("{value:?}")))
+    } else {
+        None
+    }
+}
+/// Each leaf is resolved before the next operand, including index evaluation and validation.
+fn text_parts(
+    value: &Value,
+    parts: &mut Vec<TextPart>,
+    leaf: &mut impl FnMut(&Value) -> Option<TextPart>,
+) -> Option<()> {
+    if value.ty != Ty::Str {
+        return None;
+    }
+    if let Kind::Binary(op, a, b) = &value.kind
+        && op == "+"
+    {
+        text_parts(a, parts, leaf)?;
+        text_parts(b, parts, leaf)?;
+    } else if let Kind::Query(op, args) = &value.kind
+        && op == "delta_value"
+    {
+        text_parts(args.first()?, parts, leaf)?;
+    } else {
+        parts.push(leaf(value)?);
     }
     Some(())
 }
@@ -56,19 +61,11 @@ pub fn text(value: &Value, result: Option<&Ty>) -> Option<String> {
         return None;
     }
     let mut parts = Vec::new();
-    text_parts(value, &mut parts)?;
-    let measure=parts.iter().map(|part|format!("bytes=bytes.checked_add(({part}).len()).ok_or_else(||hgl_types::NodeError::new(\"prepared text capacity overflow\"))?;")).collect::<Vec<_>>().concat();
+    text_parts(value, &mut parts, &mut text_leaf)?;
+    let measure=parts.iter().map(|part|format!("bytes=bytes.checked_add(({}).len()).ok_or_else(||hgl_types::NodeError::new(\"prepared text capacity overflow\"))?;",part.checked)).collect::<Vec<_>>().concat();
     let compose = parts
         .iter()
-        .map(|part| {
-            format!(
-                "destination.push_str({});",
-                part.replace(
-                    '?',
-                    ".unwrap_or_else(|_|unreachable!(\"measured valid input\"))"
-                )
-            )
-        })
+        .map(|part| format!("destination.push_str({});", part.validated))
         .collect::<Vec<_>>()
         .concat();
     let target = if result.is_some_and(|ty| matches!(ty, Ty::Rolling(..))) {
@@ -81,4 +78,34 @@ pub fn text(value: &Value, result: Option<&Ty>) -> Option<String> {
     Some(format!(
         "_ctx.prepared().{target},|observation|{{let mut bytes=0usize;{measure}Ok(bytes)}},|destination,observation|{{{compose}}})?;"
     ))
+}
+
+/// Encode immutable text fragments after their ordered read validation.
+pub(crate) fn text_encoding(
+    value: &Value,
+    prelude: &mut Vec<String>,
+    emit: &impl Fn(&Value) -> String,
+) -> Option<String> {
+    let mut retained = Vec::new();
+    let mut parts = Vec::new();
+    text_parts(value, &mut parts, &mut |value| {
+        let part = text_leaf(value).or_else(|| {
+            let slot = crate::source_slots::projection(value, emit)?;
+            let id = prelude.len() + retained.len();
+            retained.push(format!("let expression_text_slot{id}={slot};"));
+            Some(TextPart::immutable(format!(
+                "self.configuration_columns.scalar::<String>(expression_text_slot{id}.fields())"
+            )))
+        })?;
+        retained.push(format!("_ctx.with_observations(|observation,_|->hgl_types::NodeResult{{let _=({}).len();Ok(())}})?;", part.checked));
+        Some(part)
+    })?;
+    prelude.extend(retained);
+    Some(
+        parts
+            .into_iter()
+            .map(|part| format!("out.write(({}).as_bytes());", part.validated))
+            .collect::<Vec<_>>()
+            .concat(),
+    )
 }

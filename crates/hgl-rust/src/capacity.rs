@@ -188,6 +188,7 @@ impl Capacity {
         hgl_rust_codegen::native_results::limits(plan, |ty| self.bounds(ty))
             + &crate::pure_bounds::native_limits(plan, || self.index(&Ty::Str))
             + &crate::pure_bounds::byte_limits(self.types.values(), |ty| self.index(ty))
+            + &self.text_limits(plan)
             + &if self.types.contains_key(&global_type(&Ty::Any)) {
                 crate::any_expression::limits(plan, |ty| self.bounds(ty), self.index(&Ty::Any))
                     + &crate::any_values::limits(

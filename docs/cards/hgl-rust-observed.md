@@ -31,3 +31,14 @@ prepared slots rather than cloning owning sparse storage during evaluation.
 
 This module now lives in hgl-rust-codegen below executable program assembly;
 its hgl-rust facade path and module ceiling remain unchanged.
+
+`text_encoding` shares immutable text fragments with direct text publication
+and encodes Any frames. Configuration field/list projections use `source_slots`;
+each index is evaluated once and its selected slot is validated before the next
+operand. Immutable bytes are read again only for width measurement and copying,
+without constructing owning text. Unsupported leaves retain the existing
+caller-selected lowering.
+
+Computed-text validation uses the lifecycle-safe `with_observations` facade.
+Text bounds are established before Any frame bounds and follow checked constructor
+origins, without evaluating constructor or provider bodies during planning.
