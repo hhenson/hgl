@@ -11,3 +11,5 @@ private entries, so assignment and append consume a complete staged value.
 Each source operand is evaluated and retained before the next operand begins.
 The normalizer does not move expressions out of control flow or helper scopes;
 existing helper and start/stop boundaries remain unchanged.
+Closed collection recipes retain their literal boundary; staging their nested
+constructors must not invalidate the collection's finite capacity proof.

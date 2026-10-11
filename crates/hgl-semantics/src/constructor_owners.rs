@@ -61,6 +61,9 @@ pub fn prepare(plan: &Plan, owning: impl Fn(&Ty) -> bool) -> Plan {
             if matches!(&v.kind, Kind::Query(op, _) if op.starts_with("\0constructor:")) {
                 return false;
             }
+            if matches!(v.kind, Kind::List(_)) && v.closed() {
+                return false;
+            }
             if matches!(v.kind, Kind::Construct(_))
                 && matches!(v.ty, Ty::Struct(..) | Ty::Recursive(_))
                 && owning(&v.ty)
