@@ -1,6 +1,6 @@
 # Card: hgl-library
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `library` module of `hgl-semantics` (`crates/hgl-semantics/src/library.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `library` module of `hgl-semantics` (`crates/hgl-semantics/src/library.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
 Index source modules, parts, imports, operator instances and test contexts.
 Uses `hgl-source` and `hgl-struct-declarations`; budget 500 lines. Allocation happens during compilation.

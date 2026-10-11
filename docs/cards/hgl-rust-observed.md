@@ -1,6 +1,6 @@
 # hgl-rust-observed
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `observed` module of `hgl-rust` (`crates/hgl-rust/src/observed.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `observed` module of `hgl-rust` (`crates/hgl-rust/src/observed.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
 Statically typed publication transport for prepared finite evaluations. `methods` emits exact structural `apply_slot`, `observe_slot`, and `pass` implementations; `apply`, `capture`, and `pass` render leaf or recursive calls. Ordinary values remain in independently owned destination storage. Key visitation borrows cold retained identities. Sparse membership and validity use existing endpoint semantics, and capacity overflow fails rather than allocating.
 

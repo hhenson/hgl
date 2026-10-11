@@ -1,6 +1,6 @@
 # Card: hgl-native
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `native` module of `hgl-stdlib` (`crates/hgl-stdlib/src/native.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `native` module of `hgl-stdlib` (`crates/hgl-stdlib/src/native.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
 Thin native helpers. May use `hgl-store`, `hgl-types`. Budget: 130 lines.
 Tests may use `hgl-alloc-count`. No registry, node lifecycle, mutation, scheduler

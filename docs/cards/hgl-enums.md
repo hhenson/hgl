@@ -1,6 +1,6 @@
 # Card: hgl-enums
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `enums` module of `hgl-semantics` (`crates/hgl-semantics/src/enums.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `enums` module of `hgl-semantics` (`crates/hgl-semantics/src/enums.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
 Checked nominal enum declarations and qualified member references. Uses
 hgl-library, hgl-source and hgl-struct-names; budget 250 source lines.

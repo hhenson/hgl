@@ -1,6 +1,6 @@
 # Card: hgl-list-storage
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `list_storage` module of `hgl-store` (`crates/hgl-store/src/list_storage.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `list_storage` module of `hgl-store` (`crates/hgl-store/src/list_storage.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
 Ordinary list marker storage, using hgl-global-value, hgl-prepared-value and
 hgl-types; budget 300 source lines. No unsafe code or third-party dependencies.

@@ -1,6 +1,6 @@
 # Card: hgl-global-arena
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `global_arena` module of `hgl-store` (`crates/hgl-store/src/global_arena.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `global_arena` module of `hgl-store` (`crates/hgl-store/src/global_arena.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
 Reusable run-owned storage for typed ordinary values. Uses `hgl-types` and
 `hgl-columns`; budget 220 lines. No unsafe code or third-party dependencies.

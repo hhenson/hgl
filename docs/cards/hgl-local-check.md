@@ -1,6 +1,6 @@
 # Card: hgl-local-check
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `local_check` module of `hgl-semantics` (`crates/hgl-semantics/src/local_check.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `local_check` module of `hgl-semantics` (`crates/hgl-semantics/src/local_check.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
 Check initialized local categories and ordinary mutations, preserving existing
 ownership, observation and arithmetic rules. Uses hgl-source, hgl-rust-ir,

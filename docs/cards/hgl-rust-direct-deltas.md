@@ -1,6 +1,6 @@
 # hgl-rust-direct-deltas
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `direct_deltas` module of `hgl-rust` (`crates/hgl-rust/src/direct_deltas.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `direct_deltas` module of `hgl-rust` (`crates/hgl-rust/src/direct_deltas.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
 Compile-time lowering of sparse output constructors and retained scalar aliases.
 The crate uses checked IR, layouts and typed observed transport; budget 400 lines.

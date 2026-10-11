@@ -1,6 +1,6 @@
 # Card: hgl-test-runner
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `test_runner` module of `hgl-compiler` (`crates/hgl-compiler/src/test_runner.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `test_runner` module of `hgl-compiler` (`crates/hgl-compiler/src/test_runner.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
 Public hglc test execution using hgl-program checking and emission, a temporary
 Cargo package and the workspace runtime crates. run(arguments, root) accepts

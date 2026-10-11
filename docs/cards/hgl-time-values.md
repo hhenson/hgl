@@ -1,6 +1,6 @@
 # Card: hgl-time-values
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `time_values` module of `hgl-types` (`crates/hgl-types/src/time_values.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `time_values` module of `hgl-types` (`crates/hgl-types/src/time_values.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
 Pure temporal scalar data; no dependencies; budget 250 source lines. Move
 EngineTime, EngineDelta, Date and Time here unchanged and re-export them from

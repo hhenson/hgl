@@ -1,6 +1,6 @@
 # Card: hgl-flow-check
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `flow_check` module of `hgl-semantics` (`crates/hgl-semantics/src/flow_check.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `flow_check` module of `hgl-semantics` (`crates/hgl-semantics/src/flow_check.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
 Pure control-flow proof analysis over checked IR. Dependency hgl-rust-ir;
 budget 150 source lines. Public: terminates, facts, merge_facts, handler_facts.

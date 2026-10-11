@@ -1,6 +1,6 @@
 # Card: hgl-proto-nodes
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `proto_nodes` module of `hgl-testkit` (`crates/hgl-testkit/src/proto_nodes.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `proto_nodes` module of `hgl-testkit` (`crates/hgl-testkit/src/proto_nodes.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
 ## Purpose
 

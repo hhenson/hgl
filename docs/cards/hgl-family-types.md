@@ -1,6 +1,6 @@
 # Card: hgl-family-types
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `family_types` module of `hgl-semantics` (`crates/hgl-semantics/src/family_types.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `family_types` module of `hgl-semantics` (`crates/hgl-semantics/src/family_types.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
 Declaration-fixed abstract membership and scoped inherited field typing. Depends
 on source, library, inheritance, struct-names and value-access; budget 300 lines.
