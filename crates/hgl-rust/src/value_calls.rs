@@ -33,6 +33,9 @@ fn statements(body: &[Statement], id: Option<usize>) -> bool {
     })
 }
 fn used(value: &Value, id: Option<usize>) -> bool {
+    if crate::scalars::bytes_input(value).is_some() {
+        return false;
+    }
     match &value.kind {
         Kind::Local(local) | Kind::MutableLocal(local) => Some(*local) == id,
         Kind::Construct(fields) | Kind::Captured(_, fields) => {

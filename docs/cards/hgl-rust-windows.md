@@ -11,8 +11,14 @@ independent forwarding, prepared recording and readiness. query returns only
 window-specific delta_value/all_valid forms; other endpoint queries remain with
 the existing metadata emitter. All helpers receive a checked complete rolling
 shape. The arrival marker is the ordinary V, never a retained-window snapshot.
+scalar(ty,input,output) borrows a scalar input through prepared rolling transport,
+copying one arrival into the independent reserved output ring.
 
 Acceptance: six unchanged rolling shared cases execute in debug/release with
 complete Graph::evaluate allocation measurements, plus nested structural child
 and generic payload regressions. Finite cold capacity is the compiler's duty;
 these fragments contain no dynamic schema interpretation or fallback allocation.
+
+`forward(source,result,input,output)` selects prepared arrival transport from
+the checked result: scalar, complete atomic payload, or rolling with its own
+window policy. Unsupported representations return None for ordinary emission.

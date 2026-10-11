@@ -47,6 +47,7 @@ pub fn shape_marker(ty: &Ty) -> String {
         | Ty::F64
         | Ty::Bool
         | Ty::Str
+        | Ty::Bytes
         | Ty::CivilDateTime
         | Ty::TimeZone
         | Ty::ZonedTime
@@ -287,6 +288,7 @@ fn collect(ty: &Ty, types: &mut BTreeSet<Ty>) {
         | Ty::F64
         | Ty::Bool
         | Ty::Str
+        | Ty::Bytes
         | Ty::CivilDateTime
         | Ty::TimeZone
         | Ty::Enum(_)

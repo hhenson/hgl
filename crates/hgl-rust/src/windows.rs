@@ -28,10 +28,17 @@ pub fn apply(ty: &Ty, output: &str, payload: &str) -> String {
         marker(ty)
     )
 }
+/// Borrow a scalar source into an independently retained rolling arrival.
+pub fn scalar(ty: &Ty, input: &str, output: &str) -> String {
+    format!(
+        "_ctx.prepared().rolling_scalar::<{}>({input},{output})?;",
+        marker(ty)
+    )
+}
 /// Prepared source-to-output arrival copy.
 pub fn from(ty: &Ty, output: &str, source: &str, slot: &str) -> String {
     format!(
-        "_ctx.prepared().rolling_from::<{}>({source},{slot},{output})?;",
+        "_ctx.prepared().rolling_from::<{}>(Some({source}),{slot},{output})?;",
         marker(ty)
     )
 }
@@ -71,4 +78,35 @@ pub fn query(ty: &Ty, op: &str, input: &str) -> Option<String> {
         "all_valid" => Some(ready(ty, input)),
         _ => None,
     }
+}
+
+/// Publish an arrival using the checked destination representation and policy.
+pub fn forward(source: &Ty, result: &Ty, input: &str, output: &str) -> Option<String> {
+    let Ty::Rolling(payload, _) = source else {
+        return None;
+    };
+    let method = if let Ty::Rolling(target, _) = result {
+        if target != payload {
+            return None;
+        }
+        "pass_rolling_as"
+    } else if let Some(target) = crate::layouts::whole_payload(result) {
+        if target != payload.as_ref() {
+            return None;
+        }
+        "atomic_from_rolling"
+    } else if result == payload.as_ref() && result.scalar() {
+        "scalar_from_rolling"
+    } else {
+        return None;
+    };
+    let shape = marker(source);
+    let arguments = if method == "pass_rolling_as" {
+        format!("{shape},{}", marker(result))
+    } else {
+        shape
+    };
+    Some(format!(
+        "_ctx.prepared().{method}::<{arguments}>({input},{output})?;"
+    ))
 }

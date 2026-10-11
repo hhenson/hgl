@@ -38,3 +38,5 @@ components; `composite_ids(usize) -> &[i64]` enumerates the prepared domain.
 Exact generated markers own domain ordinals, consistent across shared layouts
 and independent stores. Optional presence bits are explicit. Lookup compares
 all tokens after hashing and allocates nothing, including its first use.
+
+Vec<u8> is an exact cold key domain. Equality and hashing use unsigned octet contents; independently reconstructed equal keys share identity. Retained keys and with_value reads preserve ownership without hot allocation.

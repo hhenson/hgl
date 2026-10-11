@@ -32,3 +32,5 @@ EXECUTION_CODES includes value.unset_read for an admitted operation consuming
 an unset child retained from an ordinary structural observation. Retention and
 constructor copying do not consume payloads; other read failures keep their
 existing identities.
+
+The execution catalogue includes value.byte_range for constructor octets outside 0 through 255. Constant-required failure remains source rejection; executed constructors retain their phase and execution identifier.

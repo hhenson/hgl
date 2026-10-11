@@ -195,6 +195,7 @@ pub const SOURCE_CODES: &[(&str, &str)] = &[
 /// Initial execution-error catalogue, disjoint from source-error codes.
 pub const EXECUTION_CODES: &[&str] = &[
     "value.unset_read",
+    "value.byte_range",
     "yield.negative_duration",
     "yield.non_increasing_time",
     "eval.input_delta_profile",
@@ -216,12 +217,11 @@ pub fn render_issue(sources: &[(String, String)], issue: Issue) -> String {
 /// Return every rendered primary source error without changing its identity.
 pub fn ensure(errors: Vec<Diagnostic>) -> Result<(), String> {
     if errors.is_empty() {
-        Ok(())
-    } else {
-        Err(errors
-            .into_iter()
-            .map(|error| error.to_string())
-            .collect::<Vec<_>>()
-            .join("\n"))
+        return Ok(());
     }
+    Err(errors
+        .into_iter()
+        .map(|error| error.to_string())
+        .collect::<Vec<_>>()
+        .join("\n"))
 }

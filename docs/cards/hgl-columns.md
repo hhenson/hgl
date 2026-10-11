@@ -30,3 +30,5 @@ prepared borrowed projections neither allocate nor consult a provider.
 Scalar inherits hgl-scalar-copy::ScalarCopy for statically selected cold byte
 reservation and prevalidated capacity-preserving copies. Existing fixed scalars
 remain direct copies. The sealed set of scalar storage types is unchanged.
+
+Vec<u8> is the sealed Bytes scalar column. try_clone reserves fallibly and independently retains contents; erased copies remain tooling operations. Scalar extraction rejects other variants with explicit let-else checks.

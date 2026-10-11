@@ -43,6 +43,7 @@ pub fn preparation(plan: &Plan) -> String {
     code += "hgl_source::Literal::Int(v)=><i64 as hgl_store::Key>::prepare(keys,v),";
     code += "hgl_source::Literal::Float(v)=><f64 as hgl_store::Key>::prepare(keys,v),";
     code += "hgl_source::Literal::Str(v)=><String as hgl_store::Key>::prepare(keys,v),";
+    code += "hgl_source::Literal::Bytes(v)=><Vec<u8> as hgl_store::Key>::prepare(keys,v),";
     code += "hgl_source::Literal::Date(v)=><hgl_types::Date as hgl_store::Key>::prepare(keys,&hgl_types::Date(*v)),";
     code += "hgl_source::Literal::Time(v)=><hgl_types::Time as hgl_store::Key>::prepare(keys,&hgl_types::Time(*v)),";
     code += "hgl_source::Literal::Duration(v)=><hgl_types::EngineDelta as hgl_store::Key>::prepare(keys,&hgl_types::EngineDelta::from_micros(*v)),";

@@ -178,6 +178,7 @@ pub fn allocate(
             ScalarType::I64 => leaf::<i64>(columns)?,
             ScalarType::F64 => leaf::<f64>(columns)?,
             ScalarType::Text => leaf::<String>(columns)?,
+            ScalarType::Bytes => leaf::<Vec<u8>>(columns)?,
             ScalarType::Date => leaf::<Date>(columns)?,
             ScalarType::Time => leaf::<Time>(columns)?,
             ScalarType::DateTime => leaf::<EngineTime>(columns)?,

@@ -41,3 +41,5 @@ projections continue to use prepared internal membership IDs.
 
 The exhaustive ordinary-schema carrier includes Set/Map variants; source key admission remains the frontend contract.
 Growing<S> is the statically typed dense growing-list marker. Its member projections reuse construction-validated typed child tokens; Shape metadata remains distinct from Dictionary and Fixed.
+
+Vec<u8> implements Shape as TsType::Ts(ScalarType::Bytes), including typed children, map values and fixed/growing lists. It adds no structural children to bytes itself.

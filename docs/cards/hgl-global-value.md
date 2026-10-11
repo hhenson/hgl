@@ -87,3 +87,5 @@ actual descendants are installed by statically typed Recursive markers, never by
 looking up a name during evaluation.
 
 Schema-driven Set/Map root allocation creates one ordinary descriptor, using the same typed descendant ownership protocol as lists.
+
+Bytes uses the existing Scalar-based GlobalValue implementation and exact OrdinaryType::Scalar(Bytes) schema, including fallible independent retention and typed leaf allocation.

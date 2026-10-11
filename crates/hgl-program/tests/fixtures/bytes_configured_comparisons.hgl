@@ -1,0 +1,77 @@
+module bytes_configured_comparisons
+fn same(value:bytes,const expected:bytes)->bool {when {return value==expected}}
+test exact_review_example {
+    assert eval(same,[bytes([0,128,255]),bytes([0,128,255]),_,bytes(),bytes([255])],expected:bytes([0,128,255]))==[true,true,_,false,false]
+}
+const fn long_bytes()->bytes {return bytes([0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127,128,129,130,131,132,133,134,135,136,137,138,139,140,141,142,143,144,145,146,147,148,149,150,151,152,153,154,155,156,157,158,159,160,161,162,163,164,165,166,167,168,169,170,171,172,173,174,175,176,177,178,179,180,181,182,183,184,185,186,187,188,189,190,191,192,193,194,195,196,197,198,199,200,201,202,203,204,205,206,207,208,209,210,211,212,213,214,215,216,217,218,219,220,221,222,223,224,225,226,227,228,229,230,231,232,233,234,235,236,237,238,239,240,241,242,243,244,245,246,247,248,249,250,251,252,253,254,255,128,255])}
+const fn long_bytes_with_suffix()->bytes {return bytes([0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127,128,129,130,131,132,133,134,135,136,137,138,139,140,141,142,143,144,145,146,147,148,149,150,151,152,153,154,155,156,157,158,159,160,161,162,163,164,165,166,167,168,169,170,171,172,173,174,175,176,177,178,179,180,181,182,183,184,185,186,187,188,189,190,191,192,193,194,195,196,197,198,199,200,201,202,203,204,205,206,207,208,209,210,211,212,213,214,215,216,217,218,219,220,221,222,223,224,225,226,227,228,229,230,231,232,233,234,235,236,237,238,239,240,241,242,243,244,245,246,247,248,249,250,251,252,253,254,255,128,255,1])}
+fn configured_eq_left(value:bytes,const anchor:bytes)->bool {when {return value==anchor}}
+fn configured_eq_right(value:bytes,const anchor:bytes)->bool {when {return anchor==value}}
+fn configured_ne_left(value:bytes,const anchor:bytes)->bool {when {return value!=anchor}}
+fn configured_ne_right(value:bytes,const anchor:bytes)->bool {when {return anchor!=value}}
+fn configured_lt_left(value:bytes,const anchor:bytes)->bool {when {return value<anchor}}
+fn configured_lt_right(value:bytes,const anchor:bytes)->bool {when {return anchor<value}}
+fn configured_le_left(value:bytes,const anchor:bytes)->bool {when {return value<=anchor}}
+fn configured_le_right(value:bytes,const anchor:bytes)->bool {when {return anchor<=value}}
+fn configured_gt_left(value:bytes,const anchor:bytes)->bool {when {return value>anchor}}
+fn configured_gt_right(value:bytes,const anchor:bytes)->bool {when {return anchor>value}}
+fn configured_ge_left(value:bytes,const anchor:bytes)->bool {when {return value>=anchor}}
+fn configured_ge_right(value:bytes,const anchor:bytes)->bool {when {return anchor>=value}}
+test configuration_0_comparisons {
+    assert eval(configured_eq_left,[bytes(),bytes(),bytes(),_,bytes([0]),bytes([128]),bytes([255]),bytes([1]),long_bytes()],anchor:bytes())==[true,true,true,_,false,false,false,false,false]
+    assert eval(configured_eq_right,[bytes(),bytes(),bytes(),_,bytes([0]),bytes([128]),bytes([255]),bytes([1]),long_bytes()],anchor:bytes())==[true,true,true,_,false,false,false,false,false]
+    assert eval(configured_ne_left,[bytes(),bytes(),bytes(),_,bytes([0]),bytes([128]),bytes([255]),bytes([1]),long_bytes()],anchor:bytes())==[false,false,false,_,true,true,true,true,true]
+    assert eval(configured_ne_right,[bytes(),bytes(),bytes(),_,bytes([0]),bytes([128]),bytes([255]),bytes([1]),long_bytes()],anchor:bytes())==[false,false,false,_,true,true,true,true,true]
+    assert eval(configured_lt_left,[bytes(),bytes(),bytes(),_,bytes([0]),bytes([128]),bytes([255]),bytes([1]),long_bytes()],anchor:bytes())==[false,false,false,_,false,false,false,false,false]
+    assert eval(configured_lt_right,[bytes(),bytes(),bytes(),_,bytes([0]),bytes([128]),bytes([255]),bytes([1]),long_bytes()],anchor:bytes())==[false,false,false,_,true,true,true,true,true]
+    assert eval(configured_le_left,[bytes(),bytes(),bytes(),_,bytes([0]),bytes([128]),bytes([255]),bytes([1]),long_bytes()],anchor:bytes())==[true,true,true,_,false,false,false,false,false]
+    assert eval(configured_le_right,[bytes(),bytes(),bytes(),_,bytes([0]),bytes([128]),bytes([255]),bytes([1]),long_bytes()],anchor:bytes())==[true,true,true,_,true,true,true,true,true]
+    assert eval(configured_gt_left,[bytes(),bytes(),bytes(),_,bytes([0]),bytes([128]),bytes([255]),bytes([1]),long_bytes()],anchor:bytes())==[false,false,false,_,true,true,true,true,true]
+    assert eval(configured_gt_right,[bytes(),bytes(),bytes(),_,bytes([0]),bytes([128]),bytes([255]),bytes([1]),long_bytes()],anchor:bytes())==[false,false,false,_,false,false,false,false,false]
+    assert eval(configured_ge_left,[bytes(),bytes(),bytes(),_,bytes([0]),bytes([128]),bytes([255]),bytes([1]),long_bytes()],anchor:bytes())==[true,true,true,_,true,true,true,true,true]
+    assert eval(configured_ge_right,[bytes(),bytes(),bytes(),_,bytes([0]),bytes([128]),bytes([255]),bytes([1]),long_bytes()],anchor:bytes())==[true,true,true,_,false,false,false,false,false]
+}
+test configuration_1_comparisons {
+    assert eval(configured_eq_left,[bytes(),bytes([0,128,255]),bytes([0,128,255]),_,bytes([0]),bytes([128]),bytes([255]),bytes([0,128,255,1]),long_bytes()],anchor:bytes([0,128,255]))==[false,true,true,_,false,false,false,false,false]
+    assert eval(configured_eq_right,[bytes(),bytes([0,128,255]),bytes([0,128,255]),_,bytes([0]),bytes([128]),bytes([255]),bytes([0,128,255,1]),long_bytes()],anchor:bytes([0,128,255]))==[false,true,true,_,false,false,false,false,false]
+    assert eval(configured_ne_left,[bytes(),bytes([0,128,255]),bytes([0,128,255]),_,bytes([0]),bytes([128]),bytes([255]),bytes([0,128,255,1]),long_bytes()],anchor:bytes([0,128,255]))==[true,false,false,_,true,true,true,true,true]
+    assert eval(configured_ne_right,[bytes(),bytes([0,128,255]),bytes([0,128,255]),_,bytes([0]),bytes([128]),bytes([255]),bytes([0,128,255,1]),long_bytes()],anchor:bytes([0,128,255]))==[true,false,false,_,true,true,true,true,true]
+    assert eval(configured_lt_left,[bytes(),bytes([0,128,255]),bytes([0,128,255]),_,bytes([0]),bytes([128]),bytes([255]),bytes([0,128,255,1]),long_bytes()],anchor:bytes([0,128,255]))==[true,false,false,_,true,false,false,false,true]
+    assert eval(configured_lt_right,[bytes(),bytes([0,128,255]),bytes([0,128,255]),_,bytes([0]),bytes([128]),bytes([255]),bytes([0,128,255,1]),long_bytes()],anchor:bytes([0,128,255]))==[false,false,false,_,false,true,true,true,false]
+    assert eval(configured_le_left,[bytes(),bytes([0,128,255]),bytes([0,128,255]),_,bytes([0]),bytes([128]),bytes([255]),bytes([0,128,255,1]),long_bytes()],anchor:bytes([0,128,255]))==[true,true,true,_,true,false,false,false,true]
+    assert eval(configured_le_right,[bytes(),bytes([0,128,255]),bytes([0,128,255]),_,bytes([0]),bytes([128]),bytes([255]),bytes([0,128,255,1]),long_bytes()],anchor:bytes([0,128,255]))==[false,true,true,_,false,true,true,true,false]
+    assert eval(configured_gt_left,[bytes(),bytes([0,128,255]),bytes([0,128,255]),_,bytes([0]),bytes([128]),bytes([255]),bytes([0,128,255,1]),long_bytes()],anchor:bytes([0,128,255]))==[false,false,false,_,false,true,true,true,false]
+    assert eval(configured_gt_right,[bytes(),bytes([0,128,255]),bytes([0,128,255]),_,bytes([0]),bytes([128]),bytes([255]),bytes([0,128,255,1]),long_bytes()],anchor:bytes([0,128,255]))==[true,false,false,_,true,false,false,false,true]
+    assert eval(configured_ge_left,[bytes(),bytes([0,128,255]),bytes([0,128,255]),_,bytes([0]),bytes([128]),bytes([255]),bytes([0,128,255,1]),long_bytes()],anchor:bytes([0,128,255]))==[false,true,true,_,false,true,true,true,false]
+    assert eval(configured_ge_right,[bytes(),bytes([0,128,255]),bytes([0,128,255]),_,bytes([0]),bytes([128]),bytes([255]),bytes([0,128,255,1]),long_bytes()],anchor:bytes([0,128,255]))==[true,true,true,_,true,false,false,false,true]
+}
+test configuration_2_comparisons {
+    assert eval(configured_eq_left,[bytes(),long_bytes(),long_bytes(),_,bytes([0]),bytes([128]),bytes([255]),long_bytes_with_suffix(),long_bytes()],anchor:long_bytes())==[false,true,true,_,false,false,false,false,true]
+    assert eval(configured_eq_right,[bytes(),long_bytes(),long_bytes(),_,bytes([0]),bytes([128]),bytes([255]),long_bytes_with_suffix(),long_bytes()],anchor:long_bytes())==[false,true,true,_,false,false,false,false,true]
+    assert eval(configured_ne_left,[bytes(),long_bytes(),long_bytes(),_,bytes([0]),bytes([128]),bytes([255]),long_bytes_with_suffix(),long_bytes()],anchor:long_bytes())==[true,false,false,_,true,true,true,true,false]
+    assert eval(configured_ne_right,[bytes(),long_bytes(),long_bytes(),_,bytes([0]),bytes([128]),bytes([255]),long_bytes_with_suffix(),long_bytes()],anchor:long_bytes())==[true,false,false,_,true,true,true,true,false]
+    assert eval(configured_lt_left,[bytes(),long_bytes(),long_bytes(),_,bytes([0]),bytes([128]),bytes([255]),long_bytes_with_suffix(),long_bytes()],anchor:long_bytes())==[true,false,false,_,true,false,false,false,false]
+    assert eval(configured_lt_right,[bytes(),long_bytes(),long_bytes(),_,bytes([0]),bytes([128]),bytes([255]),long_bytes_with_suffix(),long_bytes()],anchor:long_bytes())==[false,false,false,_,false,true,true,true,false]
+    assert eval(configured_le_left,[bytes(),long_bytes(),long_bytes(),_,bytes([0]),bytes([128]),bytes([255]),long_bytes_with_suffix(),long_bytes()],anchor:long_bytes())==[true,true,true,_,true,false,false,false,true]
+    assert eval(configured_le_right,[bytes(),long_bytes(),long_bytes(),_,bytes([0]),bytes([128]),bytes([255]),long_bytes_with_suffix(),long_bytes()],anchor:long_bytes())==[false,true,true,_,false,true,true,true,true]
+    assert eval(configured_gt_left,[bytes(),long_bytes(),long_bytes(),_,bytes([0]),bytes([128]),bytes([255]),long_bytes_with_suffix(),long_bytes()],anchor:long_bytes())==[false,false,false,_,false,true,true,true,false]
+    assert eval(configured_gt_right,[bytes(),long_bytes(),long_bytes(),_,bytes([0]),bytes([128]),bytes([255]),long_bytes_with_suffix(),long_bytes()],anchor:long_bytes())==[true,false,false,_,true,false,false,false,false]
+    assert eval(configured_ge_left,[bytes(),long_bytes(),long_bytes(),_,bytes([0]),bytes([128]),bytes([255]),long_bytes_with_suffix(),long_bytes()],anchor:long_bytes())==[false,true,true,_,false,true,true,true,true]
+    assert eval(configured_ge_right,[bytes(),long_bytes(),long_bytes(),_,bytes([0]),bytes([128]),bytes([255]),long_bytes_with_suffix(),long_bytes()],anchor:long_bytes())==[true,true,true,_,true,false,false,false,true]
+}
+struct ConfiguredBytes { expected:bytes }
+fn projected(value:bytes,const comparison:ConfiguredBytes)->bool {when {return value==comparison.expected && comparison.expected==value}}
+struct ConfiguredCandidates { values:list<bytes> }
+fn indexed(value:bytes,const candidates:ConfiguredCandidates)->bool {when {return value==candidates.values[0] && candidates.values[0]==value}}
+fn retained(value:bytes,const anchor:bytes)->bool {when {
+    let seen=value
+    let copied=seen
+    return seen==anchor && anchor==copied
+}}
+const fn configured_bytes(value:bytes)->bytes {return value}
+test configuration_projections_and_independent_observations {
+    assert eval(projected,[bytes([0,128,255]),bytes([0,128,255]),_,bytes()],comparison:ConfiguredBytes(expected:bytes([0,128,255])))==[true,true,_,false]
+    assert eval(indexed,[bytes([0,128,255]),bytes([0,128,255]),_,bytes()],candidates:ConfiguredCandidates(values:[bytes([0,128,255])]))==[true,true,_,false]
+    assert eval(retained,[bytes([0,128,255]),bytes([0,128,255]),_,bytes()],anchor:bytes([0,128,255]))==[true,true,_,false]
+    assert eval(same,[bytes([0,128,255]),bytes(),_,bytes([255])],expected:configured_bytes(bytes([0,128,255])))==[true,false,_,false]
+}

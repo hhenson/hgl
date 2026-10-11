@@ -38,3 +38,18 @@ the graph, and preserves the primary error plus cleanup failures.
 
 List indexing still requires the parent payload and existing bounds checks before
 retaining the selected child; this extension supplies no absent-List indexing rule.
+
+May use observed. byte_slice(&Value, Option<(&str,String)>, &str)->String borrows bytes from selected typed storage or a live scalar endpoint, preserving required child validity and avoiding owning copies.
+
+Configured byte comparisons use the existing `values::place` configuration
+projection and borrow its byte slice. The measured prepared-execution fixture
+checks both operand directions for equality, inequality and every ordering
+operator, with empty, repeated, silent and long byte observations, configuration
+field/index projections, retained copies and ordinary const-function parameters.
+Removing only that configuration place projection makes the exact direct
+comparison allocate and fail the unchanged allocation assertion.
+
+The configuration fixture executes each of its 41 checked eval steps exactly
+once in a separate generated program. This preserves its authored inputs and
+expectations while bounding the Windows debug stack; allocation measurement
+remains unchanged. Other prepared-execution fixtures keep their lexical suites.

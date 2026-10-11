@@ -75,6 +75,7 @@ pub fn native(ty: &Ty, output: &str, value: &str) -> String {
         | Ty::F64
         | Ty::Bool
         | Ty::Str
+        | Ty::Bytes
         | Ty::Duration
         | Ty::Date
         | Ty::Time
@@ -165,19 +166,15 @@ pub fn prepared(ty: &Ty, output: &str, source: &str) -> String {
     )
 }
 /// Publish to an existing own output without terminating the rest of the handler.
-pub fn assignment(value: &Value, emit: impl Fn(&Value) -> String) -> Option<String> {
+pub fn assignment(value: &Value, result: &Ty, emit: impl Fn(&Value) -> String) -> Option<String> {
     if !value.snapshot && !matches!(value.ty, Ty::Tuple(_) | Ty::Struct(..)) {
         return None;
     }
     let expression = if value.snapshot {
         crate::snapshot_views::publication(value, &emit)
     } else {
-        crate::snapshots::complete(&value.ty, &emit(value))
+        emit(value)
     };
-    let publication = if value.snapshot {
-        prepared(&value.ty, "self._output", "publication")
-    } else {
-        native(&value.ty, "self._output", "publication")
-    };
-    Some(format!("{{let publication={expression};{publication}}}\n"))
+    crate::snapshot_slots::publication(value, &expression, Some(result))
+        .map(|code| format!("{{{code}}}\n"))
 }

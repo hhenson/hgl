@@ -6,7 +6,7 @@ use hgl_types::{Date, EngineDelta, EngineTime, NodeError, NodeResult, ScalarType
 pub use crate::value_lists::ListData;
 /// Upper bounds on slots required before an infallible installation.
 #[derive(Debug, Default)]
-pub struct Capacity([usize; 13]);
+pub struct Capacity([usize; 14]);
 impl Capacity {
     /// Count one statically typed primitive slot.
     pub fn scalar<T: Scalar>(&mut self) {
@@ -19,14 +19,14 @@ impl Capacity {
     }
     /// Count a known number of list descriptors, saturating into reservation failure.
     pub fn lists(&mut self, count: usize) {
-        self.0[12] = self.0[12].saturating_add(count);
+        self.0[13] = self.0[13].saturating_add(count);
     }
 }
 /// Private payloads remain in type-specific columns; all handles are stable indices.
 #[derive(Debug, Default)]
 pub struct Columns {
     values: crate::columns::Columns,
-    free: [Vec<usize>; 12],
+    free: [Vec<usize>; 13],
     lists: crate::value_lists::Lists,
 }
 impl Columns {
@@ -43,6 +43,7 @@ impl Columns {
         self.reserve_scalar::<i64>(capacity)?;
         self.reserve_scalar::<f64>(capacity)?;
         self.reserve_scalar::<String>(capacity)?;
+        self.reserve_scalar::<Vec<u8>>(capacity)?;
         self.reserve_scalar::<Date>(capacity)?;
         self.reserve_scalar::<Time>(capacity)?;
         self.reserve_scalar::<EngineTime>(capacity)?;
@@ -51,7 +52,7 @@ impl Columns {
         self.reserve_scalar::<hgl_types::ZoneId>(capacity)?;
         self.reserve_scalar::<hgl_types::ZonedDateTime>(capacity)?;
         self.reserve_scalar::<hgl_types::ZonedTime>(capacity)?;
-        self.lists.reserve(capacity.0[12])
+        self.lists.reserve(capacity.0[13])
     }
 
     fn reserve_scalar<T: Scalar>(&mut self, capacity: &Capacity) -> NodeResult {
@@ -144,6 +145,7 @@ impl Columns {
                 + count::<i64>(&self.values)
                 + count::<f64>(&self.values)
                 + count::<String>(&self.values)
+                + count::<Vec<u8>>(&self.values)
                 + count::<Date>(&self.values)
                 + count::<Time>(&self.values)
                 + count::<EngineTime>(&self.values)
@@ -163,6 +165,7 @@ fn kind<T: Scalar>() -> usize {
         ScalarType::I64 => 1,
         ScalarType::F64 => 2,
         ScalarType::Text => 3,
+        ScalarType::Bytes => 12,
         ScalarType::Date => 4,
         ScalarType::Time => 5,
         ScalarType::DateTime => 6,

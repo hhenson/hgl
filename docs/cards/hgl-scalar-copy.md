@@ -17,3 +17,5 @@ The sealed Scalar storage trait inherits this contract. There is no per-value
 type test and no replacement of the destination with a source-owned backing token.
 Acceptance includes empty names/text, longer replacements within bounds, exact
 alias distinction, retained capture independence and zero measured hot allocations.
+
+Vec<u8> reserves cold capacity and copies exact contents without replacing its buffer. bytes_from_octets(&mut Vec<u8>, impl Iterator<Item=i64> + Clone)->NodeResult validates every octet and destination capacity before any write; its repeated iterator is an immutable ordinary list observation.

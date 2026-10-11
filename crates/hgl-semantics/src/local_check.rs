@@ -17,7 +17,7 @@ fn widen(value: Value, expected: &Ty, allowed: bool) -> Value {
 
 /// Check a resolved local annotation in the initializer's own category.
 pub fn initializer(value: Value, annotation: Option<&Ty>) -> Result<Value, String> {
-    let value = crate::tuple_values::retain(value, false);
+    let value = crate::tuple_admission::retain_local(value);
     if value.ty == Ty::Void {
         return Err("statement operation has no initializer value".into());
     }

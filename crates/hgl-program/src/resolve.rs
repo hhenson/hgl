@@ -12,6 +12,7 @@ use hgl_semantics::value_bind::{
     bind, bind_prepared, method_arguments, order_arguments, resolve_type,
 };
 use hgl_semantics::value_check::{ordinary, writable};
+use hgl_semantics::value_eval::atomic_argument;
 use hgl_source::Issue;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -101,15 +102,7 @@ pub(crate) fn prepared_assertion(
 ) -> Result<Value, Issue> {
     let mut checker = test_checker(library, module, scope);
     let value = checker.expression(module, expr, &scope.bindings, false)?;
-    if value.ty != Ty::Bool {
-        return Err("ordinary assertion requires bool".into());
-    }
-    if hgl_semantics::value_check::context_free(&value) {
-        checker
-            .wiring
-            .value(&value)
-            .map_err(|e| format!("constant evaluation: {e}"))?;
-    }
+    hgl_semantics::value_eval::check_assertion(&value)?;
     Ok(value)
 }
 pub(crate) fn compile(library: Library, module: &str, entry: &str) -> Result<Plan, Issue> {
@@ -569,31 +562,30 @@ impl Checker {
         }
         true
     }
-    fn wiring_value(&mut self, value: &Value) -> Result<Value, Issue> {
-        match self.wiring.value(value) {
+    fn wiring_result<T>(
+        &mut self,
+        result: Result<T, hgl_semantics::value_eval::EvalError>,
+        failed: impl FnOnce(String) -> T,
+    ) -> Result<T, Issue> {
+        use hgl_semantics::value_eval::EvalError;
+        match result {
             Ok(value) => Ok(value),
-            Err(hgl_semantics::value_eval::EvalError::Operation(message)) => {
+            Err(EvalError::Operation(message)) => {
                 self.plan.construction_error.get_or_insert(message.clone());
-                Ok(Value::new(value.ty.clone(), Kind::WiringFailure(message)))
+                Ok(failed(message))
             }
-            Err(hgl_semantics::value_eval::EvalError::Unsupported(message)) => Err(message.into()),
-            Err(hgl_semantics::value_eval::EvalError::ContextRequired) => {
-                Err("contextual value requires run preparation".into())
-            }
+            Err(error) => Err(error.to_string().into()),
         }
     }
+    fn wiring_value(&mut self, value: &Value) -> Result<Value, Issue> {
+        let result = self.wiring.value(value);
+        self.wiring_result(result, |message| {
+            Value::new(value.ty.clone(), Kind::WiringFailure(message))
+        })
+    }
     fn wiring_statement(&mut self, statement: &Statement) -> Result<(), Issue> {
-        match self.wiring.statement(statement) {
-            Ok(_) => Ok(()),
-            Err(hgl_semantics::value_eval::EvalError::Operation(message)) => {
-                self.plan.construction_error.get_or_insert(message);
-                Ok(())
-            }
-            Err(hgl_semantics::value_eval::EvalError::Unsupported(message)) => Err(message.into()),
-            Err(hgl_semantics::value_eval::EvalError::ContextRequired) => {
-                Err("contextual value requires run preparation".into())
-            }
-        }
+        let result = self.wiring.statement(statement).map(|_| ());
+        self.wiring_result(result, |_| ())
     }
     fn wiring_local(
         &mut self,
@@ -1605,6 +1597,11 @@ impl Checker {
         env: &Env,
         runtime: bool,
     ) -> Result<Value, Issue> {
+        if name == "bytes" {
+            return hgl_semantics::value_operations::bytes(args, |expr, hint| {
+                self.expected_expression(module, expr, env, runtime, Some(hint))
+            });
+        }
         if name == "delta_value" {
             return self.delta_value(module, args, env, runtime);
         }
@@ -1620,6 +1617,10 @@ impl Checker {
         }
         if matches!(name, "len" | "push") && !args.is_empty() {
             let receiver = self.expression(module, &args[0].1, env, runtime)?;
+            if receiver.ty == Ty::Bytes && name == "len" && args.len() == 1 && args[0].0.is_none() {
+                require_payload(&receiver)?;
+                return Ok(Value::new(Ty::I64, Kind::Length(Box::new(receiver))));
+            }
             if let Ty::List(element, _) = &receiver.ty {
                 if args.iter().any(|(label, _)| label.is_some()) {
                     return Err("ordinary list operations require positional arguments".into());
@@ -1655,6 +1656,7 @@ impl Checker {
             let value =
                 self.expected_expression(module, v, env, runtime, hint.as_ref().map(|(ty, _)| ty))?;
             self.requirements.delta = previous;
+            let value = atomic_argument(value, hint.as_ref().map(|(ty, _)| ty));
             if !endpoint_metadata(name) {
                 require_payload(&value)?;
             }

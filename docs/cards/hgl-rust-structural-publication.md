@@ -8,7 +8,7 @@ layouts, snapshots and snapshot_slots. Layout/cold capacity and observation
 capture/read remain with those existing owners.
 
 Public surface: `native(&Ty, &str, &str) -> String`, `prepared(&Ty, &str, &str)
--> String` and `assignment(&Value, emit) -> Option<String>`. native publishes
+-> String` and `assignment(&Value, &Ty, emit) -> Option<String>`. native publishes
 complete supported native positional values. prepared publishes independently
 retained typed slots. assignment selects this same transport without terminating
 the handler. Inputs use canonical Ty; synthetic slot identities are emission-only.
@@ -42,3 +42,7 @@ specific native collection profile rejection are separate controls.
 
 May use snapshot_views to select scalar required reads versus the existing whole
 structural publication exclusion. Required-read coding adds no publication policy.
+
+assignment(value,result,emit) delegates the shared snapshot publication selection
+to snapshot_slots, preserving result-aware byte scalar versus rolling arrival
+transport without terminating the handler.

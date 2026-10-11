@@ -11,6 +11,7 @@ fn scalar(ty: &Ty) -> bool {
             | Ty::F64
             | Ty::Bool
             | Ty::Str
+            | Ty::Bytes
             | Ty::Duration
             | Ty::Date
             | Ty::Time

@@ -141,6 +141,7 @@ pub(crate) fn snapshot(
             | Kind::Set(_)
             | Kind::Ts(
                 ScalarType::Text
+                | ScalarType::Bytes
                 | ScalarType::Date
                 | ScalarType::Time
                 | ScalarType::DateTime
@@ -227,6 +228,7 @@ pub(crate) fn output(store: &Store, id: OutputId, t: i64, path: &str, rows: &mut
             ScalarValue::Bool(v) => v.to_string(),
             ScalarValue::F64(v) => v.to_string(),
             ScalarValue::Text(v) => v,
+            ScalarValue::Bytes(v) => format!("{v:?}"),
             ScalarValue::Date(v) => v.0.to_string(),
             ScalarValue::Time(v) => v.0.to_string(),
             ScalarValue::DateTime(v) => v.micros().to_string(),

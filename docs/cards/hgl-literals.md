@@ -26,3 +26,5 @@ ParsedLiteral::ty() -> Ty returns the type of its fixed value or recipe.
 Literal::Enum(EnumType, i64) retains the declaration identity and assigned member
 number. It is a constructed ordinary scalar; frontend validation admits declared
 members only. The type is Ty::Enum with the same declaration.
+
+Literal::Bytes(Vec<u8>) is a constructed exact scalar value, never a new lexer token. It preserves uninterpreted contents and canonical bytes identity through cold checked data.

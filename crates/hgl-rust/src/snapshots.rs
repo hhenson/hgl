@@ -54,6 +54,7 @@ pub fn storage(ty: &Ty) -> Ty {
         | Ty::F64
         | Ty::Bool
         | Ty::Str
+        | Ty::Bytes
         | Ty::Duration
         | Ty::Date
         | Ty::Time
@@ -113,6 +114,7 @@ pub fn complete(ty: &Ty, value: &str) -> String {
         | Ty::F64
         | Ty::Bool
         | Ty::Str
+        | Ty::Bytes
         | Ty::Duration
         | Ty::Date
         | Ty::Time
@@ -218,6 +220,7 @@ pub fn bounds(
             | Ty::F64
             | Ty::Bool
             | Ty::Str
+            | Ty::Bytes
             | Ty::Duration
             | Ty::Date
             | Ty::Time

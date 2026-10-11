@@ -97,6 +97,23 @@ impl Arena {
         );
         Ok(ValueSlot::bind(&mut root.layout.as_slice()))
     }
+    /// Copy a current complete ordinary octet list after whole-value preflight.
+    pub fn copy_bytes<const N: i64>(
+        &self,
+        bindings: &Bindings,
+        input: Input<Atomic<crate::list::List<i64, N>>>,
+        destination: &mut Vec<u8>,
+    ) -> NodeResult {
+        let source = self.borrow(bindings, input)?;
+        crate::scalar_copy::bytes_from_octets(
+            destination,
+            self.values.list(source.fields()).iter().map(|item| {
+                *self
+                    .values
+                    .scalar::<i64>(ValueSlot::<i64>::bind(&mut item.as_slice()).fields())
+            }),
+        )
+    }
     /// Read-only columns for ordinary borrowed projections.
     pub fn values(&self) -> &ValueColumns {
         &self.values

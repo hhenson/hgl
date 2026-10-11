@@ -41,7 +41,7 @@ fn steps(
             Step::Ordinary(statement) => {
                 if evaluator
                     .statement_with(statement, materialize)
-                    .map_err(|e| e.to_string())?
+                    .map_err(Failure::from)?
                     .is_some()
                 {
                     return Err("test setup cannot return a value".into());
@@ -50,7 +50,7 @@ fn steps(
             Step::Assert(value) => {
                 let value = evaluator
                     .value_with(value, materialize)
-                    .map_err(|e| e.to_string())?;
+                    .map_err(Failure::from)?;
                 if !matches!(value.kind, Kind::Literal(Literal::Bool(true))) {
                     return Err("ordinary assertion failed".into());
                 }
@@ -59,7 +59,7 @@ fn steps(
             Step::If(condition, yes, no) => {
                 let value = evaluator
                     .value_with(condition, materialize)
-                    .map_err(|e| e.to_string())?;
+                    .map_err(Failure::from)?;
                 let Kind::Literal(Literal::Bool(condition)) = value.kind else {
                     return Err("test condition requires bool".into());
                 };
@@ -84,7 +84,7 @@ fn steps(
                                 .transpose()
                         })
                         .collect::<Result<Vec<_>, _>>()
-                        .map_err(|e| e.to_string())?;
+                        .map_err(Failure::from)?;
                     compare(&expected, &actual)?;
                 }
                 if let Step::BindEval(id, ty, _) = step {
@@ -92,7 +92,7 @@ fn steps(
                         Value::new(ty.clone(), Kind::Captured(actual.length, actual.ticks));
                     evaluator
                         .statement_with(&Statement::Let(*id, retained), materialize)
-                        .map_err(|e| e.to_string())?;
+                        .map_err(Failure::from)?;
                 }
                 count += 1;
             }
@@ -114,7 +114,7 @@ fn prepare(
                 *binding,
                 evaluator
                     .value_with(value, materialize)
-                    .map_err(|e| e.to_string())?,
+                    .map_err(Failure::from)?,
             ),
             Argument::Dense {
                 parameter,
@@ -127,7 +127,7 @@ fn prepare(
                 let slots = if let Some(sequence) = sequence {
                     let value = evaluator
                         .value_with(sequence, materialize)
-                        .map_err(|e| e.to_string())?;
+                        .map_err(Failure::from)?;
                     let Kind::List(values) = value.kind else {
                         return Err("ordinary publication sequence requires a list".into());
                     };
@@ -141,7 +141,7 @@ fn prepare(
                                 .transpose()
                         })
                         .collect::<Result<Vec<_>, _>>()
-                        .map_err(|e| e.to_string())?
+                        .map_err(Failure::from)?
                 };
                 input_length = input_length.max(slots.len());
                 let value = crate::eval_data::timed(entry_type.clone(), &slots)?;

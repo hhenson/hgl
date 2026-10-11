@@ -128,3 +128,5 @@ emission delegates membership semantics to keyed.
 
 Prepared output assignments reuse return publication transport without returning
 from the handler; subsequent assignments and mutations retain source order.
+
+May use scalars. Byte comparisons and lengths borrow typed scalar slices, including atomic/global/snapshot projections, instead of retaining owning copies. Prepared byte constructors use a single authorized destination and complete preflight. Ordinary fallback construction retains phase and errors. Borrowed ordinary List indexing uses the existing immutable list::global_index transport, allowing retained byte comparisons without a mutable context borrow.

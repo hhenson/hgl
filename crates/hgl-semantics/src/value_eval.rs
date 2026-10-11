@@ -390,9 +390,38 @@ fn field_value(value: &Value, id: usize) -> Result<&Value, EvalError> {
 }
 
 fn sequence_length(value: &Value) -> Result<usize, EvalError> {
-    if let Kind::Captured(size, _) = value.kind {
+    if let Kind::Literal(Literal::Bytes(bytes)) = &value.kind {
+        Ok(bytes.len())
+    } else if let Kind::Captured(size, _) = value.kind {
         Ok(size)
     } else {
         Ok(list(value)?.len())
     }
+}
+
+/// Check an ordinary assertion while leaving admitted coded failures in its execution phase.
+pub fn check_assertion(value: &Value) -> Result<(), String> {
+    if value.ty != Ty::Bool {
+        return Err("ordinary assertion requires bool".into());
+    }
+    if crate::value_constant::context_free(value) {
+        match Evaluator::default().value(value) {
+            Ok(_) | Err(EvalError::Coded(..)) => {}
+            Err(error) => return Err(format!("constant evaluation: {error}")),
+        }
+    }
+    Ok(())
+}
+
+/// A readable complete atomic input supplies an ordinary helper's exact payload.
+pub fn atomic_argument(value: Value, expected: Option<&Ty>) -> Value {
+    if let Ty::Atomic(payload) = &value.ty
+        && matches!(value.kind, Kind::Input(_, false))
+        && expected.is_some_and(|expected| expected == payload.as_ref())
+    {
+        let ty = *payload.clone();
+        let kind = Kind::Unary("atomic_value".into(), Box::new(value));
+        return Value::new(ty, kind);
+    }
+    value
 }

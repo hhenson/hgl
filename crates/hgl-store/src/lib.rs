@@ -48,6 +48,7 @@ pub mod member_table;
 pub mod observation;
 pub mod optional;
 pub mod prepared_globals;
+mod prepared_rolling;
 pub mod prepared_store;
 pub mod prepared_value;
 pub mod recursive_value;

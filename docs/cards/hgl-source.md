@@ -112,3 +112,6 @@ Stmt::TimedYield retains its time operand primary Range<usize> as a third field
 so resolved semantic errors keep the original source location after parsing.
 
 Expr::Located retains expression and optional named argument origins; syntax, span and argument_span expose them without changing expression identity. Typed arrow lambda expressions are parsed for source checking; valid callable lowering remains outside the executable backend profile. Paired items iteration retains both declared local names.
+
+`Ty::scalar()` identifies ordinary scalar leaves, including nominal enums;
+composites and temporal wrappers return false.

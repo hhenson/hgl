@@ -40,6 +40,7 @@ pub fn output(
             ScalarType::I64 => scalar::<i64>(bindings, columns, owner),
             ScalarType::F64 => scalar::<f64>(bindings, columns, owner),
             ScalarType::Text => scalar::<String>(bindings, columns, owner),
+            ScalarType::Bytes => scalar::<Vec<u8>>(bindings, columns, owner),
             ScalarType::Date => scalar::<hgl_types::Date>(bindings, columns, owner),
             ScalarType::Time => scalar::<hgl_types::Time>(bindings, columns, owner),
             ScalarType::DateTime => scalar::<hgl_types::EngineTime>(bindings, columns, owner),
