@@ -35,3 +35,7 @@ each index is evaluated once and its selected slot is validated before the next
 operand. Immutable bytes are read again only for width measurement and copying,
 without constructing owning text. Unsupported leaves retain the existing
 caller-selected lowering.
+
+Computed constructor text fields use the same validated immutable fragments as
+boxed text. Their complete width is checked before clearing the reserved String
+destination, and each fragment is copied directly into it.

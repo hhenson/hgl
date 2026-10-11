@@ -35,6 +35,9 @@ impl Text {
     }
 }
 fn text(value: &Value, locals: &BTreeMap<usize, Text>) -> Text {
+    if let Some(origin) = crate::constructor_owners::origin(value) {
+        return text(origin, locals);
+    }
     if let Kind::Local(id) | Kind::MutableLocal(id) | Kind::GeneratorLocal(id) = &value.kind {
         return locals.get(id).cloned().unwrap_or(Text::Width(1));
     }

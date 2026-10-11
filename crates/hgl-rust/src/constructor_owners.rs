@@ -105,3 +105,13 @@ pub(crate) fn global_bounds(
     }
     result
 }
+
+/// Recover the checked recipe retained by an ordinary constructor staging owner.
+pub(crate) fn origin(value: &Value) -> Option<&Value> {
+    let Kind::Query(op, args) = &value.kind else {
+        return None;
+    };
+    op.starts_with("\0constructor:")
+        .then(|| args.last())
+        .flatten()
+}

@@ -36,7 +36,7 @@ mutation_bounds = { budget = 250, uses = [] }
 observed = { budget = 500, uses = ["source_slots", "snapshots", "deltas", "composite_keys", "layouts", "windows"] }
 preparation = { budget = 300, uses = ["checked_data", "collections", "families", "layouts", "recursive_convert", "value_convert", "values"] }
 prepared_values = { budget = 250, uses = [] }
-pure_bounds = { budget = 300, uses = [] }
+pure_bounds = { budget = 300, uses = ["constructor_owners"] }
 recursive_convert = { budget = 160, uses = ["checked_data", "layouts"] }
 scalars = { budget = 150, uses = [] }
 snapshot_slots = { budget = 350, uses = ["snapshot_views", "structural_publication", "layouts", "observed", "snapshots", "any_prepared", "windows"] }
