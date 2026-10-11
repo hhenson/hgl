@@ -1,5 +1,5 @@
 //! Callsite-local owner identities keep helper storage separate from caller and sibling scopes.
-use crate::ir::{Kind, Plan, Statement, Value};
+use crate::ir::{Kind, Node, Plan, Statement, Value};
 use std::collections::BTreeMap;
 fn declarations(body: &mut [Statement], visit: &mut impl FnMut(&mut usize)) {
     crate::ir_visit::nodes_mut(body, &mut |s| {
@@ -15,7 +15,7 @@ fn declarations(body: &mut [Statement], visit: &mut impl FnMut(&mut usize)) {
         }
     });
 }
-/// Highest declared local ID, excluding nested helper scopes.
+/// First unused local ID after this body's declarations, excluding nested helper scopes.
 pub(crate) fn maximum(body: &mut [Statement]) -> usize {
     let mut next = 0;
     declarations(body, &mut |id| next = next.max(*id + 1));
@@ -61,14 +61,20 @@ fn calls(value: &mut Value, next: &mut usize) -> bool {
 /// Give each helper's declared locals independent node-wide storage IDs; formal IDs remain unchanged.
 pub fn prepare(plan: &mut Plan) {
     for node in &mut plan.nodes {
-        let mut next = 0;
-        for body in std::iter::once(&mut node.start)
-            .chain(std::iter::once(&mut node.stop))
-            .chain(node.handlers.iter_mut().map(|(_, body)| body))
-            .chain(node.generator.iter_mut())
-        {
-            next = next.max(maximum(body));
-        }
+        let mut next = node_maximum(node);
         crate::ir_visit::hooks_mut(node, &mut |v| calls(v, &mut next));
     }
+}
+
+/// First unused declaration ID across lifecycle and generator bodies, excluding helper scopes.
+pub(crate) fn node_maximum(node: &mut Node) -> usize {
+    let mut next = 0;
+    for body in std::iter::once(&mut node.start)
+        .chain(std::iter::once(&mut node.stop))
+        .chain(node.handlers.iter_mut().map(|(_, body)| body))
+        .chain(node.generator.iter_mut())
+    {
+        next = next.max(maximum(body));
+    }
+    next
 }

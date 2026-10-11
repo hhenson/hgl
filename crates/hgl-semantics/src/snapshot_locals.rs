@@ -1,5 +1,5 @@
 //! Cold lexical destination reservation for complete ordinary observations.
-use crate::call_locals::maximum;
+use crate::call_locals::{maximum, node_maximum};
 use crate::ir::{Kind, Plan, Statement, Value};
 use hgl_source::Ty;
 
@@ -69,13 +69,7 @@ fn calls(
 pub fn prepare(plan: &mut Plan, storage: impl Fn(&Ty) -> Ty) {
     for (node_id, node) in plan.nodes.iter_mut().enumerate() {
         let mut locals = std::collections::BTreeMap::new();
-        let mut next = maximum(&mut node.start).max(maximum(&mut node.stop)).max(
-            node.handlers
-                .iter_mut()
-                .map(|(_, body)| maximum(body))
-                .max()
-                .unwrap_or(0),
-        );
+        let mut next = node_maximum(node);
         crate::ir_visit::hooks_mut(node, &mut |v| {
             if let Kind::ValueCall(_, body) = &mut v.kind {
                 next = next.max(maximum(body));

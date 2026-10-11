@@ -10,3 +10,8 @@ May use ir, ir_visit and call_locals for shared declaration-ID scanning; budget 
 
 Acceptance: generated observation and Any ownership tests preserve capture
 isolation, lexical identity and allocation-free finite evaluation.
+
+The declaration maximum covers start, stop, handlers and generator bodies before
+adding synthesized owners; nested helper maxima are included after callsite
+normalization. Generator declarations cannot be overwritten by scratch owners,
+including when an invoked helper has no local declarations.
