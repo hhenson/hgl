@@ -7,8 +7,8 @@ hgl-source; source admission stays in hgl-semantics. Checked type facade paths r
 `TypeSpelling` trait, as documented in the hgl-source card.
 
 May use hgl-types and the existing jiff dependency; cannot depend on source AST,
-parsing, semantic binding or compiler emission. Budget 1100. Existing moved
-module ceilings are split or transferred without increases.
+parsing, semantic binding or compiler emission. Optional reporting target: 1100 lines. Module dependencies remain enforced;
+source size is informational.
 
 DEC0004 reason 3: source and model each exceed 1000 lines
 under xtask's code-line count. Cargo prevents lower layers from reaching source

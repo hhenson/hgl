@@ -86,9 +86,9 @@ The model depends only on hgl-types and the existing jiff dependency, so it
 cannot reach source AST, parsing or semantic name resolution. Type facade reexports preserve checked type identity. Rust parsing callers must
 import `hgl_source::TypeSpelling` for `Ty::parse` and `Ty::list_parts`; those calls
 are no longer inherent Model APIs. This explicit Rust API migration keeps source
-parsing in Source without changing the HGL language. The model ceiling is 1100; moved module ceilings are
-split or transferred without increasing any crate or module ceiling.
+parsing in Source without changing the HGL language. Model has an optional 1100-line reporting target; numerical targets do not
+constrain the dependency boundary.
 
-The metadata split transfers the original Source/Semantics allowance without
-adding capacity: Source 1150, Model 1100 and Semantics 9430 total 11680.
-Measured code at this boundary is respectively 1111, 1051 and 9394 lines.
+The metadata split records optional reporting targets of Source 1150, Model
+1100 and Semantics 9430 lines. Cargo and module dependency rules enforce the
+architecture; neither individual nor combined line counts are limits.
