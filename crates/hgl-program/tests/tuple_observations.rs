@@ -115,11 +115,10 @@ fn wholly_invalid_complete_structures_fail_the_existing_profile_boundary()
     Ok(())
 }
 fn run_shared(measure: bool) -> Result<(), Box<dyn std::error::Error>> {
-    run_source(
-        include_str!("../../../external/hgraph_std/hgl/hgraph/tests/tuple_observation_values.hgl"),
-        measure,
-        false,
-    )
+    let suite = compile_tests(&sources(include_str!(
+        "../../../external/hgraph_std/hgl/hgraph/tests/tuple_observation_values.hgl"
+    )))?;
+    run_suite(&suite, measure, false, None).map(|_| ())
 }
 fn run_source(
     source: &str,
@@ -135,15 +134,42 @@ fn run_selected(
     selection: &[&str],
     expected_error: Option<&str>,
 ) -> Result<String, Box<dyn std::error::Error>> {
+    let inputs = sources(source);
+    let mut suite = compile_tests(&inputs)?;
+    let declared;
+    let selection = if selection.is_empty() {
+        declared = hgl_semantics::library::load(&inputs)?
+            .declarations
+            .iter()
+            .filter(|decl| {
+                decl.source == "tuple_observations.hgl"
+                    && decl.role == hgl_semantics::library::Role::Test
+            })
+            .map(|decl| format!("{}::{}", decl.module, decl.name))
+            .collect::<Vec<_>>();
+        if declared.is_empty() {
+            return Err("the probe source must declare its own tests".into());
+        }
+        declared.iter().map(String::as_str).collect::<Vec<_>>()
+    } else {
+        selection.to_vec()
+    };
+    suite.select(&selection)?;
+    run_suite(&suite, measure, expect_failure, expected_error)
+}
+fn run_suite(
+    suite: &hgl_program::Suite,
+    measure: bool,
+    expect_failure: bool,
+    expected_error: Option<&str>,
+) -> Result<String, Box<dyn std::error::Error>> {
     use std::{fs, process::Command};
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .canonicalize()?;
     let dir = scratch_dir("hgl-tuple-observations")?;
     fs::create_dir_all(dir.join("src"))?;
-    let mut suite = compile_tests(&sources(source))?;
-    suite.select(selection)?;
-    let mut code = hgl_program::emit_tests(&suite);
+    let mut code = hgl_program::emit_tests(suite);
     if measure {
         code = code.replace("hgl_kernel::run_simulation(", "crate::measured_simulation(");
         code.push_str(r#"

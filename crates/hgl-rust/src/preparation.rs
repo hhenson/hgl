@@ -11,7 +11,7 @@ pub fn emit_test(test: &Test, _plans: &[Plan]) -> String {
     let callbacks = callbacks(&test.steps);
     let data = crate::checked_data::test(test);
     format!(
-        "fn test()->Result<usize,String> {{ let mut context=hgl_source::time_context::RunContext::from_bundled()?; let test={data}; hgl_semantics::harness::execute(&test, |recipe|context.materialize(recipe).map_err(hgl_semantics::value_eval::EvalError::Operation), |case,prepared|match case {{{callbacks}_=>Err(\"unknown generated eval\".into())}}) }}\n"
+        "#[inline(never)]\nfn test()->Result<usize,String> {{ let mut context=hgl_source::time_context::RunContext::from_bundled()?; let test={data}; hgl_semantics::harness::execute(&test, |recipe|context.materialize(recipe).map_err(hgl_semantics::value_eval::EvalError::Operation), |case,prepared|match case {{{callbacks}_=>Err(\"unknown generated eval\".into())}}) }}\n"
     )
 }
 

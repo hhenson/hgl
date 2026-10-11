@@ -1,5 +1,7 @@
 //! The complete generated replay, target and recording path must not allocate in ticks.
 use std::{fmt::Write as _, fs, process::Command, time::SystemTime};
+#[path = "support/checked_batches.rs"]
+mod checked_batches;
 
 // Two tests can start within the same clock tick, and on Windows a second test
 // in the same directory then fights the first for its executable.
@@ -117,28 +119,36 @@ fn growing_list_publications_use_prepared_storage() -> Result<(), Box<dyn std::e
 fn bytes_configured_comparisons_borrow_without_allocating() -> Result<(), Box<dyn std::error::Error>>
 {
     let (root, suite) = compile(include_str!("fixtures/bytes_configured_comparisons.hgl").into())?;
-    let mut evaluations = 0;
-    // Each checked assertion is independent. One generated evaluation per program
-    // bounds its Windows debug stack without changing authored inputs or assertions.
+    let mut independent = hgl_program::Suite::default();
+    let mut plans = suite.plans.into_iter().map(Some).collect::<Vec<_>>();
     for test in suite.tests {
         for (position, step) in test.steps.into_iter().enumerate() {
             let hgl_semantics::harness_ir::Step::Eval(mut evaluation) = step else {
                 return Err("configured comparisons require independent evaluation steps".into());
             };
-            let plan = suite.plans[evaluation.case].clone();
-            evaluation.case = 0;
-            let selected = hgl_program::Suite {
-                tests: vec![hgl_semantics::harness_ir::Test {
-                    name: format!("{}::{position}", test.name),
-                    steps: vec![hgl_semantics::harness_ir::Step::Eval(evaluation)],
-                }],
-                plans: vec![plan],
-            };
-            execute_suite(&root, &selected, RUNTIME, true)?;
-            evaluations += 1;
+            let plan = plans[evaluation.case]
+                .take()
+                .ok_or("each comparison must own its graph plan")?;
+            evaluation.case = independent.plans.len();
+            independent.plans.push(plan);
+            independent.tests.push(hgl_semantics::harness_ir::Test {
+                name: format!("{}::{position}", test.name),
+                steps: vec![hgl_semantics::harness_ir::Step::Eval(evaluation)],
+            });
         }
     }
-    assert_eq!(evaluations, 41, "every authored evaluation executes once");
+    assert_eq!(
+        independent.tests.len(),
+        41,
+        "every authored evaluation executes once"
+    );
+    assert!(
+        plans.iter().all(Option::is_none),
+        "every graph must be retained"
+    );
+    for batch in checked_batches::split(independent, 8) {
+        execute_suite(&root, &batch, RUNTIME, true)?;
+    }
     Ok(())
 }
 #[test]
@@ -581,6 +591,20 @@ fn execute_suite(
         String::from_utf8_lossy(&output.stderr)
     );
 
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let reported = stdout
+        .lines()
+        .filter_map(|line| line.strip_suffix(" ... ok [executed]"))
+        .collect::<Vec<_>>();
+    let expected = suite
+        .tests
+        .iter()
+        .map(|test| test.name.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        reported, expected,
+        "every prepared test must execute once in source order"
+    );
     fs::remove_dir_all(dir)?;
     Ok(())
 }
