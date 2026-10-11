@@ -114,6 +114,15 @@ fn growing_list_publications_use_prepared_storage() -> Result<(), Box<dyn std::e
     )
 }
 #[test]
+fn bytes_configured_comparisons_borrow_without_allocating() -> Result<(), Box<dyn std::error::Error>>
+{
+    execute(
+        include_str!("fixtures/bytes_configured_comparisons.hgl").into(),
+        RUNTIME,
+        true,
+    )
+}
+#[test]
 fn bytes_construction_publication_and_recording_allocate_nothing()
 -> Result<(), Box<dyn std::error::Error>> {
     execute(r#"module bytes_prepared
