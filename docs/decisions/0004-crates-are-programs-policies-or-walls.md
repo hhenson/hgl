@@ -86,5 +86,9 @@ The model depends only on hgl-types and the existing jiff dependency, so it
 cannot reach source AST, parsing or semantic name resolution. Type facade reexports preserve checked type identity. Rust parsing callers must
 import `hgl_source::TypeSpelling` for `Ty::parse` and `Ty::list_parts`; those calls
 are no longer inherent Model APIs. This explicit Rust API migration keeps source
-parsing in Source without changing the HGL language. The model ceiling is 1200; moved module ceilings are
+parsing in Source without changing the HGL language. The model ceiling is 1100; moved module ceilings are
 split or transferred without increasing any crate or module ceiling.
+
+The metadata split transfers the original Source/Semantics allowance without
+adding capacity: Source 1150, Model 1100 and Semantics 9430 total 11680.
+Measured code at this boundary is respectively 1111, 1051 and 9394 lines.

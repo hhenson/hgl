@@ -7,7 +7,7 @@ publish.workspace = true
 description = "HGL semantics: the program model, its checks and the IR the backend reads."
 
 [package.metadata.hgl]
-line-budget = 9590
+line-budget = 9430
 
 # Budgets of the modules that were crates of their own (docs/decisions/0004).
 [package.metadata.hgl.modules]

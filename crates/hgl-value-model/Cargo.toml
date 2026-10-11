@@ -7,7 +7,7 @@ publish.workspace = true
 description = "Syntax-neutral ordinary metadata, checked IR and contextual materialization."
 
 [package.metadata.hgl]
-line-budget = 1200
+line-budget = 1100
 
 [package.metadata.hgl.modules]
 ordinary_shape = { budget = 120, uses = ["type_shape"] }

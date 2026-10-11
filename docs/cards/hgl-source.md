@@ -134,3 +134,6 @@ Numeric source parsing stays at `hgl_source::literals::numeric`. Model-only
 consumers retain metadata and checked IR access, but have no source parser API.
 The external-consumer regression compiles the migrated Source call and Model
 metadata usage, then verifies that Model-only parsing calls fail to compile.
+
+The crate allowance is 1150 lines after the Model split. Source, Model (1100)
+and Semantics (9430) retain the original combined 11680-line allowance.
