@@ -62,6 +62,41 @@ pub(crate) fn publication(plan: &Plan, value: &Value, result: Option<&Ty>) -> Op
     }
     crate::observed::forwarded(value, result)
 }
+fn capture(v: &Value, slot: &str) -> Option<String> {
+    if let Kind::Input(id, false) = v.kind
+        && v.ty.scalar_kind().is_some()
+    {
+        return Some(crate::observed::capture(
+            &v.ty,
+            &format!("self.input{id}"),
+            slot,
+        ));
+    }
+    if let Kind::Query(op, args) = &v.kind
+        && op == "delta_value"
+    {
+        let arg = &args[0];
+        let Kind::Input(id, _) = arg.kind else {
+            unreachable!("checked input observation")
+        };
+        return Some(crate::observed::capture(
+            &arg.ty,
+            &format!("self.input{id}"),
+            slot,
+        ));
+    }
+    if let Kind::ObservedLocal(id) = v.kind
+        && let Ty::Delta(origin) = &v.ty
+    {
+        return Some(crate::observed::capture(
+            origin,
+            &format!("local{id}"),
+            slot,
+        ));
+    }
+    None
+}
+
 pub(crate) fn write(plan: &Plan, v: &Value, slot: &str, prelude: &mut Vec<String>) -> String {
     if (!v.snapshot || v.ty.owning_scalar())
         && let Some((arena, source)) = crate::source_slots::source(plan, v)
@@ -117,24 +152,8 @@ pub(crate) fn write(plan: &Plan, v: &Value, slot: &str, prelude: &mut Vec<String
             slot,
         );
     }
-    if let Kind::Input(id, false) = v.kind
-        && v.ty.scalar_kind().is_some()
-    {
-        return crate::observed::capture(&v.ty, &format!("self.input{id}"), slot);
-    }
-    if let Kind::Query(op, args) = &v.kind
-        && op == "delta_value"
-    {
-        let arg = &args[0];
-        let Kind::Input(id, _) = arg.kind else {
-            unreachable!("checked input observation")
-        };
-        return crate::observed::capture(&arg.ty, &format!("self.input{id}"), slot);
-    }
-    if let Kind::ObservedLocal(id) = v.kind
-        && let Ty::Delta(origin) = &v.ty
-    {
-        return crate::observed::capture(origin, &format!("local{id}"), slot);
+    if let Some(code) = capture(v, slot) {
+        return code;
     }
     if let Some(code) = crate::observed::text_assignment(v, slot, prelude, &|v| emit(plan, v)) {
         return code;

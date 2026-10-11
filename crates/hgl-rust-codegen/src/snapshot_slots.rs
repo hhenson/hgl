@@ -132,7 +132,7 @@ pub fn prepare(plan: &Plan) -> Plan {
     if prepared {
         for node in &mut plan.nodes {
             let mut next = node_maximum(node);
-            for body in node.generator.iter_mut() {
+            if let Some(body) = &mut node.generator {
                 crate::native_owners::statements(body, &mut next);
             }
             crate::native_owners::statements(&mut node.start, &mut next);
@@ -152,7 +152,7 @@ pub fn prepare(plan: &Plan) -> Plan {
             }
             true
         });
-        for body in node.generator.iter_mut() {
+        if let Some(body) = &mut node.generator {
             scan(body, &mut locals, &mut next, prepared);
         }
         scan(&mut node.start, &mut locals, &mut next, prepared);
