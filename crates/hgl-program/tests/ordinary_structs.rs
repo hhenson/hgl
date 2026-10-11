@@ -116,12 +116,12 @@ fn fixed_struct_defaults_are_checked_even_when_fields_are_supplied() {
         (
             "struct Box { amount:i64=9223372036854775807+1 }",
             "let box=Box()",
-            "fixed scalar",
+            "integer overflow",
         ),
         (
             "struct Box { amount:i64=unknown() }",
             "let box=Box()",
-            "fixed scalar",
+            "unknown",
         ),
         (
             "struct Box<T> { amount:T=1 }",

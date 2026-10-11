@@ -287,7 +287,12 @@ pub fn prepare_node(
     };
 
     for p in &signature.parameters {
-        if p.constant {
+        if p.constant
+            || (signature.value_function
+                && env
+                    .get(&p.name)
+                    .is_some_and(|v| !matches!(v.kind, Kind::Wire(_))))
+        {
             let value = env.get_mut(&p.name).ok_or("missing configuration")?;
             if matches!(value.kind, Kind::Prepared(_))
                 || matches!(
@@ -330,4 +335,26 @@ fn call_arguments(args: &[Value], live: &BTreeMap<usize, bool>) -> Result<(), St
         expression(value, live)?;
     }
     Ok(())
+}
+
+/// Preserve canonical expected value types and the existing scalar widening boundary.
+pub fn expected_value(
+    mut value: Value,
+    expected: Option<&Ty>,
+    span: std::ops::Range<usize>,
+) -> Result<Value, hgl_source::Issue> {
+    if expected == Some(&Ty::F64) && value.ty == Ty::I64 {
+        value = Value::new(Ty::F64, Kind::Unary("float".into(), Box::new(value)));
+    }
+    if let Some(ty) = expected
+        && value.ty != *ty
+    {
+        return Err(hgl_source::Issue::coded(
+            "type",
+            "delta.type_mismatch",
+            span,
+            format!("expected {}, got {}", ty.name(), value.ty.name()),
+        ));
+    }
+    Ok(value)
 }

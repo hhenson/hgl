@@ -179,6 +179,8 @@ pub fn recording_key(plan: &crate::ir::Plan) -> String {
 pub struct Evaluation {
     /// Named target.
     pub function: String,
+    /// Explicit selection of the ordinary value declaration before lifting.
+    pub value_only: bool,
     /// Source-ordered arguments.
     pub arguments: Vec<(Option<String>, Expr)>,
     /// Optional dense expected output.
@@ -207,14 +209,26 @@ pub fn evaluation(expr: Expr, assertion: bool) -> Result<Evaluation, String> {
         return Err("expected eval(function, ...)".into());
     }
     let (label, expression) = arguments.remove(0);
-    let Expr::Name(function) = expression.syntax().clone() else {
-        return Err("eval requires a named function".into());
+    let (function, value_only) = if let Expr::Name(function) = expression.syntax() {
+        (function.clone(), false)
+    } else if let Expr::Call(selector, args) = expression.syntax()
+        && selector == "const"
+        && args.len() == 1
+        && args[0].0.is_none()
+    {
+        let Expr::Name(function) = args[0].1.syntax() else {
+            return Err("value selector requires a named function".into());
+        };
+        (function.clone(), true)
+    } else {
+        return Err("eval requires a named function or explicit value selector".into());
     };
     if label.is_some() {
         return Err("eval function must be positional".into());
     }
     Ok(Evaluation {
         function,
+        value_only,
         arguments,
         expected,
     })

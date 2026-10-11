@@ -64,4 +64,6 @@ retained keys obey the same constant/provenance checks as child expressions.
 
 signature_types returns structured Issues and delegates written reduced delta requirements and bound excluded shapes to source_check. Generic parameter identity remains exact after earlier argument constraints; codes do not depend on diagnostic wording. May use source_check.
 
+Checked ordinary defaults are retained in Parameter::value_default. Signature::parameter_names supplies declaration-order binding names. General default checking belongs to hgl-default-values.
+
 May use struct_declarations for the shared declared type-domain check.

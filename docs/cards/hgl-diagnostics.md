@@ -35,4 +35,4 @@ existing identities.
 
 The execution catalogue includes value.byte_range for constructor octets outside 0 through 255. Constant-required failure remains source rejection; executed constructors retain their phase and execution identifier.
 
-The execution catalogue admits value.capability for an executed boxed operation or key missing its actual contained capability.
+The source catalogue admits type/value.constant_capability for known required-constant Any operations or keys missing a capability. The execution catalogue admits value.capability. These catalogues remain disjoint.

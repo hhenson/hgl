@@ -11,12 +11,15 @@ pub fn compile_module_suite(sources: &[(String, String)]) -> Result<Suite, Strin
     suite(sources, true)
 }
 fn suite(sources: &[(String, String)], module_only: bool) -> Result<Suite, String> {
-    let errors = hgl_semantics::source_check::with_module_semantics(sources, |_, _| Ok(()));
-    if module_only {
-        hgl_source::diagnostics::ensure(errors)?;
+    let check = |library: &index::Library, decl: &index::Decl| {
+        resolve::validate_defaults(library.clone(), decl)
+    };
+    let errors = if module_only {
+        hgl_semantics::source_check::with_module_semantics(sources, check)
     } else {
-        hgl_semantics::source_check::ensure_sources(sources)?;
-    }
+        hgl_semantics::source_check::with_semantics(sources, check)
+    };
+    hgl_source::diagnostics::ensure(errors)?;
     let library = index::load(sources)?;
     hgl_semantics::enums::validate(&library)?;
     let mut suite = Suite::default();

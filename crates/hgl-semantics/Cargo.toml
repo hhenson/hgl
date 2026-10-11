@@ -18,6 +18,7 @@ boxed_uses = { budget = 80, uses = ["ir", "ir_visit"] }
 any_values = { budget = 60, uses = ["ir", "value_eval", "endpoint_check", "value_access", "family_values", "scalar_keys"] }
 value_constructors = { budget = 100, uses = ["ir", "value_eval", "endpoint_check", "value_access", "any_values"] }
 value_operators = { budget = 120, uses = [] }
+default_values = { budget = 220, uses = ["ir", "library", "value_eval", "value_types", "inheritance", "enums"] }
 body_check = { budget = 220, uses = ["ir", "library"] }
 collection_check = { budget = 180, uses = ["collection_values", "ir", "value_access", "value_constant", "value_eval", "any_values"] }
 delta_check = { budget = 350, uses = ["composite_keys", "ir"] }
@@ -27,16 +28,16 @@ eval_data = { budget = 350, uses = ["ir", "library", "publication_trace", "value
 family_types = { budget = 300, uses = ["inheritance", "library", "struct_names", "value_access"] }
 flow_check = { budget = 150, uses = ["ir"] }
 harness = { budget = 250, uses = ["collection_values", "eval_data", "family_values", "harness_ir", "ir", "value_eval", "any_values"] }
-harness_check = { budget = 180, uses = ["eval_data", "flow_check", "harness_ir", "ir", "static_values"] }
+harness_check = { budget = 180, uses = ["eval_data", "flow_check", "harness_ir", "ir", "static_values", "library", "value_types"] }
 inheritance = { budget = 300, uses = ["enums", "library", "struct_names"] }
-library = { budget = 500, uses = ["struct_declarations"] }
+library = { budget = 500, uses = ["struct_declarations", "ir"] }
 local_check = { budget = 220, uses = ["endpoint_check", "ir", "structural_admission", "tuple_admission", "value_check"] }
 name_check = { budget = 250, uses = ["tuple_flow", "tuple_phase", "enums", "library", "struct_names", "type_sizes"] }
 recursive_types = { budget = 350, uses = ["struct_declarations", "enums", "library", "shape_obligations", "struct_names", "value_access"] }
 shape_obligations = { budget = 150, uses = ["library", "struct_names", "value_access"] }
 source_check = { budget = 550, uses = ["tuple_writes", "tuple_flow", "tuple_phase", "ir", "enums", "eval_data", "library", "name_check", "type_sizes", "value_access", "value_check", "value_types"] }
 static_values = { budget = 150, uses = ["composite_keys", "ir", "library", "value_constant", "value_eval"] }
-struct_check = { budget = 450, uses = ["enums", "family_types", "inheritance", "ir", "library", "type_sizes", "value_access", "value_types"] }
+struct_check = { budget = 450, uses = ["enums", "family_types", "inheritance", "ir", "library", "type_sizes", "value_access", "value_types", "default_values"] }
 struct_declarations = { budget = 200, uses = [] }
 struct_names = { budget = 160, uses = ["library"] }
 type_sizes = { budget = 180, uses = ["ir", "value_check", "value_eval"] }

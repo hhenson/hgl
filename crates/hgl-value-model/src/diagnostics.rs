@@ -179,6 +179,7 @@ pub const SOURCE_CODES: &[(&str, &str)] = &[
     ("type", "rolling.size_bounds"),
     ("type", "yield.time_type"),
     ("type", "test.raises_code"),
+    ("type", "value.constant_capability"),
     ("phase", "test.statement_phase"),
     ("shape", "delta.unsupported_shape"),
     ("type", "delta.type_mismatch"),

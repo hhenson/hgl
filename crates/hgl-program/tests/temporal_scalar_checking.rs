@@ -54,7 +54,7 @@ fn contextual_defaults_remain_recipes_and_supplied_values_suppress_them() {
     assert!(
         compile(&[("test.hgl".into(), source.into())], "main")
             .unwrap_err()
-            .contains("contextual temporal default")
+            .contains("contextual temporal construction requires run preparation")
     );
 }
 #[test]

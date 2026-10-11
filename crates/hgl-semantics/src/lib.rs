@@ -59,5 +59,7 @@ pub mod value_operators;
 /// Independent lexical storage identities for emitted helper callsites.
 pub mod call_locals;
 
+/// Required ordinary defaults share checking-time retention and capability identity.
+pub mod default_values;
 /// Cold reservation of lexical complete observation destinations.
 pub mod snapshot_locals;

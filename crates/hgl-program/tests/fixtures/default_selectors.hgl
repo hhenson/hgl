@@ -1,0 +1,8 @@
+module default_selectors
+const fn choose(value:i64,factor:i64=2)->i64=>value+factor
+fn choose(value:i64,const factor:i64=10)->i64 {when {return value+factor}}
+test {test selected {
+    assert eval(const(choose),value:[1,2],factor:3)==[4,5]
+    assert eval(const(choose),value:[1,2])==[3,4]
+    assert eval(choose,value:[1,2])==[11,12]
+}}

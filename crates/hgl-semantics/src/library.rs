@@ -52,8 +52,10 @@ pub struct Parameter {
     pub type_tokens: Vec<Token>,
     /// Wiring-time parameter.
     pub constant: bool,
-    /// Optional fixed default expression.
+    /// Optional required ordinary default expression.
     pub default: Option<Expr>,
+    /// Checked independently owned required default, materialized before binding.
+    pub value_default: Option<crate::ir::Value>,
 }
 #[derive(Debug, Clone)]
 /// A callable signature and its retained body.
@@ -476,6 +478,7 @@ fn parameters(c: &mut Cursor<'_>, value_function: bool) -> Result<Vec<Parameter>
             type_tokens,
             constant,
             default,
+            value_default: None,
         });
         c.lines();
         if !c.take(",") {
@@ -502,4 +505,11 @@ pub fn locate_type_issue(mut issue: Issue, tokens: &[Token], source: &str) -> Is
         issue.span = token.span.clone();
     }
     issue.in_source(source)
+}
+
+impl Signature {
+    /// Formal argument order shared by binding and size/default preparation.
+    pub fn parameter_names(&self) -> Vec<&str> {
+        self.parameters.iter().map(|p| p.name.as_str()).collect()
+    }
 }

@@ -22,6 +22,7 @@ fn plan(body: &str) -> Plan {
         library,
         "example",
         "probe",
+        false,
         &[(
             None,
             Expr::Sequence(vec![Some(Expr::Literal(Literal::Int(1)))]),

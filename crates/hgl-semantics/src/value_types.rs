@@ -171,8 +171,8 @@ pub fn specialize(
         }
         for (_, value) in schema.defaults.iter().filter(|(field, _)| *field == index) {
             if !matches!(value.syntax(), hgl_source::Expr::Null)
-                && crate::enums::default(library, &decl.module, value)?.ty()
-                    != crate::value_access::project(&ty)
+                && crate::enums::default(library, &decl.module, value)
+                    .is_ok_and(|value| value.ty() != crate::value_access::project(&ty))
             {
                 return Err(format!("struct field {name}: default type mismatch"));
             }
