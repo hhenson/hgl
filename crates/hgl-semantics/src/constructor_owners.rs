@@ -14,10 +14,11 @@ fn hoist(value: &mut Value, configuration: &mut Vec<Value>, owning: &impl Fn(&Ty
     }
 }
 fn references(value: &mut Value, owners: &BTreeMap<usize, usize>) -> bool {
-    if let Kind::Local(id) = value.kind
+    if let Kind::Local(id) | Kind::MutableLocal(id) = value.kind
         && let Some(entry) = owners.get(&id)
     {
-        value.kind = Kind::BorrowedLocal(id, *entry, false);
+        value.kind = Kind::BorrowedLocal(id, *entry, matches!(value.kind, Kind::MutableLocal(_)));
+        value.snapshot = false;
     }
     if let Kind::ValueCall(args, _) = &mut value.kind {
         for argument in args {
@@ -42,11 +43,16 @@ pub fn prepare(
             .chain(node.handlers.iter_mut().map(|(_, body)| body))
         {
             crate::ir_visit::nodes_mut(body, &mut |s| {
-                if let Statement::Let(id, value) = s
+                if let Statement::Assign(target, value) = s
+                    && matches!(target.kind,Kind::MutableLocal(id) if owners.contains_key(&id))
+                {
+                    hoist(value, &mut node.configuration, &owning);
+                }
+                if let Statement::Let(id, value) | Statement::Var(id, value) = s
                     && matches!(value.ty, Ty::Struct(..) | Ty::Recursive(_) | Ty::Family(_))
                     && (matches!(value.kind, Kind::Construct(_))
                         || matches!(&value.kind, Kind::Unary(op, _) if op=="family")
-                        || matches!(value.kind,Kind::Local(id) if origins.contains_key(&id)))
+                        || matches!(value.kind,Kind::Local(id)|Kind::MutableLocal(id) if origins.contains_key(&id)))
                     && owning(&value.ty)
                 {
                     let origin =
@@ -78,7 +84,7 @@ fn origin(
     owning: &impl Fn(&Ty) -> bool,
     convert: &impl Fn(&Value) -> Option<Value>,
 ) -> Value {
-    if let Kind::Local(source) = value.kind {
+    if let Kind::Local(source) | Kind::MutableLocal(source) = value.kind {
         return origins[&source].clone();
     }
     *value = convert(value).unwrap_or_else(|| value.clone());
