@@ -8,11 +8,13 @@ pub(crate) fn prepare(
     node_id: usize,
 ) -> bool {
     if let Kind::Binary(op, left, right) = &v.kind
-        && matches!(op.as_str(), "==" | "!=")
-        && matches!(left.ty, Ty::Family(_))
-        && [left.as_ref(), right.as_ref()]
-            .iter()
-            .all(|v| crate::source_slots::source(plan, v).is_some())
+        && matches!(op.as_str(), "==" | "!=" | "<" | "<=" | ">" | ">=")
+        && (left.ty == Ty::Any
+            || matches!(op.as_str(), "==" | "!=")
+                && matches!(left.ty, Ty::Family(_))
+                && [left.as_ref(), right.as_ref()]
+                    .iter()
+                    .all(|v| crate::source_slots::source(plan, v).is_some()))
     {
         let entry = globals.len();
         for offset in 0..2 {
@@ -30,7 +32,7 @@ pub(crate) fn prepare(
 
     false
 }
-/// Compare retained family members through precompiled codecs without native owning extraction.
+/// Compare independently retained operands through compiled codecs without native owning extraction.
 pub(crate) fn comparison(plan: &Plan, op: &str, args: &[Value]) -> String {
     let (entry, operation) = op
         .strip_prefix("\0family-eq:")

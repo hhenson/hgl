@@ -125,7 +125,7 @@ fn copied(plan: &Plan, value: &Value, destination: &str) -> Option<String> {
         "<{marker} as hgl_store::PreparedValue>::check_slots({source_columns},source,columns,{destination})?;<{marker} as hgl_store::PreparedValue>::{copy};"
     );
     Some(format!(
-        "let source={source};let mut prepared=_ctx.prepared();let(observation,globals)=prepared.storage.observations();let columns=globals.values_mut();{copied}"
+        "let source={source};_ctx.with_observations(|observation,globals|->hgl_types::NodeResult{{let columns=globals.values_mut();{copied}Ok(())}})?;"
     ))
 }
 /// Retain complete boxes before any borrowed source can be replaced.
@@ -142,7 +142,7 @@ pub fn write(
         let capture =
             crate::observed::capture(&input.ty, &crate::observed::input(input), destination);
         return format!(
-            "let now=_ctx.evaluation_time();let mut prepared=_ctx.prepared();let(observation,globals)=prepared.storage.observations();let columns=globals.values_mut();{capture}"
+            "let now=_ctx.evaluation_time();_ctx.with_observations(|observation,globals|->hgl_types::NodeResult{{let columns=globals.values_mut();{capture}Ok(())}})?;"
         );
     }
     if let Some(code) = copied(plan, value, destination) {
@@ -169,7 +169,7 @@ pub fn write(
             };
             let capture = crate::observed::capture(origin, &format!("self.input{input}"), "source");
             return format!(
-                "let source=_ctx.global_state().destination(self.global{id});let now=_ctx.evaluation_time();let mut prepared=_ctx.prepared();let(observation,globals)=prepared.storage.observations();let columns=globals.values_mut();{capture}columns.compose_any({destination},|columns|{{let mut width=hgl_types::any_values::AnyWidth::default();let plan=any_box_slots_{n}(columns,source,&mut width);Ok((plan,width.0))}},|columns,out|{{any_box_slots_{n}(columns,source,out);}})?;"
+                "let source=_ctx.global_state().destination(self.global{id});let now=_ctx.evaluation_time();_ctx.with_observations(|observation,globals|->hgl_types::NodeResult{{let columns=globals.values_mut();{capture}columns.compose_any({destination},|columns|{{let mut width=hgl_types::any_values::AnyWidth::default();let plan=any_box_slots_{n}(columns,source,&mut width);Ok((plan,width.0))}},|columns,out|{{any_box_slots_{n}(columns,source,out);}})?;Ok(())}})?;"
             );
         }
         if let Some((columns, source)) = crate::source_slots::source(plan, argument) {
@@ -181,13 +181,13 @@ pub fn write(
                 destination,
             );
             return format!(
-                "let source={source};let mut prepared=_ctx.prepared();let(observation,globals)=prepared.storage.observations();let columns=globals.values_mut();{boxed}"
+                "let source={source};_ctx.with_observations(|observation,globals|->hgl_types::NodeResult{{let columns=globals.values_mut();{boxed}Ok(())}})?;"
             );
         }
         let mut prelude = Vec::new();
         if let Some(code) = crate::any_expression::encoding(plan, argument, &emit, &mut prelude) {
             return format!(
-                "{}let mut prepared=_ctx.prepared();let(observation,globals)=prepared.storage.observations();let columns=globals.values_mut();{}",
+                "{}_ctx.with_observations(|observation,globals|->hgl_types::NodeResult{{let columns=globals.values_mut();{}Ok(())}})?;",
                 prelude.concat(),
                 crate::any_expression::compose(&code, destination)
             );

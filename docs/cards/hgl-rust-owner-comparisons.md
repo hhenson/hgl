@@ -8,3 +8,5 @@ Acceptance: the original admitted mixed family equality-before-boxing source run
 
 This module now lives in hgl-rust-codegen below executable program assembly;
 its hgl-rust facade path and module ceiling remain unchanged.
+
+The reviewed Any comparison path also stages both ordinary Any operands for all six comparison operators, preserving provider failures and avoiding temporary owners.

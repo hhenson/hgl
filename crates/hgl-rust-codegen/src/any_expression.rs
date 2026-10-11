@@ -63,19 +63,12 @@ fn body(
             .collect::<Vec<_>>()
             .concat();
     }
-    let id = prelude.len();
-    let n = crate::any_values::name(&value.ty);
-    if let Some((arena, source)) = crate::source_slots::source(plan, value) {
-        prelude.push(format!("let expression_source{id}={source};"));
-        format!(
-            "any_slots_{n}({},expression_source{id},out);",
-            crate::source_slots::columns(arena)
-        )
-    } else {
-        prelude.push(format!("let expression_value{id}={};", emit(value)));
-        format!("any_write_{n}(&expression_value{id},out);")
-    }
+    format!(
+        "{};",
+        crate::any_expression_leaves::emit(plan, value, prelude, emit, false)
+    )
 }
+
 fn boxed(
     plan: &Plan,
     value: &Value,
@@ -89,17 +82,7 @@ fn boxed(
         return "None::<&'static hgl_types::AnyPlan>".into();
     }
     if matches!(value.ty, Ty::Any | Ty::Family(_)) {
-        let id = prelude.len();
-        let n = crate::any_values::name(&value.ty);
-        if let Some((arena, source)) = crate::source_slots::source(plan, value) {
-            prelude.push(format!("let expression_source{id}={source};"));
-            return format!(
-                "any_box_slots_{n}({},expression_source{id},out)",
-                crate::source_slots::columns(arena)
-            );
-        }
-        prelude.push(format!("let expression_value{id}={};", emit(value)));
-        return format!("any_box_native_{n}(&expression_value{id},out)");
+        return crate::any_expression_leaves::emit(plan, value, prelude, emit, true);
     }
     let data = body(plan, value, prelude, emit);
     format!("{data}Some(&ANY_{})", crate::any_values::name(&value.ty))

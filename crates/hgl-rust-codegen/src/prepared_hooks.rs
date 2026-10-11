@@ -1,5 +1,6 @@
 //! Prepared publication and ordered global hook writes share typed source slots.
 use crate::layouts::global_type;
+pub(crate) use crate::prepared_global_writes::set;
 use crate::values::condition_code as emit;
 use hgl_semantics::ir::{Kind, Plan, Value};
 use hgl_source::Ty;
@@ -101,6 +102,11 @@ fn write(plan: &Plan, v: &Value, slot: &str, prelude: &mut Vec<String>) -> Strin
             slot,
         );
     }
+    if let Kind::Input(id, false) = v.kind
+        && v.ty.scalar_kind().is_some()
+    {
+        return crate::observed::capture(&v.ty, &format!("self.input{id}"), slot);
+    }
     if let Kind::Query(op, args) = &v.kind
         && op == "delta_value"
     {
@@ -128,7 +134,7 @@ pub(crate) fn append(plan: &Plan, item: &Value, list: &str) -> String {
     let mut prelude = Vec::new();
     let write = write(plan, item, "destination", &mut prelude);
     format!(
-        "{{{}let now=_ctx.evaluation_time();let list={list};let mut prepared=_ctx.prepared();let (observation,globals)=prepared.storage.observations();let columns=globals.values_mut();let destination=hgl_store::append_slot::<{marker}>(columns,list)?;{}hgl_store::commit_append::<{marker}>(columns,list);}}",
+        "{{{}let now=_ctx.evaluation_time();let list={list};_ctx.with_observations(|observation,globals|->hgl_types::NodeResult{{let columns=globals.values_mut();let destination=hgl_store::append_slot::<{marker}>(columns,list)?;{}hgl_store::commit_append::<{marker}>(columns,list);Ok(())}})?;}}",
         prelude.concat(),
         write
     )
@@ -137,34 +143,7 @@ pub(crate) fn replace(plan: &Plan, item: &Value, slot: &str) -> String {
     let mut prelude = Vec::new();
     let write = write(plan, item, "destination", &mut prelude);
     format!(
-        "{{{}let destination={slot};let now=_ctx.evaluation_time();let mut prepared=_ctx.prepared();let(observation,globals)=prepared.storage.observations();let columns=globals.values_mut();{write}}}",
+        "{{{}let destination={slot};let now=_ctx.evaluation_time();_ctx.with_observations(|observation,globals|->hgl_types::NodeResult{{let columns=globals.values_mut();{write}Ok(())}})?;}}",
         prelude.concat()
-    )
-}
-
-pub(crate) fn set(plan: &Plan, id: usize, v: &Value) -> String {
-    if v.ty == Ty::Any && crate::finite_domains::prepared(plan) {
-        return format!(
-            "{{let destination=_ctx.global_state().destination(self.global{id});{}_ctx.global_state().mark_present(self.global{id});}}",
-            crate::any_prepared::write(plan, v, "destination", |v| emit(plan, v))
-        );
-    }
-    if v.snapshot {
-        let marker = global_type(&v.ty);
-        let source = crate::snapshot_slots::projection(v, |v| emit(plan, v));
-        return format!(
-            "{{let source={source};let globals=_ctx.global_state();let destination=globals.destination(self.global{id});<{marker} as hgl_store::PreparedValue>::check_slots(globals.values(),source,globals.values(),destination)?;<{marker} as hgl_store::PreparedValue>::copy_within(globals.values_mut(),source,destination);globals.mark_present(self.global{id});}}"
-        );
-    }
-    if !crate::finite_domains::prepared(plan) {
-        return format!(
-            "{{let value={};_ctx.global_state().set(self.global{id},&value)?;}}",
-            emit(plan, v)
-        );
-    }
-    let marker = global_type(&v.ty);
-    format!(
-        "{{let value={};let globals=_ctx.global_state();let slot=globals.destination(self.global{id});<{marker} as hgl_store::PreparedValue>::check_native(globals.values(),slot,&value)?;<{marker} as hgl_store::PreparedValue>::copy_native(globals.values_mut(),slot,&value);globals.mark_present(self.global{id});}}",
-        emit(plan, v)
     )
 }

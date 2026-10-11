@@ -1,6 +1,7 @@
 //! Checked value, layout and hook emission, isolated from executable program assembly.
 /// Prepared expression emission used by program capacity planning.
 pub mod any_expression;
+mod any_expression_leaves;
 pub mod any_prepared;
 pub mod any_values;
 pub mod checked_data;
@@ -22,6 +23,7 @@ pub mod mutation_bounds;
 pub mod observed;
 mod owner_comparisons;
 pub mod prepared_hooks;
+mod prepared_global_writes;
 pub mod prepared_values;
 pub mod pure_bounds;
 pub mod recursive_convert;

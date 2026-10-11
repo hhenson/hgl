@@ -9,13 +9,15 @@ publish.workspace = true
 line-budget = 8940
 
 [package.metadata.hgl.modules]
+any_expression_leaves = { budget = 50, uses = ["layouts", "any_values", "source_slots"] }
+prepared_global_writes = { budget = 60, uses = ["layouts", "prepared_hooks", "values", "any_prepared", "finite_domains", "snapshot_slots"] }
 owner_comparisons = { budget = 100, uses = ["source_slots", "any_prepared", "any_values", "values"] }
-any_expression = { budget = 180, uses = ["any_values", "source_slots", "constructor_owners"] }
+any_expression = { budget = 180, uses = ["any_expression_leaves", "any_values", "source_slots", "constructor_owners"] }
 constructor_owners = { budget = 180, uses = ["prepared_hooks", "layouts"] }
 identifiers = { budget = 40, uses = [] }
 any_values = { budget = 600, uses = ["deltas", "layouts", "collections", "families", "scalars", "value_convert"] }
 any_prepared = { budget = 250, uses = ["execution_proof", "source_slots", "layouts", "any_values", "values", "observed", "any_expression", "constructor_owners", "owner_comparisons", "native_image"] }
-prepared_hooks = { budget = 180, uses = ["source_slots", "any_values", "scalars", "layouts", "direct_deltas", "finite_domains", "observed", "snapshot_slots", "execution_proof", "any_prepared", "values", "any_expression", "constructor_owners"] }
+prepared_hooks = { budget = 180, uses = ["prepared_global_writes", "source_slots", "any_values", "scalars", "layouts", "direct_deltas", "finite_domains", "observed", "snapshot_slots", "execution_proof", "any_prepared", "values", "any_expression", "constructor_owners"] }
 checked_data = { budget = 250, uses = ["enums", "type_data", "scalars"] }
 collections = { budget = 250, uses = ["families", "prepared_values", "layouts"] }
 composite_keys = { budget = 250, uses = [] }

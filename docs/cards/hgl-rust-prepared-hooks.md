@@ -12,3 +12,5 @@ Constructor field publication delegates optional and recursive slot selection to
 
 This module now lives in hgl-rust-codegen below executable program assembly;
 its hgl-rust facade path and module ceiling remain unchanged.
+
+Global set/presence emission lives in prepared_global_writes (initial ceiling 60, uses layouts, prepared_hooks, values, any_prepared, finite_domains and snapshot_slots). The existing prepared_hooks::set facade is preserved. Complete constructor/global replacements share ordered field writes; input scalar leaves borrow readonly observations. All existing ceilings and the aggregate ceiling remain unchanged.

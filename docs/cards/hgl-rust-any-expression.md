@@ -10,3 +10,5 @@ Constructor operands are cached once in supplied source order before encoding in
 
 This module now lives in hgl-rust-codegen below executable program assembly;
 its hgl-rust facade path and module ceiling remain unchanged.
+
+The any_expression_leaves sibling owns typed leaf source selection (initial ceiling 50, uses layouts, any_values and source_slots). Both plain frames and nested box leaves share its codec selection. Scalar input views validate before writing and borrow immutable observation storage during measurement/copy without allocating a String. The parent module uses this sibling and retains its existing 180-line ceiling.

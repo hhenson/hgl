@@ -339,3 +339,5 @@ This keeps source observation, prepared record append and publication under one
 borrowed capability without adding per-value names or type dispatch.
 
 On a primary execution/start failure followed by cleanup failure, retain the first primary and attach cleanup to NodeError.cleanup; matching negative assertions can then fail without losing either error.
+
+`Ctx::with_observations(action)` lends immutable temporal observations and mutable ordinary global storage in start, evaluation or stop, without publication authority. This is the reviewed Any lifecycle boundary reused by Native owning copies.

@@ -474,8 +474,10 @@ fn native_argument(plan: &Plan, v: &Value) -> String {
     if hgl_semantics::tuple_values::endpoint(v) && matches!(v.kind, Kind::Field(..)) {
         return crate::snapshot_slots::native_text(v);
     }
-    if borrowed_place(plan, v).is_some() {
-        return format!("&({})", value(plan, v));
+    if let Some(slot) = borrowed_place(plan, v) {
+        return format!(
+            "_ctx.store().global_values().scalar::<String>(({slot}).fields()).as_str()"
+        );
     }
     if matches!(v.kind, Kind::IterationInput(_) | Kind::Input(..)) {
         return crate::snapshot_slots::native_text(v);
