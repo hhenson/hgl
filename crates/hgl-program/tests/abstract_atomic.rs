@@ -198,6 +198,16 @@ fn owning_family_failed_index_stops_later_callbacks() -> Result<(), Box<dyn std:
 }
 
 #[test]
+fn scalar_only_family_constructors_keep_tags_and_payloads() -> Result<(), Box<dyn std::error::Error>>
+{
+    run_source(
+        include_str!("fixtures/scalar_family_constructors.hgl"),
+        true,
+        "mod native {pub fn once_i64(value:i64)->Result<i64,Box<hgl_types::NodeError>> {static CALLS:std::sync::atomic::AtomicUsize=std::sync::atomic::AtomicUsize::new(0);let call=CALLS.fetch_add(1,std::sync::atomic::Ordering::SeqCst);assert!(call<4);assert_eq!(value,41+(call%2) as i64);Ok(value)}}",
+    )
+}
+
+#[test]
 fn invalid_family_construction_and_widening_are_rejected() {
     for statement in [
         "let x = Event(label:\"no\")",

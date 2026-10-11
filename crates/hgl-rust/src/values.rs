@@ -245,8 +245,10 @@ pub fn statements(plan: &Plan, body: &[Statement], out: &mut Vec<String>, result
             Statement::Let(i,v) | Statement::Var(i,v) if v.snapshot && v.ty==Ty::Any => crate::any_prepared::local(plan,*i,v,|v|value(plan,v)),
             Statement::Let(i,v) if v.snapshot => crate::snapshot_slots::local(*i,v, |v| value(plan,v)),
             Statement::Let(i,v) => {
-                let init = atomic_place(plan,v).or_else(||observation(v)).unwrap_or_else(||condition_code(plan,v));
-                format!("let local{i} = {init};\n")
+                let slot = atomic_place(plan,v).or_else(||observation(v));
+                let annotation=if slot.is_none()&&matches!(v.ty,Ty::Family(_)) {format!(":{}",owned_type(&v.ty))} else {String::new()};
+                let init = slot.unwrap_or_else(||condition_code(plan,v));
+                format!("let local{i}{annotation} = {init};\n")
             },
             Statement::Borrow(i, v, _) => {
                 let source = if let Kind::GlobalGet(entry) = v.kind {
@@ -606,8 +608,11 @@ fn push(plan: &Plan, parent: &Value, item: &Value) -> String {
 fn direct_call(plan: &Plan, result: &Ty, args: &[Value], body: &[Statement]) -> String {
     let mut code = vec!["{ ".into()];
     for (i, arg) in args.iter().enumerate() {
+        let annotation = matches!(arg.ty, Ty::Family(_))
+            .then(|| format!(":{}", owned_type(&arg.ty)))
+            .unwrap_or_default();
         code.push(format!(
-            "let argument{i} = {};",
+            "let argument{i}{annotation} = {};",
             crate::value_calls::argument(arg, i, body, |v| value(plan, v))
         ));
     }

@@ -1,7 +1,7 @@
 //! Exact ordinary collection layout and ordered constructor emission.
 use crate::append;
 use hgl_semantics::ir::{Kind, Value};
-use hgl_source::Ty;
+use hgl_source::{FamilyType, Ty};
 
 /// Homogeneous retained element; maps retain complete typed key/value pairs.
 pub fn element(ty: &Ty) -> Option<Ty> {
@@ -183,12 +183,7 @@ fn key_checks(ty: &Ty, value: &str) -> String {
 /// Project an inherited family field through its exact retained member tag.
 /// # Panics
 /// Panics when supplied IR lacks the checked common field or concrete members.
-pub fn family_field(
-    family: &hgl_source::FamilyType,
-    index: usize,
-    source: &str,
-    slot: bool,
-) -> String {
+pub fn family_field(family: &FamilyType, index: usize, source: &str, slot: bool) -> String {
     let (_, fields, _) = family.members()[0]
         .1
         .structure()

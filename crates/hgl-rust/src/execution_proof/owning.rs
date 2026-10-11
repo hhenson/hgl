@@ -12,6 +12,10 @@ pub fn owning_argument(ty: &Ty) -> bool {
     if let Ty::Struct(_, fields, _) = ty {
         return fields.iter().any(|(_, child)| owning_argument(child));
     }
+    if let Ty::Family(family) = ty {
+        let members = family.members();
+        return members.iter().any(|(_, child)| owning_argument(child));
+    }
     if let Ty::Nullable(child) | Ty::Atomic(child) = ty {
         return owning_argument(child);
     }
