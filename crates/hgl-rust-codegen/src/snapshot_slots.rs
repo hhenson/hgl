@@ -10,6 +10,7 @@ fn scan(
     next: &mut usize,
     prepared: bool,
 ) {
+    hgl_semantics::ir_visit::statements_mut(body, &mut |v| calls(v, locals, next, prepared));
     let mut result = Vec::new();
     for mut statement in std::mem::take(body) {
         match &mut statement {
@@ -80,6 +81,21 @@ fn scan(
     }
     *body = result;
 }
+fn calls(
+    value: &mut Value,
+    locals: &mut std::collections::BTreeMap<usize, Ty>,
+    next: &mut usize,
+    prepared: bool,
+) -> bool {
+    if let Kind::ValueCall(args, body) = &mut value.kind {
+        for arg in args {
+            hgl_semantics::ir_visit::value_mut(arg, &mut |v| calls(v, locals, next, prepared));
+        }
+        scan(body, locals, next, prepared);
+        return false;
+    }
+    true
+}
 fn maximum(body: &[Statement]) -> usize {
     body.iter()
         .map(|s| match s {
@@ -130,6 +146,12 @@ pub fn prepare(plan: &Plan) -> Plan {
     for (node_id, node) in plan.nodes.iter_mut().enumerate() {
         let mut locals = std::collections::BTreeMap::new();
         let mut next = node_maximum(node);
+        hgl_semantics::ir_visit::hooks_mut(node, &mut |v| {
+            if let Kind::ValueCall(_, body) = &mut v.kind {
+                next = next.max(maximum(body));
+            }
+            true
+        });
         for body in node.generator.iter_mut() {
             scan(body, &mut locals, &mut next, prepared);
         }

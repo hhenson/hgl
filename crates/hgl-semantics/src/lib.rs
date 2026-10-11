@@ -64,3 +64,6 @@ pub mod default_values;
 mod wiring_mutation;
 /// Standalone checked cold wiring recipes and lexical bindings.
 pub mod wiring_values;
+
+/// Node-wide identities for checked ordinary helper locals.
+pub mod call_locals;

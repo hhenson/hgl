@@ -176,3 +176,115 @@ test {
         assert eval(retain_rolling_arrival, [any(1), _, any(2)]) == [any(1), _, any(2)]
     }
 }
+
+struct OptionalReplacement { required:i64
+    optional:i64 = null
+}
+test {
+    fn replace_optional(value:i64)->any {
+        inject global_state
+        start { set(global_state, "optional_replacement", OptionalReplacement(required:1, optional:2)) }
+        when {
+            var target:OptionalReplacement=get(global_state, "optional_replacement")
+            if value == 1 { target=OptionalReplacement(required:value) }
+            else { target=OptionalReplacement(required:value, optional:0) }
+            return any(target)
+        }
+    }
+    test omitted_optional_constructor_fields_clear_existing_presence {
+        assert eval(replace_optional, [1,2,1]) == [
+            any(OptionalReplacement(required:1)),
+            any(OptionalReplacement(required:2, optional:0)),
+            any(OptionalReplacement(required:1))]
+    }
+}
+
+native const fn helper_begin(value:i64) throws
+native const fn helper_begin(value:i64) throws {}
+native const fn helper_mark(value:i64)->i64 throws
+native const fn helper_mark(value:i64)->i64 throws {}
+native const fn helper_finish(value:i64) throws
+native const fn helper_finish(value:i64) throws {}
+
+const fn helper_box_equal(value:i64, expected:i64)->bool {
+    let boxed=any(value)
+    let expected_box=any(expected)
+    return boxed==expected_box
+}
+const fn nested_helper_box(value:i64)->bool {
+    let boxed=any(value+10)
+    let outer_expected=any(value+10)
+    if value>0 {
+        let boxed=any(value+20)
+        let inner_expected=any(value+20)
+        return helper_box_equal(value,value) && boxed==inner_expected
+    }
+    return boxed==outer_expected
+}
+test {
+    fn helper_boxes(value:i64)->bool {
+        start { helper_begin(0) }
+        stop { helper_finish(0) }
+        when {
+            let boxed=any(value+100)
+            let expected_box=any(value+100)
+            let first=helper_box_equal(value,value)
+            let second=helper_box_equal(value+1,value)
+            let ordered=helper_box_equal(helper_mark(2),helper_mark(1))
+            return !ordered && first && !second && nested_helper_box(value) && boxed==expected_box
+        }
+    }
+    test helper_box_owners_keep_callsite_and_lexical_identity {
+        assert eval(helper_boxes,[1,-2,3])==[true,true,true]
+    }
+}
+
+test {
+    fn direct_global_box(value:i64)->any {
+        inject global_state
+        when {
+            set(global_state,key:"direct_box",value:any(value))
+            return get(global_state,key:"direct_box")
+        }
+    }
+    fn direct_global_aggregate(value:i64)->any {
+        inject global_state
+        when {
+            set(global_state,key:"direct_aggregate",value:any(BoxField(box:any(value))))
+            return get(global_state,key:"direct_aggregate")
+        }
+    }
+    test direct_typed_global_owning_returns {
+        assert eval(direct_global_box,[1,_,2]) == [any(1),_,any(2)]
+        assert eval(direct_global_aggregate,[1,_,2]) == [any(BoxField(box:any(1))),_,any(BoxField(box:any(2)))]
+    }
+}
+
+const fn inline_box_equal(value:i64, expected:i64)->bool {
+    let boxed=any(value)
+    return boxed==any(expected)
+}
+test {
+    fn inline_box_comparison(value:i64)->bool {
+        when { return inline_box_equal(value,value) }
+    }
+    test inline_any_comparison_operand_is_prepared {
+        assert eval(inline_box_comparison,[1,-2,3])==[true,true,true]
+    }
+}
+
+test {
+    fn inline_ordered_operands(value:i64)->bool {
+        start { helper_begin(0) }
+        stop { helper_finish(0) }
+        when {
+            let ordered=any(helper_mark(2))>any(helper_mark(1))
+            let same=inline_box_equal(value,value) && any(value)<=any(value) && any(value)>=any(value)
+            let different=any(value)<any(value+1) && any(value)!=any(value+1) && any(value)!=any(1.0)
+            return ordered && same && different && !(any(value)<any(1.0)) && any()<any(value)
+        }
+    }
+    test inline_any_comparisons_retain_operands_once_in_order {
+        assert eval(inline_ordered_operands,[1,-2,3])==[true,true,true]
+    }
+}

@@ -28,3 +28,7 @@ comparison operations retain their descriptor capabilities and failure behavior.
 Preparation includes generator bodies, with Any locals reserved by the existing
 snapshot-local pass. Direct boxed yield payloads are retained after the time
 operand; configuration projections preserve the replay proof and existing slots.
+
+Before reserving helper owners, `call_locals` assigns each checked invocation
+independent node-wide declaration IDs while retaining formal argument IDs.
+Nested calls retain source evaluation order and independently reserved owners.

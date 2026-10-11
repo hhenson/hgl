@@ -45,7 +45,9 @@ fn bindings(body: &mut [Statement]) {
     });
 }
 fn mark(value: &mut Value) -> bool {
-    if let Kind::ValueCall(args, _) = &mut value.kind {
+    if let Kind::ValueCall(args, body) = &mut value.kind {
+        bindings(body);
+        hgl_semantics::ir_visit::statements_mut(body, &mut |v| mark(v));
         for value in args {
             hgl_semantics::ir_visit::value_mut(value, &mut |v| mark(v));
         }
@@ -68,9 +70,11 @@ pub fn prepare(plan: &Plan) -> Plan {
     if !crate::execution_proof::prepared(plan) {
         return plan.clone();
     }
-    let original = plan;
+    let mut original = plan.clone();
+    hgl_semantics::call_locals::prepare(&mut original);
+    let original = &original;
     let mut plan = hgl_semantics::constructor_owners::prepare(
-        plan,
+        original,
         crate::execution_proof::owning_argument,
         crate::constructor_owners::family,
     );

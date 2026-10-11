@@ -11,6 +11,7 @@ line-budget = 9590
 
 # Budgets of the modules that were crates of their own (docs/decisions/0004).
 [package.metadata.hgl.modules]
+call_locals = { budget = 80, uses = ["ir", "ir_visit"] }
 constructor_growth = { budget = 40, uses = ["ir", "ir_visit"] }
 constructor_owners = { budget = 100, uses = ["constructor_growth", "ir", "ir_visit"] }
 boxed_uses = { budget = 80, uses = ["ir", "ir_visit"] }
