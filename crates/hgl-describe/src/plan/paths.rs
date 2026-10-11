@@ -68,15 +68,17 @@ pub fn check_edge(
     if input != out && !follows(out, input) && !follows(input, out) {
         return Err(BuildError::wrong_type(&nodes[target].label, name));
     }
-    for previous in bound.iter() {
-        if previous.node == edge.target.node
-            && previous.input == edge.target.input
-            && (previous.path.starts_with(&edge.target.path)
-                || edge.target.path.starts_with(&previous.path))
-        {
-            return Err(BuildError::bound_twice(&nodes[target].label, name));
-        }
+    if bound.iter().any(|previous| previous.overlaps(&edge.target)) {
+        return Err(BuildError::bound_twice(&nodes[target].label, name));
     }
     bound.push(edge.target.clone());
     Ok(())
+}
+
+impl InputPort {
+    pub(super) fn overlaps(&self, other: &Self) -> bool {
+        self.node == other.node
+            && self.input == other.input
+            && (self.path.starts_with(&other.path) || other.path.starts_with(&self.path))
+    }
 }

@@ -2,17 +2,18 @@
 
 Status: recursive-description infrastructure; used by the scalar compiler.
 
-Build and instantiate the plain descriptions from [hgl-plan](hgl-plan.md).
-Uses `hgl-types`, `hgl-store`, `hgl-kernel`, `hgl-plan`. Budget remains 500 lines.
+Build and instantiate the plain descriptions in the internal
+[plan module](hgl-plan.md). Uses `hgl-types`, `hgl-store`, and `hgl-kernel`.
+The crate ceiling remains 1000 lines; the plan module retains its 500-line ceiling.
 
 The existing `Buildable`, `Registry`, `Builder`, `NodeRef`, `Ports` and
 `instantiate` entry points remain. Description types and `BuildError` are
-re-exported from hgl-plan. Registry construction remains explicit; no lookup
+re-exported from the plan module. Registry construction remains explicit; no lookup
 or allocation is added to ordinary ticks.
 
 ## Surface additions
 
-- `Registry` is cloneable; constructors remain function pointers. A host node
+- `Registry` is cloneable; constructors remain cold factories. A host node
   may retain its registry and child templates while constructing its instances.
 - `Ports::shaped_input(name)`, `shaped_output()` allocate the declared recursive
   shape and return endpoint IDs. `store()` exposes shared projection/typed-handle
@@ -85,3 +86,23 @@ construction from owning configurations and release after registry teardown.
 
 `Ports::keys()` exposes mutable finite key-domain storage only during node
 construction, so generated literal keys are retained before any hook runs.
+
+
+## Cold descriptor catalog
+
+`Registry::retain_descriptor(&'static AnyPlan)` assigns an inert identity to exact
+producer metadata. `Registry::descriptor(id)` resolves only entries owned by this
+registry or its clones. The catalog is registry-owned, shared only across explicit
+registry clones, and drops with its last owner. Static compiled metadata outlives
+all entries. Each retention receives a fresh transport handle; handles do not
+participate in semantic type or value identity. Catalog storage grows with cold
+retentions until the last registry clone drops, keeping every issued carrier
+resolvable without scanning previous descriptors.
+
+A checked process-wide monotonic ID allocator stores no descriptor or callback;
+it prevents another registry from accidentally resolving a same-position entry.
+Exhaustion and lock poisoning are ordinary cold errors. Catalog operations never
+invoke provider callbacks. Generated typed readers run those callbacks after all
+carrier IDs resolve. There is no catalog lookup, lock, refcount, name lookup, or
+allocation on graph ticks. Descriptions continue to hold plain data without
+pointers or executable callbacks.
