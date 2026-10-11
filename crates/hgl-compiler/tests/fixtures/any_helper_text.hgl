@@ -1,0 +1,25 @@
+module hgraph.std part any_helper_text
+use hgraph.native::{as_str}
+const fn helper_four(value:i64)->bool {
+    let left=any(as_str(value)+as_str(value)+as_str(value)+as_str(value))
+    let right=any(as_str(value)+as_str(value)+as_str(value)+as_str(value))
+    return left==right
+}
+const fn helper_inline(value:i64)->bool {
+    return any(as_str(value)+as_str(value)+as_str(value)+as_str(value))==any(as_str(value)+as_str(value)+as_str(value)+as_str(value))
+}
+const fn helper_nested(value:i64)->bool => helper_four(value)
+fn helper_boxes(value:i64)->bool {when {return helper_four(value)}}
+fn inline_helper_boxes(value:i64)->bool {when {return helper_inline(value)}}
+fn nested_helper_boxes(value:i64)->bool {when {return helper_nested(value)}}
+test helper_local_box_widths_include_complete_checked_bodies {
+    assert eval(helper_boxes,[9223372036854775807])==[true]
+    assert eval(helper_boxes,[-9223372036854775807])==[true]
+    assert eval(helper_boxes,[0])==[true]
+    assert eval(inline_helper_boxes,[9223372036854775807])==[true]
+    assert eval(inline_helper_boxes,[-9223372036854775807])==[true]
+    assert eval(inline_helper_boxes,[0])==[true]
+    assert eval(nested_helper_boxes,[9223372036854775807])==[true]
+    assert eval(nested_helper_boxes,[-9223372036854775807])==[true]
+    assert eval(nested_helper_boxes,[0])==[true]
+}

@@ -82,3 +82,13 @@ hgl-diagnostics. Existing load/signature String APIs remain compatibility wrappe
 
 locate_type_issue maps normalized type-expression offsets to retained original
 annotation tokens and attaches the declaring source, preserving earlier origins.
+
+`Library::declarations` is `Arc<[Decl]>`: source tables are shared across cold
+checker and overload candidates. The loader freezes its declaration vector once
+after indexing all source parts. Readers use indexing or `.iter()`; mutation
+uses `Arc::make_mut`, preserving independent value-copy behavior. This replaces
+the former public `Vec<Decl>` field type. Declaration tokens and diagnostic
+origins are retained unchanged. `type_sizes`, imports and instances remain
+independently cloned, so one specialization cannot alter another candidate.
+The shared ownership exists only in source checking; generated values and
+runtime execution do not retain or clone this table.

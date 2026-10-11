@@ -1,0 +1,54 @@
+module hgraph.std part generator_constructor_owners
+
+struct GeneratorOwner { first:i64
+    second:i64
+    items:list<i64>
+}
+struct GeneratorChain { value:i64
+    items:list<i64>
+    next:atomic<GeneratorChain> = null
+}
+native const fn owner_begin(value:i64) throws
+native const fn owner_begin(value:i64) throws {}
+native const fn owner_mark(value:i64)->i64 throws
+native const fn owner_mark(value:i64)->i64 throws {}
+native const fn owner_finish(value:i64) throws
+native const fn owner_finish(value:i64) throws {}
+
+fn owner_generator_tick(value:i64) {when {}}
+fn ordered_owner_generator()->any {
+    owner_begin(0)
+    let first=GeneratorOwner(second:owner_mark(2),first:owner_mark(1),items:[1,2])
+    if first.first==1 {
+        yield 0us:any(first)
+        yield 1us:any(first)
+        let second=GeneratorOwner(second:owner_mark(2),first:owner_mark(1),items:[3])
+        if second.second==2 {yield 1us:any(second)}
+        yield 1us:any(first)
+    }
+    owner_finish(0)
+}
+fn drive_ordered_owner(value:i64)->any {owner_generator_tick(value)
+    ordered_owner_generator()}
+fn recursive_owner_generator()->any {
+    let chain=GeneratorChain(value:1,items:[1,2],next:GeneratorChain(value:2,items:[3]))
+    if chain.value==1 {
+        yield 0us:any(chain)
+        yield 1us:any(chain)
+    }
+}
+fn drive_recursive_owner(value:i64)->any {owner_generator_tick(value)
+    recursive_owner_generator()}
+
+test generator_constructor_locals_preserve_order_and_suspended_owners {
+    assert eval(drive_ordered_owner,[1,1,1,1]) == [
+        any(GeneratorOwner(first:1,second:2,items:[1,2])),
+        any(GeneratorOwner(first:1,second:2,items:[1,2])),
+        any(GeneratorOwner(first:1,second:2,items:[3])),
+        any(GeneratorOwner(first:1,second:2,items:[1,2]))]
+}
+test recursive_generator_local_is_read_and_boxed_without_reconstruction {
+    assert eval(drive_recursive_owner,[1,1]) == [
+        any(GeneratorChain(value:1,items:[1,2],next:GeneratorChain(value:2,items:[3]))),
+        any(GeneratorChain(value:1,items:[1,2],next:GeneratorChain(value:2,items:[3])))]
+}

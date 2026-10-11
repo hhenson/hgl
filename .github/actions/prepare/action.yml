@@ -25,11 +25,20 @@ runs:
         path: |
           target/debug
           target/ci-release
+          target/source-tests/**/.fingerprint
+          target/source-tests/**/build
+          target/source-tests/**/deps/*.rlib
+          target/source-tests/**/deps/*.rmeta
+          target/source-tests/**/deps/*.d
+          target/source-tests/**/deps/*.so
+          target/source-tests/**/deps/*.dylib
+          target/source-tests/**/deps/*.dll
+          target/source-tests/**/deps/*.a
           target/ci-source-mtimes.json
           experiments/compiler-tools/target/debug
-        key: workspace-v2-${{ runner.os }}-${{ runner.arch }}-${{ inputs.stage }}-${{ steps.build-environment.outputs.key }}-${{ github.sha }}
+        key: workspace-v3-${{ runner.os }}-${{ runner.arch }}-${{ inputs.stage }}-${{ steps.build-environment.outputs.key }}-${{ github.sha }}
         restore-keys: |
-          workspace-v2-${{ runner.os }}-${{ runner.arch }}-${{ inputs.stage }}-${{ steps.build-environment.outputs.key }}-
+          workspace-v3-${{ runner.os }}-${{ runner.arch }}-${{ inputs.stage }}-${{ steps.build-environment.outputs.key }}-
     - name: Restore timestamps of unchanged build inputs
       shell: bash
       run: python tools/ci_build_cache.py restore

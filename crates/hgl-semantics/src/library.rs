@@ -85,8 +85,8 @@ pub use crate::struct_declarations::RequiredStruct;
 pub struct Library {
     /// Declaration-owned bound literals, retaining exact count or duration kind.
     pub type_sizes: BTreeMap<(String, String), hgl_source::Literal>,
-    /// All indexed declarations.
-    pub declarations: Vec<Decl>,
+    /// Shared cold source declarations; detach with `Arc::make_mut` before mutation.
+    pub declarations: std::sync::Arc<[Decl]>,
     /// First source's module.
     pub root: String,
     /// Module and alias to qualified target.
@@ -121,14 +121,17 @@ pub fn load(sources: &[(String, String)]) -> Result<Library, String> {
 pub fn load_checked(sources: &[(String, String)]) -> Result<Library, Box<Diagnostic>> {
     let mut library = Library::default();
     let mut parts = BTreeSet::new();
+    let mut declarations = Vec::new();
     for (source, text) in sources {
-        load_source(&mut library, &mut parts, source, text)
+        load_source(&mut library, &mut declarations, &mut parts, source, text)
             .map_err(|e| Box::new(Diagnostic::new(source, text, e)))?;
     }
+    library.declarations = declarations.into();
     Ok(library)
 }
 fn load_source(
     library: &mut Library,
+    declarations: &mut Vec<Decl>,
     parts: &mut BTreeSet<(String, String)>,
     source: &str,
     text: &str,
@@ -161,10 +164,18 @@ fn load_source(
         return Err(format!("{source}: invalid module header").into());
     }
     c.lines();
-    load_items(library, &module, source, &tokens[c.pos..], false)
+    load_items(
+        library,
+        declarations,
+        &module,
+        source,
+        &tokens[c.pos..],
+        false,
+    )
 }
 fn load_items(
     library: &mut Library,
+    declarations: &mut Vec<Decl>,
     module: &str,
     source: &str,
     tokens: &[Token],
@@ -225,7 +236,7 @@ fn load_items(
                 .iter()
                 .rposition(|t| t.text == "}")
                 .ok_or("unclosed test context")?;
-            load_items(library, module, source, &chunk[2..end], true)?;
+            load_items(library, declarations, module, source, &chunk[2..end], true)?;
             continue;
         }
         d.pos = 0;
@@ -263,7 +274,7 @@ fn load_items(
                 continue;
             };
             let name = d.name()?;
-            library.declarations.push(Decl {
+            declarations.push(Decl {
                 module: module.into(),
                 name,
                 role,

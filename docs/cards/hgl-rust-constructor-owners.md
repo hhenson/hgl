@@ -12,3 +12,7 @@ Staging uses a distinct reserved owner; a failed field retention cannot expose a
 partial replacement of the caller's destination. May also use constructor_fields.
 
 Concrete family constructors select the static discriminator and typed member slot. Copies preserve the checked finite origin for preparation and boxing, while each copy owns an independent destination.
+
+`destination` emits a typed private slot handle without executing its constructor.
+Generator resume machines reuse that handle while the original bind block alone
+performs ordered field retention.

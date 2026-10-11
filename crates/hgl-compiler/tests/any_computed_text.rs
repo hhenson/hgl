@@ -8,10 +8,18 @@ use std::{
 };
 #[test]
 fn computed_text_boxes_use_exact_prepared_bounds() -> Result<(), Box<dyn std::error::Error>> {
+    run("any_computed_text", true)
+}
+#[test]
+fn formatter_helper_boxes_retain_complete_text() -> Result<(), Box<dyn std::error::Error>> {
+    // One replay item avoids funding the helper box through unrelated list frame bounds.
+    run("any_helper_text", false)
+}
+fn run(fixture: &str, allocation_free: bool) -> Result<(), Box<dyn std::error::Error>> {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .canonicalize()?;
-    let files = vec![root.join("crates/hgl-compiler/tests/fixtures/any_computed_text.hgl")];
+    let files = vec![root.join(format!("crates/hgl-compiler/tests/fixtures/{fixture}.hgl"))];
     let libraries = vec![
         root.join("external/hgraph_std/hgl"),
         root.join("native/stdlib"),
@@ -22,16 +30,21 @@ fn computed_text_boxes_use_exact_prepared_bounds() -> Result<(), Box<dyn std::er
     let start = "store.prepare_collection_inputs();hgl_kernel::run_simulation(";
     let end = ").map_err(|e|match e {hgl_kernel::EngineError::Node(e)=>";
     assert!(source.contains(start) && source.contains(end));
+    let allocation_check = if allocation_free {
+        "assert_eq!(allocations,0,\"prepared Any evaluation allocated in {}\",module_path!());"
+    } else {
+        "println!(\"formatter helper {} allocations: {allocations}\",module_path!());"
+    };
     let source=source.replace(start,"store.prepare_collection_inputs();let (run,allocations)=hgl_alloc_count::count_in(||hgl_kernel::run_simulation(")
-        .replace(end,"));if run.is_ok(){assert_eq!(allocations,0,\"prepared Any evaluation allocated in {}\",module_path!());}run.map_err(|e|match e {hgl_kernel::EngineError::Node(e)=>");
+        .replace(end,&format!("));if run.is_ok(){{{allocation_check}}}run.map_err(|e|match e {{hgl_kernel::EngineError::Node(e)=>"));
     let directory = std::env::temp_dir().join(format!(
-        "hgl-any-computed-text-{}-{}",
+        "hgl-any-computed-text-{fixture}-{}-{}",
         std::process::id(),
         SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos()
     ));
     fs::create_dir_all(directory.join("src"))?;
     let mut manifest = format!(
-        "[package]\nname=\"hgl-any-computed-text-{}\"\nversion=\"0.0.0\"\nedition=\"2024\"\n[workspace]\n[dependencies]\n",
+        "[package]\nname=\"hgl-any-computed-text-{fixture}-{}\"\nversion=\"0.0.0\"\nedition=\"2024\"\n[workspace]\n[dependencies]\n",
         std::process::id()
     );
     for name in [

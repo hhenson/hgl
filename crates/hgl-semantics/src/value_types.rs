@@ -195,43 +195,105 @@ pub fn unify(
     generics: &[String],
     bindings: &mut BTreeMap<String, Ty>,
 ) -> Result<(), String> {
-    let normalized = type_sizes::normalize(pattern, &mut |expr| size(library, module, expr))?;
-    let pattern = normalized.as_str();
-    if generics.iter().any(|name| name == pattern) {
-        if !ordinary(actual) && !actual.publication() {
-            return Err("struct type arguments require canonical ordinary value types".into());
-        }
-        let actual = source_argument(library, actual)?;
-        if bindings
-            .insert(pattern.into(), actual.clone())
-            .is_some_and(|old| old != actual)
-        {
-            return Err(format!("conflicting struct inference for {pattern}"));
-        }
-        return Ok(());
+    Unification {
+        library,
+        module,
+        generics,
+        bindings,
+        check_bounds: true,
     }
-    if let Some(origin) = delta_argument(pattern) {
-        return unify_delta(library, module, origin, actual, generics, bindings);
+    .pattern(pattern, actual)
+}
+/// Infer substitutions from checked arguments before dependent bounds are available.
+pub fn infer(
+    library: &Library,
+    module: &str,
+    pattern: &str,
+    actual: &Ty,
+    generics: &[String],
+    bindings: &mut BTreeMap<String, Ty>,
+) -> Result<(), String> {
+    Unification {
+        library,
+        module,
+        generics,
+        bindings,
+        check_bounds: false,
     }
-    if let Some((element, size)) = Ty::list_parts(pattern) {
-        let Ty::List(child, actual_size) = actual else {
-            return Err("struct field type mismatch".into());
+    .pattern(pattern, actual)
+}
+struct Unification<'a> {
+    library: &'a Library,
+    module: &'a str,
+    generics: &'a [String],
+    bindings: &'a mut BTreeMap<String, Ty>,
+    check_bounds: bool,
+}
+impl Unification<'_> {
+    fn pattern(&mut self, pattern: &str, actual: &Ty) -> Result<(), String> {
+        let normalized = if self.check_bounds {
+            type_sizes::normalize(pattern, &mut |expr| size(self.library, self.module, expr))?
+        } else {
+            pattern.into()
         };
-        if size != *actual_size {
-            return Err("struct field list fixedness mismatch".into());
+        let pattern = normalized.as_str();
+        if self.generics.iter().any(|name| name == pattern) {
+            if !ordinary(actual) && !actual.publication() {
+                return Err("struct type arguments require canonical ordinary value types".into());
+            }
+            let actual = source_argument(self.library, actual)?;
+            if self
+                .bindings
+                .insert(pattern.into(), actual.clone())
+                .is_some_and(|old| old != actual)
+            {
+                return Err(format!("conflicting struct inference for {pattern}"));
+            }
+            return Ok(());
         }
-        return unify(library, module, element, child, generics, bindings);
+        if let Some(origin) = delta_argument(pattern) {
+            return self.delta(origin, actual);
+        }
+        if let Some(("list", arguments)) = application(pattern) {
+            if !(1..=2).contains(&arguments.len()) {
+                return Err("list requires an element and optional constant size".into());
+            }
+            let Ty::List(child, actual_size) = actual else {
+                return Err("struct field type mismatch".into());
+            };
+            if self.check_bounds
+                && Ty::list_parts(pattern).map(|(_, size)| size) != Some(*actual_size)
+            {
+                return Err("struct field list fixedness mismatch".into());
+            }
+            return self.pattern(arguments[0], child);
+        }
+        if let Some((base, arguments)) = application(pattern) {
+            return self.application(base, arguments, actual);
+        }
+        let expected = resolve(self.library, self.module, pattern, &mut BTreeSet::new())?;
+        if expected != *actual && crate::value_access::project(&expected) != *actual {
+            return Err("struct field type mismatch".into());
+        }
+        Ok(())
     }
-    if let Some((base, arguments)) = application(pattern) {
+
+    fn application(&mut self, base: &str, arguments: Vec<&str>, actual: &Ty) -> Result<(), String> {
         if base == "atomic" && arguments.len() == 1 {
             let payload = atomic_payload(actual)?;
-            return unify(library, module, arguments[0], payload, generics, bindings);
+            return self.pattern(arguments[0], payload);
         }
         if let ("rolling", Ty::Rolling(payload, window)) = (base, actual) {
-            if hgl_source::Window::parse(arguments[1], arguments.get(2).copied()) != Some(*window) {
+            if !(2..=3).contains(&arguments.len()) {
+                return Err("rolling requires element and window bounds".into());
+            }
+            if self.check_bounds
+                && hgl_source::Window::parse(arguments[1], arguments.get(2).copied())
+                    != Some(*window)
+            {
                 return Err("rolling bounds mismatch".into());
             }
-            return unify(library, module, arguments[0], payload, generics, bindings);
+            return self.pattern(arguments[0], payload);
         }
         let children = match (base, actual) {
             ("map", Ty::Map(key, child)) => Some(vec![key.as_ref(), child.as_ref()]),
@@ -244,14 +306,14 @@ pub fn unify(
                 return Err("structural type arity mismatch".into());
             }
             for (pattern, actual) in arguments.into_iter().zip(children) {
-                unify(library, module, pattern, actual, generics, bindings)?;
+                self.pattern(pattern, actual)?;
             }
             return Ok(());
         }
-        if crate::enums::resolve(library, module, base)?.is_some() {
+        if crate::enums::resolve(self.library, self.module, base)?.is_some() {
             return Err("enum type arguments are unsupported".into());
         }
-        let decl = declaration(library, module, base)?
+        let decl = declaration(self.library, self.module, base)?
             .ok_or_else(|| format!("unresolved ordinary type {base}"))?;
         let identity = if let Ty::Recursive(batch) = actual {
             batch.identity()
@@ -266,17 +328,40 @@ pub fn unify(
             return Err("struct field nominal specialization mismatch".into());
         }
         for (pattern, actual) in arguments.into_iter().zip(&identity.arguments) {
-            unify(library, module, pattern, actual, generics, bindings)?;
+            self.pattern(pattern, actual)?;
         }
-        return Ok(());
+        Ok(())
     }
-    let expected = resolve(library, module, pattern, &mut BTreeSet::new())?;
-    if expected != *actual && crate::value_access::project(&expected) != *actual {
-        return Err("struct field type mismatch".into());
+    fn delta(&mut self, origin: &str, actual: &Ty) -> Result<(), String> {
+        if let Ok(expected) =
+            concrete(self.library, self.module, origin, self.bindings).and_then(Ty::delta)
+        {
+            return if expected == *actual {
+                Ok(())
+            } else {
+                Err("delta originating shape mismatch".into())
+            };
+        }
+        if let Some(("atomic", arguments)) = application(origin)
+            && let [payload] = arguments.as_slice()
+        {
+            return self.pattern(payload, actual);
+        }
+        let actual_origin = if let Ty::Delta(origin) = actual {
+            origin.as_ref()
+        } else if actual.atomic_payload()
+            && !matches!(actual, Ty::List(..) | Ty::Tuple(_) | Ty::Struct(..))
+        {
+            actual
+        } else {
+            return Err("unresolved temporal shape from complete composite delta payload".into());
+        };
+        if actual_origin.clone().delta()? != *actual {
+            return Err("delta originating shape mismatch".into());
+        }
+        self.pattern(origin, actual_origin)
     }
-    Ok(())
 }
-
 fn atomic_payload(actual: &Ty) -> Result<&Ty, String> {
     if let Ty::Atomic(payload) = actual {
         return Ok(payload);
@@ -291,41 +376,6 @@ fn size(library: &Library, module: &str, expr: &str) -> Result<hgl_source::Liter
         .type_sizes
         .get(&(module.into(), expr.into()))
         .map_or_else(|| type_sizes::literal(expr), |size| Ok(size.clone()))
-}
-
-fn unify_delta(
-    library: &Library,
-    module: &str,
-    origin: &str,
-    actual: &Ty,
-    generics: &[String],
-    bindings: &mut BTreeMap<String, Ty>,
-) -> Result<(), String> {
-    if let Ok(expected) = concrete(library, module, origin, bindings).and_then(Ty::delta) {
-        return if expected == *actual {
-            Ok(())
-        } else {
-            Err("delta originating shape mismatch".into())
-        };
-    }
-    if let Some(("atomic", arguments)) = application(origin)
-        && let [payload] = arguments.as_slice()
-    {
-        return unify(library, module, payload, actual, generics, bindings);
-    }
-    let actual_origin = if let Ty::Delta(origin) = actual {
-        origin.as_ref()
-    } else if actual.atomic_payload()
-        && !matches!(actual, Ty::List(..) | Ty::Tuple(_) | Ty::Struct(..))
-    {
-        actual
-    } else {
-        return Err("unresolved temporal shape from complete composite delta payload".into());
-    };
-    if actual_origin.clone().delta()? != *actual {
-        return Err("delta originating shape mismatch".into());
-    }
-    unify(library, module, origin, actual_origin, generics, bindings)
 }
 
 /// Recover canonical declaration-owned arguments from ordinary projected payloads.

@@ -1,5 +1,7 @@
 //! Run the unmodified shared suite and probe the harness independently of it.
 use hgl_program::{compile_tests, emit_tests};
+#[path = "support/checked_batches.rs"]
+mod checked_batches;
 
 // Two tests can start within the same clock tick, and on Windows a second test
 // in the same directory then fights the first for its executable.
@@ -350,17 +352,17 @@ fn standard_batches(
         .collect::<Vec<_>>();
     let mut observed = Vec::new();
     let mut evaluations = 0;
-    for batch in tests.chunks(8) {
+    for batch in checked_batches::split(compile_tests(sources)?, 8) {
         let selected = batch
+            .tests
             .iter()
-            .map(|decl| (decl.source.as_str(), decl.name.as_str()))
+            .map(|test| test.name.as_str())
             .collect::<std::collections::BTreeSet<_>>();
-        let inputs = sources
-            .iter()
-            .map(|(name, text)| Ok((name.clone(), selected_tests(text, &selected, name)?)))
-            .collect::<Result<Vec<_>, String>>()?;
-        let summary = expected_summary(&inputs)?;
-        module(dir, "standard", &emit_tests(&compile_tests(&inputs)?))?;
+        let summary =
+            declaration_summary(tests.iter().copied().filter(|decl| {
+                selected.contains(format!("{}::{}", decl.module, decl.name).as_str())
+            }))?;
+        module(dir, "standard", &emit_tests(&batch))?;
         image_main(dir, std::iter::once("standard"))?;
         let output = Command::new(build_binary(dir)?).arg("standard").output()?;
         let text = format!(
@@ -383,53 +385,6 @@ fn standard_batches(
     );
     assert!((expected.minimum..=expected.maximum).contains(&evaluations));
     Ok(())
-}
-fn selected_tests(
-    text: &str,
-    selected: &std::collections::BTreeSet<(&str, &str)>,
-    source: &str,
-) -> Result<String, String> {
-    let tokens = hgl_source::lex(text)?;
-    let mut omitted = Vec::new();
-    let mut index = 0;
-    while index + 2 < tokens.len() {
-        if tokens[index].text != "test" || tokens[index + 1].text == "{" {
-            index += 1;
-            continue;
-        }
-        let name = tokens[index + 1].text.as_str();
-        let start = tokens[index].span.start;
-        index += 2;
-        while tokens.get(index).is_some_and(|token| token.text == "\n") {
-            index += 1;
-        }
-        if tokens.get(index).is_none_or(|token| token.text != "{") {
-            return Err("named test body missing".into());
-        }
-        let mut depth = 1;
-        index += 1;
-        while depth > 0 {
-            let token = tokens.get(index).ok_or("unclosed named test")?;
-            match token.text.as_str() {
-                "{" => depth += 1,
-                "}" => depth -= 1,
-                _ => {}
-            }
-            index += 1;
-        }
-        if !selected.contains(&(source, name)) {
-            omitted.push(start..tokens[index - 1].span.end);
-        }
-    }
-    let mut filtered = text.to_owned();
-    for range in omitted.into_iter().rev() {
-        let whitespace = filtered[range.clone()]
-            .chars()
-            .map(|c| if c == '\n' { '\n' } else { ' ' })
-            .collect::<String>();
-        filtered.replace_range(range, &whitespace);
-    }
-    Ok(filtered)
 }
 struct ExpectedSummary {
     names: Vec<String>,
@@ -456,12 +411,17 @@ fn step_bounds(steps: &[hgl_semantics::eval_data::TestStep]) -> (usize, usize) {
 }
 fn expected_summary(sources: &[(String, String)]) -> Result<ExpectedSummary, String> {
     let library = hgl_semantics::library::load(sources)?;
+    declaration_summary(library.declarations.iter())
+}
+fn declaration_summary<'a>(
+    declarations: impl Iterator<Item = &'a hgl_semantics::library::Decl>,
+) -> Result<ExpectedSummary, String> {
     let mut summary = ExpectedSummary {
         names: Vec::new(),
         minimum: 0,
         maximum: 0,
     };
-    for declaration in library.declarations {
+    for declaration in declarations {
         if declaration.role == hgl_semantics::library::Role::Test {
             summary
                 .names
@@ -1090,4 +1050,22 @@ fn unique_package(manifest: &str, dir: &Path) -> String {
         .file_name()
         .map_or_else(String::new, |name| name.to_string_lossy().into_owned());
     manifest.replacen("\"\n", &format!("-{suffix}\"\n"), 1)
+}
+
+#[test]
+fn checked_batches_preserve_nested_eval_plans_and_emitted_code() -> Result<(), String> {
+    let definitions =
+        "fn id(value:i64)->i64 {when {return value}}\nfn fail()->i64 {yield -1us:1}\n";
+    let cases = [
+        "test first {let captured=eval(id,[1])\nassert len(captured)==1}",
+        "test second {if true {assert eval(id,[2])==[2]} else {eval(id,[3])}\nassert raises(\"yield.negative_duration\") {eval(fail)}}",
+    ];
+    let suite = compile_tests(&source(&format!("{definitions}{}", cases.join("\n"))))?;
+    let batches = checked_batches::split(suite, 1);
+    assert_eq!(batches.len(), cases.len());
+    for (batch, case) in batches.iter().zip(cases) {
+        let independent = compile_tests(&source(&format!("{definitions}{case}")))?;
+        assert_eq!(emit_tests(batch), emit_tests(&independent));
+    }
+    Ok(())
 }

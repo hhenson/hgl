@@ -1,6 +1,6 @@
 //! Typed lowering of checked generator source control flow.
 use crate::values::{condition_code, global_type, owned_type, statements};
-use hgl_semantics::ir::{Plan, Statement, Value};
+use hgl_semantics::ir::{Kind, Plan, Statement, Value};
 use hgl_source::Ty;
 use std::collections::BTreeMap;
 mod hoist;
@@ -19,6 +19,7 @@ pub struct Generator {
     entry: usize,
     blocks: Vec<Block>,
     locals: BTreeMap<usize, (Ty, bool)>,
+    constructors: BTreeMap<usize, String>,
 }
 impl Generator {
     /// Lower a checked generator body; ordinary helper bodies stay lexical.
@@ -27,6 +28,7 @@ impl Generator {
             entry: 0,
             blocks: vec![Block::Done],
             locals: BTreeMap::new(),
+            constructors: BTreeMap::new(),
         };
         result.entry = result.sequence(body, 0);
         result
@@ -46,7 +48,13 @@ impl Generator {
         let block = match statement {
             Statement::Exit => return 0,
             Statement::Let(id, value) | Statement::Var(id, value) => {
-                self.locals.insert(*id, (value.ty.clone(), value.snapshot));
+                if let Kind::Query(key, _) = &value.kind
+                    && key.starts_with("\0constructor:")
+                {
+                    self.constructors.insert(*id, key.clone());
+                } else {
+                    self.locals.insert(*id, (value.ty.clone(), value.snapshot));
+                }
                 Block::Bind(*id, hoist::value(value), next)
             }
             Statement::Call(value) => Block::Execute(Statement::Call(hoist::value(value)), next),
@@ -156,6 +164,14 @@ impl Generator {
                 slot_publication(&payload, "publication", result, "global")
             ));
         }
+        // These immutable handles refer to node-owned storage across suspension.
+        // Binding a handle does not evaluate or retain a constructor operand.
+        for (id, key) in &self.constructors {
+            code.push(format!(
+                "let local{id}={};",
+                crate::constructor_owners::destination(plan, key)
+            ));
+        }
         code.push("loop { match self.generator_pc {\n".into());
         for (id, block) in self.blocks.iter().enumerate() {
             code.push(format!("{id} => {{\n"));
@@ -171,6 +187,10 @@ impl Generator {
                 code.push(self.clear_locals());
                 code.push("self.generator_pc = 0; return Ok(());\n".into());
             }
+            Block::Bind(id, value, next) if self.constructors.contains_key(id) => code.push(format!(
+                "let _={};self.generator_pc={next};",
+                crate::constructor_owners::source(plan,value).unwrap_or_else(||unreachable!("canonical generator constructor"))
+            )),
             Block::Bind(id, value, next) if value.snapshot && value.ty == Ty::Any => code.push(format!(
                 "{}self.generator_local{id}=Some(local{id});self.generator_pc={next};",
                 crate::any_prepared::local(plan,*id,value,|v|condition_code(plan,v))
