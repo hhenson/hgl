@@ -1,6 +1,6 @@
 # Card: hgl-diagnostics
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `diagnostics` module of `hgl-source` (`crates/hgl-source/src/diagnostics.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `diagnostics` module of `hgl-value-model` (`crates/hgl-value-model/src/diagnostics.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
 Source-origin diagnostic identity shared by parsers, checkers and rejection
 fixtures. No dependencies; budget 200 source lines. Public Issue contains

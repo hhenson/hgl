@@ -13,7 +13,7 @@ use hgl_semantics::value_bind::{
 };
 use hgl_semantics::value_check::{ordinary, writable};
 use hgl_semantics::value_eval::atomic_argument;
-use hgl_source::Issue;
+use hgl_source::{Issue, TypeSpelling};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Default)]

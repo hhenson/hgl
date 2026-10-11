@@ -1,4 +1,5 @@
 //! Source recipes preserve spelling and never consult a provider.
+use hgl_source::TypeSpelling;
 use hgl_source::literals::{Literal, ParsedLiteral, TemporalLiteral, numeric};
 use hgl_source::type_shape::Ty;
 

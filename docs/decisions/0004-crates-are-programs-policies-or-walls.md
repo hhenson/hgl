@@ -78,10 +78,11 @@ None.
 
 ## Enforced ordinary metadata boundary
 
-hgl-value-model separates canonical ordinary metadata and contextual scalar
-materialization from source parsing/checking under reason 3. Both the model and
-the upper parsing/checking layer exceed 1000 lines. The model depends only on
-hgl-types and the existing jiff dependency; it cannot reach source syntax or
-semantic name resolution. hgl-source preserves facade reexports. The new model
-ceiling is 1200, moved module ceilings stay unchanged, and existing crate
-ceilings are not increased.
+hgl-value-model owns syntax-neutral ordinary metadata, checked IR definitions
+and contextual scalar materialization under reason 3. Source type-spelling and
+literal parsers remain in hgl-source. The source crate and model each exceed
+1000 lines under xtask's code-line count; the execution layer also exceeds 1000.
+The model depends only on hgl-types and the existing jiff dependency, so it
+cannot reach source AST, parsing or semantic name resolution. Facade reexports
+preserve existing clients. The model ceiling is 1200; moved module ceilings are
+split or transferred without increasing any crate or module ceiling.

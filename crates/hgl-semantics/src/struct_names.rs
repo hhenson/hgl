@@ -1,5 +1,6 @@
 //! Shared nominal declaration lookup and export visibility closure.
 use crate::library::{Decl, Library, Role};
+use hgl_source::TypeSpelling;
 use hgl_source::{Ty, application, delta_argument};
 /// Resolve imported declaration identity.
 pub fn identity(library: &Library, module: &str, name: &str) -> (String, String) {

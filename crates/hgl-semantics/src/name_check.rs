@@ -1,6 +1,6 @@
 //! Callable binding before deferred type specialization, shared with overload selection.
 use crate::library::{Decl, Library, Role};
-use hgl_source::{Expr, Issue, Ty};
+use hgl_source::{Expr, Issue, Ty, TypeSpelling};
 use std::collections::{BTreeMap, BTreeSet};
 /// Lexical facts that do not require concrete generic or configuration values.
 #[derive(Debug, Clone, Default)]

@@ -34,7 +34,7 @@ harness = { budget = 250, uses = ["collection_values", "eval_data", "family_valu
 harness_check = { budget = 180, uses = ["eval_data", "flow_check", "harness_ir", "ir", "static_values"] }
 harness_ir = { budget = 200, uses = ["ir", "value_eval"] }
 inheritance = { budget = 300, uses = ["enums", "library", "struct_names"] }
-ir = { budget = 180, uses = [] }
+ir = { budget = 0, uses = [] }
 library = { budget = 500, uses = ["struct_declarations"] }
 local_check = { budget = 220, uses = ["endpoint_check", "ir", "structural_admission", "tuple_admission", "value_check"] }
 name_check = { budget = 250, uses = ["tuple_flow", "tuple_phase", "enums", "library", "struct_names", "type_sizes"] }

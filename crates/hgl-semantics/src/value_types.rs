@@ -3,6 +3,7 @@ use crate::library::{Decl, Library};
 pub use crate::struct_names::{declaration, identity};
 use crate::type_sizes;
 use crate::value_check::ordinary;
+use hgl_source::TypeSpelling;
 use hgl_source::{Nominal, Ty, application, delta_argument};
 use std::collections::{BTreeMap, BTreeSet};
 mod family;

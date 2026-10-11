@@ -1,5 +1,6 @@
 //! Finite recursive specialization batches without recursive type expansion.
 use crate::library::{Decl, Library};
+use hgl_source::TypeSpelling;
 use hgl_source::{Nominal, NominalDefinition, RecursiveType, Ty};
 use std::collections::{BTreeMap, BTreeSet};
 mod component;

@@ -18,7 +18,7 @@ pub mod harness;
 pub mod harness_check;
 pub mod harness_ir;
 pub mod inheritance;
-pub mod ir;
+pub use hgl_source::ir;
 pub mod library;
 pub mod local_check;
 pub mod name_check;

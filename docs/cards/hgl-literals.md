@@ -1,6 +1,6 @@
 # Card: hgl-literals
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `literals` module of `hgl-source` (`crates/hgl-source/src/literals.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
+The `literals` model is in `crates/hgl-value-model/src/literals.rs`; source parsing is in `crates/hgl-source/src/literals.rs`. Their manifests retain informational line targets and enforce module dependencies.
 
 Source scalar values and unresolved provider-dependent literal recipes. Uses
 hgl-calendar, hgl-type-shape and hgl-time-values; budget 250 source lines.

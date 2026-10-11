@@ -1,7 +1,7 @@
 //! Bind checked values to concrete ordinary and temporal signatures.
 use crate::ir::{Kind, Value};
 use crate::library::{Role, Signature};
-use hgl_source::{Cursor, Expr, Ty};
+use hgl_source::{Cursor, Expr, Ty, TypeSpelling};
 use std::collections::{BTreeMap, BTreeSet};
 type Bound = (Vec<Value>, BTreeMap<String, Ty>, Ty);
 /// Check bind at the typed call boundary.

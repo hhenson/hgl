@@ -1,4 +1,5 @@
 //! Declaration-owned struct grammar and finite constraints.
+use hgl_source::TypeSpelling;
 use hgl_source::{Cursor, Expr, Token};
 #[derive(Debug, Clone)]
 /// Concrete ordinary struct contract before specialization.

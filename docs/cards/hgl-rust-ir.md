@@ -1,8 +1,8 @@
 # Card: hgl-rust-ir
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `ir` module of `hgl-semantics` (`crates/hgl-semantics/src/ir.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `ir` module of `hgl-value-model` (`crates/hgl-value-model/src/ir.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
-Checked compiler/backend data boundary. Uses only `hgl-source`; budget 180
+Checked compiler/backend data boundary. Lives in `crates/hgl-value-model/src/ir.rs`, using the model and `hgl-types`; budget 180
 source lines. No runtime dependencies or third-party crates.
 
 Surface: `Value { ty, kind }`, `Value::new`; `Kind`, `Statement`, `Node`,

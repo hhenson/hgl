@@ -2,6 +2,7 @@ use crate::library::Library;
 use crate::name_check::Scope;
 use crate::source_check::{annotation, inferred};
 use crate::tuple_writes::{assignment, conditional, handler};
+use hgl_source::TypeSpelling;
 use hgl_source::{Cursor, Issue, Ty};
 pub(super) struct Checker<'a> {
     pub library: &'a Library,

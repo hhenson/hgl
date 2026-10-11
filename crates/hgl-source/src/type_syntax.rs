@@ -67,8 +67,3 @@ pub fn list_parts(name: &str) -> Option<(&str, Option<usize>)> {
     }
     Some((body, None))
 }
-
-/// Join complete canonical child spellings without changing inferred shape.
-pub(crate) fn type_names(names: impl Iterator<Item = String>) -> String {
-    names.collect::<Vec<_>>().join(",")
-}

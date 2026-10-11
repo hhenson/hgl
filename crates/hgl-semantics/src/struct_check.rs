@@ -2,6 +2,7 @@
 use crate::ir::{Kind, Value};
 use crate::library::{Decl, Library, RequiredStruct};
 use crate::value_types::{declaration, specialize, substitute, unify};
+use hgl_source::TypeSpelling;
 use hgl_source::{Expr, Ty, application, delta_argument};
 use std::collections::{BTreeMap, BTreeSet};
 

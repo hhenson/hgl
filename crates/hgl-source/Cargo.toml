@@ -11,6 +11,9 @@ line-budget = 2090
 # Budgets of the modules that were crates of their own (docs/decisions/0004).
 [package.metadata.hgl.modules]
 lex = { budget = 180, uses = [] }
+literals = { budget = 100, uses = [] }
+type_shape = { budget = 70, uses = ["type_syntax"] }
+type_syntax = { budget = 100, uses = [] }
 
 [dependencies]
 hgl-types = { path = "../hgl-types" }

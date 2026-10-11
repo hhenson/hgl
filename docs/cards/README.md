@@ -23,7 +23,7 @@ size and enforces the "may use" list from the crate's
 
 | Card | Now | Of |
 |---|---|---|
-| [hgl-ordinary-shape](hgl-ordinary-shape.md) | module `ordinary_shape` | `hgl-source` |
+| [hgl-ordinary-shape](hgl-ordinary-shape.md) | module `ordinary_shape` | `hgl-value-model` |
 | [hgl-constructor-owners](hgl-constructor-owners.md) | module `constructor_owners` | `hgl-semantics` |
 | [hgl-rust-constructor-owners](hgl-rust-constructor-owners.md) | module `constructor_owners` | `hgl-rust` |
 | `hgl-bench-twin` | binary `twin` | `hgl-bench` |
@@ -38,7 +38,7 @@ size and enforces the "may use" list from the crate's
 | [hgl-composite-keys](hgl-composite-keys.md) | module `composite_keys` | `hgl-semantics` |
 | [hgl-deadlines](hgl-deadlines.md) | module `deadlines` | `hgl-kernel` |
 | [hgl-delta-check](hgl-delta-check.md) | module `delta_check` | `hgl-semantics` |
-| [hgl-diagnostics](hgl-diagnostics.md) | module `diagnostics` | `hgl-source` |
+| [hgl-diagnostics](hgl-diagnostics.md) | module `diagnostics` | `hgl-value-model` |
 | [hgl-documentation](hgl-documentation.md) | module `documentation` | `hgl-program` |
 | [hgl-endpoint-check](hgl-endpoint-check.md) | module `endpoint_check` | `hgl-semantics` |
 | [hgl-endpoints](hgl-endpoints.md) | module `endpoints` | `hgl-store` |
@@ -62,14 +62,14 @@ size and enforces the "may use" list from the crate's
 | [hgl-library-files](hgl-library-files.md) | module `library_files` | `hgl-program` |
 | [hgl-list](hgl-list.md) | module `list` | `hgl-store` |
 | [hgl-list-storage](hgl-list-storage.md) | module `list_storage` | `hgl-store` |
-| [hgl-literals](hgl-literals.md) | module `literals` | `hgl-source` |
+| [hgl-literals](hgl-literals.md) | module `literals` | `hgl-value-model` + `hgl-source` |
 | [hgl-local-check](hgl-local-check.md) | module `local_check` | `hgl-semantics` |
 | [hgl-member-table](hgl-member-table.md) | module `member_table` | `hgl-store` |
 | [hgl-name-check](hgl-name-check.md) | module `name_check` | `hgl-semantics` |
 | [hgl-native](hgl-native.md) | module `native` | `hgl-stdlib` |
 | [hgl-nested](hgl-nested.md) | module `nested` | `hgl-kernel` |
 | [hgl-node-error](hgl-node-error.md) | module `node_error` | `hgl-types` |
-| [hgl-nominal-batch](hgl-nominal-batch.md) | module `nominal_batch` | `hgl-source` |
+| [hgl-nominal-batch](hgl-nominal-batch.md) | module `nominal_batch` | `hgl-value-model` |
 | [hgl-observation](hgl-observation.md) | module `observation` | `hgl-store` |
 | [hgl-optional](hgl-optional.md) | module `optional` | `hgl-store` |
 | [hgl-plan](hgl-plan.md) | module `plan` | `hgl-describe` |
@@ -92,7 +92,7 @@ size and enforces the "may use" list from the crate's
 | [hgl-rust-families](hgl-rust-families.md) | module `families` | `hgl-rust` |
 | [hgl-rust-finite-domains](hgl-rust-finite-domains.md) | module `finite_domains` | `hgl-rust` |
 | [hgl-rust-generators](hgl-rust-generators.md) | module `generators` | `hgl-rust` |
-| [hgl-rust-ir](hgl-rust-ir.md) | module `ir` | `hgl-semantics` |
+| [hgl-rust-ir](hgl-rust-ir.md) | module `ir` | `hgl-value-model` |
 | [hgl-rust-key-origins](hgl-rust-key-origins.md) | module `key_origins` | `hgl-rust` |
 | [hgl-rust-keyed](hgl-rust-keyed.md) | module `keyed` | `hgl-rust` |
 | [hgl-rust-layouts](hgl-rust-layouts.md) | module `layouts` | `hgl-rust` |
@@ -123,9 +123,9 @@ size and enforces the "may use" list from the crate's
 | [hgl-test-annotations](hgl-test-annotations.md) | module `test_annotations` | `hgl-compiler` |
 | [hgl-test-runner](hgl-test-runner.md) | module `test_runner` | `hgl-compiler` |
 | [hgl-test-units](hgl-test-units.md) | module `test_units` | `hgl-compiler` |
-| [hgl-time-context](hgl-time-context.md) | module `time_context` | `hgl-source` |
+| [hgl-time-context](hgl-time-context.md) | module `time_context` | `hgl-value-model` |
 | [hgl-time-values](hgl-time-values.md) | module `time_values` | `hgl-types` |
-| [hgl-type-shape](hgl-type-shape.md) | module `type_shape` | `hgl-source` |
+| [hgl-type-shape](hgl-type-shape.md) | module `type_shape` | `hgl-value-model` + `hgl-source` |
 | [hgl-type-sizes](hgl-type-sizes.md) | module `type_sizes` | `hgl-semantics` |
 | [hgl-type-syntax](hgl-type-syntax.md) | module `type_syntax` | `hgl-source` |
 | [hgl-value-access](hgl-value-access.md) | module `value_access` | `hgl-semantics` |
@@ -255,7 +255,7 @@ own-output source compatibility.
 complete publication, fixed child validity and exact Map membership reconciliation.
 Snapshot layouts and cold capacities remain with their existing owners.
 
-Additional ordinary value contracts: [Any semantics](hgl-any-values.md), [compiled box vocabulary](hgl-types-any-values.md), [Any storage](hgl-store-any-values.md), [Any emission](hgl-rust-any-values.md), [prepared box owners](hgl-rust-any-prepared.md), [constructor frame encoding](hgl-rust-any-expression.md), [exclusive boxing uses](hgl-boxed-uses.md), [prepared hook writes](hgl-rust-prepared-hooks.md), [private identifiers](hgl-rust-identifiers.md), [checked IR traversal](hgl-ir-visit.md), [constructor checking](hgl-value-constructors.md), [operator typing](hgl-value-operators.md), and [builtin scalar metadata](hgl-scalar-shape.md).
+Additional ordinary value contracts: [Any semantics](hgl-any-values.md), [compiled box vocabulary](hgl-types-any-values.md), [Any storage](hgl-store-any-values.md), [Any emission](hgl-rust-any-values.md), [prepared box owners](hgl-rust-any-prepared.md), [constructor frame encoding](hgl-rust-any-expression.md), [exclusive boxing uses](hgl-boxed-uses.md), [prepared hook writes](hgl-rust-prepared-hooks.md), [private identifiers](hgl-rust-identifiers.md), [checked IR traversal](hgl-ir-visit.md), [required ordinary defaults](hgl-default-values.md), [constructor checking](hgl-value-constructors.md), [operator typing](hgl-value-operators.md), and [builtin scalar metadata](hgl-scalar-shape.md).
 
 - [Constructor field emission](hgl-rust-constructor-fields.md).
 
