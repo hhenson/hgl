@@ -234,41 +234,19 @@ pub struct Plan {
 impl Value {
     /// Whether an expression is already a closed ordinary constant.
     pub fn closed(&self) -> bool {
-        match &self.kind {
-            Kind::Delta(parts) => parts.iter().all(|part| part.operands().all(Value::closed)),
-            Kind::Literal(_) | Kind::Void => true,
-            Kind::List(items) => items.iter().all(Value::closed),
-            Kind::Captured(_, fields) | Kind::Construct(fields) => {
-                fields.iter().all(|(_, value)| value.closed())
-            }
-            Kind::TemporalLiteral(_)
-            | Kind::Prepared(_)
-            | Kind::WiringFailure(_)
-            | Kind::Index(..)
-            | Kind::Length(_)
-            | Kind::Push(..)
-            | Kind::ValueCall(..)
-            | Kind::Configuration(_)
-            | Kind::Field(..)
-            | Kind::GlobalGet(_)
-            | Kind::BorrowedLocal(..)
-            | Kind::GlobalSet(..)
-            | Kind::IsPresent(_)
-            | Kind::Present(_)
-            | Kind::Wire(_)
-            | Kind::IterationInput(_)
-            | Kind::Input(..)
-            | Kind::Cache(_)
-            | Kind::ObservedLocal(_)
-            | Kind::Local(_)
-            | Kind::MutableLocal(_)
-            | Kind::Native(..)
-            | Kind::Binary(..)
-            | Kind::Unary(..)
-            | Kind::Query(..)
-            | Kind::Output
-            | Kind::Capability
-            | Kind::GeneratorLocal(_) => false,
-        }
+        let mut closed = true;
+        crate::ir_visit::value(self, &mut |value| {
+            closed &= matches!(
+                value.kind,
+                Kind::Literal(_)
+                    | Kind::Void
+                    | Kind::Delta(_)
+                    | Kind::List(_)
+                    | Kind::Captured(..)
+                    | Kind::Construct(_)
+            );
+            closed
+        });
+        closed
     }
 }

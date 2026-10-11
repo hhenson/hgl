@@ -7,11 +7,11 @@ publish.workspace = true
 description = "Checked ordinary IR execution without source parsing or name resolution."
 
 [package.metadata.hgl]
-line-budget = 2000
+line-budget = 1540
 
 [package.metadata.hgl.modules]
 any_values = { budget = 360, uses = ["ir", "value_eval", "family_values", "scalar_keys"] }
-ir_visit = { budget = 320, uses = ["ir", "harness_ir"] }
+ir_visit = { budget = 60, uses = ["ir", "harness_ir"] }
 collection_values = { budget = 200, uses = ["composite_keys", "family_values", "ir", "any_values", "value_eval"] }
 composite_keys = { budget = 150, uses = ["ir", "scalar_keys", "any_values", "family_values"] }
 family_values = { budget = 100, uses = ["ir"] }

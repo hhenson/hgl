@@ -1,6 +1,6 @@
 # Card: hgl-eval
 
-Ordinary execution and traversal of checked IR form a lower layer depending only on
+Ordinary execution and harness traversal form a lower layer depending only on
 hgl-value-model and hgl-types. It cannot parse syntax, resolve declarations or
 reenter semantic checking. Contextual temporal materialization uses the existing
 explicit callback; no execution API or language admission changes.
@@ -8,9 +8,10 @@ explicit callback; no execution API or language admission changes.
 The ir facade reexports syntax-neutral definitions from hgl-value-model.
 Public modules are ir, ir_visit, harness_ir, value_eval, value_operations,
 any_values, collection_values, composite_keys, scalar_keys, family_values,
-value_constant and publication_trace. Their existing contracts and module
-ceilings remain unchanged; aggregate ceiling 2000. publication_trace::materialized
-checks closed delta key overlap/duplication; delta expression admission stays in
+value_constant and publication_trace. Their existing contracts are preserved. The IR walkers and 260 lines of allowance transfer to
+Model; `ir_visit` retains the harness walker and reexports the Model walkers.
+Its allowance is 60 of the original 320; the crate ceiling is 1540 within the unchanged phase allowance.
+`publication_trace::materialized` checks closed delta key overlap/duplication; delta expression admission stays in
 semantic delta_check.
 
 Semantic facade paths preserve existing clients. Boxing and scalar constructor

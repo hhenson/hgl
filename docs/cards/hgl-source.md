@@ -135,6 +135,6 @@ consumers retain metadata and checked IR access, but have no source parser API.
 The external-consumer regression compiles the migrated Source call and Model
 metadata usage, then verifies that Model-only parsing calls fail to compile.
 
-The crate allowance is 1150 lines after the Model split. Source, Model (1100)
-and Semantics (9430) retain the original combined 11680-line allowance.
+The crate allowance is 1130 lines after the execution split. Source, Model (1270),
+Eval (1540) and Semantics (7740) retain the original combined 11680-line allowance.
 `Expr::children` exposes immediate expression operands in source order, omitting absent cells and preserving each operand's origin wrapper. It does not descend or select lambda scope; source policies control those boundaries.

@@ -7,7 +7,7 @@ publish.workspace = true
 description = "Syntax-neutral ordinary metadata, checked IR and contextual materialization."
 
 [package.metadata.hgl]
-line-budget = 1100
+line-budget = 1270
 
 [package.metadata.hgl.modules]
 ordinary_shape = { budget = 120, uses = ["type_shape"] }
@@ -17,7 +17,8 @@ literals = { budget = 150, uses = ["type_shape"] }
 nominal_batch = { budget = 160, uses = [] }
 time_context = { budget = 200, uses = ["literals"] }
 type_shape = { budget = 230, uses = ["nominal_batch"] }
-ir = { budget = 180, uses = [] }
+ir = { budget = 180, uses = ["ir_visit"] }
+ir_visit = { budget = 260, uses = ["ir"] }
 
 [dependencies]
 hgl-types = { path = "../hgl-types" }

@@ -8,7 +8,11 @@ checking and immutable recipe retention. Public
 and lexical ValueCall argument/local scopes. It rejects external locals,
 contextual recipes, prepared configuration, native/capability/global/endpoint
 effects and unsupported or unbounded control flow without evaluating anything.
-The evaluator retains short-circuit and branch execution semantics.
+The Model walker supplies ordered expression descent. Classification prunes
+helper calls explicitly: arguments use the caller scope, then the body uses
+fresh formal bindings. Constructor constants and context-free expressions
+retain separate whitelists. The evaluator retains short-circuit and branch
+execution semantics.
 
 Acceptance: constant bounds diagnostics, deferred mixed contextual expressions,
 external setup locals, and skipped invalid branches in hgl-program regressions.

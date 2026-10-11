@@ -86,12 +86,10 @@ The model depends only on hgl-types and the existing jiff dependency, so it
 cannot reach source AST, parsing or semantic name resolution. Type facade reexports preserve checked type identity. Rust parsing callers must
 import `hgl_source::TypeSpelling` for `Ty::parse` and `Ty::list_parts`; those calls
 are no longer inherent Model APIs. This explicit Rust API migration keeps source
-parsing in Source without changing the HGL language. The model ceiling is 1100; moved module ceilings are
-split or transferred without increasing any crate or module ceiling.
+parsing in Source without changing the HGL language. The syntax-neutral IR walkers also belong to Model, with Eval facade paths
+preserved. Their 260-line module allowance transfers from Eval. The original 320-line
+IR traversal module allowance splits 260/60; harness traversal stays in Eval.
 
-The metadata split transfers the original Source/Semantics allowance without
-adding capacity: Source 1150, Model 1100 and Semantics 9430 total 11680.
-Measured code at this boundary is respectively 1111, 1051 and 9394 lines.
 ## Enforced checked execution boundary
 
 hgl-eval separates ordinary/harness value execution from source
@@ -99,6 +97,7 @@ semantics under reason 3. Each layer exceeds 1000 lines. The evaluator depends o
 hgl-value-model and hgl-types, so it cannot parse syntax or reenter declaration
 resolution. Existing hgl-semantics facade paths remain available. Expression
 admission and optional folding policy remain in semantics; executed operators,
-EvalError and materialized publication validation belong below it. The new
-ceiling is 2000, moved module ceilings remain unchanged, and no existing ceiling
-increases.
+EvalError and materialized publication validation belong below it. The phase ceilings are Source 1130, Model 1270, Eval 1540 and Semantics 7740.
+Their combined 11680 lines equal the pre-split Source/Semantics allowance.
+Shared source traversal, declaration-domain validation and IR traversal fund
+the new dependency boundaries without increasing aggregate capacity.

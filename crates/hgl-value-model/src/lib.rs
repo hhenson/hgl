@@ -6,6 +6,7 @@ pub use type_shape::{
 };
 pub mod diagnostics;
 pub mod ir;
+pub mod ir_visit;
 pub mod literals;
 pub mod nominal_batch;
 pub mod ordinary_shape;

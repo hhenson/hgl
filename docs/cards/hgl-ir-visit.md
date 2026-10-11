@@ -1,6 +1,9 @@
 # Card: hgl-ir-visit
 
-The ir_visit policy owns complete checked IR traversal, with explicit subtree pruning. It may use ir and harness_ir. Initial module budget 320 lines within the unchanged semantics crate cap.
+Model `ir_visit` owns syntax-neutral checked IR traversal with explicit subtree
+pruning and may use Model `ir`. Eval `ir_visit` reexports those walkers and owns
+harness traversal, using `ir` and `harness_ir`. The original 320-line allowance
+is split 260 to Model and 60 to Eval, with the same aggregate donor transfer.
 
 Public surface: value, statements, hooks, value_mut, statements_mut, nodes and nodes_mut and harness. Traversal visits source-order operands and retained ordinary helper bodies; false stops only the selected expression subtree. nodes and nodes_mut rewrites lexical statements while preserving independent helper-local scopes. harness includes setup/assertions, every supplied eval argument and sequence, expected capture values and nested raises/if bodies.
 
@@ -12,5 +15,6 @@ Acceptance: all existing IR tests and hidden Any payload layout collection, incl
 
 Read-only lexical nodes and mutable nodes preserve helper scope boundaries for representation-use analysis and immutable literal normalization. Delta and key discovery reuse expression traversal while retaining explicit helper/capture pruning.
 
-Checked execution lives in hgl-eval behind the existing hgl-semantics facade.
+Checked execution and harness traversal live in hgl-eval behind the existing
+hgl-semantics facade. Model has no harness or evaluator dependency.
 Source constructor admission remains above that dependency boundary.
