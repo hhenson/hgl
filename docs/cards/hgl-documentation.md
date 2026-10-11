@@ -1,6 +1,6 @@
 # Card: hgl-documentation
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `documentation` module of `hgl-program` (`crates/hgl-program/src/documentation.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `documentation` module of `hgl-program` (`crates/hgl-program/src/documentation.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
 Owned source documentation and reStructuredText output, independent of compiler
 ASTs, runtime types and code generation. Budget: 250 source lines. No dependencies.

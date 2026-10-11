@@ -176,7 +176,7 @@ fn ci(args: &[String]) -> ExitCode {
     }
 }
 
-/// Print every crate's size against its declared line budget.
+/// Report crate/module sizes and enforce declared sibling dependencies.
 fn budgets() -> Outcome {
     let root = env::var_os("CARGO_MANIFEST_DIR").map_or_else(
         || Path::new(".").to_path_buf(),
@@ -184,18 +184,17 @@ fn budgets() -> Outcome {
     );
     match budget::measure(&root) {
         Ok(lines) => {
+            println!("Line counts and targets are informational; module uses are enforced.");
             for line in &lines {
-                let budget = line.budget.map_or_else(
-                    || "no line-budget declared".to_owned(),
-                    |budget| budget.to_string(),
-                );
-                let verdict = if line.within() { "" } else { "  <-- OVER" };
-                println!("{:<18}{:>5} / {budget}{verdict}", line.name, line.lines);
+                report_size(&line.name, line.lines, line.budget);
+                for module in &line.modules {
+                    report_size(&format!("  {}", module.name), module.lines, module.budget);
+                }
                 for finding in &line.findings {
                     println!("{:<18}{finding}", "");
                 }
             }
-            if lines.iter().all(budget::Line::within) {
+            if lines.iter().all(budget::Line::dependencies_allowed) {
                 Outcome::Passed
             } else {
                 Outcome::Failed
@@ -206,6 +205,11 @@ fn budgets() -> Outcome {
             Outcome::Failed
         }
     }
+}
+
+fn report_size(name: &str, lines: usize, target: Option<usize>) {
+    let target = target.map_or_else(|| "no target".to_owned(), |size| format!("target {size}"));
+    println!("{name:<24}{lines:>5} lines ({target})");
 }
 
 fn run(cargo: &OsStr, gate: &Gate, extra: &[String]) -> Outcome {

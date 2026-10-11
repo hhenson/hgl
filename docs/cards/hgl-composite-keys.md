@@ -1,6 +1,6 @@
 # Card: hgl-composite-keys
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `composite_keys` module of `hgl-semantics` (`crates/hgl-semantics/src/composite_keys.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `composite_keys` module of `hgl-semantics` (`crates/hgl-semantics/src/composite_keys.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
 Cold exact identity for complete scalar, positional tuple and concrete struct
 collection keys. Depends on source, rust-ir and scalar-keys; budget 150 lines.

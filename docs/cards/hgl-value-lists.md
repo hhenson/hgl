@@ -1,6 +1,6 @@
 # Card: hgl-value-lists
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `value_lists` module of `hgl-store` (`crates/hgl-store/src/value_lists.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `value_lists` module of `hgl-store` (`crates/hgl-store/src/value_lists.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
 Stable ordinary list descriptors, depending on hgl-types; budget 120 source lines.
 No unsafe code or third-party dependencies. `ListData = Vec<Vec<usize>>` contains

@@ -1,6 +1,6 @@
 # Card: hgl-value-constant
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `value_constant` module of `hgl-semantics` (`crates/hgl-semantics/src/value_constant.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `value_constant` module of `hgl-semantics` (`crates/hgl-semantics/src/value_constant.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
 Pure classification of checked ordinary expressions eligible for constant
 checking. Uses hgl-rust-ir; initial budget 100 source lines. Public

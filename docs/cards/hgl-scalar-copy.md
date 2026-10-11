@@ -1,6 +1,6 @@
 # Card: hgl-scalar-copy
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `scalar_copy` module of `hgl-store` (`crates/hgl-store/src/scalar_copy.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `scalar_copy` module of `hgl-store` (`crates/hgl-store/src/scalar_copy.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
 Capacity-preserving scalar ownership, depending only on hgl-types; budget 180.
 No unsafe code, type erasure, reference counting or third-party dependencies.

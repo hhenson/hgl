@@ -1,6 +1,6 @@
 # hgl-name-check
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `name_check` module of `hgl-semantics` (`crates/hgl-semantics/src/name_check.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `name_check` module of `hgl-semantics` (`crates/hgl-semantics/src/name_check.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
 Resolve parsed callable references before deferred generic and required-constant
 body specialization. `Scope` carries inferred types, generic constructors,

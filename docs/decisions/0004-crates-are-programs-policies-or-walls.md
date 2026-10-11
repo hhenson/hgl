@@ -1,7 +1,7 @@
 # 0004 — A crate is a program, a compiler policy, or a wall between layers; everything else is a module
 
 Status: accepted
-Date: 2026-10-06
+Date: 2026-10-06; size policy revised 2026-10-11
 Exploration: ../explorations/0011-crate-boundaries.md
 
 ## Decision
@@ -17,23 +17,25 @@ A new crate is added only when one of three things is true:
 
 Everything else is a module in the crate that owns the idea. A contract card
 describes a module as readily as a crate; the module keeps the card's "may
-use" list and its line budget, and `cargo xtask ci` holds both:
+use" list, enforced by `cargo xtask ci`. Crate and module line counts are
+informational. Existing numeric metadata remains an optional reporting target;
+exceeding or omitting it does not fail CI:
 
 ```toml
 [package.metadata.hgl]
-line-budget = 5700          # the crate, as before
+line-budget = 5700          # optional informational crate target
 
 [package.metadata.hgl.modules]
 bindings = { budget = 1100, uses = ["endpoints"] }   # src/bindings.rs plus src/bindings/**
 ```
 
 `uses` is the card's "may use" list as sibling modules; the crate root is
-always reachable. `xtask` grew by the module gate, so its budget is 580 (the gate selection and per-gate cargo arguments that let CI run and shard the test stages as parallel jobs are held there too).
-
-The workspace is the fourteen packages listed in the exploration. The
-budgets of the merged crates became module budgets, unchanged, and each
-crate's budget is the sum of what it absorbed. A module budget is raised the
-way a crate budget was: by a decision, never to pass a build.
+always reachable. The existing `budget` gate reports every crate and declared
+module, with its target when present. It fails on forbidden sibling reach or
+unreadable inputs, never on source size. A module without `budget` still has
+its `uses` checked. Do not split code or add crates merely to reduce a count.
+Lint, unsafe confinement, correctness tests and performance requirements are
+unchanged; the three reasons for creating a crate above remain binding.
 
 Decision 0003 is unchanged in substance: `unsafe` stays confined to
 `hgl-store`. Once the store holds any, the crate's own lint drops from
@@ -42,6 +44,9 @@ Decision 0003 is unchanged in substance: `unsafe` stays confined to
 that one module rather than the crate.
 
 ## Reason
+
+The following records the original consolidation rationale, before line
+counts became informational.
 
 The crate count had become a side effect of two good rules — budgets are
 never raised, cards are written per unit of work — rather than a design.

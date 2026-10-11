@@ -1,6 +1,6 @@
 # Card: hgl-type-syntax
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `type_syntax` module of `hgl-source` (`crates/hgl-source/src/type_syntax.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `type_syntax` module of `hgl-source` (`crates/hgl-source/src/type_syntax.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
 Pure nested type-spelling decomposition extracted unchanged from hgl-type-shape.
 No dependencies; budget 100 source lines. Expose application(&str) ->

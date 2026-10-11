@@ -1,6 +1,6 @@
 # Card: hgl-fixed-bench
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `fixed` binary of `hgl-bench`; its budget and "may use" list are held per module by `cargo xtask ci`.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `fixed` binary of `hgl-bench`; `cargo xtask ci` reports its size and enforces its "may use" list.
 
 Measure native Rust graph execution against the paired C++ fixed-collection
 scenarios. May use `hgl-types`, `hgl-store` and `hgl-kernel`; no public API.
