@@ -31,3 +31,26 @@ pub fn stage_finish_i64(expected:i64)->hgl_types::NodeResult {
     assert_eq!(STAGE_TRACE.swap(0,std::sync::atomic::Ordering::SeqCst),expected as usize,"operand order/once/failure barrier");
     Ok(())
 }
+
+    static GENERATOR_TRACE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    pub fn generator_begin_i64(_: i64) -> hgl_types::NodeResult {
+        assert_eq!(GENERATOR_TRACE.load(std::sync::atomic::Ordering::SeqCst),0,"generator evaluated before start");
+        Ok(())
+    }
+    pub fn generator_mark_i64(value:i64)->hgl_types::NodeResult<i64> {
+        GENERATOR_TRACE.fetch_update(std::sync::atomic::Ordering::SeqCst,std::sync::atomic::Ordering::SeqCst,|old|Some(old*10+value.unsigned_abs() as usize)).unwrap();
+        Ok(value)
+    }
+    pub fn generator_time_i64(value:i64)->hgl_types::NodeResult<hgl_types::EngineDelta> {
+        generator_mark_i64(value)?;
+        Ok(hgl_types::EngineDelta::from_micros(if value<0 {-1}else{1}))
+    }
+    pub fn generator_finish_i64(expected:i64)->hgl_types::NodeResult {
+        assert_eq!(GENERATOR_TRACE.swap(0,std::sync::atomic::Ordering::SeqCst),expected as usize,"generator repeated or reordered operands");
+        Ok(())
+    }
+
+    pub fn generator_reject_time_i64(value:i64)->hgl_types::NodeResult<hgl_types::EngineDelta> {
+        generator_mark_i64(value)?;
+        Err(hgl_types::NodeError::coded("deliberate time operand failure","yield.negative_duration"))
+    }

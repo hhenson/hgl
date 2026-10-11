@@ -18,3 +18,7 @@ Direct Any publications stage complete nonlocal expressions into private slots b
 
 Helper call bodies receive the same Any binding preparation in their own lexical
 scopes after call_locals normalization. Formal IDs and argument order are preserved.
+
+Preparation includes generator bodies, with Any locals reserved by the existing
+snapshot-local pass. Direct boxed yield payloads are retained after the time
+operand; configuration projections preserve the replay proof and existing slots.

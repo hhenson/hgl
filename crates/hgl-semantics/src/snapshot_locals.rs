@@ -15,12 +15,27 @@ fn scan(
             Statement::Let(id, v) | Statement::Var(id, v) if v.snapshot => {
                 locals.insert(*id, v.ty.clone());
             }
-            Statement::Return(value) | Statement::Assign(_, value)
+            Statement::Return(value)
+            | Statement::Assign(_, value)
+            | Statement::TimedYield(_, value)
                 if value.snapshot
                     && (matches!(value.kind, Kind::Unary(..) | Kind::Construct(_))
                         || value.ty == Ty::Any
                             && !matches!(value.kind, Kind::Local(_) | Kind::MutableLocal(_))) =>
             {
+                // The time operand precedes payload retention, including when either fails.
+                if let Statement::TimedYield(time, _) = &mut statement {
+                    let id = *next;
+                    *next += 1;
+                    result.push(Statement::Let(id, time.clone()));
+                    *time = Value::new(time.ty.clone(), Kind::Local(id));
+                }
+                let (Statement::Return(value)
+                | Statement::Assign(_, value)
+                | Statement::TimedYield(_, value)) = &mut statement
+                else {
+                    unreachable!("snapshot value statement")
+                };
                 let id = *next;
                 *next += 1;
                 locals.insert(id, value.ty.clone());

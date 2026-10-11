@@ -11,21 +11,25 @@ pub(crate) fn source(plan: &Plan, value: &Value) -> Option<(&'static str, String
     if let Some(slot) = atomic_place(plan, value) {
         return Some(("atomic_values", slot));
     }
+    if let Some(slot) =
+        crate::source_slots::projection(value, |v| crate::values::condition_code(plan, v))
+    {
+        return Some(("configuration_columns", slot));
+    }
     if value.snapshot
         && matches!(
             value.kind,
-            Kind::Local(_) | Kind::MutableLocal(_) | Kind::Field(..) | Kind::Index(..)
+            Kind::Local(_)
+                | Kind::MutableLocal(_)
+                | Kind::GeneratorLocal(_)
+                | Kind::Field(..)
+                | Kind::Index(..)
         )
     {
         return Some((
             "global_values",
             crate::snapshot_slots::projection(value, |v| crate::values::condition_code(plan, v)),
         ));
-    }
-    if let Some(slot) =
-        crate::source_slots::projection(value, |v| crate::values::condition_code(plan, v))
-    {
-        return Some(("configuration_columns", slot));
     }
     borrowed_place(plan, value).map(|slot| ("global_values", slot))
 }
