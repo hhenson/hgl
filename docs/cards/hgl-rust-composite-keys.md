@@ -1,6 +1,6 @@
 # Card: hgl-rust-composite-keys
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `composite_keys` module of `hgl-rust` (`crates/hgl-rust/src/composite_keys.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `composite_keys` module of `hgl-rust` (`crates/hgl-rust/src/composite_keys.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
 Generate exact finite ordinary tuple/struct Key operations. Depends only on
 hgl-source; budget 250 source lines. No runtime reflection, allocation, provider

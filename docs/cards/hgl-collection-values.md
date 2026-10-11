@@ -1,6 +1,6 @@
 # Card: hgl-collection-values
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `collection_values` module of `hgl-semantics` (`crates/hgl-semantics/src/collection_values.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `collection_values` module of `hgl-semantics` (`crates/hgl-semantics/src/collection_values.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
 Complete ordinary collection identity and ordered cold construction. Uses
 source, checked IR, complete composite keys and family values; budget 200 lines.

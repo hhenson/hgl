@@ -1,6 +1,6 @@
 # Card: hgl-body-check
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `body_check` module of `hgl-semantics` (`crates/hgl-semantics/src/body_check.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `body_check` module of `hgl-semantics` (`crates/hgl-semantics/src/body_check.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
 Classify function phases and parse function-level service headers. Uses
 hgl-source and hgl-library; budget 220 source lines, no runtime dependency.

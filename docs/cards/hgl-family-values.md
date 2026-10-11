@@ -1,6 +1,6 @@
 # Card: hgl-family-values
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `family_values` module of `hgl-semantics` (`crates/hgl-semantics/src/family_values.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `family_values` module of `hgl-semantics` (`crates/hgl-semantics/src/family_values.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
 Checked ordinary family widening and canonical closed payload ownership. Depends
 on source and rust-ir; budget 100 source lines. No runtime discovery or projection.

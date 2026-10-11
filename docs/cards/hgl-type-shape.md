@@ -1,6 +1,6 @@
 # Card: hgl-type-shape
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `type_shape` module of `hgl-source` (`crates/hgl-source/src/type_shape.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `type_shape` module of `hgl-source` (`crates/hgl-source/src/type_shape.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
 Canonical checked source types and finite nominal application identities. No
 runtime or third-party dependency; budget 300 source lines.

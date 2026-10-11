@@ -5,7 +5,7 @@ selective and qualified imports, with export visibility and duplicate checking.
 It rejects native type arguments. nominal_declaration shares the nominal type
 namespace lookup across structs, enums and native scalars.
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `struct_names` module of `hgl-semantics` (`crates/hgl-semantics/src/struct_names.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `struct_names` module of `hgl-semantics` (`crates/hgl-semantics/src/struct_names.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
 Resolve finite struct declaration names and export visibility. Dependencies:
 hgl-library and hgl-source; budget 160 source lines. Compile-time only.

@@ -1,6 +1,6 @@
 # Card: hgl-value-check
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `value_check` module of `hgl-semantics` (`crates/hgl-semantics/src/value_check.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `value_check` module of `hgl-semantics` (`crates/hgl-semantics/src/value_check.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
 Ordinary value authority, borrow provenance and lexical entry-effect checking
 for checked HGL hook IR. Uses `hgl-source`, `hgl-rust-ir` and `hgl-library`; budget 400

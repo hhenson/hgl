@@ -1,6 +1,6 @@
 # hgl-rust-capacity
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `capacity` module of `hgl-rust` (`crates/hgl-rust/src/capacity.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `capacity` module of `hgl-rust` (`crates/hgl-rust/src/capacity.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
 Cold finite replay capacity emission. `Capacity::new` collects exact checked ordinary payload types. `include` merges already materialized configuration values without repeating provider recipes; `bounds` emits typed descendant limits. `declaration` emits graph-local maxima, and `output` prepares every concrete output leaf including inactive finite keyed descendants. Capacities and generated record horizons are established before graph start; overflow remains an explicit error rather than hot growth.
 

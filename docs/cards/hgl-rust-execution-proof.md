@@ -1,6 +1,6 @@
 # hgl-rust-execution-proof
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `execution_proof` module of `hgl-rust` (`crates/hgl-rust/src/execution_proof.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `execution_proof` module of `hgl-rust` (`crates/hgl-rust/src/execution_proof.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
 `prepared(plan)` selects one complete evaluation transport before hooks execute.
 It requires known membership mutation counts, finite owning payload widths, and

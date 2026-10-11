@@ -19,10 +19,11 @@ report a failing or skipped gate as exactly that.
 - **A new third-party crate needs the owner's agreement.** Ask first, then add
   it once to `[workspace.dependencies]`.
 - **Never buy a green build.** No `#[allow]`; `#[expect(.., reason)]` only with
-  a real reason; never raise a lint threshold or a crate's or module's budget
-  (`[package.metadata.hgl]` and its `modules` table, held by `cargo xtask ci`),
-  never add a crate outside `docs/decisions/0004`'s three reasons, never delete
-  or weaken a test, never stub a function to get past a gate. If a gate is
+  a real reason; never raise a lint threshold or weaken module dependency
+  rules. Crate and module line counts are informational, not limits; missing
+  numerical targets do not fail CI. Never add a crate outside
+  `docs/decisions/0004`'s three reasons, never delete or weaken a test, never
+  stub a function to get past a gate. If a gate is
   wrong, say so and stop.
 - **Write Rust its owner can read.** The owner's first language is C++. Prefer
   plain structs, enums, functions and `match`. No `macro_rules!`, no

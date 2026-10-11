@@ -1,6 +1,6 @@
 # Card: hgl-global
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `global` module of `hgl-store` (`crates/hgl-store/src/global.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `global` module of `hgl-store` (`crates/hgl-store/src/global.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
 Run-owned ordinary values, independent of temporal endpoints. Uses
 `hgl-types`, `hgl-global-value` and `hgl-list`; initial budget 200 lines. No third-party crates.

@@ -1,6 +1,6 @@
 # Card: hgl-rust-families
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `families` module of `hgl-rust` (`crates/hgl-rust/src/families.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `families` module of `hgl-rust` (`crates/hgl-rust/src/families.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
 Statically selected owning abstract family layouts and conversion emission.
 Depends on source, rust-ir and rust-type-data; budget 200 source lines. No runtime crate.

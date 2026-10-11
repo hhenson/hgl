@@ -1,6 +1,6 @@
 # Card: hgl-source-check
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `source_check` module of `hgl-semantics` (`crates/hgl-semantics/src/source_check.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `source_check` module of `hgl-semantics` (`crates/hgl-semantics/src/source_check.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
 Declaration-wide structural admission, shared by normal compile/test and
 compile-rejection fixtures. Dependencies diagnostics, source, library, eval-data,

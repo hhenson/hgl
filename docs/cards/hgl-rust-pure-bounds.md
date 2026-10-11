@@ -1,6 +1,6 @@
 # hgl-rust-pure-bounds
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `pure_bounds` module of `hgl-rust` (`crates/hgl-rust/src/pure_bounds.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `pure_bounds` module of `hgl-rust` (`crates/hgl-rust/src/pure_bounds.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
 Cold analysis of checked pure text expressions. `text_factor` follows ordinary
 local construction, field access and assignment to bound concatenation byte

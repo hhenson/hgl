@@ -1,6 +1,6 @@
 # Card: hgl-inheritance
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `inheritance` module of `hgl-semantics` (`crates/hgl-semantics/src/inheritance.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `inheritance` module of `hgl-semantics` (`crates/hgl-semantics/src/inheritance.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
 Scoped finite single-inheritance patterns for ordinary constructors and closed
 abstract family membership. Depends on source, library and struct-names; budget

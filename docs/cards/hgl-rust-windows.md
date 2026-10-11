@@ -1,6 +1,6 @@
 # Card: hgl-rust-windows
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `windows` module of `hgl-rust` (`crates/hgl-rust/src/windows.rs`); its budget and "may use" list are held per module by `cargo xtask ci`.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `windows` module of `hgl-rust` (`crates/hgl-rust/src/windows.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
 Static rolling marker, query and arrival transport emission. Uses source and
 rust-layouts; budget 100 source lines. No runtime execution or third-party deps.

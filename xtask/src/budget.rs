@@ -1,24 +1,12 @@
-//! The line-budget gate.
+//! Informational source sizes and enforced module dependencies.
 //!
-//! Every crate declares how large it may grow, in its own `Cargo.toml`, and
-//! may declare the same for the modules that were crates of their own
-//! (docs/decisions/0004):
+//! Crates may retain `line-budget` and module `budget` metadata as size
+//! targets. Counts and targets are informational; missing targets are valid.
+//! Module `uses` lists remain enforced architectural boundaries.
 //!
-//! ```toml
-//! [package.metadata.hgl]
-//! line-budget = 500
-//!
-//! [package.metadata.hgl.modules]
-//! bindings = { budget = 1100, uses = ["endpoints"] }
-//! ```
-//!
-//! What is counted is every line under `src/` that is neither blank nor a
-//! comment, doc comments included in "comment". A module is `src/<name>.rs`
-//! plus `src/<name>/`; `uses` names the sibling modules its card lets it
-//! reach through `crate::`, the crate root always being reachable. A crate
-//! or module over its budget, a crate without one, or a module reaching a
-//! sibling it did not declare fails the gate. A budget is raised by a
-//! decision, never to make a build pass (`CLAUDE.md`).
+//! Counts include every nonblank, noncomment line under `src/`. A module
+//! includes `src/<name>.rs` and `src/<name>/`. Its `uses` list allows sibling
+//! modules reached through `crate::`; the crate root is always reachable.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -32,20 +20,28 @@ pub(crate) struct Line {
     pub(crate) lines: usize,
     /// `None` when the crate declares no budget.
     pub(crate) budget: Option<usize>,
-    /// What its modules got wrong: over budget, or a use their card lacks.
+    pub(crate) modules: Vec<ModuleSize>,
+    /// Sibling dependencies their cards do not allow.
     pub(crate) findings: Vec<String>,
 }
 
 impl Line {
-    pub(crate) fn within(&self) -> bool {
-        self.budget.is_some_and(|budget| self.lines <= budget) && self.findings.is_empty()
+    pub(crate) fn dependencies_allowed(&self) -> bool {
+        self.findings.is_empty()
     }
+}
+
+/// A module's measured size and optional informational target.
+pub(crate) struct ModuleSize {
+    pub(crate) name: String,
+    pub(crate) lines: usize,
+    pub(crate) budget: Option<usize>,
 }
 
 /// A module declared in the manifest's `modules` table.
 struct Module {
     name: String,
-    budget: usize,
+    budget: Option<usize>,
     uses: Vec<String>,
 }
 
@@ -66,8 +62,11 @@ fn measure_crate(path: &Path) -> Result<Line, String> {
     }
     let modules = declared_modules(&manifest);
     let mut findings = Vec::new();
+    let mut sizes = Vec::new();
     for module in &modules {
-        findings.extend(check_module(&src, module, &modules)?);
+        let (size, violations) = check_module(&src, module, &modules)?;
+        sizes.push(size);
+        findings.extend(violations);
     }
     Ok(Line {
         name: path
@@ -76,11 +75,16 @@ fn measure_crate(path: &Path) -> Result<Line, String> {
             .unwrap_or_default(),
         lines,
         budget: declared(&manifest),
+        modules: sizes,
         findings,
     })
 }
 
-fn check_module(src: &Path, module: &Module, all: &[Module]) -> Result<Vec<String>, String> {
+fn check_module(
+    src: &Path,
+    module: &Module,
+    all: &[Module],
+) -> Result<(ModuleSize, Vec<String>), String> {
     let mut findings = Vec::new();
     let mut lines = 0;
     let mut reached = Vec::new();
@@ -88,12 +92,6 @@ fn check_module(src: &Path, module: &Module, all: &[Module]) -> Result<Vec<Strin
         let text = read(&file)?;
         lines += code_lines(&text);
         reached.extend(crate_paths(&text));
-    }
-    if lines > module.budget {
-        findings.push(format!(
-            "module {} is {lines} lines against a budget of {}",
-            module.name, module.budget
-        ));
     }
     reached.sort();
     reached.dedup();
@@ -106,7 +104,14 @@ fn check_module(src: &Path, module: &Module, all: &[Module]) -> Result<Vec<Strin
             ));
         }
     }
-    Ok(findings)
+    Ok((
+        ModuleSize {
+            name: module.name.clone(),
+            lines,
+            budget: module.budget,
+        },
+        findings,
+    ))
 }
 
 fn module_files(src: &Path, name: &str) -> Result<Vec<PathBuf>, String> {
@@ -168,12 +173,8 @@ fn declared_modules(manifest: &str) -> Vec<Module> {
 fn parse_module(line: &str) -> Option<Module> {
     let (name, rest) = line.split_once('=')?;
     let body = rest.trim().strip_prefix('{')?.strip_suffix('}')?;
-    let budget = after_key(body, "budget")?
-        .split(',')
-        .next()?
-        .trim()
-        .parse()
-        .ok()?;
+    let budget =
+        after_key(body, "budget").and_then(|value| value.split(',').next()?.trim().parse().ok());
     let uses = after_key(body, "uses")
         .and_then(|list| list.strip_prefix('[')?.split(']').next())
         .map_or_else(Vec::new, |list| {
@@ -228,7 +229,83 @@ fn read(path: &Path) -> Result<String, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{crate_paths, declared, declared_modules, is_code};
+    use super::{crate_paths, declared, declared_modules, is_code, measure_crate};
+    use std::fs;
+    use std::path::PathBuf;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    struct Fixture(PathBuf);
+
+    impl Fixture {
+        fn new(targets: bool, dependency: &str) -> Self {
+            static NEXT: AtomicUsize = AtomicUsize::new(0);
+            let path = std::env::temp_dir().join(format!(
+                "hgl-size-policy-{}-{}",
+                std::process::id(),
+                NEXT.fetch_add(1, Ordering::Relaxed)
+            ));
+            fs::create_dir_all(path.join("src/source")).unwrap();
+            let crate_target = if targets { "line-budget = 0" } else { "" };
+            let module_target = if targets { "budget = 0, " } else { "" };
+            fs::write(
+                path.join("Cargo.toml"),
+                format!(
+                    "[package.metadata.hgl]\n{crate_target}\n[package.metadata.hgl.modules]\n\
+                     source = {{ {module_target}uses = [\"allowed\"] }}\n\
+                     allowed = {{ uses = [] }}\nforbidden = {{ uses = [] }}\n"
+                ),
+            )
+            .unwrap();
+            fs::write(
+                path.join("src/source.rs"),
+                format!("use crate::{dependency}::Item;\n"),
+            )
+            .unwrap();
+            fs::write(
+                path.join("src/source/nested.rs"),
+                "const VALUE: usize = 1;\n",
+            )
+            .unwrap();
+            fs::write(path.join("src/allowed.rs"), "pub struct Item;\n").unwrap();
+            fs::write(path.join("src/forbidden.rs"), "pub struct Item;\n").unwrap();
+            Self(path)
+        }
+    }
+
+    impl Drop for Fixture {
+        fn drop(&mut self) {
+            fs::remove_dir_all(&self.0).unwrap();
+        }
+    }
+
+    #[test]
+    fn oversized_and_missing_targets_are_informational() {
+        for targets in [true, false] {
+            let fixture = Fixture::new(targets, "allowed");
+            let report = measure_crate(&fixture.0).unwrap();
+            assert!(report.dependencies_allowed());
+            assert_eq!(report.lines, 4);
+            assert_eq!(report.budget, targets.then_some(0));
+            assert_eq!(report.modules.len(), 3);
+            let source = &report.modules[0];
+            assert_eq!(source.name, "source");
+            assert_eq!(source.lines, 2);
+            assert_eq!(source.budget, targets.then_some(0));
+        }
+    }
+
+    #[test]
+    fn forbidden_dependency_still_fails_with_or_without_targets() {
+        for targets in [true, false] {
+            let fixture = Fixture::new(targets, "forbidden");
+            let report = measure_crate(&fixture.0).unwrap();
+            assert!(!report.dependencies_allowed());
+            assert_eq!(
+                report.findings,
+                ["module source uses crate::forbidden, which its card does not allow"]
+            );
+        }
+    }
 
     #[test]
     fn blank_lines_and_comments_are_not_code() {
@@ -262,9 +339,9 @@ mod tests {
         let modules = declared_modules(manifest);
         let names: Vec<&str> = modules.iter().map(|m| m.name.as_str()).collect();
         assert_eq!(names, ["bindings", "keys"]);
-        assert_eq!(modules[0].budget, 1100);
+        assert_eq!(modules[0].budget, Some(1100));
         assert_eq!(modules[0].uses, ["endpoints", "keys"]);
-        assert_eq!(modules[1].budget, 40);
+        assert_eq!(modules[1].budget, Some(40));
         assert!(modules[1].uses.is_empty());
     }
 
