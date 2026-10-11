@@ -16,3 +16,5 @@ source span; no delta error code is substituted.
 Acceptance: both published tuple constant-context rejection fixtures, unused
 clock/property and temporal-alias controls, runtime constructors and independent
 ordinary Tuple children in the positive example.
+
+May use eval_data for its declaration-parameter lookup; missing overload parameters remain unknown instead of producing an eval diagnostic.

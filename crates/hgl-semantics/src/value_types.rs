@@ -158,15 +158,7 @@ pub fn specialize(
         .into_iter()
         .zip(arguments.clone())
         .collect::<BTreeMap<_, _>>();
-    if let Some((parameter, domain)) = schema.type_domain
-        && !bindings.get(&parameter).is_some_and(|ty| {
-            domain
-                .iter()
-                .any(|name| Ty::parse(name).as_ref() == Some(ty))
-        })
-    {
-        return Err(format!("requires {parameter} in {{{}}}", domain.join(", ")));
-    }
+    crate::struct_declarations::check_domain(schema.type_domain.as_ref(), &bindings)?;
     let origin = format!("{}::{}", decl.module, decl.name);
     if !active.insert(origin.clone()) {
         return Err("recursive ordinary structs are not supported".into());

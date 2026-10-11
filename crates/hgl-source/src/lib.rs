@@ -53,6 +53,22 @@ impl Expr {
             self
         }
     }
+    /// Immediate expression operands in source order; absent cells have no operand.
+    pub fn children(&self) -> Vec<&Self> {
+        match self.syntax() {
+            Self::Lambda(_, _, child) | Self::Property(child, _) | Self::Unary(_, child) => {
+                vec![child]
+            }
+            Self::Index(a, b) | Self::Binary(_, a, b) => vec![a, b],
+            Self::Call(_, args) | Self::Applied(_, args) => {
+                args.iter().map(|(_, child)| child).collect()
+            }
+            Self::Sequence(items) | Self::Tuple(items) => items.iter().flatten().collect(),
+            Self::Sparse(items) => items.iter().flat_map(|(a, b)| [a, b]).collect(),
+            Self::Null | Self::Literal(_) | Self::TemporalLiteral(_) | Self::Name(_) => Vec::new(),
+            Self::Located(..) => unreachable!("syntax strips origins"),
+        }
+    }
     /// Original source range, or no range for synthesized expressions.
     pub fn span(&self) -> std::ops::Range<usize> {
         if let Self::Located(_, span, _) = self {

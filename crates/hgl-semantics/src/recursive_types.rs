@@ -1,6 +1,5 @@
 //! Finite recursive specialization batches without recursive type expansion.
 use crate::library::{Decl, Library};
-use hgl_source::TypeSpelling;
 use hgl_source::{Nominal, NominalDefinition, RecursiveType, Ty};
 use std::collections::{BTreeMap, BTreeSet};
 mod component;
@@ -42,15 +41,7 @@ pub fn resolve(
             .cloned()
             .zip(current.arguments.iter().cloned())
             .collect::<BTreeMap<_, _>>();
-        if let Some((parameter, domain)) = &schema.type_domain
-            && !bindings.get(parameter).is_some_and(|ty| {
-                domain
-                    .iter()
-                    .any(|name| Ty::parse(name).as_ref() == Some(ty))
-            })
-        {
-            return Err(format!("requires {parameter} in {{{}}}", domain.join(", ")));
-        }
+        crate::struct_declarations::check_domain(schema.type_domain.as_ref(), &bindings)?;
         let mut fields = Vec::new();
         for (index, (name, pattern)) in schema.fields.iter().enumerate() {
             let ty =

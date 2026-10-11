@@ -1,6 +1,6 @@
 # Card: hgl-any-values
 
-The `any_values` policy in hgl-semantics checks ANY-1–5 against admitted ordinary types. It may use ir, value_eval, value_access, endpoint_check, family_values and scalar_keys; its initial module budget is 420 lines within the unchanged crate budget.
+The `any_values` policy in hgl-semantics checks ANY-1–5 against admitted ordinary types. It may use ir, value_eval, value_access, endpoint_check, family_values and scalar_keys; the original 420-line allowance is split between Semantics admission (60) and Eval execution (360).
 
 Public surface: checked, retain, contents, capability, capable, binary, equal_data, validate_key, fields and contains_any. Construction retains exact concrete family identity and independently owns every ordinary descendant. Atomic and delta Any wrappers normalize to the same whole box leaf. There is no closed builtin payload union.
 

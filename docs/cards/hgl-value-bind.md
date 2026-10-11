@@ -63,3 +63,5 @@ Delta traversal includes typed Add/Remove keys and both Keyed map operands;
 retained keys obey the same constant/provenance checks as child expressions.
 
 signature_types returns structured Issues and delegates written reduced delta requirements and bound excluded shapes to source_check. Generic parameter identity remains exact after earlier argument constraints; codes do not depend on diagnostic wording. May use source_check.
+
+May use struct_declarations for the shared declared type-domain check.

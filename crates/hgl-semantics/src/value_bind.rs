@@ -52,13 +52,7 @@ pub fn bind(
     {
         types.insert(signature.result.clone(), hint.clone());
     }
-    if let Some((parameter, domain)) = &signature.type_domain
-        && !types
-            .get(parameter)
-            .is_some_and(|ty| domain.iter().any(|t| Ty::parse(t).as_ref() == Some(ty)))
-    {
-        return Err(format!("requires {parameter} in {{{}}}", domain.join(", ")));
-    }
+    crate::struct_declarations::check_domain(signature.type_domain.as_ref(), &types)?;
     let result = resolve_type(&signature.result, &types).ok_or("unresolved result type")?;
     let result = if signature.value_function && !matches!(result, Ty::Atomic(_)) {
         crate::value_access::project(&result)
