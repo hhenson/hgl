@@ -1,6 +1,6 @@
 //! Complete finite key identities for cold validation, never runtime dispatch.
 use crate::ir::{Kind, Value};
-use hgl_source::{Literal, Ty};
+use hgl_value_model::{Literal, Ty};
 /// Exact scalar or complete composite identity, including each optional presence bit.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Key {

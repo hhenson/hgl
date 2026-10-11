@@ -1,6 +1,6 @@
 //! Ordered construction and unordered identity of complete ordinary collections.
 use crate::ir::{Kind, Value};
-use hgl_source::Ty;
+use hgl_value_model::Ty;
 /// Validate a complete retained key, preserving optional presence and exact types.
 pub fn key(value: &Value) -> Result<crate::composite_keys::Key, String> {
     crate::composite_keys::key(value)

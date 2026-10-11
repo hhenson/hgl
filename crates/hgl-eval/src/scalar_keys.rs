@@ -1,5 +1,5 @@
 //! Exact scalar identities for cold collection checking, never runtime lookup.
-use hgl_source::{Literal, Ty};
+use hgl_value_model::{Literal, Ty};
 
 /// A comparison key preserving ordinary type and complete scalar identity.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]

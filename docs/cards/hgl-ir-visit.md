@@ -11,3 +11,6 @@ Acceptance: all existing IR tests and hidden Any payload layout collection, incl
 `hooks_mut` rewrites the same start/stop/generator/handler operand boundaries as `hooks`, sharing ownership metadata preparation across backend passes.
 
 Read-only lexical nodes and mutable nodes preserve helper scope boundaries for representation-use analysis and immutable literal normalization. Delta and key discovery reuse expression traversal while retaining explicit helper/capture pruning.
+
+Checked execution lives in hgl-eval behind the existing hgl-semantics facade.
+Source constructor admission remains above that dependency boundary.

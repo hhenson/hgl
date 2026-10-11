@@ -1,6 +1,6 @@
 # Card: hgl-value-eval
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `value_eval` module of `hgl-semantics` (`crates/hgl-semantics/src/value_eval.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `value_eval` module of `hgl-eval` (`crates/hgl-eval/src/value_eval.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
 Direct execution of checked ordinary value IR during constant evaluation and
 graph construction. Depends on `hgl-source`, `hgl-rust-ir` and `hgl-delta-check`; budget 500
@@ -80,3 +80,6 @@ preserving outer variable writes and provider execution order.
 List IR with exact Set/Map type executes through hgl-collection-values: every key is independently retained and checked before its map value. Captures retain complete owned descendants, and duplicate failure returns no partial container.
 
 check_assertion(&Value)->Result<(),String> preserves coded execution failures during optional assertion evaluation while retaining unsupported-operation diagnostics. atomic_argument(Value, Option<&Ty>)->Value projects a readable non-signal atomic input to an exact ordinary helper argument, retaining a typed atomic_value read in IR. May use value_constant. Byte length and construction execute in ordinary phase.
+
+Checked execution lives in hgl-eval behind the existing hgl-semantics facade.
+Source constructor admission remains above that dependency boundary.

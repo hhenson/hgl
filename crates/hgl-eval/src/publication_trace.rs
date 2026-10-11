@@ -1,7 +1,7 @@
 //! Validate canonical closed publication sequences before graph start.
 use crate::composite_keys::{Key, key};
 use crate::ir::{DeltaEntry, Kind, Value};
-use hgl_source::{Literal, Ty};
+use hgl_value_model::{Literal, Ty};
 use std::collections::{BTreeMap, BTreeSet};
 #[derive(Default)]
 struct State {
@@ -50,7 +50,7 @@ impl State {
         let Kind::Delta(parts) = &value.kind else {
             return Ok(());
         };
-        crate::delta_check::materialized(parts)?;
+        materialized(parts)?;
         if matches!(shape, Ty::List(_, None)) {
             self.growing(parts)?;
         }
@@ -103,4 +103,24 @@ impl State {
         }
         Ok(())
     }
+}
+
+/// Validate exact duplicate and overlap identities after cold materialization.
+pub fn materialized(parts: &[DeltaEntry]) -> Result<(), String> {
+    let mut added = BTreeSet::new();
+    let mut removed = BTreeSet::new();
+    for part in parts {
+        let (value, keys) = match part {
+            DeltaEntry::Add(value) | DeltaEntry::Keyed(value, _) => (value, &mut added),
+            DeltaEntry::Remove(value) => (value, &mut removed),
+            DeltaEntry::Child(..) => continue,
+        };
+        if !keys.insert(key(value)?) {
+            return Err("duplicate delta key/member".into());
+        }
+    }
+    if added.intersection(&removed).next().is_some() {
+        return Err("delta additions/upserts overlap removals".into());
+    }
+    Ok(())
 }

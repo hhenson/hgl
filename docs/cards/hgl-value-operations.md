@@ -16,3 +16,6 @@ bytes(source arguments, typed checker)->Result<Value,Issue> validates constructo
 Explicit constructor checking delegates to hgl-value-constructors, preserving the existing constructor/bytes public paths. Any binary execution delegates to hgl-any-values. BOOL-1 supplies false-before-true order and exact Boolean equality/hash.
 
 Complete atomic payload conversion preserves signal-only input authority.
+
+Checked execution lives in hgl-eval behind the existing hgl-semantics facade.
+Source constructor admission remains above that dependency boundary.

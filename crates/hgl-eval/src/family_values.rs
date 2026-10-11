@@ -1,6 +1,6 @@
 //! Checked ordinary family widening and concrete-tag-preserving cold ownership.
 use crate::ir::{Kind, Value};
-use hgl_source::Ty;
+use hgl_value_model::Ty;
 /// Admit only a concrete declared member or an explicit subfamily ancestor edge.
 pub fn coerce(expected: Option<&Ty>, value: Value) -> Result<Value, String> {
     let Some(Ty::Family(family)) = expected else {

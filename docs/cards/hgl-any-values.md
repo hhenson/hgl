@@ -9,3 +9,6 @@ Capability selection is type based, including empty ordinary containers. Recursi
 Acceptance: shared any_values suite; independent retained recursive aggregates and structural delta payloads; exact nominal identity.
 
 Static capable, fields and contains_any metadata delegates to hgl-source ordinary_shape; evaluation and boxed capability failures remain owned here.
+
+Checked execution lives in hgl-eval behind the existing hgl-semantics facade.
+Source constructor admission remains above that dependency boundary.

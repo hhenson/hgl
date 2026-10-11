@@ -2,7 +2,7 @@
 use crate::ir::{DeltaEntry, Kind, Statement, Value};
 use crate::value_operations as operators;
 pub use crate::value_operations::EvalError;
-use hgl_source::{Literal, TemporalLiteral, Ty};
+use hgl_value_model::{Literal, TemporalLiteral, Ty};
 fn unsupported(message: &str) -> EvalError {
     EvalError::Unsupported(message.into())
 }
@@ -298,7 +298,7 @@ impl Execution<'_, '_> {
                 DeltaEntry::Child(..) => {}
             }
         }
-        crate::delta_check::materialized(&parts).map_err(EvalError::Operation)?;
+        crate::publication_trace::materialized(&parts).map_err(EvalError::Operation)?;
         Ok(Kind::Delta(parts))
     }
     fn path(&mut self, value: &Value, path: &mut Vec<Projection>) -> Result<usize, EvalError> {
