@@ -115,9 +115,17 @@ impl Checker {
     fn native_phase(&self, runtime: bool) -> &'static str {
         match (runtime, self.value_context) {
             (_, ValueContext::Preparation) if !self.preparing_graph => "setup",
+            (_, ValueContext::Preparation | ValueContext::Constant) | (false, _) => "cold",
             (true, _) => self.phase.name(),
-            (false, _) => "cold",
         }
+    }
+    fn wiring_context(&mut self) -> ValueContext {
+        let context = if self.value_context == ValueContext::Preparation {
+            ValueContext::Preparation
+        } else {
+            ValueContext::Constant
+        };
+        std::mem::replace(&mut self.value_context, context)
     }
     fn call(
         &mut self,
@@ -192,10 +200,12 @@ impl Checker {
             Value::new(result.clone(), kind)
         } else {
             let previous = std::mem::replace(&mut self.preparing_graph, true);
+            let previous_context = self.wiring_context();
             let value = self
                 .graph(&module, &mut cursor, &mut env, (&result, &signature))
                 .map_err(|e| e.in_source(&decl.source))?;
             self.preparing_graph = previous;
+            self.value_context = previous_context;
             value
         };
         self.types = previous_types;

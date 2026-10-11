@@ -525,21 +525,65 @@ fn standalone_cold_native_keeps_phase_and_topology_checks() -> Result<(), String
         error.contains("provider-dependent wiring topology"),
         "{error}"
     );
-    let mut input = sources("export fn main(){let ignored=token(\"cold\")}")?;
-    for (name, text) in &mut input {
-        if name.ends_with(".hgl-native") {
-            *text = text.replace(
-                "phases {setup,cold,evaluation}",
-                "phases {setup,evaluation}",
-            );
+    for body in [
+        "export fn main(){let ignored=token(\"cold\")}",
+        "const fn wrap(text:str)->Token{return token(text)}\nexport fn main(){let ignored=wrap(\"cold\")}",
+        "export fn main(){if true {let ignored=token(\"cold\")}}",
+        "const fn wrap(text:str)->Token{return token(text)}\nexport fn main(){if true {let ignored=wrap(\"cold\")}}",
+        "const fn wrap(text:str)->Token{return token(text)}\nfn source()->i64 {inject alarm\nstart{schedule(alarm,0us)}\nwhen{return 1}}\nexport fn main(){source()\nlet ignored=wrap(\"cold\")}",
+    ] {
+        let mut input = sources(body)?;
+        for (name, text) in &mut input {
+            if name.ends_with(".hgl-native") {
+                *text = text.replace(
+                    "phases {setup,cold,evaluation}",
+                    "phases {setup,evaluation}",
+                );
+            }
         }
+        let error = hgl_program::compile(&input, "main")
+            .err()
+            .ok_or("evaluation-only native admitted in cold phase")?;
+        assert!(
+            error.contains("native helper is unavailable in cold"),
+            "{error}"
+        );
+        for (name, text) in &mut input {
+            if name.ends_with(".hgl-native") {
+                *text = text.replace("phases {setup,evaluation}", "phases {cold}");
+            }
+        }
+        hgl_program::compile(&input, "main")?;
     }
-    let error = hgl_program::compile(&input, "main")
-        .err()
-        .ok_or("evaluation-only native admitted in cold phase")?;
-    assert!(
-        error.contains("native helper is unavailable in cold"),
-        "{error}"
-    );
+    Ok(())
+}
+
+#[test]
+fn native_wiring_context_preserves_actual_node_invocation_phases() -> Result<(), String> {
+    let prefix = "const fn wrap(value:str)->Token{return token(value)}\nfn source()->str {inject alarm\nstart {schedule(alarm,0us)}\nwhen{return \"x\"}}\n";
+    for body in [
+        "fn consume(value:str)->Token {when{return wrap(value)}}\nexport fn main(){consume(source())}",
+        "export fn main(){wrap(source())}",
+    ] {
+        let mut input = sources(&format!("{prefix}{body}"))?;
+        for (name, text) in &mut input {
+            if name.ends_with(".hgl-native") {
+                *text = text.replace("phases {setup,cold,evaluation}", "phases {evaluation}");
+            }
+        }
+        hgl_program::compile(&input, "main")?;
+        for (name, text) in &mut input {
+            if name.ends_with(".hgl-native") {
+                *text = text.replace("phases {evaluation}", "phases {cold}");
+            }
+        }
+        let error = hgl_program::compile(&input, "main")
+            .err()
+            .ok_or("cold-only native admitted in evaluation")?;
+        assert!(
+            error.contains("native helper is unavailable in evaluation"),
+            "{error}"
+        );
+    }
     Ok(())
 }

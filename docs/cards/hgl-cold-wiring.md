@@ -42,3 +42,10 @@ ordered cold failure recipe, so earlier helpers execute and later helpers do not
 Existing constant checking and pre-provider construction-failure behavior remains
 unchanged. A control checks failing list access, its retained failed alias, and the
 exact helper count before the failure.
+
+Native phase admission follows the checked invocation context. Ordinary composition
+blocks and their nested const helpers use cold, including ordinary conditional
+bodies; lexical test setup retains setup. Node checking temporarily enters the
+node's lifecycle context, including lifted const functions, and restores the
+surrounding wiring context afterwards. Merely using the ordinary statement checker
+must not relabel cold invocations as node evaluation.
