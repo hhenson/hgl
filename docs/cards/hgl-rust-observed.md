@@ -42,3 +42,7 @@ caller-selected lowering.
 Computed-text validation uses the lifecycle-safe `with_observations` facade.
 Text bounds are established before Any frame bounds and follow checked constructor
 origins, without evaluating constructor or provider bodies during planning.
+
+Computed constructor text fields use the same validated immutable fragments as
+boxed text. Their complete width is checked before clearing the reserved String
+destination, and each fragment is copied directly into it.

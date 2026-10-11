@@ -1,5 +1,6 @@
 use hgl_semantics::ir::{Kind, Value};
 use hgl_source::Ty;
+use std::fmt::Write as _;
 
 struct TextPart {
     checked: String,
@@ -80,12 +81,11 @@ pub fn text(value: &Value, result: Option<&Ty>) -> Option<String> {
     ))
 }
 
-/// Encode immutable text fragments after their ordered read validation.
-pub(crate) fn text_encoding(
+fn prepared_parts(
     value: &Value,
     prelude: &mut Vec<String>,
     emit: &impl Fn(&Value) -> String,
-) -> Option<String> {
+) -> Option<Vec<TextPart>> {
     let mut retained = Vec::new();
     let mut parts = Vec::new();
     text_parts(value, &mut parts, &mut |value| {
@@ -101,11 +101,39 @@ pub(crate) fn text_encoding(
         Some(part)
     })?;
     prelude.extend(retained);
+    Some(parts)
+}
+/// Encode immutable text fragments after their ordered read validation.
+pub(crate) fn text_encoding(
+    value: &Value,
+    prelude: &mut Vec<String>,
+    emit: &impl Fn(&Value) -> String,
+) -> Option<String> {
     Some(
-        parts
+        prepared_parts(value, prelude, emit)?
             .into_iter()
             .map(|part| format!("out.write(({}).as_bytes());", part.validated))
             .collect::<Vec<_>>()
             .concat(),
     )
+}
+
+/// Retain computed text directly in its prepared constructor field.
+pub(crate) fn text_assignment(
+    value: &Value,
+    slot: &str,
+    prelude: &mut Vec<String>,
+    emit: &impl Fn(&Value) -> String,
+) -> Option<String> {
+    let parts = prepared_parts(value, prelude, emit)?;
+    let mut measure = String::new();
+    let mut compose = String::new();
+    for part in parts {
+        write!(measure,"width=width.checked_add(({}).len()).ok_or_else(||hgl_types::NodeError::new(\"prepared text capacity overflow\"))?;", part.validated).unwrap_or_else(|_| unreachable!("String formatting"));
+        write!(compose, "destination.push_str({});", part.validated)
+            .unwrap_or_else(|_| unreachable!("String formatting"));
+    }
+    Some(format!(
+        "{{let mut width=0usize;{measure}if columns.scalar::<String>(({slot}).fields()).capacity()<width{{return Err(hgl_types::NodeError::new(\"prepared scalar capacity exceeded\"));}}let destination=columns.scalar_mut::<String>(({slot}).fields());destination.clear();{compose}}}"
+    ))
 }

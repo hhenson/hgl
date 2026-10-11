@@ -18,3 +18,11 @@ byte_limits(type iterator, index function)->String emits cold Bytes width propag
 
 This module now lives in hgl-rust-codegen below executable program assembly;
 its hgl-rust facade path and module ceiling remain unchanged.
+
+Capacity setup first includes native scalar envelopes and applies the checked
+text multiplier; only then does it derive Any frame widths from those bounds.
+This preserves one cold bound for direct text outputs and computed boxed leaves.
+
+Prepared constructor recipes retain their checked origin for text bounds; staging
+into an owning slot does not hide concatenation width. The module may use
+constructor_owners to recover that origin without evaluating the recipe.
