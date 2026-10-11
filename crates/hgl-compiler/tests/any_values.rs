@@ -58,10 +58,11 @@ fn generated_any_evaluation_uses_reserved_owning_buffers() -> Result<(), Box<dyn
         writeln!(manifest, "{name}={{path=\"{path}\"}}")?;
     }
     fs::write(directory.join("Cargo.toml"), manifest)?;
+    let provider = include_str!("fixtures/any_helper_provider.rs");
     fs::write(
         directory.join("src/main.rs"),
         format!(
-            "#[global_allocator] static ALLOCATOR:hgl_alloc_count::CountingAllocator=hgl_alloc_count::CountingAllocator;struct Provider;mod native{{pub use hgl_stdlib::std_native::*;}}\n{source}"
+            "#[global_allocator] static ALLOCATOR:hgl_alloc_count::CountingAllocator=hgl_alloc_count::CountingAllocator;struct Provider;mod native{{pub use hgl_stdlib::std_native::*;{provider}}}\n{source}"
         ),
     )?;
     let output = Command::new(env!("CARGO"))

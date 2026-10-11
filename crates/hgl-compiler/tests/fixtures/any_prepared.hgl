@@ -198,3 +198,43 @@ test {
             any(OptionalReplacement(required:1))]
     }
 }
+
+native const fn helper_begin(value:i64) throws
+native const fn helper_begin(value:i64) throws {}
+native const fn helper_mark(value:i64)->i64 throws
+native const fn helper_mark(value:i64)->i64 throws {}
+native const fn helper_finish(value:i64) throws
+native const fn helper_finish(value:i64) throws {}
+
+const fn helper_box_equal(value:i64, expected:i64)->bool {
+    let boxed=any(value)
+    let expected_box=any(expected)
+    return boxed==expected_box
+}
+const fn nested_helper_box(value:i64)->bool {
+    let boxed=any(value+10)
+    let outer_expected=any(value+10)
+    if value>0 {
+        let boxed=any(value+20)
+        let inner_expected=any(value+20)
+        return helper_box_equal(value,value) && boxed==inner_expected
+    }
+    return boxed==outer_expected
+}
+test {
+    fn helper_boxes(value:i64)->bool {
+        start { helper_begin(0) }
+        stop { helper_finish(0) }
+        when {
+            let boxed=any(value+100)
+            let expected_box=any(value+100)
+            let first=helper_box_equal(value,value)
+            let second=helper_box_equal(value+1,value)
+            let ordered=helper_box_equal(helper_mark(2),helper_mark(1))
+            return !ordered && first && !second && nested_helper_box(value) && boxed==expected_box
+        }
+    }
+    test helper_box_owners_keep_callsite_and_lexical_identity {
+        assert eval(helper_boxes,[1,-2,3])==[true,true,true]
+    }
+}

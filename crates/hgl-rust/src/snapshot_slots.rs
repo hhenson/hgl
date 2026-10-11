@@ -1,101 +1,13 @@
 //! Independent typed tuple locals in prepared ordinary slots.
 use crate::append;
 use crate::layouts::{global_type, rust_type};
-use hgl_semantics::ir::{Kind, Plan, Statement, Value};
+use hgl_semantics::ir::{Kind, Plan, Value};
 use hgl_source::Ty;
 
-fn scan(
-    body: &mut Vec<Statement>,
-    locals: &mut std::collections::BTreeMap<usize, Ty>,
-    next: &mut usize,
-) {
-    let mut result = Vec::new();
-    for mut statement in std::mem::take(body) {
-        match &mut statement {
-            Statement::Let(id, v) | Statement::Var(id, v) if v.snapshot => {
-                locals.insert(*id, v.ty.clone());
-            }
-            Statement::Return(value) | Statement::Assign(_, value)
-                if value.snapshot
-                    && (matches!(value.kind, Kind::Unary(..) | Kind::Construct(_))
-                        || value.ty == Ty::Any
-                            && !matches!(value.kind, Kind::Local(_) | Kind::MutableLocal(_))) =>
-            {
-                let id = *next;
-                *next += 1;
-                locals.insert(id, value.ty.clone());
-                result.push(Statement::Let(id, value.clone()));
-                let mut local = Value::new(value.ty.clone(), Kind::Local(id));
-                local.snapshot = true;
-                *value = local;
-            }
-            Statement::If(_, a, b) => {
-                scan(a, locals, next);
-                scan(b, locals, next);
-            }
-            Statement::While(_, b)
-            | Statement::For(_, _, b)
-            | Statement::ForItems(_, _, _, _, b) => scan(b, locals, next),
-            Statement::Exit
-            | Statement::Let(..)
-            | Statement::Var(..)
-            | Statement::Borrow(..)
-            | Statement::Return(_)
-            | Statement::TimedYield(..)
-            | Statement::Yield(_)
-            | Statement::Call(_)
-            | Statement::Assign(..) => {}
-        }
-        result.push(statement);
-    }
-    *body = result;
-}
-fn maximum(body: &[Statement]) -> usize {
-    body.iter()
-        .map(|s| match s {
-            Statement::Let(id, _) | Statement::Var(id, _) | Statement::Borrow(id, _, _) => id + 1,
-            Statement::If(_, a, b) => maximum(a).max(maximum(b)),
-            Statement::While(_, b) => maximum(b),
-            Statement::For(id, _, b) => (id + 1).max(maximum(b)),
-            Statement::ForItems(key, child, _, _, b) => (key + 1).max(child + 1).max(maximum(b)),
-            Statement::Exit
-            | Statement::Return(_)
-            | Statement::TimedYield(..)
-            | Statement::Yield(_)
-            | Statement::Call(_)
-            | Statement::Assign(..) => 0,
-        })
-        .max()
-        .unwrap_or(0)
-}
-
-/// Reserve private local destinations in the emission plan; no source type is changed.
+/// Reserve private destinations before emitting typed local writes.
 pub fn prepare(plan: &Plan) -> Plan {
     let mut plan = crate::any_prepared::prepare(plan);
-    for (node_id, node) in plan.nodes.iter_mut().enumerate() {
-        let mut locals = std::collections::BTreeMap::new();
-        let mut next = maximum(&node.start).max(maximum(&node.stop)).max(
-            node.handlers
-                .iter()
-                .map(|(_, body)| maximum(body))
-                .max()
-                .unwrap_or(0),
-        );
-        scan(&mut node.start, &mut locals, &mut next);
-        scan(&mut node.stop, &mut locals, &mut next);
-        for (_, body) in &mut node.handlers {
-            scan(body, &mut locals, &mut next);
-        }
-        if !locals.is_empty() {
-            node.global_state = true;
-        }
-        for (id, ty) in locals {
-            let key = format!("\0snapshot:{node_id}:{id}");
-            if !node.globals.iter().any(|(k, _)| k == &key) {
-                node.globals.push((key, crate::snapshots::storage(&ty)));
-            }
-        }
-    }
+    hgl_semantics::snapshot_locals::prepare(&mut plan, crate::snapshots::storage);
     plan
 }
 fn slot(ty: &Ty, fields: &str, columns: &str) -> String {

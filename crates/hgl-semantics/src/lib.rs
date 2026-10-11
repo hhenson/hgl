@@ -54,3 +54,9 @@ pub mod ir_visit;
 
 /// Checked ordinary operator type algebra.
 pub mod value_operators;
+
+/// Independent lexical storage identities for emitted helper callsites.
+pub mod call_locals;
+
+/// Cold reservation of lexical complete observation destinations.
+pub mod snapshot_locals;

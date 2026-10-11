@@ -39,7 +39,9 @@ fn bindings(body: &mut [Statement]) {
     });
 }
 fn mark(value: &mut Value) -> bool {
-    if let Kind::ValueCall(args, _) = &mut value.kind {
+    if let Kind::ValueCall(args, body) = &mut value.kind {
+        bindings(body);
+        hgl_semantics::ir_visit::statements_mut(body, &mut |v| mark(v));
         for value in args {
             hgl_semantics::ir_visit::value_mut(value, &mut |v| mark(v));
         }
@@ -61,6 +63,7 @@ pub fn prepare(plan: &Plan) -> Plan {
         return plan.clone();
     }
     let mut plan = plan.clone();
+    hgl_semantics::call_locals::prepare(&mut plan);
     for node in &mut plan.nodes {
         let mut globals = std::mem::take(&mut node.globals);
         let mut prepare_payload = |v: &mut Value| {
