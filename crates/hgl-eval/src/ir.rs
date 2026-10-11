@@ -227,6 +227,8 @@ impl Native {
 pub struct Plan {
     /// Standalone registration has no finite evaluation preparation phase.
     pub ordinary_instantiation: bool,
+    /// Checked cold recipes executed once per standalone wiring invocation.
+    pub wiring: Vec<Value>,
     /// Deterministic wiring operation failure reported during construction.
     pub construction_error: Option<String>,
     /// Nodes in construction order, addressed by index.

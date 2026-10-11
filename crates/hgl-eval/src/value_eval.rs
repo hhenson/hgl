@@ -40,6 +40,10 @@ impl Evaluator {
     }
     /// Preserve a checked unavailable wiring result while later source checks continue.
     pub fn bind_failed(&mut self, id: usize, value: Value, writable: bool) {
+        self.bind_checked(id, value, writable);
+    }
+    /// Bind an inert checked value without executing its construction recipe.
+    pub fn bind_checked(&mut self, id: usize, value: Value, writable: bool) {
         self.locals.push((id, value, writable));
     }
     /// Evaluate a checked expression to a closed, independently owned value.

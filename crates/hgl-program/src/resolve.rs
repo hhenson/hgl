@@ -102,6 +102,10 @@ pub(crate) fn prepared_assertion(
 pub(crate) fn compile(library: Library, module: &str, entry: &str) -> Result<Plan, Issue> {
     let mut checker = Checker {
         library,
+        plan: Plan {
+            ordinary_instantiation: true,
+            ..Plan::default()
+        },
         ..Checker::default()
     };
     checker.call(module, entry, &[], false)?;
@@ -552,30 +556,11 @@ impl Checker {
         }
         true
     }
-    fn wiring_result<T>(
-        &mut self,
-        result: Result<T, hgl_semantics::value_eval::EvalError>,
-        failed: impl FnOnce(String) -> T,
-    ) -> Result<T, Issue> {
-        use hgl_semantics::value_eval::EvalError;
-        match result {
-            Ok(value) => Ok(value),
-            Err(EvalError::Operation(message)) => {
-                self.plan.construction_error.get_or_insert(message.clone());
-                Ok(failed(message))
-            }
-            Err(error) => Err(error.to_string().into()),
-        }
-    }
     fn wiring_value(&mut self, value: &Value) -> Result<Value, Issue> {
-        let result = self.wiring.value(value);
-        self.wiring_result(result, |message| {
-            Value::new(value.ty.clone(), Kind::WiringFailure(message))
-        })
+        hgl_semantics::wiring_values::value(&mut self.wiring, &mut self.plan, value)
     }
     fn wiring_statement(&mut self, statement: &Statement) -> Result<(), Issue> {
-        let result = self.wiring.statement(statement).map(|_| ());
-        self.wiring_result(result, |_| ())
+        hgl_semantics::wiring_values::statement(&mut self.wiring, &mut self.plan, statement)
     }
     fn wiring_local(
         &mut self,
@@ -648,7 +633,7 @@ impl Checker {
                     }
                     output = self.expression(module, expr, env, false)?;
                     if !matches!(output.kind, Kind::Wire(_) | Kind::Void) {
-                        self.wiring_value(&output)?;
+                        output = self.wiring_value(&output)?;
                     }
                 }
                 Stmt::Assign(Expr::Name(name), expr) | Stmt::Add(Expr::Name(name), expr) => {

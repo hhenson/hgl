@@ -84,3 +84,8 @@ check_assertion(&Value)->Result<(),String> preserves coded execution failures du
 Checked execution now lives in hgl-eval and is reexported through this semantic
 facade. Only hgl-value-model and hgl-types are reachable from execution; syntax
 admission, declaration lookup and provider discovery stay above this boundary.
+
+`bind_checked` installs an inert, already checked lexical value with explicit write
+authority. Standalone wiring uses it for deferred recipe identities; generated cold
+execution uses it for independently owned evaluated results. It never discovers or
+executes a provider and does not bypass source checking.

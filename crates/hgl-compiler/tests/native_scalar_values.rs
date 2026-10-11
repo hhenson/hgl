@@ -433,3 +433,113 @@ fn main() {
 "#);
     execute(&generated)
 }
+
+#[test]
+fn standalone_cold_native_recipes_execute_once_and_descriptions_retain_aliases()
+-> Result<(), Box<dyn std::error::Error>> {
+    let body = r#"
+fn consume(const first:Token,const second:Token,const text:str,const numbers:list<i64>) {inject global_state,alarm
+start {schedule(alarm,0us)}
+when {set(global_state,"first",token_text(first))
+set(global_state,"second",token_text(second))
+set(global_state,"text",text)
+set(global_state,"number",numbers[0])}}
+const fn wrap(text:str)->Token {return token(text)}
+export fn main() {
+var current=wrap("retained")
+let saved=current
+if true {current=token("replacement")} else {current=token("failure")}
+let unused=token("")
+consume(first:saved,second:current,text:token_text(saved),numbers:[7])
+}
+"#;
+    let mut generated = String::new();
+    for (name, body) in [
+        ("success", body.to_owned()),
+        ("failure", body.replace("replacement", "failure")),
+        ("ordinary_failure", body.replace("let unused=token(\"\")", "let values:list<i64> =[]\nlet broken=values[0]\nlet alias=broken\nlet unused=token(\"\")")),
+    ] {
+        let mut input = sources(&body)?;
+        for (_, text) in &mut input {
+            *text = text.replace(
+                "fn token(text: str) -> Token",
+                "fn token(text: str) -> Token throws",
+            );
+        }
+        let (_, descriptor) = input
+            .iter_mut()
+            .find(|(name, _)| name.ends_with(".hgl-native"))
+            .ok_or("descriptor missing")?;
+        *descriptor = descriptor
+            .replace("->Token symbol", "->Token throws symbol")
+            .replace(
+                "\"atomic_values.rs\"",
+                "\"../../crates/hgl-compiler/tests/fixtures/native_generic_provider.rs\"",
+            );
+        let plan = hgl_program::compile(&input, "main")?;
+        writeln!(
+            generated,
+            "mod {name} {{{}}}",
+            hgl_program::emit_rust(&plan)
+        )?;
+    }
+    generated.push_str(r#"
+static CALLS:std::sync::atomic::AtomicUsize=std::sync::atomic::AtomicUsize::new(0);
+fn main(){
+let mut registry=hgl_describe::Registry::new();success::register(&mut registry).unwrap();
+assert_eq!(CALLS.load(std::sync::atomic::Ordering::Relaxed),0);
+for invocation in 1..=2 {
+let graph=success::main(&registry).unwrap();
+assert_eq!(CALLS.load(std::sync::atomic::Ordering::Relaxed),3*invocation);
+for description in [&graph,&graph.clone()] {
+let mut store=hgl_store::Store::new();store.global_state().provision();
+let mut built=hgl_describe::instantiate_complete(description,&registry,&mut store).unwrap();
+hgl_kernel::run_simulation(&mut built.graph,&mut store,&hgl_kernel::RunConfig{start_time:hgl_types::EngineTime::MIN_START,end_time:hgl_types::EngineTime::from_micros(10)}).unwrap();
+for (key,want) in [("first","retained"),("second","replacement"),("text","retained")] {
+let key=store.global_state().bind::<String>(key).unwrap();assert_eq!(store.global_state().get(key).unwrap(),want);}
+}
+assert_eq!(CALLS.load(std::sync::atomic::Ordering::Relaxed),3*invocation);
+let mut corrupt=graph.clone();
+let hgl_types::ScalarValue::Bytes(bytes)=&mut corrupt.nodes[0].scalars[0].1 else {panic!("native carrier")};bytes[0]^=1;
+let mut store=hgl_store::Store::new();store.global_state().provision();
+assert!(format!("{:?}",hgl_describe::instantiate_complete(&corrupt,&registry,&mut store).err()).contains("carrier identity mismatch"));
+}
+let mut registry=hgl_describe::Registry::new();failure::register(&mut registry).unwrap();
+assert!(format!("{:?}",failure::main(&registry).unwrap_err()).contains("native.generic.failure"));
+assert_eq!(CALLS.load(std::sync::atomic::Ordering::Relaxed),8);
+let mut registry=hgl_describe::Registry::new();ordinary_failure::register(&mut registry).unwrap();
+assert!(format!("{:?}",ordinary_failure::main(&registry).unwrap_err()).contains("ordinary list index out of bounds"));
+assert_eq!(CALLS.load(std::sync::atomic::Ordering::Relaxed),10);
+}
+"#);
+    execute(&generated)
+}
+
+#[test]
+fn standalone_cold_native_keeps_phase_and_topology_checks() -> Result<(), String> {
+    let body = "export fn main(){if token(\"a\")==token(\"b\") {let ignored=1}}";
+    let error = hgl_program::compile(&sources(body)?, "main")
+        .err()
+        .ok_or("provider-dependent topology admitted")?;
+    assert!(
+        error.contains("provider-dependent wiring topology"),
+        "{error}"
+    );
+    let mut input = sources("export fn main(){let ignored=token(\"cold\")}")?;
+    for (name, text) in &mut input {
+        if name.ends_with(".hgl-native") {
+            *text = text.replace(
+                "phases {setup,cold,evaluation}",
+                "phases {setup,evaluation}",
+            );
+        }
+    }
+    let error = hgl_program::compile(&input, "main")
+        .err()
+        .ok_or("evaluation-only native admitted in cold phase")?;
+    assert!(
+        error.contains("native helper is unavailable in cold"),
+        "{error}"
+    );
+    Ok(())
+}

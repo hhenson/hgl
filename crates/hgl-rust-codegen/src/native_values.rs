@@ -23,7 +23,7 @@ pub(crate) fn metadata(scalar: &Scalar) -> String {
 /// Retain cold opaque data through the statically selected typed provider operation.
 pub(crate) fn decode(scalar: &Scalar) -> String {
     format!(
-        "let hgl_semantics::ir::Kind::Opaque(value)=&v.kind else {{return Err(\"prepared native scalar required\".into())}}; hgl_store::native_values::NativeView::<{}>::from_provider(value.data()).retain().map_err(|e|e.message.clone())?",
+        "let hgl_semantics::ir::Kind::Opaque(value)=&v.kind else {{return Err(\"prepared native scalar required\".into())}}; hgl_store::native_values::NativeView::<{}>::from_provider(value.data()).retain().map_err(|e|format!(\"{{:?}}: {{}}\",e.code,e.message))?",
         marker(scalar)
     )
 }

@@ -60,3 +60,6 @@ pub mod value_operators;
 
 /// Required ordinary defaults share checking-time retention and capability identity.
 pub mod default_values;
+
+/// Standalone checked cold wiring recipes and lexical bindings.
+pub mod wiring_values;

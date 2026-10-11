@@ -106,7 +106,7 @@ fn node_build(
     generator: Option<&Generator>,
     out: &mut Vec<String>,
 ) {
-    node_type(n, index, out);
+    node_type(plan, n, index, out);
     build_entry(plan, n, index, out);
     out.push(crate::keyed::node_preparation(n, |v| {
         condition_code(plan, v)
@@ -177,7 +177,9 @@ fn build_entry(plan: &Plan, node: &Node, index: usize, out: &mut Vec<String>) {
         );
         return;
     }
-    let body = if node_prepared(node) {
+    let body = if let Some(body) = crate::cold_wiring::build(plan, node) {
+        body
+    } else if node_prepared(node) {
         format!(
             "Err(hgl_describe::BuildError::InvalidNodeType {{node:{:?},what:\"prepared configuration required\".into()}})",
             node.name
@@ -195,12 +197,13 @@ fn build_entry(plan: &Plan, node: &Node, index: usize, out: &mut Vec<String>) {
         .join(",");
     out.push(format!("fn build(ports:&mut hgl_describe::Ports<'_>)->Result<Self,hgl_describe::BuildError>{{{body}}}}}impl Node{index} {{fn build_prepared(ports:&mut hgl_describe::Ports<'_>,{parameters})->Result<Self,hgl_describe::BuildError>{{"));
 }
-fn node_type(n: &Node, index: usize, out: &mut Vec<String>) {
+fn node_type(plan: &Plan, n: &Node, index: usize, out: &mut Vec<String>) {
     out.push(format!("impl hgl_describe::Buildable for Node{index} {{\nfn node_type() -> hgl_types::NodeType {{\nhgl_types::NodeType {{ name: {:?}, inputs: vec![",format!("{}#{index}",n.name)));
     for (name, _, ty) in &n.inputs {
         out.push(format!("({name:?},{}),", shape(ty)));
     }
     out.push("],\n".to_owned());
+    out.push(crate::cold_wiring::schema(plan, n));
     if n.global_state {
         out.push("uses_global_state: true,\nglobal_entries: vec![".into());
         for (key, ty) in &n.globals {
@@ -290,6 +293,10 @@ fn emit_inner(plan: &Plan, layouts: bool) -> String {
         out.push(crate::deltas::markers(plan));
         out.push(crate::any_values::layouts(plan));
     }
+    if !plan.wiring.is_empty() {
+        register_prepared(plan, &mut out);
+        out.push(crate::cold_wiring::recipes(plan));
+    }
     for (i, n) in plan.nodes.iter().enumerate() {
         node(plan, n, i, &mut out);
     }
@@ -299,10 +306,12 @@ fn emit_inner(plan: &Plan, layouts: bool) -> String {
     }
     out.push("Ok(())\n}\n".into());
     out.push("/// Construct the checked entry graph without executing it.\npub fn main(registry: &hgl_describe::Registry) -> Result<hgl_describe::GraphDescription,hgl_describe::BuildError> {\nvalidate_native_images().map_err(|what|hgl_describe::BuildError::InvalidNodeType {node:\"hgl.program\",what})?;let mut builder = hgl_describe::Builder::new(\"hgl.program\",registry);\n" .to_owned());
+    out.push(crate::cold_wiring::execute(plan));
     for (i, n) in plan.nodes.iter().enumerate() {
         out.push(format!(
-            "let _wire{i} = builder.node({:?}, &[])?;\n",
-            format!("{}#{i}", n.name)
+            "let _wire{i} = builder.node({:?}, {})?;\n",
+            format!("{}#{i}", n.name),
+            crate::cold_wiring::arguments(plan, n, i)
         ));
         for (name, source, _) in &n.inputs {
             out.push(format!(

@@ -11,6 +11,7 @@ pub use hgl_rust_codegen::collections;
 pub use hgl_rust_codegen::composite_keys;
 pub use hgl_rust_codegen::deltas;
 pub use hgl_rust_codegen::direct_deltas;
+mod cold_wiring;
 mod emit;
 pub use hgl_rust_codegen::enums;
 pub use hgl_rust_codegen::execution_proof;
