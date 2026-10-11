@@ -10,22 +10,13 @@ line-budget = 2090
 
 # Budgets of the modules that were crates of their own (docs/decisions/0004).
 [package.metadata.hgl.modules]
-ordinary_shape = { budget = 120, uses = ["type_shape"] }
-execution_phase = { budget = 40, uses = [] }
 native_package = { budget = 80, uses = ["native_descriptor"] }
 native_descriptor = { budget = 140, uses = [] }
-scalar_shape = { budget = 80, uses = [] }
-diagnostics = { budget = 200, uses = [] }
 lex = { budget = 180, uses = [] }
-literals = { budget = 250, uses = ["type_shape"] }
-nominal_batch = { budget = 160, uses = [] }
-time_context = { budget = 200, uses = ["literals"] }
-type_shape = { budget = 300, uses = ["nominal_batch", "type_syntax"] }
-type_syntax = { budget = 100, uses = [] }
 
 [dependencies]
 hgl-types = { path = "../hgl-types" }
-jiff.workspace = true
+hgl-value-model = { path = "../hgl-value-model" }
 
 [lints]
 workspace = true

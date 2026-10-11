@@ -1,6 +1,6 @@
 //! Exact provider membership and retained identity precede graph execution.
-use hgl_source::literals::{Literal, TemporalLiteral};
-use hgl_source::time_context::RunContext;
+use hgl_value_model::literals::{Literal, TemporalLiteral};
+use hgl_value_model::time_context::RunContext;
 
 #[cfg(unix)]
 static NEXT_DIR: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);

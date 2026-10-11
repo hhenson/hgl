@@ -1,0 +1,28 @@
+[package]
+name = "hgl-value-model"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "Canonical ordinary value metadata independent of source syntax and binding."
+
+[package.metadata.hgl]
+line-budget = 1200
+
+[package.metadata.hgl.modules]
+ordinary_shape = { budget = 120, uses = ["type_shape"] }
+execution_phase = { budget = 40, uses = [] }
+scalar_shape = { budget = 80, uses = [] }
+diagnostics = { budget = 200, uses = [] }
+literals = { budget = 250, uses = ["type_shape"] }
+nominal_batch = { budget = 160, uses = [] }
+time_context = { budget = 200, uses = ["literals"] }
+type_shape = { budget = 300, uses = ["nominal_batch", "type_syntax"] }
+type_syntax = { budget = 100, uses = [] }
+
+[dependencies]
+hgl-types = { path = "../hgl-types" }
+jiff.workspace = true
+
+[lints]
+workspace = true

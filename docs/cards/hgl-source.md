@@ -121,3 +121,9 @@ composites and temporal wrappers return false.
 
 Inert full native package headers/records are described by [native-package](hgl-native-package.md);
 shared cold node phase metadata is described by [execution-phase](hgl-execution-phase.md).
+
+The canonical metadata modules now live in hgl-value-model, with their module
+ceilings unchanged. hgl-source retains lexer, Cursor/Expr/Stmt parsing and inert
+native package/descriptor syntax, and reexports model paths for compatibility.
+Its dependencies are hgl-value-model and hgl-types; it no longer directly uses
+jiff. See [the value-model card](hgl-value-model.md) for the enforced lower wall.

@@ -263,3 +263,5 @@ Additional ordinary value contracts: [Any semantics](hgl-any-values.md), [compil
 
 - [Native package metadata](hgl-native-package.md)
 - [Node execution phases](hgl-execution-phase.md)
+
+- [Canonical ordinary value model](hgl-value-model.md)

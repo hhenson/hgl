@@ -837,21 +837,21 @@ fn type_admitted(name: &str, ordinary: bool) -> bool {
     args.iter().all(|arg| type_admitted(arg, child_ordinary))
 }
 
-pub mod diagnostics;
+pub use hgl_value_model::diagnostics;
 pub mod lex;
-pub mod literals;
-pub mod nominal_batch;
-pub mod time_context;
-pub mod type_shape;
-pub mod type_syntax;
+pub use hgl_value_model::literals;
+pub use hgl_value_model::nominal_batch;
+pub use hgl_value_model::time_context;
+pub use hgl_value_model::type_shape;
+pub use hgl_value_model::type_syntax;
 
 pub mod native_descriptor;
-pub mod ordinary_shape;
+pub use hgl_value_model::ordinary_shape;
 /// Cold builtin scalar metadata preserves owning and nominal leaf boundaries.
-pub mod scalar_shape;
+pub use hgl_value_model::scalar_shape;
 
 /// Inert provider package records and image location parsing.
 pub mod native_package;
 
 /// Checked node lifecycle value phases.
-pub mod execution_phase;
+pub use hgl_value_model::execution_phase;

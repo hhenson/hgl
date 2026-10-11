@@ -70,3 +70,15 @@ second.
 ## Upstream
 
 None.
+
+## Enforced ordinary value model boundary
+
+The native-value integration separates hgl-value-model from source parsing under
+reason 3. Before extraction the moved model has 1081 code lines and the remaining
+source parser/descriptor layer has over 1100. The model depends on hgl-types and
+the already-approved jiff library; source depends on the model and cannot be
+reached from it. This prevents canonical value operations and execution-context
+materialization from reading parser syntax or discovering native implementation
+images. Public source paths remain facade reexports. The new model ceiling is
+1200, each moved module keeps its prior ceiling, and no existing crate ceiling
+is increased.
