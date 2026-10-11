@@ -145,7 +145,7 @@ pub(crate) fn place(plan: &Plan, v: &Value) -> String {
     }
     if let Kind::Field(parent, index) = &v.kind {
         if let Ty::Family(family) = &parent.ty {
-            return crate::collections::family_field(family, *index, &place(plan, parent));
+            return crate::collections::family_field(family, *index, &place(plan, parent), false);
         }
         if parent.snapshot {
             return format!(
@@ -534,7 +534,12 @@ pub(crate) fn borrowed_place(plan: &Plan, value: &Value) -> Option<String> {
         return borrowed_place(plan, parent).map(|parent| format!("{{ let parent = {parent}; let index = {}; hgl_store::list::global_index(_ctx.store().global_values(), parent, index)? }}", self::value(plan, index)));
     }
     if let Kind::Field(parent, field) = &value.kind {
-        return borrowed_place(plan, parent).map(|parent| format!("({parent}).fields().{field}"));
+        return borrowed_place(plan, parent).map(|source| {
+            if let Ty::Family(family) = &parent.ty {
+                return crate::collections::family_field(family, *field, &source, true);
+            }
+            format!("({source}).fields().{field}")
+        });
     }
     None
 }

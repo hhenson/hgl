@@ -81,6 +81,11 @@ presence survives owning boundaries. This introduces no optional read syntax.
 Internal family widening preserves tuple-valued expression parentheses and exact
 discriminators. Returning immutable configuration payloads uses typed prepared
 slot publication, avoiding an owning clone in the evaluation hook.
+Canonical borrowed family projections delegate to collections::family_field,
+including families nested in owning Struct and List storage. Reads and writes
+address the active member's common field; independent retention preserves the
+family payload when another owner is mutated. Index expressions evaluate once
+before dispatch, and failed access stops later operands.
 
 Complete ordinary set/map construction delegates key-first validation to hgl-rust-collections; retention uses the exact GlobalValue marker and comparison is recursively unordered.
 Prepared eval transport is selected as one complete path by
