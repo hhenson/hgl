@@ -232,6 +232,36 @@ assert eval(copy,[1,_,2])==[2,_,3]
     )?;
     run_sources(&input)
 }
+
+#[test]
+fn inferred_native_values_cannot_shadow_visible_test_nominal_identities() -> Result<(), String> {
+    let mut input = sources(
+        r#"
+const fn configured()->Token {return token("a")}
+test {
+struct Clash {value:i64}
+test incompatible_identity {let opaque=configured()
+let structural=Clash(value:1)
+assert any(opaque)!=any(structural)}
+}
+"#,
+    )?;
+    let (_, descriptor) = input
+        .iter_mut()
+        .find(|(name, _)| name.ends_with(".hgl-native"))
+        .ok_or("descriptor missing")?;
+    *descriptor = descriptor.replace("hgraph.std::Token\"", "native_cases::Clash\"");
+    let error = hgl_program::compile_module_suite(&input)
+        .err()
+        .ok_or("inferred native identity collision admitted")?;
+    assert!(
+        error.contains(
+            "native canonical identity conflicts with non-native HGL type native_cases::Clash"
+        ),
+        "{error}"
+    );
+    Ok(())
+}
 #[test]
 fn modules_share_one_provider_image_and_retain_all_scalar_mappings_and_aliases()
 -> Result<(), Box<dyn std::error::Error>> {

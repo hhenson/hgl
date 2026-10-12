@@ -6,24 +6,32 @@ use hgl_source::native_contracts::{Image, Scalar};
 use hgl_source::{Issue, Ty};
 use std::collections::{BTreeMap, BTreeSet};
 
-fn collect(ty: &Ty, scalars: &mut BTreeMap<String, Scalar>, seen: &mut BTreeSet<String>) {
+fn collect(
+    ty: &Ty,
+    scalars: &mut BTreeMap<String, Scalar>,
+    seen: &mut BTreeSet<String>,
+    ordinary: &mut BTreeSet<String>,
+) {
+    if !matches!(ty, Ty::Native(_)) {
+        ordinary.insert(ty.source_name());
+    }
     match ty {
         Ty::Native(scalar) => {
             scalars.insert(scalar.identity.clone(), scalar.clone());
         }
         Ty::Struct(_, fields, _) => {
             for (_, child) in fields {
-                collect(child, scalars, seen);
+                collect(child, scalars, seen, ordinary);
             }
         }
         Ty::Tuple(children) => {
             for child in children {
-                collect(child, scalars, seen);
+                collect(child, scalars, seen, ordinary);
             }
         }
         Ty::Map(key, child) => {
-            collect(key, scalars, seen);
-            collect(child, scalars, seen);
+            collect(key, scalars, seen, ordinary);
+            collect(child, scalars, seen, ordinary);
         }
         Ty::Atomic(child)
         | Ty::Ref(child)
@@ -31,10 +39,10 @@ fn collect(ty: &Ty, scalars: &mut BTreeMap<String, Scalar>, seen: &mut BTreeSet<
         | Ty::Set(child)
         | Ty::Delta(child)
         | Ty::List(child, _)
-        | Ty::Rolling(child, _) => collect(child, scalars, seen),
+        | Ty::Rolling(child, _) => collect(child, scalars, seen, ordinary),
         Ty::Family(family) => {
             for (_, child) in family.members() {
-                collect(child, scalars, seen);
+                collect(child, scalars, seen, ordinary);
             }
         }
         Ty::Recursive(batch)
@@ -42,7 +50,7 @@ fn collect(ty: &Ty, scalars: &mut BTreeMap<String, Scalar>, seen: &mut BTreeSet<
         {
             for definition in batch.definitions() {
                 for (_, child) in definition.fields() {
-                    collect(child, scalars, seen);
+                    collect(child, scalars, seen, ordinary);
                 }
             }
         }
@@ -67,53 +75,70 @@ fn collect(ty: &Ty, scalars: &mut BTreeMap<String, Scalar>, seen: &mut BTreeSet<
 }
 
 /// Native scalar contracts reached by checked graph storage and expressions.
-pub fn scalars(plan: &Plan) -> BTreeMap<String, Scalar> {
+pub fn scalars(plan: &Plan) -> Result<BTreeMap<String, Scalar>, Issue> {
+    combined_scalars(std::slice::from_ref(plan), &[])
+}
+/// Native scalar contracts reached by ordinary lexical test expressions.
+pub fn harness_scalars(tests: &[Test]) -> Result<BTreeMap<String, Scalar>, Issue> {
+    combined_scalars(&[], tests)
+}
+/// Check the common canonical namespace before plans and lexical values share layouts.
+pub fn combined_scalars(plans: &[Plan], tests: &[Test]) -> Result<BTreeMap<String, Scalar>, Issue> {
     let mut scalars = BTreeMap::new();
     let mut seen = BTreeSet::new();
-    for ty in &plan.ordinary_types {
-        collect(ty, &mut scalars, &mut seen);
-    }
-    for value in &plan.wiring {
-        crate::ir_visit::value(value, &mut |v| {
-            collect(&v.ty, &mut scalars, &mut seen);
-            true
-        });
-    }
-    for node in &plan.nodes {
-        for ty in std::iter::once(&node.result)
-            .chain(node.inputs.iter().map(|(_, _, ty)| ty))
-            .chain(node.globals.iter().map(|(_, ty)| ty))
-        {
-            collect(ty, &mut scalars, &mut seen);
+    let mut ordinary = BTreeSet::new();
+    for plan in plans {
+        for ty in &plan.ordinary_types {
+            collect(ty, &mut scalars, &mut seen, &mut ordinary);
         }
-        for value in &node.configuration {
+        for value in &plan.wiring {
             crate::ir_visit::value(value, &mut |v| {
-                collect(&v.ty, &mut scalars, &mut seen);
+                collect(&v.ty, &mut scalars, &mut seen, &mut ordinary);
                 true
             });
         }
-        crate::ir_visit::hooks(node, &mut |v| {
-            collect(&v.ty, &mut scalars, &mut seen);
-            true
-        });
-    }
-    for native in &plan.natives {
-        for ty in std::iter::once(&native.result).chain(&native.args) {
-            collect(ty, &mut scalars, &mut seen);
+        for node in &plan.nodes {
+            for ty in std::iter::once(&node.result)
+                .chain(node.inputs.iter().map(|(_, _, ty)| ty))
+                .chain(node.globals.iter().map(|(_, ty)| ty))
+            {
+                collect(ty, &mut scalars, &mut seen, &mut ordinary);
+            }
+            for value in &node.configuration {
+                crate::ir_visit::value(value, &mut |v| {
+                    collect(&v.ty, &mut scalars, &mut seen, &mut ordinary);
+                    true
+                });
+            }
+            crate::ir_visit::hooks(node, &mut |v| {
+                collect(&v.ty, &mut scalars, &mut seen, &mut ordinary);
+                true
+            });
+        }
+        for native in &plan.natives {
+            for ty in std::iter::once(&native.result).chain(&native.args) {
+                collect(ty, &mut scalars, &mut seen, &mut ordinary);
+            }
         }
     }
-    scalars
-}
-
-/// Native scalar contracts reached by ordinary lexical test expressions.
-pub fn harness_scalars(tests: &[Test]) -> BTreeMap<String, Scalar> {
-    let mut scalars = BTreeMap::new();
-    let mut seen = BTreeSet::new();
     crate::ir_visit::harness(tests, &mut |v| {
-        collect(&v.ty, &mut scalars, &mut seen);
+        collect(&v.ty, &mut scalars, &mut seen, &mut ordinary);
         true
     });
-    scalars
+    checked(scalars, &ordinary)
+}
+
+fn checked(
+    scalars: BTreeMap<String, Scalar>,
+    ordinary: &BTreeSet<String>,
+) -> Result<BTreeMap<String, Scalar>, Issue> {
+    if let Some(identity) = scalars.keys().find(|identity| ordinary.contains(*identity)) {
+        return Err(format!(
+            "native canonical identity conflicts with non-native HGL type {identity}"
+        )
+        .into());
+    }
+    Ok(scalars)
 }
 
 /// Select exact validated type mappings without opening a provider image.

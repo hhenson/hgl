@@ -20,6 +20,22 @@ fn sources() -> Result<Vec<(String, String)>, String> {
         &[],
     )
 }
+fn portable_scalar_sources() -> Result<Vec<(String, String)>, String> {
+    let mut sources = sources()?;
+    let (_, interface) = sources
+        .iter_mut()
+        .find(|(p, _)| p.ends_with("interface.hgl"))
+        .ok_or("interface missing")?;
+    interface.push_str("\nexport native type Portable\n");
+    let (_, descriptor) = sources
+        .iter_mut()
+        .find(|(p, _)| p.ends_with(".hgl-native"))
+        .ok_or("descriptor missing")?;
+    descriptor.push_str(
+        "\nscalar Portable canonical \"canonical.Portable\" capabilities {copy,text,equality}\n",
+    );
+    Ok(sources)
+}
 #[test]
 fn checked_helper_phases_and_missing_images_reject_before_execution() -> Result<(), String> {
     for (from, to, expected) in [
@@ -119,7 +135,7 @@ fn selected_provider_executes_without_tick_allocations_and_rejects_mismatched_im
     }
     fs::write(directory.join("Cargo.toml"), manifest)?;
     for mismatch in [false, true] {
-        let mut sources = sources()?;
+        let mut sources = portable_scalar_sources()?;
         if mismatch {
             let (_, descriptor) = sources
                 .iter_mut()
@@ -194,7 +210,7 @@ fn executable_scalar_marker_is_required_and_preflighted() -> Result<(), String> 
         .err()
         .ok_or("missing marker admitted")?;
     assert!(
-        error.contains("missing native scalar target marker"),
+        error.contains("missing native scalar executable image or target marker: canonical.Token"),
         "{error}"
     );
     let (_, descriptor) = sources
@@ -236,5 +252,15 @@ fn unused_scalar_descriptor_does_not_link_its_provider() -> Result<(), String> {
     assert!(!generated.contains("canonical.Token"));
     assert!(!generated.contains("checked-lengths-v1"));
     assert!(!generated.contains("provider.rs"));
+    Ok(())
+}
+
+#[test]
+fn selected_helpers_do_not_require_markers_for_unused_portable_scalars() -> Result<(), String> {
+    let sources = portable_scalar_sources()?;
+    hgl_program::check_sources(&sources)?;
+    let generated = hgl_program::emit_tests(&hgl_program::compile_module_suite(&sources)?);
+    assert!(generated.contains("checked-lengths-v1") && generated.contains("provider.rs"));
+    assert!(!generated.contains("canonical.Portable"));
     Ok(())
 }

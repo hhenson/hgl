@@ -9,6 +9,95 @@ pub use hgl_source::native_descriptor::{Function, Scalar};
 pub use hgl_source::native_package::Descriptor;
 /// Checked package descriptors indexed by their ordinary module identity.
 pub type Contracts = BTreeMap<String, Descriptor>;
+#[derive(Clone, Copy, PartialEq)]
+enum IdentityKind {
+    Scalar,
+    Composite,
+    Native,
+}
+fn nominal_identity(library: &Library, name: &str, arguments: usize) -> Option<IdentityKind> {
+    for declaration in library.declarations.iter() {
+        if name != format!("{}::{}", declaration.module, declaration.name)
+            || declaration.test_only && library.test_scope.as_ref() != Some(&declaration.module)
+        {
+            continue;
+        }
+        if declaration.role == Role::Enum && arguments == 0 {
+            return Some(IdentityKind::Scalar);
+        }
+        if declaration.role == Role::Struct
+            && declaration
+                .required_struct()
+                .is_ok_and(|schema| schema.generics.len() == arguments)
+        {
+            return Some(IdentityKind::Composite);
+        }
+    }
+    None
+}
+// Canonical namespace checks need only declaration identities, not field layouts or execution.
+fn identity_kind(library: &Library, name: &str) -> Option<IdentityKind> {
+    if let Some(ty) = Ty::parse(name)
+        && ty.source_name() == name
+    {
+        return Some(
+            if ty.scalar_kind().is_some() || matches!(ty, Ty::Any | Ty::Void) {
+                IdentityKind::Scalar
+            } else {
+                IdentityKind::Composite
+            },
+        );
+    }
+    if let Some((child, size)) = Ty::list_parts(name)
+        && name
+            == size.map_or_else(
+                || format!("list<{child}>"),
+                |size| format!("list<{child},{size}>"),
+            )
+        && identity_kind(library, child).is_some()
+    {
+        return Some(IdentityKind::Composite);
+    }
+    let (base, arguments) = hgl_source::application(name).unwrap_or((name, Vec::new()));
+    let canonical =
+        arguments.is_empty() && base == name || name == format!("{base}<{}>", arguments.join(","));
+    if canonical {
+        if base == "rolling"
+            && (2..=3).contains(&arguments.len())
+            && identity_kind(library, arguments[0]).is_some()
+            && let Some(window) = hgl_source::Window::parse(arguments[1], arguments.get(2).copied())
+            && name == format!("rolling<{},{}>", arguments[0], window.source_name())
+        {
+            return Some(IdentityKind::Composite);
+        }
+        let children = arguments
+            .iter()
+            .map(|arg| identity_kind(library, arg))
+            .collect::<Option<Vec<_>>>();
+        if let Some(children) = children {
+            if matches!(
+                (base, children.as_slice()),
+                ("tuple", _)
+                    | ("map", [_, _])
+                    | ("set" | "ref" | "nullable", [_])
+                    | ("atomic" | "delta", [IdentityKind::Composite])
+            ) {
+                return Some(IdentityKind::Composite);
+            }
+            if (!arguments.is_empty() || name == base)
+                && let Some(kind) = nominal_identity(library, base, arguments.len())
+            {
+                return Some(kind);
+            }
+        }
+    }
+    library
+        .native_contracts
+        .values()
+        .flat_map(|d| d.scalars.values())
+        .any(|scalar| scalar.identity == name)
+        .then_some(IdentityKind::Native)
+}
 /// Identify a data sidecar in an ordinary compiler source bundle.
 pub fn sidecar(source: &str) -> bool {
     source.ends_with(".hgl-native")
@@ -84,7 +173,7 @@ pub fn validate(library: &Library) -> Result<(), Issue> {
 }
 /// Obtain one exact canonical binding, never inferring capabilities from target code.
 pub fn scalar<'a>(library: &'a Library, declaration: &Decl) -> Result<&'a Scalar, Issue> {
-    library
+    let scalar = library
         .native_contracts
         .get(&declaration.module)
         .and_then(|descriptor| descriptor.scalars.get(&declaration.name))
@@ -95,7 +184,15 @@ pub fn scalar<'a>(library: &'a Library, declaration: &Decl) -> Result<&'a Scalar
             ))
             .at(declaration.tokens.first().map_or(0..0, |t| t.span.clone()))
             .in_source(&declaration.source)
-        })
+        })?;
+    if identity_kind(library, &scalar.identity).is_some_and(|kind| kind != IdentityKind::Native) {
+        return Err(format!(
+            "{}::{}: native canonical identity conflicts with non-native HGL type {}",
+            declaration.module, declaration.name, scalar.identity
+        )
+        .into());
+    }
+    Ok(scalar)
 }
 fn canonical(library: &Library, module: &str, name: &str) -> Result<String, Issue> {
     if let Some(declaration) = crate::struct_names::native_declaration(library, module, name)? {
@@ -196,13 +293,13 @@ pub fn bind(
                     scalars: descriptor
                         .scalars
                         .iter()
-                        .map(|(name, scalar)| {
-                            let marker = descriptor.markers.get(name).ok_or_else(|| {
-                                format!("missing native scalar target marker: {name}")
-                            })?;
-                            Ok((scalar.clone(), marker.clone()))
+                        .filter_map(|(name, scalar)| {
+                            descriptor
+                                .markers
+                                .get(name)
+                                .map(|marker| (scalar.clone(), marker.clone()))
                         })
-                        .collect::<Result<_, String>>()?,
+                        .collect(),
                 }),
                 contract.symbol.clone(),
             )

@@ -112,7 +112,7 @@ pub(crate) fn compile(library: Library, module: &str, entry: &str) -> Result<Pla
     checker.call(module, entry, &[], false)?;
     checker.plan.native_images = hgl_semantics::native_images::select(
         &checker.library,
-        &hgl_semantics::native_images::scalars(&checker.plan),
+        &hgl_semantics::native_images::scalars(&checker.plan)?,
         &checker
             .plan
             .natives
@@ -2042,7 +2042,7 @@ pub(crate) fn prepare_evaluation(
     }
     checker.plan.native_images = hgl_semantics::native_images::select(
         &checker.library,
-        &hgl_semantics::native_images::scalars(&checker.plan),
+        &hgl_semantics::native_images::scalars(&checker.plan)?,
         &checker
             .plan
             .natives
