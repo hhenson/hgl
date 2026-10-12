@@ -21,7 +21,12 @@ result, read-only parameters, a Rust symbol, explicit setup/cold/evaluation/star
 stop phases and effects. Required constant evaluation is never a permitted phase.
 Signal, borrowing, mutation, generic signatures, default arguments and blocking
 evaluation remain rejected in this slice. Target bindings never infer operations
-from native implementation types. Missing scalar/helper records fail loading.
+from native implementation types. The Rust 2024 target symbol, bound and scalar
+marker each require one standalone ASCII identifier. Keywords (including `gen`),
+`_`, raw identifiers and qualified paths are rejected as incompatible target
+mappings before emission. `crate`, `self` and `super` are path prefixes in Rust,
+but cannot name a member appended to the selected image module. These target
+rules do not restrict HGL names or canonical scalar identities. Missing scalar/helper records fail loading.
 
 Logical aliases remain one canonical HGL scalar. The `hgl-rust-1` target requires
 compatible selected mappings: each canonical identity uses the same provider,

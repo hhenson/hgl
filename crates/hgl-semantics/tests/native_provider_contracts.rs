@@ -283,3 +283,60 @@ fn shared_provider_metadata_rejects_conflicting_images_even_for_distinct_scalars
     }
     Ok(())
 }
+
+#[test]
+fn rust_2024_target_keywords_fail_in_every_descriptor_role() {
+    for identifier in [
+        "gen", "async", "await", "crate", "self", "Self", "super", "_",
+    ] {
+        for descriptor in [
+            format!("{SCALAR}{}", HELPER.replace("token_str", identifier)),
+            format!(
+                "{SCALAR}{}",
+                HELPER.replace("ownership", &format!("bound {identifier:?} ownership"))
+            ),
+            format!("{} marker {identifier:?}\n{HELPER}", SCALAR.trim_end()),
+        ] {
+            let error =
+                native_contracts::parse("provider.hgl-native", &format!("{HEADER}{descriptor}"))
+                    .unwrap_err();
+            assert!(
+                error.to_string().contains("Rust 2024 target identifier"),
+                "{identifier}: {error}"
+            );
+        }
+    }
+}
+
+#[test]
+fn hgl_names_and_canonical_identities_do_not_use_rust_keyword_rules() -> Result<(), String> {
+    let scalar = SCALAR
+        .replace("scalar Token", "scalar gen")
+        .replace("existing.Token", "existing.gen");
+    let helper = HELPER
+        .replace("value token", "value gen")
+        .replace("->Token", "->gen");
+    let library = library::load(&sources(
+        "native type gen\nnative const fn gen(text:str)->gen",
+        &format!("{scalar}{helper}"),
+    ))?;
+    assert_eq!(
+        library.native_contracts["provider"].scalars["gen"].identity,
+        "existing.gen"
+    );
+    assert_eq!(
+        library.native_contracts["provider"].functions["gen"].symbol,
+        "token_str"
+    );
+    for identifier in ["generate", "gen_value", "_gen", "union", "crate_value"] {
+        native_contracts::parse(
+            "provider.hgl-native",
+            &format!(
+                "{HEADER}{SCALAR}{}",
+                HELPER.replace("token_str", identifier)
+            ),
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
