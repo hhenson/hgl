@@ -141,8 +141,8 @@ fn retain<T: NativeType>(data: &[u8]) -> NodeResult<NativeValue<T>> {
 }
 /// An exact marker whose opaque buffer positions are selected before execution.
 #[derive(Debug)]
-pub struct Native<T: NativeType, const DOMAIN: usize = 0>(PhantomData<T>);
-impl<T: NativeType, const DOMAIN: usize> Native<T, DOMAIN> {
+pub struct Native<T: NativeType, D: Debug + 'static = ()>(PhantomData<(T, D)>);
+impl<T: NativeType, D: Debug + 'static> Native<T, D> {
     /// Preflight an owning result supplied through an explicit borrowed provider ABI.
     pub fn check_view(
         columns: &ValueColumns,
@@ -158,9 +158,9 @@ impl<T: NativeType, const DOMAIN: usize> Native<T, DOMAIN> {
 }
 impl ValueColumns {
     /// Read a statically selected native slot without checking a per-value runtime tag.
-    pub fn native<T: NativeType, const DOMAIN: usize>(
+    pub fn native<T: NativeType, D: Debug + 'static>(
         &self,
-        slot: ValueSlot<Native<T, DOMAIN>>,
+        slot: ValueSlot<Native<T, D>>,
     ) -> NativeView<'_, T> {
         NativeView {
             data: self.natives.get(slot.fields()),
@@ -168,7 +168,7 @@ impl ValueColumns {
         }
     }
 }
-impl<T: NativeType, const DOMAIN: usize> GlobalValue for Native<T, DOMAIN> {
+impl<T: NativeType, D: Debug + 'static> GlobalValue for Native<T, D> {
     type Value = NativeValue<T>;
     type Slots = usize;
     const WIDTH: usize = 1;
@@ -204,7 +204,7 @@ impl<T: NativeType, const DOMAIN: usize> GlobalValue for Native<T, DOMAIN> {
         *columns.natives.get_mut(slot) = value.data;
     }
 }
-impl<T: NativeType, const DOMAIN: usize> PreparedValue for Native<T, DOMAIN> {
+impl<T: NativeType, D: Debug + 'static> PreparedValue for Native<T, D> {
     type Bounds = usize;
     fn include(bounds: &mut usize, value: &Self::Value) {
         *bounds = (*bounds).max(value.data.len());
@@ -266,10 +266,10 @@ fn replace<T: NativeType>(data: &[u8], destination: &mut Vec<u8>) {
 
 impl crate::GlobalState {
     /// Retain one helper result in a separate reserved owner, never an argument's slot.
-    pub fn native_result<T: NativeType, const DOMAIN: usize>(
+    pub fn native_result<T: NativeType, D: Debug + 'static>(
         &mut self,
         observation: crate::Observation<'_>,
-        to: ValueSlot<Native<T, DOMAIN>>,
+        to: ValueSlot<Native<T, D>>,
         execute: impl for<'v> FnOnce(crate::Observation<'v>, &'v Self) -> NodeResult<NativeView<'v, T>>,
     ) -> NodeResult {
         let mut destination = std::mem::take(self.values_mut().natives.get_mut(to.fields()));

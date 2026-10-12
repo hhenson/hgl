@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 pub fn global_type(ty: &Ty) -> String {
     if let Ty::Native(scalar) = ty {
         return format!(
-            "hgl_store::native_values::Native<{},{{NATIVE_DOMAIN{}}}>",
+            "hgl_store::native_values::Native<{},NativeDomain{}>",
             crate::native_values::marker(scalar),
             crate::identifiers::identifier(&scalar.identity)
         );
