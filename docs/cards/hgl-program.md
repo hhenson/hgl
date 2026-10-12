@@ -25,6 +25,13 @@ and complete atomic values. References are excluded from that test matrix;
 signal coverage observes metadata only. Type admission does not itself establish
 the separate finite prepared-execution proof.
 
+Graph bodies may project declared nominal fields and constant fixed-list or
+Tuple positions from ordinary and REF connections. Lowering creates a fixed
+reference projection node: an opaque designation input controls admission,
+an ordinary bound view supplies only the selected child endpoint identity.
+Repeated designations are suppressed by the existing REF publication operation;
+child values remain independently followed. Node REF traversal stays opaque.
+
 `eval` resolves ordinary `hgraph.std::replay` and `hgraph.std::record` operator
 contracts and checks their selected HGL bodies through the normal resolver.
 The supplied library must contain those declarations, implementations and

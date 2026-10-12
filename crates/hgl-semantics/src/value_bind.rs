@@ -321,8 +321,23 @@ fn argument_types(
             unify(
                 library,
                 module,
-                &parameter.ty,
-                &value.ty,
+                if !parameter.constant && !signature.value_function {
+                    parameter
+                        .ty
+                        .strip_prefix("ref<")
+                        .and_then(|ty| ty.strip_suffix('>'))
+                        .unwrap_or(&parameter.ty)
+                } else {
+                    &parameter.ty
+                },
+                if !parameter.constant
+                    && !signature.value_function
+                    && let Ty::Ref(child) = &value.ty
+                {
+                    child
+                } else {
+                    &value.ty
+                },
                 &signature.generics,
                 &mut types,
             )?;

@@ -84,7 +84,10 @@ fn value(plan: &Plan, v: &Value) -> String {
     }
 }
 fn query_value(plan: &Plan, op: &str, args: &[Value]) -> String {
-    if op.starts_with("\0family-eq:") {
+    if op == "\0reference" {
+        let input = crate::observed::input(&args[0]);
+        format!("_ctx.store().bindings().input_reference(({input}).id())")
+    } else if op.starts_with("\0family-eq:") {
         crate::owner_comparisons::comparison(plan, op, args)
     } else if op.starts_with("collection_") {
         crate::deltas::collection_operation(op, args, |v| value(plan, v))
@@ -374,12 +377,24 @@ pub fn condition_code(plan: &Plan, condition: &Value) -> String {
     }
 }
 
+fn reference_output_query(op: &str) -> String {
+    match op {
+        "valid" => "(_ctx.store().bindings().output(self._output).modified_at != hgl_types::EngineTime::NEVER)".into(),
+        "last_modified" => "_ctx.store().bindings().output(self._output).modified_at".into(),
+        "modified" => "_ctx.store().output_modified(self._output,_ctx.evaluation_time())".into(),
+        _ => unreachable!("checked reference output query"),
+    }
+}
+
 /// Emit the checked query form.
 pub fn query(op: &str, args: &[Value]) -> String {
     let values = args
         .iter()
         .map(|v| {
             if matches!(v.kind, Kind::Output) {
+                if matches!(v.ty, Ty::Ref(_)) {
+                    return reference_output_query(op);
+                }
                 return match op {
                     "valid" => "_ctx.store().output_ref(self._output).is_some()".into(),
                     "last_modified" => {

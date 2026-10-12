@@ -112,3 +112,8 @@ Plan::ordinary_types retains closed harness payload layouts hidden behind Any be
 Finite capacity planning keeps recording rows at the existing cycles-plus-start bound; ordinary global lists preserve initial rows before reserved appends.
 
 Checked IR also retains opaque native values, exact selected native bindings, cold-call phase flags and standalone wiring recipes. All these forms reside in hgl-value-model::ir and are reexported through hgl-eval and semantics.
+
+Internal Query("\0reference", [projected_input]) designates a checked child
+endpoint for a compiler-generated graph projection. It reads no scalar payload
+and grants no source node access through REF. Its result retains the child's
+declared REF schema and lifetime.

@@ -138,10 +138,9 @@ pub fn endpoint_call(name: &str, args: Arguments, runtime: bool) -> Result<Value
     {
         return Err("activity requires a scalar input".into());
     }
-    if args
-        .iter()
-        .any(|(_, v)| matches!(v.kind, Kind::Output) && !scalar(&v.ty))
-    {
+    if args.iter().any(|(_, v)| {
+        matches!(v.kind, Kind::Output) && !scalar(&v.ty) && !matches!(v.ty, Ty::Ref(_))
+    }) {
         return Err("querying structural out is not yet supported".into());
     }
     let ty = match name {

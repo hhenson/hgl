@@ -1476,18 +1476,8 @@ impl Checker {
             Expr::Tuple(_) => self.expected_expression(module, expr, env, runtime, None),
             Expr::Sparse(_) => Err("sparse entries require a delta constructor context".into()),
             Expr::Null => Err("null requires a contextual nullable comparison".into()),
-            Expr::Property(receiver, name) => {
-                if injected_clock(receiver, env) {
-                    return Ok(clock_property(receiver, name, env, runtime)?);
-                }
-                let parent = self.expression(module, receiver, env, runtime)?;
-                Ok(hgl_semantics::struct_check::field(&self.library, parent, name)?)
-            }
-            Expr::Index(receiver, index) => {
-                let parent = self.expression(module, receiver, env, runtime)?;
-                let index = self.expression(module, index, env, runtime)?;
-                Ok(hgl_semantics::value_check::indexed(parent, index)?)
-            }
+            Expr::Property(receiver, name) => self.property(module, receiver, name, env, runtime),
+            Expr::Index(receiver, index) => self.indexed(module, receiver, index, env, runtime),
             Expr::Sequence(elements) => Ok(hgl_semantics::value_check::list_literal(elements, None)?),
             Expr::Literal(l) => Ok(Value::new(l.ty(), Kind::Literal(l.clone()))),
             Expr::TemporalLiteral(l) if self.value_context == ValueContext::Preparation && !self.preparing_graph => Ok(Value::new(l.ty(), Kind::TemporalLiteral(l.clone()))),
@@ -1535,6 +1525,114 @@ impl Checker {
             Expr::Call(name, args) => self.call_expression(module, name, args, env, runtime),
             Expr::Binary(op, a, b) => self.binary(module, op, (a, b), env, runtime),
         }
+    }
+    fn property(
+        &mut self,
+        module: &str,
+        receiver: &Expr,
+        name: &str,
+        env: &Env,
+        runtime: bool,
+    ) -> Result<Value, Issue> {
+        if injected_clock(receiver, env) {
+            return Ok(clock_property(receiver, name, env, runtime)?);
+        }
+        let parent = self.expression(module, receiver, env, runtime)?;
+        if !runtime && matches!(parent.kind, Kind::Wire(_)) {
+            let ty = if let Ty::Ref(child) = &parent.ty {
+                child.as_ref()
+            } else {
+                &parent.ty
+            };
+            let (_, fields, _) = ty.structure()?;
+            let index = fields
+                .iter()
+                .position(|(field, _)| field == name)
+                .ok_or_else(|| format!("unknown struct field {name}"))?;
+            return self.graph_projection(parent, index);
+        }
+        Ok(hgl_semantics::struct_check::field(
+            &self.library,
+            parent,
+            name,
+        )?)
+    }
+    fn indexed(
+        &mut self,
+        module: &str,
+        receiver: &Expr,
+        index: &Expr,
+        env: &Env,
+        runtime: bool,
+    ) -> Result<Value, Issue> {
+        let parent = self.expression(module, receiver, env, runtime)?;
+        let index = self.expression(module, index, env, runtime)?;
+        if !runtime && matches!(parent.kind, Kind::Wire(_)) {
+            let Kind::Literal(Literal::Int(index)) = index.kind else {
+                return Err("graph projection requires a constant integer position".into());
+            };
+            let index =
+                usize::try_from(index).map_err(|_error| "graph projection index out of bounds")?;
+            return self.graph_projection(parent, index);
+        }
+        Ok(hgl_semantics::value_check::indexed(parent, index)?)
+    }
+    fn graph_projection(&mut self, parent: Value, index: usize) -> Result<Value, Issue> {
+        let Kind::Wire(source) = parent.kind else {
+            unreachable!("checked graph projection source")
+        };
+        let shape = if let Ty::Ref(child) = parent.ty {
+            *child
+        } else {
+            parent.ty
+        };
+        let child = if let Ty::Struct(_, fields, optional) = &shape {
+            if optional.contains(&index) {
+                return Err("optional field access is outside the admitted value profile".into());
+            }
+            fields.get(index).map(|(_, ty)| ty.clone())
+        } else if let Ty::Tuple(children) = &shape {
+            children.get(index).cloned()
+        } else if let Ty::List(child, Some(size)) = &shape {
+            (index < *size).then(|| *child.clone())
+        } else {
+            None
+        }
+        .ok_or("graph projection index out of bounds or unsupported shape")?;
+        let reference = Ty::Ref(Box::new(shape.clone()));
+        let child = Value::new(
+            child,
+            Kind::Field(
+                Box::new(Value::new(shape.clone(), Kind::Input(1, false))),
+                index,
+            ),
+        );
+        let result = Ty::Ref(Box::new(child.ty.clone()));
+        let projected = Value::new(
+            result.clone(),
+            Kind::Query("\0reference".into(), vec![child]),
+        );
+        let designation = Value::new(reference.clone(), Kind::Input(0, false));
+        let guard = Value::new(Ty::Bool, Kind::Query("valid".into(), vec![designation]));
+        let wire = self.plan.nodes.len();
+        self.plan.nodes.push(Node {
+            name: "hgl.projection".into(),
+            inputs: vec![
+                ("designation".into(), source, reference),
+                ("target".into(), source, shape),
+            ],
+            result: result.clone(),
+            alarm: false,
+            generator: None,
+            start: Vec::new(),
+            global_state: false,
+            globals: Vec::new(),
+            configuration: Vec::new(),
+            stop: Vec::new(),
+            caches: Vec::new(),
+            handlers: vec![(Some(guard), vec![Statement::Return(projected)])],
+        });
+        Ok(Value::new(result, Kind::Wire(wire)))
     }
     fn call_expression(
         &mut self,
