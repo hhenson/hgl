@@ -127,6 +127,62 @@ test {
     }
 }
 
+native const fn owner_check(value:bool) throws
+native const fn owner_check(value:bool) throws {}
+test {
+    fn family_comparison_at_stop(value:i64)->i64 {
+        when { return delta_value(value) }
+        stop {
+            let first:MixedChoice=MixedFirst(value:1,items:[1,2])
+            let retained=first
+            let second:MixedChoice=MixedSecond(value:1,items:[1,2])
+            owner_check(first==retained && first!=second && !(first==second))
+        }
+    }
+    test stop_hooks_compare_retained_family_owners {
+        assert eval(family_comparison_at_stop, [1,2]) == [1,2]
+    }}
+
+abstract struct NestedOwningChoice { text:str
+    items:list<i64>
+}
+struct NestedOwningMember:NestedOwningChoice {}
+struct NestedOwningRecord { dynamic:i64
+    choice:NestedOwningChoice
+}
+struct NestedOwningChain { dynamic:i64
+    choice:NestedOwningChoice
+    next:atomic<NestedOwningChain> = null
+}
+test {
+    fn nested_closed_family(value:i64)->any {
+        when {
+            let record=NestedOwningRecord(dynamic:value,
+                choice:NestedOwningMember(text:"retained",items:[1,2]))
+            if record.dynamic==value {return any(record)} else {return any()}
+        }
+    }
+    fn recursive_closed_family(value:i64)->any {
+        when {
+            let record=NestedOwningChain(dynamic:value,
+                choice:NestedOwningMember(text:"outer",items:[1,2]),
+                next:NestedOwningChain(dynamic:value+1,
+                    choice:NestedOwningMember(text:"inner",items:[])))
+            if record.dynamic==value {return any(record)} else {return any()}
+        }
+    }
+    test closed_family_children_of_dynamic_owners_are_prepared_once {
+        assert eval(nested_closed_family,[1,2])==[
+            any(NestedOwningRecord(dynamic:1,choice:NestedOwningMember(text:"retained",items:[1,2]))),
+            any(NestedOwningRecord(dynamic:2,choice:NestedOwningMember(text:"retained",items:[1,2])))]
+        assert eval(recursive_closed_family,[1,2])==[
+            any(NestedOwningChain(dynamic:1,choice:NestedOwningMember(text:"outer",items:[1,2]),
+                next:NestedOwningChain(dynamic:2,choice:NestedOwningMember(text:"inner",items:[])))),
+            any(NestedOwningChain(dynamic:2,choice:NestedOwningMember(text:"outer",items:[1,2]),
+                next:NestedOwningChain(dynamic:3,choice:NestedOwningMember(text:"inner",items:[]))))]
+    }
+}
+
 struct MutableOwnerText { value:str }
 struct MutableOwnerFixed { value:i64 }
 test {

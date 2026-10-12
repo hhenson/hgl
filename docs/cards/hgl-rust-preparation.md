@@ -57,3 +57,7 @@ Raises blocks are traversed when assembling graph callbacks. The callback failur
 
 emit_main emits named execution status rows, counts and process status for a
 checked test list. Status rows use stdout and failure details use stderr.
+
+Generated lexical test functions keep separate stack frames. Independent
+evaluations may share a build batch without combining their cold preparation
+frames; node bodies retain ordinary optimization.

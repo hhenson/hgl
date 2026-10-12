@@ -1,11 +1,11 @@
 # Card: hgl-type-shape
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `type_shape` module of `hgl-source` (`crates/hgl-source/src/type_shape.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
+The `type_shape` model is in `crates/hgl-value-model/src/type_shape.rs`; source parsing is in `crates/hgl-source/src/type_shape.rs`. Their manifests retain informational line targets and enforce module dependencies.
 
 Canonical checked source types and finite nominal application identities. No
 runtime or third-party dependency; budget 300 source lines.
 
-Public surface: `Ty`, `Ty::{name,parse,list_parts,source_name}`;
+Public surface: `Ty`, `Ty::{name,source_name}` and Source trait `TypeSpelling::{parse,list_parts}`;
 `Nominal { origin, arguments }`, `Nominal::source_name`, conversions from String
 and str for nongeneric origins; `application` splits a complete type application
 without losing nested arguments. Ty retains ordinary list fixedness and fully
@@ -97,3 +97,8 @@ Unbounded list<S> is an admitted structural publication shape whenever S is admi
 Ty::Bytes is a built-in scalar leaf. Its canonical spelling is bytes; atomic<bytes> and delta<bytes> reduce to it. Publication, atomic payload, rolling and exact collection-key admission include bytes recursively under BYTE-1–6.
 
 Ty::Any is an ordinary whole-value leaf, normalizing atomic<any> and delta<any> to the same type. Ty::scalar_kind is specified by hgl-scalar-shape; nominal enums and Any retain separate exact markers.
+
+`parse` and `list_parts` are no longer inherent `Ty` methods. Rust callers import
+`hgl_source::TypeSpelling`; callers depending only on hgl-value-model must add a
+Source dependency when they need spelling parsing. The trait implementation and
+spelling grammar live physically in Source; Model does not wrap that parser.

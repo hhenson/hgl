@@ -1,14 +1,18 @@
 # Card: hgl-value-constant
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `value_constant` module of `hgl-eval` (`crates/hgl-eval/src/value_constant.rs`), reexported through `hgl-semantics`; `cargo xtask ci` reports its size and enforces its "may use" list.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes `hgl-eval::value_constant`, re-exported by `hgl-semantics::value_constant`. It uses checked IR and ordinary type metadata; source size is informational.
 
 Pure classification of checked ordinary expressions eligible for constant
-checking. Uses hgl-rust-ir and the shared ir_visit traversal; initial budget 100 source lines. Value::closed lives here alongside context_free and recognizes only independently owning literal/void/list/constructor/captured/delta forms whose descendants are also closed. Native/provider recipes remain deferred. Public
+checking and immutable recipe retention. Public
 `context_free(&Value) -> bool` recognizes evaluator-supported closed expressions
 and lexical ValueCall argument/local scopes. It rejects external locals,
 contextual recipes, prepared configuration, native/capability/global/endpoint
 effects and unsupported or unbounded control flow without evaluating anything.
-The evaluator retains short-circuit and branch execution semantics.
+The Model walker supplies ordered expression descent. Classification prunes
+helper calls explicitly: arguments use the caller scope, then the body uses
+fresh formal bindings. Constructor constants and context-free expressions
+retain separate whitelists. The evaluator retains short-circuit and branch
+execution semantics.
 
 Acceptance: constant bounds diagnostics, deferred mixed contextual expressions,
 external setup locals, and skipped invalid branches in hgl-program regressions.

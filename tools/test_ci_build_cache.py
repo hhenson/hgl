@@ -70,7 +70,7 @@ class BuildCacheTests(unittest.TestCase):
             cache.restore(root)
             self.assertFalse(build())
 
-    def test_environment_key_invalidates_toolchain_flags_and_manifests(self):
+    def test_environment_key_tracks_toolchain_flags_and_cargo_configuration(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             manifest = root / 'Cargo.toml'
@@ -83,10 +83,41 @@ class BuildCacheTests(unittest.TestCase):
                 with patch.dict(os.environ, {'RUSTFLAGS': '-C opt-level=1'}):
                     self.assertNotEqual(cache.environment_key(root), original)
                 manifest.write_text('second')
+                self.assertEqual(cache.environment_key(root), original)
+                configuration = root / '.cargo/config.toml'
+                configuration.parent.mkdir()
+                configuration.write_text('[build]\njobs=2\n')
                 self.assertNotEqual(cache.environment_key(root), original)
-                manifest.write_text('first')
+                configuration.unlink()
                 with patch.object(cache.subprocess, 'check_output', return_value=b'rustc two'):
                     self.assertNotEqual(cache.environment_key(root), original)
+
+    def test_reused_cache_rebuilds_changed_manifest_features_and_version(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'src').mkdir()
+            manifest = root / 'Cargo.toml'
+            original = ('[package]\nname="cache-feature-probe"\nversion="0.1.0"\n'
+                        'edition="2024"\n[features]\nsecond=[]\ndefault=[]\n')
+            manifest.write_text(original)
+            (root / 'src/main.rs').write_text(
+                'fn main(){println!("{}:{}",env!("CARGO_PKG_VERSION"),'
+                'if cfg!(feature="second"){2}else{1});}\n')
+
+            def run():
+                result = subprocess.run(
+                    ['cargo', 'run', '--offline', '--quiet'], cwd=root,
+                    text=True, capture_output=True, check=True)
+                return result.stdout.strip()
+
+            cache.restore(root)
+            self.assertEqual(run(), '0.1.0:1')
+            manifest.write_text(original.replace('default=[]', 'default=["second"]'))
+            cache.restore(root)
+            self.assertEqual(run(), '0.1.0:2')
+            manifest.write_text(manifest.read_text().replace('0.1.0', '0.2.0'))
+            cache.restore(root)
+            self.assertEqual(run(), '0.2.0:2')
 
 
 if __name__ == '__main__':

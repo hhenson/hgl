@@ -50,7 +50,7 @@ fn parse(decl: &Decl) -> Result<EnumType, String> {
 }
 /// Validate every indexed declaration, including unused enums.
 pub fn validate(library: &Library) -> Result<(), String> {
-    for declaration in &library.declarations {
+    for declaration in library.declarations.iter() {
         if declaration.role == Role::Enum {
             if library
                 .declarations

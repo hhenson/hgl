@@ -1,0 +1,14 @@
+module dependent_defaults
+const fn width<T>(items:set<T>)->i64=>1
+const fn mark(value:i64,const message:str)->i64 {
+ inject logger
+ info(logger,message)
+ return value
+}
+const fn sized<T>(left:T,right:T,const n:i64=width(set<T>(items:[])))->i64=>n
+fn ordered(value:i64)->i64 {
+ when {return sized(right:mark(value,"2"),left:mark(value,"1"))}
+}
+test inferred_defaults_keep_supplied_operand_order {
+ assert eval(ordered,[1,2])==[1,1]
+}

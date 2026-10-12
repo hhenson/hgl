@@ -1,6 +1,7 @@
 //! Descriptor-only native scalar and exact ordinary helper contracts.
 use crate::ir::Value;
 use crate::library::{Decl, Library, Role, Signature};
+use hgl_source::TypeSpelling;
 use hgl_source::{Cursor, Issue, Ty};
 use std::collections::BTreeMap;
 
@@ -45,7 +46,7 @@ pub fn parse(source: &str, input: &str) -> Result<Descriptor, Issue> {
 /// Validate aliases and declaration bindings before any provider activation.
 pub fn validate(library: &Library) -> Result<(), Issue> {
     hgl_source::native_package::validate_aliases(library.native_contracts.values())?;
-    for declaration in &library.declarations {
+    for declaration in library.declarations.iter() {
         if declaration.role == Role::NativeType {
             declaration.native_type()?;
             crate::struct_names::native_declaration(

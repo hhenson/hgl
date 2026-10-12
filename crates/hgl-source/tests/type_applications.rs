@@ -1,4 +1,5 @@
 //! One balanced application grammar preserves finite-list and nested argument boundaries.
+use hgl_source::TypeSpelling;
 use hgl_source::type_shape::{Ty, application};
 
 #[test]

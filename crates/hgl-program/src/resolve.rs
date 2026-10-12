@@ -1,5 +1,5 @@
 use crate::index::{Decl, Library, Role, Signature};
-use crate::syntax::{Cursor, Expr, Issue, Literal, Stmt, Ty};
+use crate::syntax::{Cursor, Expr, Issue, Literal, Stmt, Ty, TypeSpelling};
 use hgl_rust::{Kind, Native, Node, Plan, Statement, Value};
 use hgl_semantics::body_check::runtime_body;
 use hgl_semantics::endpoint_check::{
@@ -286,7 +286,9 @@ impl Checker {
         args: &[(Option<String>, Value)],
         source: &str,
     ) -> Result<(Signature, BTreeMap<String, Ty>), Issue> {
-        self.parameter_defaults((module, source), &mut signature, &BTreeMap::new())?;
+        let inferred =
+            hgl_semantics::value_bind::infer_arguments(&self.library, module, &signature, args)?;
+        self.parameter_defaults((module, source), &mut signature, &inferred)?;
         let supplied = order_arguments(&signature.parameter_names(), args)?;
         let env = hgl_semantics::default_values::size_environment(&signature, &supplied, |v| {
             self.static_values.resolve(v).clone()
@@ -393,7 +395,10 @@ impl Checker {
         let selected = self.selected_value.take();
         let mut candidates = Vec::new();
         let mut errors = Vec::new();
-        for (id, decl) in self.library.declarations.clone().iter().enumerate() {
+        for (id, decl) in std::sync::Arc::clone(&self.library.declarations)
+            .iter()
+            .enumerate()
+        {
             if !hgl_semantics::name_check::visible(
                 &self.library,
                 decl,
@@ -465,7 +470,10 @@ impl Checker {
         let name = declaration.name.as_str();
         let mut implementations = Vec::new();
         let mut errors = Vec::new();
-        for (candidate, implementation) in self.library.declarations.clone().iter().enumerate() {
+        for (candidate, implementation) in std::sync::Arc::clone(&self.library.declarations)
+            .iter()
+            .enumerate()
+        {
             if implementation.module != module
                 || implementation.name != name
                 || implementation.role != Role::Implementation

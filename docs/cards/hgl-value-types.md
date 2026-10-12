@@ -75,3 +75,10 @@ family inference helper. Constructor inference and direct unification share
 this recovery, preserving nested atomic source boundaries in exact arguments.
 
 concrete and substitute preserve structured Issues for excluded delta origins. Relative primary ranges accumulate through nested source arguments, so written delta<T> exclusions locate concrete T; bound substitutions locate the constraining call. Reference types resolve as temporal shapes and remain excluded from delta formation.
+
+May use struct_declarations for the shared declared type-domain check.
+
+`infer` shares nominal and structural matching with `unify` while deferring
+list/rolling bound validation. Call preparation uses these substitutions for
+required defaults, then `unify` checks all resolved bounds exactly. No shape
+value is fabricated and no source expression is executed by either matcher.

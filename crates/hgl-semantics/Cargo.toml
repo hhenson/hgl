@@ -7,7 +7,7 @@ publish.workspace = true
 description = "HGL semantics: the program model, its checks and the IR the backend reads."
 
 [package.metadata.hgl]
-line-budget = 9590
+line-budget = 7740
 
 # Budgets of the modules that were crates of their own (docs/decisions/0004).
 [package.metadata.hgl.modules]
@@ -16,6 +16,7 @@ constructor_growth = { budget = 40, uses = ["ir", "ir_visit"] }
 constructor_owners = { budget = 100, uses = ["constructor_growth", "ir", "ir_visit", "value_constant"] }
 boxed_uses = { budget = 80, uses = ["ir", "ir_visit"] }
 any_values = { budget = 420, uses = ["ir", "value_eval", "endpoint_check", "value_access", "family_values", "scalar_keys"] }
+snapshot_locals = { budget = 150, uses = ["ir", "ir_visit", "call_locals"] }
 value_constructors = { budget = 100, uses = ["ir", "value_eval", "endpoint_check", "value_access", "any_values"] }
 value_operators = { budget = 120, uses = [] }
 default_values = { budget = 220, uses = ["ir", "library", "value_eval", "value_types", "inheritance", "enums"] }
@@ -34,7 +35,7 @@ library = { budget = 500, uses = ["struct_declarations", "ir", "native_contracts
 local_check = { budget = 220, uses = ["endpoint_check", "ir", "structural_admission", "tuple_admission", "value_check"] }
 name_check = { budget = 250, uses = ["tuple_flow", "tuple_phase", "enums", "library", "struct_names", "type_sizes"] }
 native_contracts = { budget = 350, uses = ["library", "struct_names", "ir"] }
-recursive_types = { budget = 350, uses = ["enums", "library", "shape_obligations", "struct_names", "value_access"] }
+recursive_types = { budget = 350, uses = ["enums", "library", "shape_obligations", "struct_names", "value_access", "struct_declarations"] }
 shape_obligations = { budget = 150, uses = ["library", "struct_names", "value_access"] }
 source_check = { budget = 550, uses = ["tuple_writes", "tuple_flow", "tuple_phase", "ir", "enums", "eval_data", "library", "name_check", "type_sizes", "value_access", "value_check", "value_types"] }
 static_values = { budget = 150, uses = ["any_values", "composite_keys", "ir", "library", "value_constant", "value_eval"] }
@@ -44,14 +45,14 @@ struct_names = { budget = 160, uses = ["library"] }
 type_sizes = { budget = 180, uses = ["ir", "value_check", "value_eval"] }
 tuple_admission = { budget = 60, uses = ["structural_admission", "ir", "endpoint_check", "tuple_values"] }
 tuple_flow = { budget = 60, uses = ["name_check", "tuple_phase", "tuple_writes"] }
-tuple_phase = { budget = 100, uses = ["library", "name_check", "struct_names"] }
+tuple_phase = { budget = 100, uses = ["eval_data", "library", "name_check", "struct_names"] }
 tuple_writes = { budget = 100, uses = ["name_check", "tuple_phase", "tuple_flow"] }
 tuple_values = { budget = 100, uses = ["endpoint_check", "ir"] }
 value_access = { budget = 200, uses = ["ir", "library", "static_values"] }
-value_bind = { budget = 500, uses = ["native_contracts", "ir", "library", "source_check", "value_access", "value_types"] }
-value_check = { budget = 400, uses = ["tuple_admission", "tuple_values", "ir", "library", "value_access", "value_constant", "value_operators"] }
+value_bind = { budget = 500, uses = ["native_contracts", "ir", "library", "source_check", "value_access", "value_types", "struct_declarations"] }
+value_check = { budget = 400, uses = ["tuple_admission", "tuple_values", "ir", "library", "value_access", "value_constant", "value_operators", "ir_visit"] }
 value_operations = { budget = 250, uses = ["endpoint_check", "collection_values", "family_values", "ir", "any_values", "value_constructors"] }
-value_types = { budget = 350, uses = ["native_contracts", "enums", "family_types", "inheritance", "library", "recursive_types", "shape_obligations", "struct_names", "type_sizes", "value_access", "value_check"] }
+value_types = { budget = 350, uses = ["native_contracts", "enums", "family_types", "inheritance", "library", "recursive_types", "shape_obligations", "struct_names", "type_sizes", "value_access", "value_check", "struct_declarations"] }
 wiring_locals = { budget = 300, uses = ["ir", "local_check", "value_access", "value_check", "value_eval"] }
 
 structural_admission = { budget = 100, uses = ["ir", "tuple_values", "endpoint_check"] }

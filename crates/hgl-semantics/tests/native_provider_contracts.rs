@@ -170,7 +170,7 @@ fn checked_metadata_sets_value_mode_only_on_exact_native_declarations() -> Resul
     let interface = "native const fn size(value:str)->i64\nfn size(value:i64)->i64 {when {return value}}\nnative const fn legacy(value:signal)->i64";
     let helper = "value size(value:str)->i64 symbol \"length\" ownership owned phases {evaluation} effects {}\n";
     let library = library::load(&sources(interface, helper))?;
-    for declaration in &library.declarations {
+    for declaration in library.declarations.iter() {
         let signature = declaration.signature()?;
         assert_eq!(
             signature.value_function,

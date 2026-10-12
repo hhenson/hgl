@@ -158,6 +158,9 @@ pub(crate) fn write(plan: &Plan, v: &Value, slot: &str, prelude: &mut Vec<String
     if let Some(code) = crate::observed::text_assignment(v, slot, prelude, &|v| emit(plan, v)) {
         return code;
     }
+    if let Some(code) = crate::observed::text_assignment(v, slot, prelude, &|v| emit(plan, v)) {
+        return code;
+    }
     let marker = global_type(&v.ty);
     let id = prelude.len();
     prelude.push(format!("let prepared_item{id}={};", emit(plan, v)));

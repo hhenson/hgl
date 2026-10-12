@@ -8,18 +8,21 @@ pub fn context_free(value: &Value) -> bool {
     expression(value, &BTreeSet::new())
 }
 fn expression(value: &Value, locals: &BTreeSet<usize>) -> bool {
-    let mut closed = true;
+    let mut constant = true;
     crate::ir_visit::value(value, &mut |value| {
+        if !constant {
+            return false;
+        }
         if let Kind::Local(id) | Kind::MutableLocal(id) = &value.kind {
-            closed &= locals.contains(id);
+            constant = locals.contains(id);
             return false;
         }
         if let Kind::ValueCall(args, body) = &value.kind {
-            closed &= args.iter().all(|v| expression(v, locals))
+            constant = args.iter().all(|v| expression(v, locals))
                 && block(body, &(0..args.len()).collect());
             return false;
         }
-        closed &= matches!(
+        constant = matches!(
             value.kind,
             Kind::Literal(_)
                 | Kind::Void
@@ -33,10 +36,11 @@ fn expression(value: &Value, locals: &BTreeSet<usize>) -> bool {
                 | Kind::Index(..)
                 | Kind::Push(..)
         );
-        closed
+        constant
     });
-    closed
+    constant
 }
+
 fn block(body: &[Statement], inherited: &BTreeSet<usize>) -> bool {
     let mut locals = inherited.clone();
     body.iter().all(|statement| match statement {
@@ -60,27 +64,6 @@ fn block(body: &[Statement], inherited: &BTreeSet<usize>) -> bool {
         | Statement::While(..)
         | Statement::Return(_) => false,
     })
-}
-
-impl Value {
-    /// Whether an expression is already closed independently owning ordinary data.
-    pub fn closed(&self) -> bool {
-        let mut closed = true;
-        crate::ir_visit::value(self, &mut |value| {
-            closed &= matches!(
-                value.kind,
-                Kind::Opaque(_)
-                    | Kind::Delta(_)
-                    | Kind::Literal(_)
-                    | Kind::Void
-                    | Kind::List(_)
-                    | Kind::Captured(..)
-                    | Kind::Construct(_)
-            );
-            closed
-        });
-        closed
-    }
 }
 
 /// Retain closed owning constructor subtrees as immutable configuration recipes.

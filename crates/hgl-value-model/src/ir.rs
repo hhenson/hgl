@@ -1,5 +1,5 @@
 //! Checked compiler/backend data boundary; source validation belongs to the frontend.
-use hgl_value_model::{Literal, Ty};
+use crate::{Literal, Ty};
 
 /// A typed expression after frontend resolution.
 #[derive(Debug, Clone)]
@@ -31,7 +31,7 @@ impl Value {
 #[derive(Debug, Clone)]
 pub enum Kind {
     /// Cold independently owning native data produced by an explicit provider context.
-    Opaque(hgl_value_model::native_value::NativeValue),
+    Opaque(crate::native_value::NativeValue),
     /// Typed map child endpoint scoped to one modified-entry iteration.
     IterationInput(usize),
     /// Closed harness sequence with dense horizon and only present owned slots.
@@ -71,7 +71,7 @@ pub enum Kind {
     /// A compile-time scalar literal.
     Literal(Literal),
     /// A provider-dependent recipe executed during ordered preparation.
-    TemporalLiteral(hgl_value_model::TemporalLiteral),
+    TemporalLiteral(crate::TemporalLiteral),
     /// Cold prepared configuration binding; never a node-hook expression.
     Prepared(usize),
     /// Graph wiring marker containing the producing node index.
@@ -207,7 +207,7 @@ pub struct Native {
     /// Rust provider method name.
     pub method: String,
     /// Data-only image contract selected through the ordinary library package.
-    pub provider: Option<hgl_value_model::native_contracts::Image>,
+    pub provider: Option<crate::native_contracts::Image>,
     /// Whether the provider returns a fallible result.
     pub throws: bool,
     /// Resolved argument types in declaration order.
@@ -245,4 +245,25 @@ pub struct Plan {
     pub input_length: usize,
     /// Cold payload schemas reached by a surrounding lexical test harness.
     pub ordinary_types: Vec<Ty>,
+}
+
+impl Value {
+    /// Whether an expression is already a closed ordinary constant.
+    pub fn closed(&self) -> bool {
+        let mut closed = true;
+        crate::ir_visit::value(self, &mut |value| {
+            closed &= matches!(
+                value.kind,
+                Kind::Opaque(_)
+                    | Kind::Literal(_)
+                    | Kind::Void
+                    | Kind::Delta(_)
+                    | Kind::List(_)
+                    | Kind::Captured(..)
+                    | Kind::Construct(_)
+            );
+            closed
+        });
+        closed
+    }
 }

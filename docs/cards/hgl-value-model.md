@@ -1,18 +1,21 @@
 # Card: hgl-value-model
 
-Canonical ordinary type/value metadata and contextual scalar materialization form
-an enforced lower layer. Public modules and their existing contracts are
-`diagnostics`, `literals`, `nominal_batch`, `type_shape`, `scalar_shape`,
-`ordinary_shape`, `type_syntax`, `time_context` and `execution_phase`. Root exports
-retain `Issue`, scalar literal forms, `Ty`, nominal metadata and window metadata.
-The source crate reexports these paths for existing clients.
+Syntax-neutral ordinary metadata, checked IR definitions and contextual scalar
+materialization. Owns diagnostics, retained literal forms, nominal and ordinary
+shapes, time context, checked IR and syntax-neutral IR traversal. Source spelling and literal parsers stay in
+hgl-source; source admission stays in hgl-semantics. Checked type facade paths remain; parsing callers must migrate to the Source
+`TypeSpelling` trait, as documented in the hgl-source card.
 
-May use hgl-types and the existing jiff dependency. Cannot reach source tokens,
-Cursor, Expr, declaration discovery, semantic Library or executable native images.
-The aggregate budget is 1200; the moved module ceilings remain unchanged.
-Existing source/model tests continue exercising the same public facade.
+May use hgl-types and the existing jiff dependency; cannot depend on source AST,
+parsing, semantic binding or compiler emission. Optional reporting target: 1270 lines. Dependency walls remain enforced;
+numerical targets do not constrain source size.
+The `ir_visit` module owns source-ordered read/mutable expression, statement,
+hook and lexical-node walkers with subtree pruning. It never executes values;
+helper scope policies stay with callers. `Value::closed` uses this traversal
+with its constructor/literal whitelist.
 
-This boundary implements DEC0004 reason 3: the model and parser sides each exceed
-1000 lines, and Cargo prevents ordinary type/value operations from reentering
-source parsing or name resolution. Contextual scalar construction uses only its
-explicit execution context; native activation remains outside this layer.
+DEC0004 reason 3: source, model and checked execution each exceed 1000 lines
+under xtask's code-line count. Cargo prevents lower layers from reaching source
+parsing and name resolution. The relocation changes no language behavior.
+
+Native contract metadata, cold independently owned NativeValue data and checked invocation phase metadata remain in this model. Native checked IR carries exact descriptor-backed helper bindings and cold-call flags; execution happens only in hgl-eval or selected target callbacks. The model cannot depend on source parsing, semantic checking or executable providers.

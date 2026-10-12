@@ -1,5 +1,6 @@
 //! Flow-fact checker tests use typed nullable IR inputs; source storage admission is separate.
 use super::*;
+use hgl_source::TypeSpelling;
 
 fn sources(body: &str, ty: &str, slots: &str) -> Vec<(String, String)> {
     vec![

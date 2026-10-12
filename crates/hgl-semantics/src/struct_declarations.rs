@@ -1,4 +1,5 @@
 //! Declaration-owned struct grammar and finite constraints.
+use hgl_source::TypeSpelling;
 use hgl_source::{Cursor, Expr, Token};
 #[derive(Debug, Clone)]
 /// Concrete ordinary struct contract before specialization.
@@ -143,4 +144,21 @@ fn parameters(c: &mut Cursor<'_>) -> Result<Vec<String>, String> {
         }
     }
     Ok(generics)
+}
+
+/// Validate an inferred binding against the declaration's finite type domain.
+pub fn check_domain(
+    domain: Option<&(String, Vec<String>)>,
+    bindings: &std::collections::BTreeMap<String, hgl_source::Ty>,
+) -> Result<(), String> {
+    if let Some((parameter, domain)) = domain
+        && !bindings.get(parameter).is_some_and(|ty| {
+            domain
+                .iter()
+                .any(|name| hgl_source::Ty::parse(name).as_ref() == Some(ty))
+        })
+    {
+        return Err(format!("requires {parameter} in {{{}}}", domain.join(", ")));
+    }
+    Ok(())
 }

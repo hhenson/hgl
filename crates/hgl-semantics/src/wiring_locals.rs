@@ -3,6 +3,7 @@ use crate::ir::{Kind, Plan, Statement, Value};
 use crate::local_check::GraphLocals;
 use crate::value_access::StaticValues;
 use crate::value_eval::{EvalError, Evaluator};
+use hgl_source::TypeSpelling;
 use hgl_source::{Expr, Literal, Stmt, Ty};
 use std::collections::{BTreeMap, BTreeSet};
 type Env = BTreeMap<String, Value>;

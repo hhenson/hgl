@@ -1,13 +1,10 @@
 # Card: hgl-source
 
-Finite list bounds reuse the balanced type_syntax::application grammar. Nested generic and parenthesized argument separators have one parser; a list carries one element and at most one nonnegative concrete or unbounded size.
-DeclarationRole is inert grammar metadata; Semantic Library reexports it as Role.
-
 Lexer and body syntax shared by library indexing and graph checking. Uses only
 `hgl-calendar`, `hgl-type-shape` and `hgl-lex`; budget 700 lines. No runtime dependency.
 
 Surface: `Token { text, span }`, `lex(&str) -> Result<Vec<Token>, String>`;
-`Ty` and `Ty::{parse,name}`; `Literal` and `Literal::ty`; `Expr` and
+`Ty`, `Ty::name` and `TypeSpelling::{parse,list_parts}`; `Literal` and `Literal::ty`; `Expr` and
 `Expr::{fixed,handler_guard}`; `Stmt`; `Cursor { tokens, pos }` with `new`, `peek`, `at`,
 `take`, `need`, `consume`, `lines`, `name`, `type_name`, `expr`, `block`.
 The enums describe literals, names, calls, unary/binary expressions, dense
@@ -119,11 +116,27 @@ Expr::Located retains expression and optional named argument origins; syntax, sp
 `Ty::scalar()` identifies ordinary scalar leaves, including nominal enums;
 composites and temporal wrappers return false.
 
-Inert full native package headers/records are described by [native-package](hgl-native-package.md);
-shared cold node phase metadata is described by [execution-phase](hgl-execution-phase.md).
+Ordinary metadata modules are facade reexports from hgl-value-model. Source syntax,
+lexing and admission remain here; canonical metadata cannot depend on them.
 
-The canonical metadata modules now live in hgl-value-model, with their module
-ceilings unchanged. hgl-source retains lexer, Cursor/Expr/Stmt parsing and inert
-native package/descriptor syntax, and reexports model paths for compatibility.
-Its dependencies are hgl-value-model and hgl-types; it no longer directly uses
-jiff. See [the value-model card](hgl-value-model.md) for the enforced lower wall.
+Rust API migration: type spelling parsing is provided by the Source-owned
+`TypeSpelling` trait, not inherent methods on Model's `Ty`. Existing callers
+must add `use hgl_source::TypeSpelling` (or call the trait explicitly). This is a
+Rust source compatibility change; HGL parsing and type identities are unchanged.
+For example:
+
+```rust
+use hgl_source::{Ty, TypeSpelling};
+assert_eq!(Ty::parse("i64"), Some(Ty::I64));
+```
+
+Numeric source parsing stays at `hgl_source::literals::numeric`. Model-only
+consumers retain metadata and checked IR access, but have no source parser API.
+The external-consumer regression compiles the migrated Source call and Model
+metadata usage, then verifies that Model-only parsing calls fail to compile.
+
+Optional reporting targets after the execution split are Source 1130, Model
+1270, Eval 1540 and Semantics 7740 lines; they are not enforced ceilings.
+`Expr::children` exposes immediate expression operands in source order, omitting absent cells and preserving each operand's origin wrapper. It does not descend or select lambda scope; source policies control those boundaries.
+
+NativeType is an opaque source declaration role. native_descriptor and native_package parse inert provider metadata; execution_phase, native_value and native_contracts reexport syntax-neutral model data.

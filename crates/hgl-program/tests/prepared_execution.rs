@@ -1,9 +1,12 @@
 //! The complete generated replay, target and recording path must not allocate in ticks.
-use std::{fmt::Write as _, fs, process::Command, time::SystemTime};
+use std::{fmt::Write as _, fs, process::Command};
+#[path = "support/checked_batches.rs"]
+mod checked_batches;
 
-// Two tests can start within the same clock tick, and on Windows a second test
-// in the same directory then fights the first for its executable.
-static NEXT_DIR: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+#[path = "support/generated_cache.rs"]
+mod generated_cache;
+#[path = "support/regression_cache.rs"]
+mod regression_cache;
 const SOURCE: &str = r#"module prepared_execution
 fn constructed_map(value:i64)->map<str,i64> {when {return delta<map<str,i64>>(upsert:["retained":value])}}
 test constructed_map {assert eval(constructed_map,value:[1,2]) == [delta<map<str,i64>>(upsert:["retained":1]),delta<map<str,i64>>(upsert:["retained":2])]}
@@ -117,28 +120,36 @@ fn growing_list_publications_use_prepared_storage() -> Result<(), Box<dyn std::e
 fn bytes_configured_comparisons_borrow_without_allocating() -> Result<(), Box<dyn std::error::Error>>
 {
     let (root, suite) = compile(include_str!("fixtures/bytes_configured_comparisons.hgl").into())?;
-    let mut evaluations = 0;
-    // Each checked assertion is independent. One generated evaluation per program
-    // bounds its Windows debug stack without changing authored inputs or assertions.
+    let mut independent = hgl_program::Suite::default();
+    let mut plans = suite.plans.into_iter().map(Some).collect::<Vec<_>>();
     for test in suite.tests {
         for (position, step) in test.steps.into_iter().enumerate() {
             let hgl_semantics::harness_ir::Step::Eval(mut evaluation) = step else {
                 return Err("configured comparisons require independent evaluation steps".into());
             };
-            let plan = suite.plans[evaluation.case].clone();
-            evaluation.case = 0;
-            let selected = hgl_program::Suite {
-                tests: vec![hgl_semantics::harness_ir::Test {
-                    name: format!("{}::{position}", test.name),
-                    steps: vec![hgl_semantics::harness_ir::Step::Eval(evaluation)],
-                }],
-                plans: vec![plan],
-            };
-            execute_suite(&root, &selected, RUNTIME, true)?;
-            evaluations += 1;
+            let plan = plans[evaluation.case]
+                .take()
+                .ok_or("each comparison must own its graph plan")?;
+            evaluation.case = independent.plans.len();
+            independent.plans.push(plan);
+            independent.tests.push(hgl_semantics::harness_ir::Test {
+                name: format!("{}::{position}", test.name),
+                steps: vec![hgl_semantics::harness_ir::Step::Eval(evaluation)],
+            });
         }
     }
-    assert_eq!(evaluations, 41, "every authored evaluation executes once");
+    assert_eq!(
+        independent.tests.len(),
+        41,
+        "every authored evaluation executes once"
+    );
+    assert!(
+        plans.iter().all(Option::is_none),
+        "every graph must be retained"
+    );
+    for batch in checked_batches::split(independent, 8) {
+        execute_suite(&root, &batch, RUNTIME, true)?;
+    }
     Ok(())
 }
 #[test]
@@ -564,21 +575,15 @@ fn execute_suite(
     runtime: &str,
     measured: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let dir = std::env::temp_dir().join(format!(
-        "hgl-prepared-execution-{}-{}",
-        SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)?
-            .as_nanos(),
-        NEXT_DIR.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-    ));
-    fs::create_dir_all(dir.join("src"))?;
+    let project = regression_cache::open(root, "prepared")?;
+    let dir = &project.path;
     let mut code = hgl_program::emit_tests(suite);
     if measured {
         code = code
             .replace("hgl_kernel::run_simulation(", "crate::measured_simulation(")
             .replace(
                 "store.prepare_collection_inputs();",
-                "crate::verify_pool(&mut store,&built,&graph);store.prepare_collection_inputs();",
+                "crate::verify_pool(&mut store,&built,&graph,&registry);store.prepare_collection_inputs();",
             );
     } else {
         assert!(
@@ -587,8 +592,9 @@ fn execute_suite(
         );
     }
     code.push_str(runtime);
-    fs::write(dir.join("src/main.rs"), code)?;
-    manifest(root, &dir)?;
+    generated_cache::write(dir.join("src/main.rs"), code)?;
+    manifest(root, dir)?;
+    generated_cache::workspace_lock(root, dir)?;
     // The gate runs the suite in both profiles; each build follows the profile of this test binary.
     let profile: Vec<&str> = if cfg!(debug_assertions) {
         vec![]
@@ -601,7 +607,7 @@ fn execute_suite(
         .env("CARGO_TARGET_DIR", concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/source-tests"))
         .env("CARGO_INCREMENTAL", "0")
         .args(profile)
-        .current_dir(&dir)
+        .current_dir(dir)
         .output()?;
     assert!(
         output.status.success(),
@@ -611,7 +617,20 @@ fn execute_suite(
         String::from_utf8_lossy(&output.stderr)
     );
 
-    fs::remove_dir_all(dir)?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let reported = stdout
+        .lines()
+        .filter_map(|line| line.strip_suffix(" ... ok [executed]"))
+        .collect::<Vec<_>>();
+    let expected = suite
+        .tests
+        .iter()
+        .map(|test| test.name.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        reported, expected,
+        "every prepared test must execute once in source order"
+    );
     Ok(())
 }
 
@@ -640,7 +659,7 @@ fn manifest(
             .replace('"', "\\\"");
         writeln!(manifest, "{name}={{path=\"{path}\"}}")?;
     }
-    fs::write(dir.join("Cargo.toml"), unique_package(&manifest, dir))?;
+    generated_cache::write(dir.join("Cargo.toml"), unique_package(&manifest, dir))?;
     Ok(())
 }
 
@@ -689,7 +708,7 @@ static KEY_CALLS:std::sync::atomic::AtomicUsize=std::sync::atomic::AtomicUsize::
 static KEY_STARTS:std::sync::atomic::AtomicUsize=std::sync::atomic::AtomicUsize::new(0);
 static CONFIGURATION_CALLS:std::sync::atomic::AtomicUsize=std::sync::atomic::AtomicUsize::new(0);
 #[global_allocator] static ALLOCATOR:hgl_alloc_count::CountingAllocator=hgl_alloc_count::CountingAllocator;
-fn verify_pool(store:&mut hgl_store::Store,built:&hgl_describe::BuiltGraph,graph:&hgl_describe::GraphDescription) {
+fn verify_pool(store:&mut hgl_store::Store,built:&hgl_describe::BuiltGraph,graph:&hgl_describe::GraphDescription,registry:&hgl_describe::Registry) {
  for (name,expected) in [("::bounded_members#",15),("::nested_bounded_members#",18)] {
  if let Some(index)=graph.nodes.iter().position(|node|node.implementation.contains(name)) {let output=built.outputs[index].expect("bounded mutation output");assert_eq!(store.bindings().output(output).members.prepared.len(),expected,"constant induction bound");}
  }
@@ -707,16 +726,27 @@ fn verify_pool(store:&mut hgl_store::Store,built:&hgl_describe::BuiltGraph,graph
  while let Some((_,child))=store.bindings().output(node).members.prepared.first() {depth+=1;node=*child;}
  let descendants=built.outputs.iter().flatten().map(|id|count(store,*id)).sum::<usize>();
  assert_eq!(descendants,2*(1+n*depth),"finite topology must preserve per-parent reachability");
- let (scalars,lists)=store.global_state().values().slot_counts();let rows=6*n+1;
+ let entries=graph.nodes.iter().flat_map(|node|&registry.node_type(&node.implementation).expect("registered node").global_entries).collect::<Vec<_>>();
+ let recordings=entries.iter().filter(|(key,_)|key.starts_with("eval.recording.")).collect::<Vec<_>>();
+ let owners=entries.iter().filter(|(key,_)|key.starts_with("\0constructor:")).collect::<Vec<_>>();
+ assert_eq!(recordings.len(),1);assert_eq!(owners.len(),1,"one independent recorder append staging owner");
+ let hgl_types::OrdinaryType::List(row,_) = &recordings[0].1 else {panic!("recording list");};
+ assert_eq!(&owners[0].1,row.as_ref(),"staging must retain exactly one complete recording row");
+ fn empty_lists(ty:&hgl_types::OrdinaryType)->usize {match ty {hgl_types::OrdinaryType::Scalar(_)=>0,hgl_types::OrdinaryType::List(..)=>1,hgl_types::OrdinaryType::Struct(_,fields)=>fields.iter().map(|(_,ty)|empty_lists(ty)).sum(),_=>panic!("scaling row schema")}}
+ let staging_roots=empty_lists(row);assert_eq!(staging_roots,3,"upsert keys, upsert values and removed keys");
+ // Replay and input horizons reserve 6*N+1 recording rows; append staging reserves one independent row.
+ let (scalars,lists)=store.global_state().values().slot_counts();let rows=6*n+1+owners.len();
  assert!(scalars<=rows*(depth+3)+1,"record scalar pool grew beyond finite recipe bounds: {scalars}");
- assert!(lists<=rows*3*depth+2,"record list pool grew beyond finite recipe bounds: {lists}");
+ // Cold replacement holds the empty staging roots until its prepared descendants exist, reusing the retired recording root.
+ assert!(lists<=rows*3*depth+1+staging_roots,"record list pool grew beyond finite recipe bounds: {lists}");
  println!("prepared scaling N={n} depth={depth}: temporal endpoints={descendants}, record scalar slots={scalars}, record list slots={lists}");
 }
 fn measured_simulation(graph:&mut hgl_kernel::Graph, store:&mut hgl_store::Store, config:&hgl_kernel::RunConfig)->Result<u64,hgl_kernel::EngineError> {
  graph.start(store,config.start_time).map_err(hgl_kernel::EngineError::Node)?;
+ let reserved=store.global_state().values().slot_counts();
  let mut cycles=0; let mut total=0; let mut now=config.start_time;
  while !graph.stop_requested() {let next=graph.next_scheduled_time();if next>=config.end_time {break;}now=next;
- let (result,count)=hgl_alloc_count::count_in(||graph.evaluate(store,now));result.map_err(hgl_kernel::EngineError::Node)?;total+=count;cycles+=1;}
+ let (result,count)=hgl_alloc_count::count_in(||graph.evaluate(store,now));result.map_err(hgl_kernel::EngineError::Node)?;assert_eq!(store.global_state().values().slot_counts(),reserved,"prepared global pools grew during evaluation");total+=count;cycles+=1;}
  graph.stop(store,now).map_err(hgl_kernel::EngineError::Node)?;
  assert_eq!(total,0,"complete generated publication and recording allocated across {cycles} cycles");Ok(cycles)
 }

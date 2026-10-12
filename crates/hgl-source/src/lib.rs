@@ -3,8 +3,8 @@ pub use diagnostics::Issue;
 pub use lex::{Token, lex};
 pub use literals::{Literal, ParsedLiteral, TemporalLiteral};
 pub use type_shape::{
-    EnumType, FamilyType, Nominal, NominalDefinition, RecursiveType, Ty, Window, WindowKind,
-    application, delta_argument,
+    EnumType, FamilyType, Nominal, NominalDefinition, RecursiveType, Ty, TypeSpelling, Window,
+    WindowKind, application, delta_argument,
 };
 #[derive(Debug, Clone, PartialEq, Eq)]
 /// The declaration role before overload selection.
@@ -855,11 +855,11 @@ fn type_admitted(name: &str, ordinary: bool) -> bool {
 
 pub use hgl_value_model::diagnostics;
 pub mod lex;
-pub use hgl_value_model::literals;
+pub mod literals;
 pub use hgl_value_model::nominal_batch;
 pub use hgl_value_model::time_context;
-pub use hgl_value_model::type_shape;
-pub use hgl_value_model::type_syntax;
+pub mod type_shape;
+pub mod type_syntax;
 
 pub mod native_descriptor;
 pub use hgl_value_model::ordinary_shape;

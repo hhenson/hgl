@@ -4,22 +4,8 @@ use hgl_source::{Expr, Issue};
 use std::collections::BTreeSet;
 /// Whether an expression depends on a known temporal binding.
 pub fn depends(expr: &Expr, temporal: &BTreeSet<String>) -> bool {
-    match expr.syntax() {
-        Expr::Name(name) => temporal.contains(name),
-        Expr::Unary(_, v) | Expr::Property(v, _) | Expr::Lambda(_, _, v) => depends(v, temporal),
-        Expr::Index(a, b) | Expr::Binary(_, a, b) => depends(a, temporal) || depends(b, temporal),
-        Expr::Call(_, args) | Expr::Applied(_, args) => {
-            args.iter().any(|(_, v)| depends(v, temporal))
-        }
-        Expr::Sequence(values) | Expr::Tuple(values) => {
-            values.iter().flatten().any(|v| depends(v, temporal))
-        }
-        Expr::Sparse(values) => values
-            .iter()
-            .any(|(a, b)| depends(a, temporal) || depends(b, temporal)),
-        Expr::Null | Expr::Literal(_) | Expr::TemporalLiteral(_) => false,
-        Expr::Located(..) => unreachable!("syntax strips origins"),
-    }
+    matches!(expr.syntax(), Expr::Name(name) if temporal.contains(name))
+        || expr.children().iter().any(|child| depends(child, temporal))
 }
 /// Reject a tuple's temporal children in an explicitly constant context.
 pub fn constant(expr: &Expr, temporal: &BTreeSet<String>, tuple: bool) -> Result<(), Issue> {
@@ -65,10 +51,7 @@ pub fn call(
         let parameters: Vec<_> = signatures
             .iter()
             .map(|signature| {
-                label.as_ref().map_or_else(
-                    || signature.parameters.get(position),
-                    |label| signature.parameters.iter().find(|p| &p.name == label),
-                )
+                crate::eval_data::parameter(signature, position, label.as_deref()).ok()
             })
             .collect();
         if parameters.iter().all(|p| p.is_some_and(|p| p.constant)) {

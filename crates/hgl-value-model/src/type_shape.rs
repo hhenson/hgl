@@ -1,5 +1,4 @@
 //! Canonical checked source shapes and invariant nominal applications.
-pub use crate::type_syntax::{application, delta_argument};
 pub use hgl_types::window_types::{Window, WindowKind};
 use std::fmt;
 /// Fixed declared membership for an abstract atomic family.
@@ -34,7 +33,7 @@ impl Nominal {
         format!(
             "{}<{}>",
             self.origin,
-            crate::type_syntax::type_names(self.arguments.iter().map(Ty::source_name))
+            type_names(self.arguments.iter().map(Ty::source_name))
         )
     }
 }
@@ -164,68 +163,6 @@ impl Ty {
             Self::Atomic(_) => "atomic",
         }
     }
-    /// Parse a concrete admitted type spelling.
-    pub fn parse(name: &str) -> Option<Self> {
-        if let Some(origin) = delta_argument(name) {
-            return Self::parse(origin)?.delta().ok();
-        }
-        if let Some((base, arguments)) = application(name) {
-            if base == "rolling" && (2..=3).contains(&arguments.len()) {
-                return Some(Self::Rolling(
-                    Box::new(Self::parse(arguments[0])?),
-                    Window::parse(arguments[1], arguments.get(2).copied())?,
-                ));
-            }
-            if base == "atomic" && arguments.len() == 1 {
-                return Some(Self::parse(arguments[0])?.atomic());
-            }
-            if base == "ref" && arguments.len() == 1 {
-                return Some(Self::Ref(Box::new(Self::parse(arguments[0])?)));
-            }
-            if base == "set" && arguments.len() == 1 {
-                return Some(Self::Set(Box::new(Self::parse(arguments[0])?)));
-            }
-            if base == "tuple" {
-                return Some(Self::Tuple(
-                    arguments
-                        .into_iter()
-                        .map(Self::parse)
-                        .collect::<Option<_>>()?,
-                ));
-            }
-            if base == "map" && arguments.len() == 2 {
-                return Some(Self::Map(
-                    Box::new(Self::parse(arguments[0])?),
-                    Box::new(Self::parse(arguments[1])?),
-                ));
-            }
-        }
-        if let Some((element, size)) = Self::list_parts(name) {
-            return Some(Self::List(Box::new(Self::parse(element)?), size));
-        }
-        match name {
-            "i64" => Some(Self::I64),
-            "f64" => Some(Self::F64),
-            "bool" => Some(Self::Bool),
-            "str" => Some(Self::Str),
-            "bytes" => Some(Self::Bytes),
-            "any" => Some(Self::Any),
-            "duration" => Some(Self::Duration),
-            "date" => Some(Self::Date),
-            "time" => Some(Self::Time),
-            "datetime" => Some(Self::DateTime),
-            "civil_datetime" => Some(Self::CivilDateTime),
-            "timezone" => Some(Self::TimeZone),
-            "zoned_time" => Some(Self::ZonedTime),
-            "zoned_datetime" => Some(Self::ZonedDateTime),
-            "void" => Some(Self::Void),
-            _ => None,
-        }
-    }
-    /// Split an ordinary list spelling, respecting nested type arguments.
-    pub fn list_parts(name: &str) -> Option<(&str, Option<usize>)> {
-        crate::type_syntax::list_parts(name)
-    }
     /// Canonical checked HGL source form, including complete nominal arguments.
     pub fn source_name(&self) -> String {
         match self {
@@ -239,7 +176,7 @@ impl Ty {
             Self::Family(family) => family.identity().source_name(),
             Self::Tuple(children) => format!(
                 "tuple<{}>",
-                crate::type_syntax::type_names(children.iter().map(Ty::source_name))
+                type_names(children.iter().map(Ty::source_name))
             ),
             Self::Map(key, child) => format!("map<{},{}>", key.source_name(), child.source_name()),
             Self::List(element, size) => match size {
@@ -339,4 +276,8 @@ impl Ty {
     pub fn scalar(&self) -> bool {
         matches!(self, Self::Enum(_) | Self::Native(_) | Self::Any) || self.scalar_kind().is_some()
     }
+}
+
+fn type_names(names: impl Iterator<Item = String>) -> String {
+    names.collect::<Vec<_>>().join(",")
 }

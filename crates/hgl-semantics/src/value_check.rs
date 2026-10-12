@@ -80,83 +80,49 @@ fn block(body: &[Statement], live: &mut BTreeMap<usize, bool>) -> Result<(), Str
     Ok(())
 }
 fn expression(value: &Value, live: &BTreeMap<usize, bool>) -> Result<(), String> {
-    match &value.kind {
-        Kind::GlobalGet(entry) => {
-            conflict(*entry, false, live)?;
-            if matches!(
-                value.ty,
-                Ty::Tuple(_)
-                    | Ty::Recursive(_)
-                    | Ty::Family(_)
-                    | Ty::Struct(..)
-                    | Ty::List(..)
-                    | Ty::Delta(_)
-            ) {
-                return Err("aggregate get requires a typed let or var binding".into());
-            }
+    let mut result = Ok(());
+    crate::ir_visit::value(value, &mut |value| {
+        if result.is_err() {
+            return false;
         }
-        Kind::GlobalSet(entry, value) => {
-            if value.snapshot {
-                helper_argument(value)?;
-            }
-            expression(value, live)?;
-            conflict(*entry, true, live)?;
-        }
-        Kind::Delta(parts) => {
-            for value in parts.iter().flat_map(crate::ir::DeltaEntry::operands) {
-                expression(value, live)?;
-            }
-        }
-        Kind::List(values) => {
-            for value in values {
-                expression(value, live)?;
-            }
-        }
-        Kind::ValueCall(args, body) => {
-            crate::tuple_admission::value_arguments(args)?;
-            call_arguments(args, live)?;
-            block(body, &mut live.clone())?;
-        }
-        Kind::Index(parent, index) | Kind::Push(parent, index) | Kind::Binary(_, parent, index) => {
-            expression(parent, live)?;
-            expression(index, live)?;
-        }
-        Kind::Construct(fields) => {
-            for (_, value) in fields {
-                expression(value, live)?;
-            }
-        }
-        Kind::Native(_, args) | Kind::Query(_, args) => {
-            call_arguments(args, live)?;
-        }
-        Kind::Length(value)
-        | Kind::Field(value, _)
-        | Kind::IsPresent(value)
-        | Kind::Present(value)
-        | Kind::Unary(_, value) => expression(value, live)?,
-        Kind::Opaque(_)
-        | Kind::TemporalLiteral(_)
-        | Kind::Captured(..)
-        | Kind::Prepared(_)
-        | Kind::WiringFailure(_)
-        | Kind::BorrowedLocal(..)
-        | Kind::Literal(_)
-        | Kind::Wire(_)
-        | Kind::IterationInput(_)
-        | Kind::Input(..)
-        | Kind::Configuration(_)
-        | Kind::Cache(_)
-        | Kind::ObservedLocal(_)
-        | Kind::Local(_)
-        | Kind::MutableLocal(_)
-        | Kind::Output
-        | Kind::Capability
-        | Kind::Void => {}
-        Kind::GeneratorLocal(_) => {
-            return Err("backend-only generator local in frontend checking".into());
-        }
-    }
-    Ok(())
+        result = if let Kind::GlobalGet(entry) = value.kind {
+            conflict(entry, false, live).and_then(|()| {
+                if matches!(
+                    value.ty,
+                    Ty::Tuple(_)
+                        | Ty::Recursive(_)
+                        | Ty::Family(_)
+                        | Ty::Struct(..)
+                        | Ty::List(..)
+                        | Ty::Delta(_)
+                ) {
+                    Err("aggregate get requires a typed let or var binding".into())
+                } else {
+                    Ok(())
+                }
+            })
+        } else if let Kind::GlobalSet(entry, child) = &value.kind {
+            (if child.snapshot {
+                helper_argument(child)
+            } else {
+                Ok(())
+            })
+            .and_then(|()| expression(child, live))
+            .and_then(|()| conflict(*entry, true, live))
+        } else if let Kind::ValueCall(args, body) = &value.kind {
+            crate::tuple_admission::value_arguments(args)
+                .and_then(|()| call_arguments(args, live))
+                .and_then(|()| block(body, &mut live.clone()))
+        } else if let Kind::Native(_, args) | Kind::Query(_, args) = &value.kind {
+            call_arguments(args, live)
+        } else if matches!(value.kind, Kind::GeneratorLocal(_)) {
+            Err("backend-only generator local in frontend checking".into())
+        } else {
+            return !matches!(value.kind, Kind::Captured(..));
+        };
+        false
+    });
+    result
 }
 
 /// Check aggregate elements while preserving source-origin callback failures.

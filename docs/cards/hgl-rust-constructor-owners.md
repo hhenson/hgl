@@ -26,3 +26,5 @@ Canonical local-owner queries carry both value and bound origin; private
 expression stages carry one value. Ordinary growing locals read the completed
 stage into their existing ordinary representation rather than inheriting a
 canonical slot identity. Existing list-growth source controls cover this boundary.
+
+Public destination emits the selected typed private slot handle without executing its initializer. Public source performs ordered staging and returns that typed handle. The executable generator assembler uses those emitter boundaries; resume handles alone never reexecute a constructor.

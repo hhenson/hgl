@@ -95,4 +95,8 @@ pub fn helper_finish_i64(_: i64) -> hgl_types::NodeResult {
         Ok(())
     }
 
+    pub fn owner_check_bool(value: bool) -> hgl_types::NodeResult {
+        assert!(value, "retained stop family identity");
+        Ok(())
+    }
 }

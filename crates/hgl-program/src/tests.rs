@@ -24,7 +24,7 @@ fn suite(sources: &[(String, String)], module_only: bool) -> Result<Suite, Strin
     hgl_semantics::enums::validate(&library)?;
     let mut suite = Suite::default();
     let mut names = std::collections::BTreeSet::new();
-    for decl in &library.declarations {
+    for decl in library.declarations.iter() {
         if decl.role != index::Role::Test || (module_only && decl.module != library.root) {
             continue;
         }

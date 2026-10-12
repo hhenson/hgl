@@ -11,3 +11,5 @@ parse_domain(cursor,generics) validates the shared finite constraint grammar.
 Single inheritance retains its source application. Multiple parents are explicitly
 unsupported; abstract declarations remain nonconstructible in semantic checking.
 Introducing null defaults preserve optionality independently of zero/empty values.
+
+`check_domain` applies the declared finite type domain to inferred bindings, shared by ordinary and recursive struct specialization and callable binding. Missing bindings and mismatches retain the same declaration-domain diagnostic.

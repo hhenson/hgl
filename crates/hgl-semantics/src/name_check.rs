@@ -1,6 +1,6 @@
 //! Callable binding before deferred type specialization, shared with overload selection.
 use crate::library::{Decl, Library, Role};
-use hgl_source::{Expr, Issue, Ty};
+use hgl_source::{Expr, Issue, Ty, TypeSpelling};
 use std::collections::{BTreeMap, BTreeSet};
 /// Lexical facts that do not require concrete generic or configuration values.
 #[derive(Debug, Clone, Default)]
@@ -69,81 +69,57 @@ pub fn expression(
     expr: &Expr,
     scope: &Scope,
 ) -> Result<(), Issue> {
-    match expr.syntax() {
-        Expr::Located(..) => unreachable!("syntax strips source origins"),
-        Expr::Call(name, args) | Expr::Applied(name, args) => {
-            crate::tuple_phase::call(library, module, test_scope, name, args, scope)?;
-            let base = hgl_source::application(name).map_or(name.as_str(), |(base, _)| base);
-            let receiver = args.first().and_then(|(_, value)| {
-                if let Expr::Name(name) = value.syntax()
-                    && scope.services.contains(name)
-                {
-                    Some(name.as_str())
-                } else {
-                    None
-                }
-            });
-            let (owner, item) = crate::struct_names::identity(library, module, base);
-            if matches!(expr.syntax(), Expr::Applied(..)) {
-                if library
-                    .declarations
-                    .iter()
-                    .any(|d| visible(library, d, &owner, &item, test_scope))
-                {
-                    return Err("explicit generic arguments require a struct constructor; generic function calls are not admitted".into());
-                }
-                type_name(library, module, name, scope, test_scope)?;
-            }
-            if !scope.parameters.contains(base)
-                && !scope.requirements.contains(base)
-                && !intrinsic(base, receiver, &owner, &item)
-                && Ty::parse(base).is_none()
-                && !matches!(
-                    base,
-                    "atomic" | "ref" | "list" | "set" | "map" | "tuple" | "delta"
-                )
-                && crate::struct_names::declaration(library, module, base)?.is_none()
-                && !library
-                    .declarations
-                    .iter()
-                    .any(|d| visible(library, d, &owner, &item, test_scope))
+    if let Expr::Call(name, args) | Expr::Applied(name, args) = expr.syntax() {
+        crate::tuple_phase::call(library, module, test_scope, name, args, scope)?;
+        let base = hgl_source::application(name).map_or(name.as_str(), |(base, _)| base);
+        let receiver = args.first().and_then(|(_, value)| {
+            if let Expr::Name(name) = value.syntax()
+                && scope.services.contains(name)
             {
-                return Err(format!("{owner}::{item}: expected one matching declaration, found 0: unknown callable {name}").into());
+                Some(name.as_str())
+            } else {
+                None
             }
-            for (_, argument) in args {
-                expression(library, module, test_scope, argument, scope)?;
-            }
-        }
-        Expr::Property(value, _) | Expr::Unary(_, value) => {
-            expression(library, module, test_scope, value, scope)?;
-        }
-        Expr::Index(a, b) | Expr::Binary(_, a, b) => {
-            expression(library, module, test_scope, a, scope)?;
-            expression(library, module, test_scope, b, scope)?;
-        }
-        Expr::Sequence(values) | Expr::Tuple(values) => {
-            for value in values.iter().flatten() {
-                expression(library, module, test_scope, value, scope)?;
-            }
-        }
-        Expr::Sparse(values) => {
-            for (key, value) in values {
-                expression(library, module, test_scope, key, scope)?;
-                expression(library, module, test_scope, value, scope)?;
-            }
-        }
-        Expr::Name(name) => {
-            if let Some((owner, _)) = name.split_once("::")
-                && !scope.parameters.contains(owner)
-                && crate::enums::member(library, module, name)?.is_none()
+        });
+        let (owner, item) = crate::struct_names::identity(library, module, base);
+        if matches!(expr.syntax(), Expr::Applied(..)) {
+            if library
+                .declarations
+                .iter()
+                .any(|d| visible(library, d, &owner, &item, test_scope))
             {
-                return Err(format!("unknown value {name}").into());
+                return Err("explicit generic arguments require a struct constructor; generic function calls are not admitted".into());
             }
+            type_name(library, module, name, scope, test_scope)?;
         }
-        Expr::Lambda(parameters, _, body) => {
-            expression(library, module, test_scope, body, &scope.lambda(parameters))?;
+        if !scope.parameters.contains(base)
+            && !scope.requirements.contains(base)
+            && !intrinsic(base, receiver, &owner, &item)
+            && Ty::parse(base).is_none()
+            && !matches!(
+                base,
+                "atomic" | "ref" | "list" | "set" | "map" | "tuple" | "delta"
+            )
+            && crate::struct_names::declaration(library, module, base)?.is_none()
+            && !library
+                .declarations
+                .iter()
+                .any(|d| visible(library, d, &owner, &item, test_scope))
+        {
+            return Err(format!("{owner}::{item}: expected one matching declaration, found 0: unknown callable {name}").into());
         }
-        Expr::Null | Expr::Literal(_) | Expr::TemporalLiteral(_) => {}
+    } else if let Expr::Name(name) = expr.syntax() {
+        if let Some((owner, _)) = name.split_once("::")
+            && !scope.parameters.contains(owner)
+            && crate::enums::member(library, module, name)?.is_none()
+        {
+            return Err(format!("unknown value {name}").into());
+        }
+    } else if let Expr::Lambda(parameters, _, body) = expr.syntax() {
+        return expression(library, module, test_scope, body, &scope.lambda(parameters));
+    }
+    for child in expr.children() {
+        expression(library, module, test_scope, child, scope)?;
     }
     Ok(())
 }

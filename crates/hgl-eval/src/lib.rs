@@ -4,7 +4,7 @@ pub mod collection_values;
 pub mod composite_keys;
 pub mod family_values;
 pub mod harness_ir;
-pub mod ir;
+pub use hgl_value_model::ir;
 pub mod ir_visit;
 pub mod publication_trace;
 pub mod scalar_keys;

@@ -2,7 +2,7 @@
 use crate::ir::{Kind, Value};
 use crate::library::{Decl, Library, RequiredStruct};
 use crate::value_types::{declaration, specialize, substitute, unify};
-use hgl_source::{Expr, Ty, application, delta_argument};
+use hgl_source::{Expr, Ty, TypeSpelling, application, delta_argument};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug)]

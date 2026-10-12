@@ -1,8 +1,8 @@
 # Card: hgl-rust-ir
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `ir` module of `hgl-semantics` (`crates/hgl-semantics/src/ir.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `ir` module of `hgl-value-model` (`crates/hgl-value-model/src/ir.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
-Checked compiler/backend data boundary. Uses only `hgl-source`; budget 180
+Checked compiler/backend data boundary. Lives in `crates/hgl-value-model/src/ir.rs`, using the model and `hgl-types`; budget 180
 source lines. No runtime dependencies or third-party crates.
 
 Surface: `Value { ty, kind }`, `Value::new`; `Kind`, `Statement`, `Node`,
@@ -111,11 +111,4 @@ Plan::ordinary_types retains closed harness payload layouts hidden behind Any be
 
 Finite capacity planning keeps recording rows at the existing cycles-plus-start bound; ordinary global lists preserve initial rows before reserved appends.
 
-Native.provider optionally retains the immutable Image projection of the one
-validated Library Descriptor. Kind::Native owns its exact checked binding and
-argument expressions, preserving selected symbols/types through temporary cold
-checking scopes. Native::invocation assembles that checked call with its frontend
-result type; legacy logger result authority stays unchanged. Image paths and
-signatures remain data, never executable checker callbacks.
-
-Value.cold_call records setup/cold provenance on each checked invocation. It is independent of the canonical interned Native method and is serialized by checked_data. Kind::Opaque contains independently owned provider data only after execution through an explicit host context; source checking cannot produce it.
+Checked IR also retains opaque native values, exact selected native bindings, cold-call phase flags and standalone wiring recipes. All these forms reside in hgl-value-model::ir and are reexported through hgl-eval and semantics.

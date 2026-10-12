@@ -1,6 +1,6 @@
 # hgl-publication-trace
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `publication_trace` module of `hgl-semantics` (`crates/hgl-semantics/src/publication_trace.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `publication_trace` module of `hgl-eval` (`crates/hgl-eval/src/publication_trace.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
 Cold validation of a closed publication sequence before graph start.
 

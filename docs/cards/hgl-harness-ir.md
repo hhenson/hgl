@@ -1,6 +1,6 @@
 # Card: hgl-harness-ir
 
-Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `harness_ir` module of `hgl-semantics` (`crates/hgl-semantics/src/harness_ir.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
+Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md) this card describes the `harness_ir` module of `hgl-eval` (`crates/hgl-eval/src/harness_ir.rs`); `cargo xtask ci` reports its size and enforces its "may use" list.
 
 Checked ordered test preparation; uses hgl-rust-ir and hgl-source. Budget 200
 source lines. Test { name: String, steps: Vec<Step> } preserves lexical order.
@@ -33,7 +33,7 @@ yes,no) contains lexical step blocks. Neither form changes graph composition.
 
 Step::Raises(code, body) owns a lexical assertion block. Failure distinguishes Execution(NodeError) from Other(String); matches excludes cleanup-only and cleanup-failed execution. Uses hgl-node-error.
 
-Suite { tests, plans } owns the checked test inventory and graph plans. select accepts short/qualified names, rejects each unknown name, and filters tests without renumbering graph plan indices.
+Suite { tests, plans } owns the checked test inventory and graph plans. select accepts short/qualified names, rejects each unknown name, and retains their referenced graph plans, and renumbers all nested evaluation references. An empty selection retains the complete suite.
 
 Suite is Default. require_tests preserves the ordinary empty-suite error after mixed-run orchestration.
 

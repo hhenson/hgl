@@ -67,3 +67,6 @@ pub mod wiring_values;
 
 /// Node-wide identities for checked ordinary helper locals.
 pub mod call_locals;
+
+/// Cold reservation of lexical complete observation destinations.
+pub mod snapshot_locals;

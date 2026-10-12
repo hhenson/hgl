@@ -132,7 +132,8 @@ impl Suite {
         }
     }
 
-    /// Retain requested short or qualified names, rejecting every unknown selector.
+    /// Retain requested tests and their graph plans, remapping nested evaluation indices.
+    /// Reject every unknown short or qualified selector before modifying the suite.
     pub fn select(&mut self, names: &[&str]) -> Result<(), String> {
         let matches = |test: &Test, name: &str| {
             test.name == name || test.name.rsplit("::").next() == Some(name)
@@ -145,6 +146,27 @@ impl Suite {
         if !names.is_empty() {
             self.tests
                 .retain(|test| names.iter().any(|name| matches(test, name)));
+            let mut retained = vec![false; self.plans.len()];
+            for test in &mut self.tests {
+                cases(&mut test.steps, &mut |case| retained[*case] = true);
+            }
+            let mut indices = vec![0; self.plans.len()];
+            let mut next = 0;
+            for (old, keep) in retained.iter().enumerate() {
+                if *keep {
+                    indices[old] = next;
+                    next += 1;
+                }
+            }
+            let mut old = 0;
+            self.plans.retain(|_| {
+                let keep = retained[old];
+                old += 1;
+                keep
+            });
+            for test in &mut self.tests {
+                cases(&mut test.steps, &mut |case| *case = indices[*case]);
+            }
         }
         Ok(())
     }
@@ -156,6 +178,22 @@ impl From<crate::value_eval::EvalError> for Failure {
             Self::Execution(hgl_types::NodeError::coded(message, code))
         } else {
             Self::Other(error.to_string())
+        }
+    }
+}
+
+fn cases(steps: &mut [Step], visit: &mut impl FnMut(&mut usize)) {
+    for step in steps {
+        match step {
+            Step::Eval(evaluation) | Step::BindEval(_, _, evaluation) => {
+                visit(&mut evaluation.case);
+            }
+            Step::If(_, yes, no) => {
+                cases(yes, visit);
+                cases(no, visit);
+            }
+            Step::Raises(_, body) => cases(body, visit),
+            Step::Ordinary(_) | Step::Assert(_) => {}
         }
     }
 }
