@@ -340,3 +340,118 @@ fn hgl_names_and_canonical_identities_do_not_use_rust_keyword_rules() -> Result<
     }
     Ok(())
 }
+
+#[test]
+fn helper_symbols_require_identical_optional_bound_callbacks() -> Result<(), String> {
+    let helper = HELPER.replace("ownership", "bound \"width\" ownership");
+    let alias = helper.replace("value token", "value alias");
+    let declarations = "native type Token\nnative const fn token(text:str)->Token\nnative const fn alias(text:str)->Token";
+    library::load(&sources(declarations, &format!("{SCALAR}{helper}{alias}")))?;
+    for replacement in ["bound \"other_width\" ", ""] {
+        let conflicting = alias.replace("bound \"width\" ", replacement);
+        let error = library::load(&sources(
+            declarations,
+            &format!("{SCALAR}{helper}{conflicting}"),
+        ))
+        .err()
+        .ok_or("conflicting symbol bound admitted")?;
+        assert!(
+            error.contains("conflicting native helper symbol bounds"),
+            "{error}"
+        );
+    }
+    let unbounded = helper.replace("bound \"width\" ", "");
+    let alias = unbounded.replace("value token", "value alias");
+    library::load(&sources(
+        declarations,
+        &format!("{SCALAR}{unbounded}{alias}"),
+    ))?;
+    let mut modules = sources(
+        "native type Token\nnative const fn token(text:str)->Token",
+        &format!("{SCALAR}{helper}"),
+    );
+    modules[1].1 = modules[1].1.replace(
+        "fingerprint \"contract-v1\"",
+        "fingerprint \"contract-v1\" image \"unloaded.rs\"",
+    );
+    modules.push((
+        "alias.hgl".into(),
+        "module alias\nnative type Token\nnative const fn alias(text:str)->Token".into(),
+    ));
+    modules.push((
+        "alias.hgl-native".into(),
+        modules[1]
+            .1
+            .replace("module provider", "module alias")
+            .replace("value token", "value alias"),
+    ));
+    library::load(&modules)?;
+    modules[3].1 = modules[3]
+        .1
+        .replace("bound \"width\"", "bound \"other_width\"");
+    let error = library::load(&modules)
+        .err()
+        .ok_or("cross-module symbol bound conflict admitted")?;
+    assert!(
+        error.contains("conflicting native helper symbol bounds"),
+        "{error}"
+    );
+    Ok(())
+}
+
+#[test]
+fn selected_markers_cannot_merge_distinct_canonical_identities() -> Result<(), String> {
+    let scalar = SCALAR.trim_end().to_owned() + " marker \"Token\"\n";
+    let other = scalar
+        .replace("scalar Token", "scalar Other")
+        .replace("existing.Token", "existing.Other");
+    let mut input = sources(
+        "native type Token\nnative type Other",
+        &format!("{scalar}{other}"),
+    );
+    input[1].1 = input[1].1.replace(
+        "fingerprint \"contract-v1\"",
+        "fingerprint \"contract-v1\" image \"unloaded.rs\"",
+    );
+    let error = library::load(&input)
+        .err()
+        .ok_or("one selected marker admitted distinct identities")?;
+    assert!(
+        error.contains("Rust target marker maps to distinct canonical native scalars"),
+        "{error}"
+    );
+    let mut distinct = input.clone();
+    distinct[1].1 = distinct[1].1.replace(
+        &other,
+        &other.replace("marker \"Token\"", "marker \"Other\""),
+    );
+    library::load(&distinct)?;
+    input[1].1 = input[1].1.replace("existing.Other", "existing.Token");
+    library::load(&input)?;
+    let mut modules = sources("native type Token", &scalar);
+    modules[1].1 = modules[1].1.replace(
+        "fingerprint \"contract-v1\"",
+        "fingerprint \"contract-v1\" image \"unloaded.rs\"",
+    );
+    modules.push(("other.hgl".into(), "module other\nnative type Other".into()));
+    modules.push((
+        "other.hgl-native".into(),
+        modules[1]
+            .1
+            .replace("module provider", "module other")
+            .replace("scalar Token", "scalar Other")
+            .replace("existing.Token", "existing.Other"),
+    ));
+    let error = library::load(&modules)
+        .err()
+        .ok_or("cross-module marker conflict admitted")?;
+    assert!(
+        error.contains("Rust target marker maps to distinct canonical native scalars"),
+        "{error}"
+    );
+    modules[3].1 = modules[3]
+        .1
+        .replace("provider \"owning-test\"", "provider \"other-test\"");
+    library::load(&modules)?;
+    Ok(())
+}

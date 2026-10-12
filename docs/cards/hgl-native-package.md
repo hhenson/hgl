@@ -11,6 +11,12 @@ Rust target path relative to the descriptor using path data without opening code
 validate_aliases requires one exact capability contract for each canonical identity.
 Semantic Library loading and checking retain one validated representation.
 
+Each selected provider/image/fingerprint/marker tuple belongs to one canonical
+identity; compatible aliases share it, while distinct identities require distinct
+target markers. Helper aliases selecting the same provider image and symbol must
+declare the same optional bound callback, including its absence. Validation
+rejects conflicting metadata before bindings can overwrite an interned mapping.
+
 `Descriptor.markers` retains the optional explicit target identifier of each
 scalar declaration. It is separate from portable canonical identity/capabilities;
 changing an import alias never changes the ordinary nominal identity. Missing
