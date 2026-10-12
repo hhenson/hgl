@@ -507,15 +507,14 @@ fn independently_emitted_native_key_domains_share_only_compatible_contracts()
     let mut incompatible = dependencies;
     for (name, text) in &mut incompatible {
         if name.ends_with(".hgl-native") {
-            *text = text
-                .replace(
+            *text = replace_native_image(
+                &text.replace(
                     "native-atomic-values-v1",
                     "native-atomic-values-incompatible",
-                )
-                .replace(
-                    &provider_file.to_string_lossy().to_string(),
-                    &incompatible_file.to_string_lossy(),
-                );
+                ),
+                &provider_file.to_string_lossy(),
+                &incompatible_file.to_string_lossy(),
+            );
         }
     }
     let incompatible = native_key_module("incompatible", "Token", "token", &incompatible)?;
@@ -532,7 +531,7 @@ fn main()->hgl_types::NodeResult{{
  alias::initialize()?;assert_eq!(alias::id(&keys,"first")?,0);assert_eq!(alias::ids(&keys),[0]);
  alias::prepare(&mut keys,"alias")?;assert_eq!(first::ids(&keys),[0,1]);assert_eq!(alias::ids(&keys),[0,1]);assert_eq!(second::ids(&keys),[0]);
  let (result,allocations)=hgl_alloc_count::count_in(||->hgl_types::NodeResult{{for _ in 0..100 {{assert_eq!(first::id(&keys,"first")?,0);assert_eq!(alias::id(&keys,"alias")?,1);assert_eq!(second::id(&keys,"second")?,0);assert_eq!(first::data(&keys,1)?,b"alias");}}Ok(())}});result?;assert_eq!(allocations,0);
- let copies=COPIES.load(std::sync::atomic::Ordering::Relaxed);let error=incompatible::initialize().unwrap_err();assert_eq!(COPIES.load(std::sync::atomic::Ordering::Relaxed),copies);assert!(error.message.contains("incompatible native key domain contract"));assert_eq!(first::ids(&keys),[0,1]);
+ let copies=COPIES.load(std::sync::atomic::Ordering::Relaxed);let error=incompatible::initialize().unwrap_err();assert_eq!(COPIES.load(std::sync::atomic::Ordering::Relaxed),copies);assert!(error.message.contains("incompatible native key domain contract"),"unexpected cold mapping rejection: {{error:?}}");assert_eq!(first::ids(&keys),[0,1]);
  let mut another=hgl_store::Keys::default();second::prepare(&mut another,"new-second")?;alias::prepare(&mut another,"new-first")?;assert_eq!(first::data(&another,0)?,b"new-first");assert_eq!(second::data(&another,0)?,b"new-second");
  Ok(())
 }}
@@ -576,4 +575,25 @@ fn native_key_module(
         pub fn data(keys:&hgl_store::Keys,id:i64)->hgl_types::NodeResult<&[u8]>{{Ok(M::key_view(keys,id)?.data())}}
         "#
     ))
+}
+
+fn replace_native_image(text: &str, from: &str, to: &str) -> String {
+    text.replace(&format!("{from:?}"), &format!("{to:?}"))
+}
+#[test]
+fn native_fixture_image_replacement_preserves_escaped_descriptor_paths() -> Result<(), String> {
+    for from in [
+        r"C:\Users\fixture\AppData\Local\Temp\provider.rs",
+        r#"C:\fixture with spaces\quoted"provider.rs"#,
+    ] {
+        let to = format!("{from}.incompatible.rs");
+        let original = format!("image {from:?}");
+        let changed = replace_native_image(&original, from, &to);
+        assert_eq!(changed, format!("image {to:?}"));
+        let tokens = hgl_source::lex::lex(changed.strip_prefix("image ").ok_or("missing image")?)?;
+        let decoded = hgl_source::native_descriptor::text(&mut hgl_source::Cursor::new(&tokens))
+            .map_err(|e| e.to_string())?;
+        assert_eq!(decoded, to);
+    }
+    Ok(())
 }
