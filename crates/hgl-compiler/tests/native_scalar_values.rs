@@ -1115,3 +1115,85 @@ test {
     }
     run_sources(&input)
 }
+
+#[test]
+fn temporal_cold_aggregate_carriers_validate_before_retaining_native_owners()
+-> Result<(), Box<dyn std::error::Error>> {
+    let body = r#"
+use hgraph.std::{cold_zone,cold_time,cold_datetime}
+fn consume(const value:tuple<any,timezone,zoned_time,zoned_datetime,time>) {inject global_state,alarm
+start {schedule(alarm,0us)}
+when {set(global_state,"retained",any(value))}}
+export fn main(){consume(value:(any(token("owner")),cold_zone(1),cold_time(1),cold_datetime(1),@09:30))}
+"#;
+    let image = std::env::temp_dir().join(format!(
+        "hgl-temporal-cold-provider-{}.rs",
+        std::process::id()
+    ));
+    fs::write(&image,fs::read_to_string(root()?.join("native/stdlib/atomic_values.rs"))?.replace("destination.write(data);","crate::COPIES.fetch_add(1,std::sync::atomic::Ordering::Relaxed);destination.write(data);"))?;
+    let mut input = sources(body)?;
+    for (name, text) in &mut input {
+        if name.ends_with(".hgl-native") {
+            *text = text.replace(
+                "\"atomic_values.rs\"",
+                &format!("{:?}", image.display().to_string()),
+            );
+        }
+    }
+    let mut provider = fs::read_to_string(&image)?;
+    provider.push_str(r#"
+pub fn cold_zone(_:i64)->hgl_types::ZoneId{hgl_types::ZoneId::from_validated_name("US/Eastern".into())}
+pub fn cold_time(_:i64)->hgl_types::ZonedTime{hgl_types::ZonedTime::from_validated_parts(hgl_types::Time(34_200_000_000),cold_zone(1))}
+pub fn cold_datetime(_:i64)->hgl_types::ZonedDateTime{hgl_types::ZonedDateTime::from_validated_parts(hgl_types::calendar::datetime("2026-07-01T16:00Z").unwrap(),cold_zone(1),-14_400)}
+"#);
+    fs::write(&image, provider)?;
+    for (name, text) in &mut input {
+        if name.ends_with("atomic_values_fixture.hgl") {
+            text.push_str("\nexport native const fn cold_zone(value:i64)->timezone\nexport native const fn cold_time(value:i64)->zoned_time\nexport native const fn cold_datetime(value:i64)->zoned_datetime\n");
+        }
+        if name.ends_with(".hgl-native") {
+            for (helper, result) in [
+                ("cold_zone", "timezone"),
+                ("cold_time", "zoned_time"),
+                ("cold_datetime", "zoned_datetime"),
+            ] {
+                writeln!(
+                    text,
+                    "value {helper}(value:i64)->{result} symbol {helper:?} ownership owned phases {{cold}} effects {{allocation}}"
+                )?;
+            }
+        }
+    }
+    let plan = hgl_program::compile(&input, "main")?;
+    let generated = format!(
+        r#"
+{}
+static COPIES:std::sync::atomic::AtomicUsize=std::sync::atomic::AtomicUsize::new(0);
+fn frame(bytes:&[u8])->Vec<u8>{{let mut out=(bytes.len() as u64).to_le_bytes().to_vec();out.extend(bytes);out}}
+fn main(){{
+ let mut registry=hgl_describe::Registry::new();register(&mut registry).unwrap();let graph=main_graph(&registry).unwrap();
+ let copies=COPIES.load(std::sync::atomic::Ordering::Relaxed);
+ let(node,scalar)=graph.nodes.iter().enumerate().find_map(|(node,n)|n.scalars.iter().position(|(key,_)|key.starts_with("\0cold:")).map(|scalar|(node,scalar))).unwrap();
+ let hgl_types::ScalarValue::Bytes(original)=&graph.nodes[node].scalars[scalar].1 else{{panic!("carrier")}};
+ let start=original.iter().position(|b|*b<32).unwrap();let count=u64::from_le_bytes(original[start..start+8].try_into().unwrap()) as usize;let payload=start+8+8*count;
+ let mut fields=Vec::new();let mut rest=&original[payload..];while !rest.is_empty(){{let width=u64::from_le_bytes(rest[..8].try_into().unwrap()) as usize;fields.push(rest[8..8+width].to_vec());rest=&rest[8+width..];}}
+ let mut bad=vec![(1,b"Missing/Zone".to_vec()),(1,b"us/eastern".to_vec()),(1,Vec::new())];
+ for time in [-1i64,86_400_000_000,i64::MAX]{{let mut zoned=time.to_le_bytes().to_vec();zoned.extend(b"US/Eastern");bad.push((2,zoned));bad.push((4,time.to_le_bytes().to_vec()));}}
+ let mut wrong_name=fields[2][..8].to_vec();wrong_name.extend(b"Missing/Zone");bad.push((2,wrong_name));
+ for offset in [0i64,-18_000,i64::MAX]{{let mut zoned=fields[3].clone();zoned[8..16].copy_from_slice(&offset.to_le_bytes());bad.push((3,zoned));}}
+ let mut outside=fields[3].clone();outside[..8].copy_from_slice(&i64::MAX.to_le_bytes());bad.push((3,outside));
+ let mut wrong_zone=fields[3][..16].to_vec();wrong_zone.extend(b"us/eastern");bad.push((3,wrong_zone));
+ assert_eq!(bad.len(),15);
+ for(index,value)in bad{{let mut changed=fields.clone();changed[index]=value;let mut carrier=original[..payload].to_vec();carrier.extend(changed.iter().flat_map(|v|frame(v)));let mut corrupt=graph.clone();corrupt.nodes[node].scalars[scalar].1=hgl_types::ScalarValue::Bytes(carrier);
+ let outcome=std::panic::catch_unwind(std::panic::AssertUnwindSafe(||{{let mut store=hgl_store::Store::new();store.global_state().provision();hgl_describe::instantiate_complete(&corrupt,&registry,&mut store)}}));
+ assert!(outcome.is_ok(),"malformed temporal carrier panicked");assert!(matches!(outcome.unwrap(),Err(hgl_describe::BuildError::InvalidNodeType{{..}})),"malformed temporal carrier admitted");assert_eq!(COPIES.load(std::sync::atomic::Ordering::Relaxed),copies,"temporal validation ran after native ownership effects");}}
+ for description in [&graph,&graph.clone()]{{let mut store=hgl_store::Store::new();store.global_state().provision();let mut built=hgl_describe::instantiate_complete(description,&registry,&mut store).unwrap();hgl_kernel::run_simulation(&mut built.graph,&mut store,&hgl_kernel::RunConfig{{start_time:hgl_types::EngineTime::MIN_START,end_time:hgl_types::EngineTime::from_micros(10)}}).unwrap();let key=store.global_state().bind::<hgl_store::Any>("retained").unwrap();let value=store.global_state().get(key).unwrap().capture::<hgl_semantics::ir::Value>().unwrap();let mut found=[false;4];hgl_semantics::ir_visit::value(&value,&mut|v|{{match &v.kind{{hgl_semantics::ir::Kind::Opaque(v)=>found[0]|=v.data()==b"owner",hgl_semantics::ir::Kind::Literal(hgl_source::Literal::TimeZone(v))=>found[1]|=v.as_str()=="US/Eastern",hgl_semantics::ir::Kind::Literal(hgl_source::Literal::ZonedTime(v))=>found[2]|=v.zone().as_str()=="US/Eastern"&&v.time().0==34_200_000_000,hgl_semantics::ir::Kind::Literal(hgl_source::Literal::ZonedDateTime(v))=>found[3]|=v.zone().as_str()=="US/Eastern"&&v.offset_seconds()==-14_400,_=>()}}true}});assert_eq!(found,[true;4]);}}
+ assert!(COPIES.load(std::sync::atomic::Ordering::Relaxed)>copies);
+}}
+"#,
+        hgl_program::emit_rust(&plan).replace("pub fn main(", "pub fn main_graph(")
+    );
+    let result = execute(&generated);
+    fs::remove_file(image)?;
+    result
+}

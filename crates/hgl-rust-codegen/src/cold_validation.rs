@@ -66,32 +66,40 @@ pub(crate) fn codec(ty: &Ty) -> String {
 }
 
 fn scalar(ty: &Ty) -> String {
-    let (width, text) = match ty.scalar_kind() {
-        Some(hgl_types::ScalarType::Bool) => {
-            return "if data.len()!=1 || data[0]>1 {return Err(cold_error())}".into();
+    let temporal = match ty.scalar_kind() {
+        Some(hgl_types::ScalarType::TimeZone) => {
+            Some((0, "hgl_source::TemporalLiteral::TimeZone(zone.into())"))
         }
-        Some(hgl_types::ScalarType::Text | hgl_types::ScalarType::TimeZone) => (0, true),
-        Some(hgl_types::ScalarType::Bytes) => return String::new(),
-        Some(hgl_types::ScalarType::ZonedTime) => (8, true),
-        Some(hgl_types::ScalarType::ZonedDateTime) => (16, true),
-        _ => (8, false),
+        Some(hgl_types::ScalarType::ZonedTime) => Some((
+            8,
+            "hgl_source::TemporalLiteral::ZonedTime{time_micros:cold_number(&data[..8])? as i64,zone:zone.into()}",
+        )),
+        Some(hgl_types::ScalarType::ZonedDateTime) => Some((
+            16,
+            "hgl_source::TemporalLiteral::ZonedDateTime{instant_micros:cold_number(&data[..8])? as i64,offset_seconds:i32::try_from(cold_number(&data[8..16])? as i64).map_err(|_|cold_error())?,zone:zone.into()}",
+        )),
+        _ => None,
     };
-    let offset = if *ty == Ty::ZonedDateTime {
-        "i32::try_from(cold_number(&data[8..16])? as i64).map_err(|_|cold_error())?;"
-    } else {
-        ""
-    };
-    if text {
-        format!(
-            "let text=data.get({width}..).ok_or_else(cold_error)?;std::str::from_utf8(text).map_err(|_|cold_error())?;{offset}"
-        )
-    } else {
-        format!("if data.len()!={width} {{return Err(cold_error())}}")
+    if let Some((width, recipe)) = temporal {
+        return format!(
+            "let zone=std::str::from_utf8(data.get({width}..).ok_or_else(cold_error)?).map_err(|_|cold_error())?;cold_temporal(&{recipe})?;"
+        );
+    }
+    match ty.scalar_kind() {
+        Some(hgl_types::ScalarType::Bool) => "if data.len()!=1 || data[0]>1 {return Err(cold_error())}".into(),
+        Some(hgl_types::ScalarType::Text) => "std::str::from_utf8(&data).map_err(|_|cold_error())?;".into(),
+        Some(hgl_types::ScalarType::Bytes) => String::new(),
+        Some(hgl_types::ScalarType::Time) => "if !(0..hgl_types::calendar::DAY).contains(&(cold_number(&data)? as i64)){return Err(cold_error())}".into(),
+        _ => "if data.len()!=8 {return Err(cold_error())}".into(),
     }
 }
 
 pub(crate) fn support() -> &'static str {
     r#"
+fn cold_temporal(recipe:&hgl_source::TemporalLiteral)->hgl_types::NodeResult{
+ let mut context=hgl_source::time_context::RunContext::from_bundled().map_err(hgl_types::NodeError::new)?;
+ context.materialize(recipe).map_err(hgl_types::NodeError::new)?;Ok(())
+}
 fn cold_error()->Box<hgl_types::NodeError>{hgl_types::NodeError::new("invalid cold payload encoding")}
 fn cold_number(bytes:&[u8])->hgl_types::NodeResult<u64>{Ok(u64::from_le_bytes(bytes.try_into().map_err(|_|cold_error())?))}
 fn cold_frame<'a>(rest:&mut hgl_types::any_values::AnyView<'a>)->hgl_types::NodeResult<hgl_types::any_values::AnyView<'a>>{

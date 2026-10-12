@@ -17,8 +17,8 @@ into checked data without repeating the provider copy.
 
 The private cold_validation emitter (initial allowance 160) may use any_values,
 layouts, collections and native_values. It generates complete typed validators
-for scalar widths and UTF-8, optional presence, fields, sequences, families,
+for scalar widths and UTF-8, exact timezone provider membership, time-of-day ranges and zoned datetime offsets at their instant, optional presence, fields, sequences, families,
 delta storage and nested descriptor contexts. Native checks use the selected
-provider preflight; opaque formats remain provider-owned. All framing and
+provider preflight; opaque formats remain provider-owned. Temporal cold recipes use the same bundled RunContext selected for generated target preparation, preserving alias spelling. All framing and
 preflight validation finishes before cold decoding copies or captures owners.
 Trusted prepared codecs retain their existing operation and allocation costs.
