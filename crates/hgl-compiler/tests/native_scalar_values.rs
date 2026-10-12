@@ -983,3 +983,31 @@ assert!(COPIES.load(std::sync::atomic::Ordering::Relaxed)>copies,"valid cold rou
     fs::remove_file(image)?;
     result
 }
+
+#[test]
+fn hgl_gen_helper_executes_with_a_compatible_rust_target_name()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut input = sources(
+        r#"
+use hgraph.std::{gen}
+test {
+ fn echo(value:Token)->Token {when {return value}}
+ test keyword_name {assert eval(echo,[gen("owner")]) == [gen("owner")]}
+}
+"#,
+    )?;
+    for (name, text) in &mut input {
+        if name.ends_with("atomic_values_fixture.hgl") {
+            text.push_str("\nnative const fn gen(text:str)->Token\n");
+        } else if name.ends_with(".hgl-native") {
+            let helper = text
+                .lines()
+                .find(|line| line.starts_with("value token("))
+                .ok_or("token descriptor missing")?
+                .replace("value token(", "value gen(");
+            text.push_str(&helper);
+            text.push('\n');
+        }
+    }
+    run_sources(&input)
+}
