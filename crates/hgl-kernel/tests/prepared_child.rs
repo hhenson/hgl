@@ -338,3 +338,88 @@ fn prepared_failure_cleanup_does_not_start_unused_children_or_stop_a_failed_star
     }
     Ok(())
 }
+
+struct UnusedNested<T> {
+    children: Vec<PreparedChild<T>>,
+}
+impl<T: 'static> Node for UnusedNested<T> {
+    fn eval(&mut self, _: &mut Ctx<'_>) -> NodeResult {
+        Ok(())
+    }
+    fn stop(&mut self, ctx: &mut Ctx<'_>) -> NodeResult {
+        for child in &mut self.children {
+            child.stop(ctx)?;
+        }
+        Ok(())
+    }
+}
+struct DiscardPrepared(PreparedChild<Vec<hgl_store::ScopeId>>);
+impl Node for DiscardPrepared {
+    fn eval(&mut self, ctx: &mut Ctx<'_>) -> NodeResult {
+        self.0.stop(ctx)?;
+        self.0.stop(ctx)?;
+        Ok(())
+    }
+}
+#[test]
+fn unused_outer_retires_all_unstarted_descendants_without_hooks_or_allocations()
+-> Result<(), Box<NodeError>> {
+    let mut store = Store::new();
+    let hooks = Hooks::default();
+    let descendant_hooks = hooks.clone();
+    let outer = PreparedChild::new(&mut store, NodeId(0), |store| {
+        let middle = PreparedChild::new(store, NodeId(0), |store| {
+            let leaf = lifecycle_child(store, NodeId(0), descendant_hooks, false)?;
+            let scopes = vec![leaf.scope()];
+            Ok((
+                Graph::new(
+                    "unused middle".into(),
+                    vec![slot(
+                        UnusedNested {
+                            children: vec![leaf],
+                        },
+                        false,
+                    )],
+                ),
+                scopes,
+            ))
+        })?;
+        let mut scopes = middle.boundary().clone();
+        scopes.push(middle.scope());
+        Ok((
+            Graph::new(
+                "unused outer".into(),
+                vec![slot(
+                    UnusedNested {
+                        children: vec![middle],
+                    },
+                    false,
+                )],
+            ),
+            scopes,
+        ))
+    })?;
+    let scopes = outer.boundary().clone();
+    assert!(
+        scopes
+            .iter()
+            .all(|&s| store.bindings().child_owner(s).is_some())
+    );
+    let mut graph = Graph::new(
+        "discard root".into(),
+        vec![slot(DiscardPrepared(outer), true)],
+    );
+    store.prepare_collection_inputs();
+    graph.start(&mut store, EngineTime::MIN_START)?;
+    let (result, allocations) = count_in(|| graph.evaluate(&mut store, EngineTime::MIN_START));
+    result?;
+    assert_eq!(allocations, 0);
+    assert!(
+        scopes
+            .iter()
+            .all(|&s| store.bindings().child_owner(s).is_none())
+    );
+    assert_eq!((hooks.starts.get(), hooks.stops.get()), (0, 0));
+    graph.stop(&mut store, EngineTime::MIN_START)?;
+    Ok(())
+}

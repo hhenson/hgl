@@ -218,3 +218,7 @@ old designations cannot grow those queues on a successful cycle.
 prepare_scope(ScopeId, usize) provisions a constructing child's mailbox without
 changing its phase; reserve_scope admits it for running hooks. child_owner
 returns the live enclosing scope/node pair for exact prepared activation checks.
+Each scope records its directly owned children independently of queued wakes.
+Releasing a scope first retires constructing descendants without hooks; running
+children still follow their owner's graph stop lifecycle. Constructing scopes
+retain local pending work without forwarding notifications to an inactive owner.

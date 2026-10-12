@@ -50,6 +50,8 @@ Evaluation before start and foreign-owner activation/stop are errors. Failed
 binding or start releases its scope; successfully started nodes stop once,
 and the failing start node never receives stop. Repeated stop is harmless.
 Never-started prepared instances can be discarded without running stop hooks.
+Discarding an unused outer instance also retires its unstarted descendants.
+`scope()` exposes the stable mailbox identity for selection-aware notifications.
 
 Finite compiler preparation must construct sufficient independent instances,
 reserve target subscriptions and call Store::prepare_collection_inputs before

@@ -44,6 +44,10 @@ impl<T> PreparedChild<T> {
     pub fn boundary(&self) -> &T {
         &self.boundary
     }
+    /// The stable scope used to match this child's notification mailbox.
+    pub fn scope(&self) -> ScopeId {
+        self.graph.scope()
+    }
     /// Start this fresh instance once under the exact owner that prepared it.
     pub fn start(&mut self, ctx: &mut Ctx<'_>) -> NodeResult {
         self.start_with(ctx, |_| Ok(()))

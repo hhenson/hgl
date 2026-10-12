@@ -25,6 +25,10 @@ pub struct Scope {
     pub phase: Phase,
     /// Scope mailbox storage.
     pub parent: Option<(ScopeId, NodeId)>,
+    /// All directly owned scopes, including children not yet started.
+    pub owned: Vec<ScopeId>,
+    /// Dense position in the parent's ownership list.
+    pub parent_position: usize,
     /// Scope mailbox storage.
     pub pending: Vec<NodeId>,
     /// Scope mailbox storage.
@@ -117,6 +121,9 @@ impl Scopes {
                 s.pending.push(node);
             }
             if scope == self.current {
+                return;
+            }
+            if s.phase == Phase::Constructing {
                 return;
             }
             let Some((parent, owner)) = s.parent else {

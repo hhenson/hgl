@@ -62,6 +62,7 @@ impl Bindings {
         let scope = Scope {
             generation,
             parent: Some((parent, owner)),
+            parent_position: self.scopes.entries[parent.index].owned.len(),
             ..Scope::default()
         };
         if index == self.scopes.entries.len() {
@@ -69,7 +70,9 @@ impl Bindings {
         } else {
             self.scopes.entries[index] = scope;
         }
-        ScopeId { index, generation }
+        let id = ScopeId { index, generation };
+        self.scopes.entries[parent.index].owned.push(id);
+        id
     }
     /// Reserve all mailbox storage before the graph can be notified.
     pub fn reserve_scope(&mut self, scope: ScopeId, nodes: usize) {
@@ -107,6 +110,18 @@ impl Bindings {
         if !self.scopes.alive(scope) || scope.index == 0 {
             return;
         }
+        // Construction has no lifecycle hooks. Retire unused nested templates
+        // before their parent loses its ancestry; live children are stopped by
+        // the owning runtime node through the normal graph lifecycle.
+        loop {
+            let child = self.scopes.entries[scope.index]
+                .owned
+                .iter()
+                .copied()
+                .find(|id| self.scopes.entries[id.index].phase == Phase::Constructing);
+            let Some(child) = child else { break };
+            self.release_scope(child, now, wake);
+        }
         self.scopes.entries[scope.index].phase = Phase::Releasing;
         while let Some(i) = self.scopes.entries[scope.index].inputs.pop() {
             if self.input(i).alive && self.input(i).scope == scope {
@@ -124,9 +139,14 @@ impl Bindings {
             }
         }
         if let Some((parent, owner)) = self.scopes.entries[scope.index].parent {
-            let parent = &mut self.scopes.entries[parent.index];
-            parent.child_count[owner.0 as usize] -= 1;
-            parent.children[owner.0 as usize].retain(|&id| id != scope);
+            let position = self.scopes.entries[scope.index].parent_position;
+            let p = &mut self.scopes.entries[parent.index];
+            p.child_count[owner.0 as usize] -= 1;
+            p.children[owner.0 as usize].retain(|&id| id != scope);
+            p.owned.swap_remove(position);
+            if let Some(&moved) = p.owned.get(position) {
+                self.scopes.entries[moved.index].parent_position = position;
+            }
         }
         let s = &mut self.scopes.entries[scope.index];
         s.phase = Phase::Dead;
