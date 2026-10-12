@@ -39,6 +39,11 @@ an ordinary bound view supplies only the selected child endpoint identity.
 Repeated designations are suppressed by the existing REF publication operation;
 child values remain independently followed. Node REF traversal stays opaque.
 
+Complete fixed nominal graph constructors with temporal child arguments reduce
+through graph_assemblies to a temporal connection assembly. Ordinary constructors
+and node-hook constructors retain their existing rules. This backend leaf leaves
+mixed ordinary/temporal fields and optional graph fields as explicit gaps.
+
 `eval` resolves ordinary `hgraph.std::replay` and `hgraph.std::record` operator
 contracts and checks their selected HGL bodies through the normal resolver.
 The supplied library must contain those declarations, implementations and

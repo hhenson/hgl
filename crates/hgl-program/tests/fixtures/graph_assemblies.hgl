@@ -1,0 +1,60 @@
+module hgraph.std part graph_assemblies_tests
+
+test {
+    struct AssemblyPair {left:i64
+        right:i64}
+    struct AssemblyNested {pair:AssemblyPair
+        extra:i64}
+    fn assembly_pair(left:i64,right:i64)->AssemblyPair => AssemblyPair(right:right,left:left)
+    fn assembly_route<T>(value:ref<T>)->ref<T> {when {return value}}
+    fn assembly_hold<T>(value:ref<T>)->ref<T> {
+        state captured:bool=false
+        when {if !captured {captured=true
+            return value}}
+    }
+    fn assembly_follow(left:i64,right:i64)->AssemblyPair => pass_through(assembly_route(assembly_pair(left,right)))
+    fn assembly_held(left:i64,right:i64)->AssemblyPair => pass_through(assembly_hold(AssemblyPair(left:left,right:right)))
+    fn assembly_duplicate(left:i64)->AssemblyPair => pass_through(assembly_route(AssemblyPair(right:left,left:left)))
+    fn assembly_project(left:i64,right:i64)->i64 {
+        let pair=assembly_pair(left,right)
+        pass_through(pair.right)
+    }
+    fn assembly_nested(left:i64,right:i64,extra:i64)->AssemblyNested => pass_through(assembly_route(AssemblyNested(pair:assembly_pair(left,right),extra:extra)))
+    fn assembly_sum(first:AssemblyPair,second:AssemblyPair)->i64 {when {return first.left+second.right}}
+    fn assembly_shared(left:i64,right:i64)->i64 {
+        let pair=assembly_pair(left,right)
+        assembly_sum(pair,pair)
+    }
+    test assembly_sparse_children_preserve_omissions_and_equal_ticks {
+        assert eval(assembly_follow,left:[_,7,8,_,8,_],right:[_,_,_,20,_,21]) == [
+            _,delta<AssemblyPair>(left:7),delta<AssemblyPair>(left:8),
+            delta<AssemblyPair>(right:20),delta<AssemblyPair>(left:8),delta<AssemblyPair>(right:21)]
+        assert eval(assembly_follow,left:[7,8,_,_,9,_],right:[20,_,21,_,_,22]) == [
+            delta<AssemblyPair>(left:7,right:20),delta<AssemblyPair>(left:8),
+            delta<AssemblyPair>(right:21),_,delta<AssemblyPair>(left:9),delta<AssemblyPair>(right:22)]
+    }
+    test assembly_duplicate_child_reuses_original_endpoint {
+        assert eval(assembly_duplicate,[_,7,8,_,8,_]) == [_,
+            delta<AssemblyPair>(left:7,right:7),delta<AssemblyPair>(left:8,right:8),_,
+            delta<AssemblyPair>(left:8,right:8),_]
+        assert eval(assembly_duplicate,[7,_,9,_]) == [delta<AssemblyPair>(left:7,right:7),_,
+            delta<AssemblyPair>(left:9,right:9),_]
+    }
+    test assembly_projection_follows_only_selected_child {
+        assert eval(assembly_project,left:[7,8,_,9,_],right:[_,20,21,_,21]) == [_,20,21,_,21]
+    }
+    test assembly_held_designation_keeps_live_child_ticks {
+        assert eval(assembly_held,left:[7,8,_,9,_],right:[20,_,21,_,22]) == [
+            delta<AssemblyPair>(left:7,right:20),delta<AssemblyPair>(left:8),
+            delta<AssemblyPair>(right:21),delta<AssemblyPair>(left:9),delta<AssemblyPair>(right:22)]
+    }
+    test assembly_nested_fields_preserve_original_leaf_ticks {
+        assert eval(assembly_nested,left:[7,8,_,_],right:[20,_,21,_],extra:[30,_,_,31]) == [
+            delta<AssemblyNested>(pair:delta<AssemblyPair>(left:7,right:20),extra:30),
+            delta<AssemblyNested>(pair:delta<AssemblyPair>(left:8)),
+            delta<AssemblyNested>(pair:delta<AssemblyPair>(right:21)),delta<AssemblyNested>(extra:31)]
+    }
+    test assembly_shared_consumers_keep_the_same_child_designations {
+        assert eval(assembly_shared,left:[7,8,_,_,8,_],right:[20,_,21,_,_,22]) == [27,28,29,_,29,30]
+    }
+}
