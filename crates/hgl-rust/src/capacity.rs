@@ -46,6 +46,9 @@ impl Capacity {
                 {
                     collect(&child.ty, &mut types);
                 }
+                if value.ty.owning_scalar() && hgl_rust_codegen::native_results::supported(value) {
+                    collect(&value.ty, &mut types);
+                }
                 true
             });
             for (_, ty) in &node.globals {

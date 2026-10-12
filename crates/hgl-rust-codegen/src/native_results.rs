@@ -10,6 +10,9 @@ fn bound(binding: &Native) -> Option<String> {
     ))
 }
 fn expression(value: &Value) -> Option<String> {
+    if let Some(expression) = borrowed_expression(value) {
+        return Some(expression);
+    }
     match &value.kind {
         Kind::Native(binding, args) => {
             if value.ty.owning_scalar() {
@@ -129,29 +132,59 @@ fn primitive_expression(value: &Value) -> Option<String> {
     scalar_query(value).or_else(|| primitive_projection(value))
 }
 fn primitive_projection(value: &Value) -> Option<String> {
-    if let Kind::Index(parent, index) = &value.kind
-        && let Kind::Configuration(id) = parent.kind
-    {
+    let (columns, slot) = borrowed_projection(value)?;
+    Some(format!("({slot}).read({columns})?"))
+}
+fn borrowed_expression(value: &Value) -> Option<String> {
+    if !matches!(
+        value.kind,
+        Kind::Field(..) | Kind::Index(..) | Kind::BorrowedLocal(..)
+    ) {
+        return None;
+    }
+    let (columns, slot) = borrowed_projection(value)?;
+    if matches!(value.ty, Ty::Native(_)) {
+        return Some(format!("({columns}).native({slot})"));
+    }
+    if value.ty == Ty::Str {
         return Some(format!(
-            "*hgl_store::list_index(&self.configuration{id},{})?",
-            expression(index)?
+            "({columns}).scalar::<String>(({slot}).fields()).as_str()"
         ));
     }
-    if let Kind::Index(parent, index) = &value.kind {
-        let parent = if let Kind::BorrowedLocal(id, _, _) = parent.kind {
-            format!("local{id}")
-        } else if let Kind::GlobalGet(id) = parent.kind {
-            format!("globals.borrow(self.global{id})?")
-        } else {
-            return None;
-        };
-        return Some(format!(
-            "{{let parent={parent};let index={};globals.list_index(parent,index)?.read(globals.values())?}}",
-            expression(index)?
+    None
+}
+fn borrowed_projection(value: &Value) -> Option<(&'static str, String)> {
+    if let Kind::Configuration(id) = value.kind {
+        return Some((
+            "&self.configuration_columns",
+            format!("self.configuration_slot{id}"),
+        ));
+    }
+    if let Kind::GlobalGet(id) = value.kind {
+        return Some((
+            "globals.values()",
+            format!("globals.borrow(self.global{id})?"),
         ));
     }
     if let Kind::BorrowedLocal(id, _, _) = value.kind {
-        return Some(format!("local{id}.read(globals.values())?"));
+        return Some(("globals.values()", format!("local{id}")));
+    }
+    if let Kind::Field(parent, index) = &value.kind {
+        if matches!(parent.ty, Ty::Family(_)) {
+            return None;
+        }
+        let (columns, parent) = borrowed_projection(parent)?;
+        return Some((columns, format!("({parent}).fields().{index}")));
+    }
+    if let Kind::Index(parent, index) = &value.kind {
+        let (columns, parent) = borrowed_projection(parent)?;
+        return Some((
+            columns,
+            format!(
+                "{{let parent={parent};let index={};hgl_store::list::global_index({columns},parent,index)?}}",
+                expression(index)?
+            ),
+        ));
     }
     None
 }
