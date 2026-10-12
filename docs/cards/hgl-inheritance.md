@@ -31,3 +31,7 @@ default_parameters(library, decl, owner) returns the declaring owner's generic
 parameters as scoped patterns in the selected root's environment. The frontend
 resolves these patterns before checking inherited default expressions, preserving
 renamed parameters, nested applications and imported declaration identity.
+
+Library.test_scope selects test-local descendants only for the active module
+test scope. Production family specialization excludes them; declaration checking
+and nested helper bodies retain their own scope. Source tables remain shared.

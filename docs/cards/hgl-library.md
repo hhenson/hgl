@@ -94,3 +94,16 @@ Decl::native_type validates the entire opaque declaration: no fields, inheritanc
 generic arguments, representation, or body. It never treats the type as a callable.
 Library.native_contracts retains validated data sidecars; loading rejects missing
 or incompatible native scalar/helper bindings before any execution or activation.
+`Library::declarations` is `Arc<[Decl]>`: source tables are shared across cold
+checker and overload candidates. The loader freezes its declaration vector once
+after indexing all source parts. Readers use indexing or `.iter()`; mutation
+uses `Arc::make_mut`, preserving independent value-copy behavior. This replaces
+the former public `Vec<Decl>` field type. Declaration tokens and diagnostic
+origins are retained unchanged. `type_sizes`, imports and instances remain
+independently cloned, so one specialization cannot alter another candidate.
+The shared ownership exists only in source checking; generated values and
+runtime execution do not retain or clone this table.
+
+Library.test_scope selects test-local descendants only for the active module
+test scope. Production family specialization excludes them; declaration checking
+and nested helper bodies retain their own scope. Source tables remain shared.

@@ -28,18 +28,19 @@ fn check_sources(
     module_only: bool,
     mut check: impl FnMut(&Library, &Decl) -> Result<(), Issue>,
 ) -> Vec<Diagnostic> {
-    let library = match crate::library::load_checked(sources) {
+    let mut library = match crate::library::load_checked(sources) {
         Ok(library) => library,
         Err(error) => return vec![*error],
     };
     let mut errors: Vec<Diagnostic> = Vec::new();
-    for declaration in library.declarations.iter() {
+    for declaration in std::sync::Arc::clone(&library.declarations).iter() {
         if module_only
             && declaration.module != library.root
             && (declaration.test_only || declaration.role == Role::Test)
         {
             continue;
         }
+        library.test_scope = declaration.test_only.then(|| declaration.module.clone());
         let mut issues = declaration_issues(&library, declaration);
         if issues.is_empty() {
             issues.extend(check(&library, declaration).err().map(|issue| {

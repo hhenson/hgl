@@ -70,6 +70,8 @@ pub use crate::struct_declarations::RequiredStruct;
 pub struct Library {
     /// Data-only selected native package contracts; never executable providers.
     pub native_contracts: crate::native_contracts::Contracts,
+    /// Module whose test-local nominal descendants participate in type resolution.
+    pub test_scope: Option<String>,
     /// Declaration-owned bound literals, retaining exact count or duration kind.
     pub type_sizes: BTreeMap<(String, String), hgl_source::Literal>,
     /// Shared cold source declarations; detach with `Arc::make_mut` before mutation.

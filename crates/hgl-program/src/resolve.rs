@@ -60,7 +60,8 @@ type Selection = (usize, Signature, Vec<Value>, BTreeMap<String, Ty>, Ty);
 type Env = BTreeMap<String, Value>;
 type Arguments = Vec<(Option<String>, Value)>;
 
-fn test_checker(library: Library, module: &str, scope: &PreparedLexicalScope) -> Checker {
+fn test_checker(mut library: Library, module: &str, scope: &PreparedLexicalScope) -> Checker {
+    library.test_scope = Some(module.into());
     Checker {
         library,
         test_scope: Some(module.into()),
@@ -180,6 +181,8 @@ impl Checker {
         }
         let previous_scope = self.test_scope.clone();
         self.test_scope = decl.test_only.then(|| module.clone());
+        let previous_family_scope =
+            std::mem::replace(&mut self.library.test_scope, self.test_scope.clone());
         let mut env = hgl_semantics::body_check::parameter_scope(&signature, values);
         let previous_types = std::mem::replace(&mut self.types, types);
         let mut cursor = Cursor::new(&signature.body);
@@ -211,6 +214,7 @@ impl Checker {
         self.types = previous_types;
         self.active.remove(&id);
         self.test_scope = previous_scope;
+        self.library.test_scope = previous_family_scope;
         Ok(value)
     }
 
@@ -343,6 +347,12 @@ impl Checker {
         } else {
             ValueContext::Constant
         };
+        let previous_scope = std::mem::replace(
+            &mut self.test_scope,
+            decl.test_only.then(|| decl.module.clone()),
+        );
+        let previous_family_scope =
+            std::mem::replace(&mut self.library.test_scope, self.test_scope.clone());
         let previous_context = std::mem::replace(&mut self.value_context, next_context);
         let previous_runtime = std::mem::replace(&mut self.runtime_node, false);
         let mut cursor = Cursor::new(&signature.body);
@@ -377,6 +387,8 @@ impl Checker {
         self.requirements.result = previous_delta;
         self.types = previous_types;
         self.value_context = previous_context;
+        self.library.test_scope = previous_family_scope;
+        self.test_scope = previous_scope;
         self.static_values.locals = previous_constants;
         self.runtime_node = previous_runtime;
         self.active.remove(&id);
@@ -408,10 +420,15 @@ impl Checker {
             ) {
                 continue;
             }
-            let (signature, declared) = match decl
+            let previous_family_scope = std::mem::replace(
+                &mut self.library.test_scope,
+                decl.test_only.then(|| decl.module.clone()),
+            );
+            let signature = decl
                 .signature_checked()
-                .and_then(|s| self.signature_sizes(&decl.module, s, args, &decl.source))
-            {
+                .and_then(|s| self.signature_sizes(&decl.module, s, args, &decl.source));
+            self.library.test_scope = previous_family_scope;
+            let (signature, declared) = match signature {
                 Ok(s) => s,
                 Err(e) => {
                     errors.push(e);
