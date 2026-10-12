@@ -29,7 +29,8 @@ Local owner discovery includes generator bodies and their nested control flow.
 Generator locals use the same independent destinations and ordered initialization
 as hook locals; preparation never executes their operands or advances resumption.
 
-The target-provided Tuple predicate stages atomic results and complete layouts
+The target-provided Tuple predicate receives the checked Value, result type and
+local initializer provenance. It stages atomic results and complete layouts
 with a proved prepared ordinary publisher. Other Tuple constructors retain their
 existing snapshot transport, rather than hiding it behind an owning canonical
 read. The predicate changes only private preparation, never source admission.

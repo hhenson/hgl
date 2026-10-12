@@ -2,6 +2,41 @@
 use crate::{constructor_fields::schema, layouts::global_type};
 use hgl_semantics::ir::{Kind, Plan, Value};
 use hgl_source::{Literal, Ty};
+use std::collections::{BTreeMap, BTreeSet};
+
+/// Canonical staging requires present leaves; temporal aggregate captures retain child presence.
+pub(crate) fn complete(value: &Value, locals: &BTreeMap<usize, Value>) -> bool {
+    complete_value(value, locals, &mut BTreeSet::new())
+}
+fn complete_value(
+    value: &Value,
+    locals: &BTreeMap<usize, Value>,
+    active: &mut BTreeSet<usize>,
+) -> bool {
+    if let Kind::Construct(fields) = &value.kind {
+        return fields
+            .iter()
+            .all(|(_, child)| complete_value(child, locals, active));
+    }
+    if !value.snapshot {
+        return true;
+    }
+    if let Kind::Local(id) | Kind::MutableLocal(id) = value.kind {
+        if !active.insert(id) {
+            return false;
+        }
+        let complete = locals
+            .get(&id)
+            .is_some_and(|v| complete_value(v, locals, active));
+        active.remove(&id);
+        return complete;
+    }
+    matches!(&value.kind, Kind::Unary(op, _) if op == "snapshot")
+        && !matches!(
+            value.ty,
+            Ty::Tuple(_) | Ty::Struct(..) | Ty::List(..) | Ty::Map(..)
+        )
+}
 /// Canonical fixed family fields preserve a checked concrete member without native construction.
 pub(crate) fn family(value: &Value) -> Option<Value> {
     let (Ty::Family(target), Kind::Unary(op, member)) = (&value.ty, &value.kind) else {
