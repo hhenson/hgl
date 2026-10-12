@@ -130,7 +130,7 @@ fn run(
         writeln!(manifest, "{name}={{path=\"{path}\"}}")?;
     }
     fs::write(directory.join("Cargo.toml"), manifest)?;
-    let provider = include_str!("fixtures/any_owner_provider.rs");
+    let provider = native_provider();
     fs::write(
         directory.join("src/main.rs"),
         format!(

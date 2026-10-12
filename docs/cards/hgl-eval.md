@@ -1,13 +1,13 @@
 # Card: hgl-eval
 
-Checked IR and ordinary execution form a lower layer whose only dependencies are
+Checked ordinary execution forms a lower layer whose only dependencies are
 hgl-value-model and hgl-types. It cannot parse source syntax, discover providers,
 resolve declarations/overloads, or reenter semantic checking. Native operations
 are invoked only through the caller's explicit checked execution context.
 
-Public modules are `ir`, `ir_visit`, `harness_ir`, `value_eval`, `value_operations`,
+Model IR is reexported as `ir`. Public modules are `ir`, `ir_visit`, `harness_ir`, `value_eval`, `value_operations`,
 `any_values`, `collection_values`, `composite_keys`, `scalar_keys`, `family_values`,
-`value_constant` and `publication_trace`. Their existing public contracts and
+`value_constant`, `publication_trace` and `key_context`. Their existing public contracts and
 module ceilings remain unchanged. `publication_trace::materialized` checks closed
 delta key overlap/duplication; expression admission remains in semantic
 `delta_check`. The aggregate ceiling is 2000 lines.

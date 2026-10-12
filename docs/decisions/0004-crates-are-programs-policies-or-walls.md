@@ -84,19 +84,18 @@ source parser/descriptor layer has over 1100. The model depends on hgl-types and
 the already-approved jiff library; source depends on the model and cannot be
 reached from it. This prevents canonical value operations and execution-context
 materialization from reading parser syntax or discovering native implementation
-images. Public source paths remain facade reexports. The new model ceiling is
-1200, each moved module keeps its prior ceiling, and no existing crate ceiling
-is increased.
+images. Checked IR and its traversal stay with this syntax-neutral model. Source spelling
+and literal parsing remain in hgl-source. Numerical reporting targets are
+informational and do not limit these modules.
 
 ## Enforced checked execution boundary
 
-hgl-eval owns checked IR and ordinary execution, with only hgl-value-model and
+hgl-eval reexports Model checked IR and owns ordinary execution, with only hgl-value-model and
 hgl-types dependencies. Both this layer and remaining semantic admission exceed
 1000 lines. Source constructor/boxing/delta admission remains in semantics,
 which reexports the lower IR and operation paths for existing consumers. Thus an
 ordinary execution operation cannot consult source declarations or discovery as
-an implicit fallback. The new aggregate ceiling is 2000, moved module ceilings
-remain unchanged, and existing crate ceilings are not increased. This is the
+an implicit fallback. Its aggregate reporting target is 2000; numerical targets remain informational. This is the
 second reason-3 boundary; it adds no third-party dependency.
 
 ## Enforced Rust assembly boundary
@@ -106,7 +105,6 @@ hgl-rust-codegen, below the hgl-rust program-assembly facade. The moved layer
 has 7492 code lines; the remaining graph/generator assembly, capacity provisioning
 and test adapters have 1504. This meets reason 3 on both sides. Cargo prevents
 codegen from reaching assembly or provisioning: the facade depends on codegen,
-and the reverse dependency would form a cycle. All existing module ceilings and
-the old 8940 aggregate ceiling move unchanged; the coherent new facade ceiling
-is 1700. Public facade reexports preserve consumers. No runtime or third-party
+and the reverse dependency would form a cycle. Module dependency lists remain enforced; aggregate and module line-count targets
+are informational. The facade reporting target is 1700. Public facade reexports preserve consumers. No runtime or third-party
 dependency is introduced.

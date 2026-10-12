@@ -25,8 +25,9 @@ from native implementation types. Missing scalar/helper records fail loading.
 
 Acceptance: authored Std fixture identities/capabilities, canonical aliases,
 descriptor-only checking, exact helper signatures, missing/incompatible contracts,
-mode/phase/signal rejection and image fingerprint comparison. This foundation
-does not yet form or execute native nominal scalar source values.
+mode/phase/signal rejection and image fingerprint comparison. Native nominal scalar
+source values bind through these validated contracts and execute through explicit
+provider contexts and generated typed callbacks.
 
 A selected ordinary scalar helper with an image record binds its explicit symbol
 and exact setup/cold/node lifecycle phase, without reading or executing image code while checking.

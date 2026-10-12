@@ -854,6 +854,7 @@ fn type_admitted(name: &str, ordinary: bool) -> bool {
 }
 
 pub use hgl_value_model::diagnostics;
+pub use hgl_value_model::ir;
 pub mod lex;
 pub mod literals;
 pub use hgl_value_model::nominal_batch;
