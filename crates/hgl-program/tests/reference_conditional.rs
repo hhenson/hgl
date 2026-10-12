@@ -41,6 +41,24 @@ fn conditional_export_keeps_mutable_var_authority_and_ordinary_harness_assignmen
     )?;
     Ok(())
 }
+#[test]
+fn zero_horizon_conditional_pools_include_scheduled_reference_and_assembly_startup()
+-> Result<(), Box<dyn std::error::Error>> {
+    let output = run(
+        &["conditional_startup_arrivals.hgl"],
+        "conditional-startup",
+        3,
+        3,
+    )?;
+    assert_eq!(
+        String::from_utf8_lossy(&output.stderr)
+            .lines()
+            .filter(|line| *line == "reference matrix measured cycles=1 tick_allocations=0")
+            .count(),
+        3,
+    );
+    Ok(())
+}
 fn run(
     names: &[&str],
     project_name: &str,
