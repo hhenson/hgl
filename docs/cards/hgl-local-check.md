@@ -69,3 +69,9 @@ Own-output assignment delegates complete ordinary/delta compatibility to
 structural_admission. Writable ordinary local widening remains separate from
 exact temporal output compatibility. Retained concrete Struct/fixed List/Map
 locals share Tuple ownership rules; mutable retained locals remain diagnosed.
+
+GraphLocals retains uninitialized declared types separately from Value IR.
+declare/declaration/initialized/read provide direct graph first-assignment
+checking without a placeholder payload or endpoint. Annotations alone grant
+no binding. Existing replacement authority fixes category/type after the first
+real binding; nested callable scopes restore their prior lexical facts.

@@ -1,0 +1,47 @@
+module hgraph.std part conditional_startup_arrival_controls
+
+test {
+    struct StartupPair {
+        first: i64
+        second: i64
+    }
+    fn startup_inactive() -> i64 { when {} }
+    fn startup_selector(const enabled: bool, value: ref<i64>) -> bool {
+        when { return enabled }
+    }
+    fn startup_assembly_selector(value: ref<StartupPair>) -> bool {
+        when { return true }
+    }
+    fn startup_reference(value: ref<i64>) -> ref<i64> {
+        when { return value }
+    }
+    fn startup_choice(enabled: bool, first: i64, second: i64) -> ref<i64> {
+        var selected: ref<i64>
+        if enabled { selected = startup_reference(first) }
+        else { selected = startup_reference(second) }
+        selected
+    }
+    fn startup_sink(value: ref<i64>) { when {} }
+    fn startup_nominal_sink(value: StartupPair) { when {} }
+    fn startup_scalar(const enabled: bool) {
+        let first = startup_inactive()
+        let second = startup_inactive()
+        startup_sink(startup_choice(startup_selector(enabled, first), first, second))
+    }
+    fn startup_assembled() {
+        let first = startup_inactive()
+        let second = startup_inactive()
+        let pair = StartupPair(first: first, second: second)
+        startup_nominal_sink(pair)
+        startup_sink(startup_choice(startup_assembly_selector(pair), first, second))
+    }
+    test zero_horizon_reference_startup_activates_true_branch {
+        eval(startup_scalar, enabled: true)
+    }
+    test zero_horizon_reference_startup_activates_false_branch {
+        eval(startup_scalar, enabled: false)
+    }
+    test zero_horizon_assembly_startup_activates_conditional {
+        eval(startup_assembled)
+    }
+}

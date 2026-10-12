@@ -13,6 +13,15 @@ impl Bindings {
         self.dirty_outputs.reserve(self.endpoints.outputs.len());
         self.dirty_inputs.reserve(self.endpoints.inputs.len());
         self.retired.reserve(self.endpoints.outputs.len());
+        self.endpoints
+            .free_outputs
+            .reserve(self.endpoints.outputs.len());
+        self.endpoints
+            .free_inputs
+            .reserve(self.endpoints.inputs.len());
+        self.scopes.retired.reserve(self.scopes.entries.len());
+        self.scopes.free.reserve(self.scopes.entries.len());
+        self.items.prepare_retirement();
     }
     /// Reserve subscriptions for a checked finite reference target before startup.
     pub fn reserve_reference_target(&mut self, output: OutputId, subscribers: usize) {

@@ -105,9 +105,11 @@ impl Checker<'_> {
         Ok(())
     }
     fn binding(&self, cursor: &mut Cursor<'_>, environment: &mut Scope) -> Result<(), Issue> {
-        let retained = matches!(cursor.consume()?.as_str(), "state" | "cache");
+        let keyword = cursor.consume()?;
+        let retained = matches!(keyword.as_str(), "state" | "cache");
         let name = cursor.name()?;
-        let declared = if cursor.take(":") {
+        let annotated = cursor.take(":");
+        let declared = if annotated {
             let start = cursor.pos;
             let spelling = cursor.type_name()?;
             annotation(&cursor.tokens[start..cursor.pos])?;
@@ -122,6 +124,14 @@ impl Checker<'_> {
         } else {
             None
         };
+        if keyword == "var" && annotated && !cursor.at("=") {
+            environment.services.remove(&name);
+            environment.tuple.runtime.remove(&name);
+            if let Some(ty) = declared {
+                environment.types.insert(name, ty);
+            }
+            return Ok(());
+        }
         cursor.need("=")?;
         let expression = self.expression(cursor, environment)?;
         environment.alias(&name, &expression, retained);

@@ -1,0 +1,110 @@
+module hgraph.std part reference_conditional_expiry_tests
+
+# TS-23 stopped-owner contract. No HGL target run claimed.
+# No raw REF eval inputs, empty REF construction or REF ordinary state.
+test {
+    fn expiry_reference(value: ref<i64>) -> ref<i64> {
+        when { return value }
+    }
+    fn expiry_branch_result(enabled: bool, first: i64, second: i64) -> ref<i64> {
+        var selected: ref<i64>
+        if enabled {
+            # This intermediate owning scalar belongs to the selected child.
+            let child = pass_through(first)
+            selected = expiry_reference(child)
+        } else {
+            let child = pass_through(second)
+            selected = expiry_reference(child)
+        }
+        selected
+    }
+    fn expiry_first_designation(value: ref<i64>) -> ref<i64> {
+        state captured: bool = false
+        when {
+            # Expiry cannot make the node capture a later fresh designation.
+            if !captured {
+                captured = true
+                return value
+            }
+        }
+    }
+    fn expiry_observe(held: i64, current: i64, step: i64) -> atomic<tuple<bool, bool, i64, bool, bool, i64>> {
+        when valid(step) && modified(step) {
+            var old_value: i64 = -1
+            var new_value: i64 = -1
+            if valid(held) { old_value = held }
+            if valid(current) { new_value = current }
+            return (valid(held), modified(held), old_value, valid(current), modified(current), new_value)
+        }
+    }
+    fn expiry_state(enabled: bool, first: i64, second: i64, step: i64) -> atomic<tuple<bool, bool, i64, bool, bool, i64>> {
+        let selected = expiry_branch_result(enabled, first, second)
+        let held = expiry_first_designation(selected)
+        expiry_observe(held, selected, step)
+    }
+    fn expiry_read(value: i64) -> i64 { when { return delta_value(value) } }
+    fn expiry_followed(enabled: bool, first: i64, second: i64) -> i64 {
+        expiry_read(expiry_first_designation(expiry_branch_result(enabled, first, second)))
+    }
+
+    test reference_stopped_branch_target_expires_at_next_cycle_and_never_revives {
+        assert eval(expiry_state,
+            enabled: [true, true, false, false, true, true, false, true, _],
+            first: [7, 8, 9, 10, 11, 12, 13, 14, 15],
+            second: [20, _, _, 21, _, _, 22, _, 23],
+            step: [1, 1, 1, 1, 1, 1, 1, 1, 1]
+        ) == [
+            (true, true, 7, true, true, 7),
+            (true, true, 8, true, true, 8),
+            # The old branch stops here; its final value remains readable.
+            (true, false, 8, true, true, 20),
+            (false, false, -1, true, true, 21),
+            # A fresh true branch publishes 11 without retargeting the old REF.
+            (false, false, -1, true, true, 11),
+            (false, false, -1, true, true, 12),
+            (false, false, -1, true, true, 22),
+            (false, false, -1, true, true, 14),
+            (false, false, -1, true, true, 15)
+        ]
+        # A fresh parent run resets its scalar capture latch.
+        assert eval(expiry_state,
+            enabled: [true, true, false, false, true, true, false, true, _],
+            first: [7, 8, 9, 10, 11, 12, 13, 14, 15],
+            second: [20, _, _, 21, _, _, 22, _, 23],
+            step: [1, 1, 1, 1, 1, 1, 1, 1, 1]
+        ) == [
+            (true, true, 7, true, true, 7), (true, true, 8, true, true, 8),
+            (true, false, 8, true, true, 20), (false, false, -1, true, true, 21),
+            (false, false, -1, true, true, 11), (false, false, -1, true, true, 12),
+            (false, false, -1, true, true, 22), (false, false, -1, true, true, 14),
+            (false, false, -1, true, true, 15)
+        ]
+        # Logical expiry is absence, not a publication or a stale scalar tick.
+        assert eval(expiry_followed,
+            enabled: [true, true, false, false, true, true, false, true, _],
+            first: [7, 8, 9, 10, 11, 12, 13, 14, 15],
+            second: [20, _, _, 21, _, _, 22, _, 23]
+        ) == [7, 8, _, _, _, _, _, _, _]
+    }
+
+    fn expiry_outer_result(enabled: bool, first: i64, second: i64) -> ref<i64> {
+        var selected: ref<i64>
+        if enabled {
+            selected = expiry_reference(first)
+        } else {
+            selected = expiry_reference(second)
+        }
+        selected
+    }
+    fn expiry_outer_followed(enabled: bool, first: i64, second: i64) -> i64 {
+        expiry_read(expiry_first_designation(expiry_outer_result(enabled, first, second)))
+    }
+    test reference_stopping_a_forwarding_branch_preserves_outer_target {
+        # The designated scalar producer belongs to the parent, not the branch.
+        assert eval(expiry_outer_followed,
+            enabled: [true, true, false, false, true, true, false, true, _],
+            first: [7, 8, 9, 10, 11, 12, 13, 14, 15],
+            second: [20, _, _, 21, _, _, 22, _, 23]
+        ) == [7, 8, 9, 10, 11, 12, 13, 14, 15]
+    }
+}

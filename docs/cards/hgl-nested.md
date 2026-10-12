@@ -36,3 +36,38 @@ fn stop(&mut self, ctx: &mut Ctx<'_>) -> NodeResult;
 ```
 
 `Children` implements `Debug` and `Default`. Keys are unique per manager.
+
+## Prepared finite instances
+
+`PreparedChild<T>::new(store, owner, factory)` constructs one fresh child in
+its own scope before startup and retains its independent boundary T. It does
+not run a hook. A failed build immediately discards its scope and unstarted
+descendants, invalidates their endpoints and releases reusable storage without
+advancing engine time. `boundary()` reads that boundary. `start(ctx)` or
+`start_with(ctx, bind)` starts it once under the exact parent scope and node
+that prepared it. The latter binds captures in the still-constructing child
+scope before hooks start; quiet sampling queues the child's initial work.
+`evaluate(ctx)`, `next_scheduled_time()` and `stop(ctx)` drive that instance.
+Evaluation before start and foreign-owner activation/stop are errors. Failed
+binding or start releases its scope; successfully started nodes stop once,
+and the failing start node never receives stop. Repeated stop is harmless.
+Never-started prepared instances can be discarded without running stop hooks.
+Discarding an unused outer instance also retires its unstarted descendants.
+`scope()` exposes the stable mailbox identity for selection-aware notifications.
+
+Finite compiler preparation must construct sufficient independent instances,
+reserve target subscriptions and call Store::prepare_collection_inputs before
+startup. It must consume fresh instances on reentry and drive only selected
+children; no stopped instance is resumed. This surface does not change the
+general dynamic Children allocation policy or imply compiler conditional
+lowering is complete. The prepared_child regression measures every successful
+cycle, including first activation, branch changes, next-cycle expiry and stop,
+with a real allocator. Scalar state starts fresh and held old designations do
+not revive when a different prepared instance starts.
+
+`PreparedSwitch<T>` owns two cold instance pools, tracks the next unused slot and
+one selected child, and matches scope notifications without a lookup table.
+`evaluate(enabled,ctx,bind)` stops before switching, binds once using the retained
+boundary, and drives only fresh/notified/due work. `stop` stops the active child
+and discards unused pools. Exhaustion fails explicitly and never reuses a stopped
+instance. `start_bound` provides a borrowed boundary to activation without cloning.

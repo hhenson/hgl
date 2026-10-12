@@ -421,6 +421,14 @@ impl Store {
     pub fn reserve_scope(&mut self, scope: ScopeId, nodes: usize) {
         self.bindings.reserve_scope(scope, nodes);
     }
+    /// Prepare mailbox capacity while keeping a child in its construction phase.
+    pub fn prepare_scope(&mut self, scope: ScopeId, nodes: usize) {
+        self.bindings.prepare_scope(scope, nodes);
+    }
+    /// Immediately discard failed cold construction without running hooks.
+    pub fn discard_scope(&mut self, scope: ScopeId) {
+        self.bindings.discard_scope(scope);
+    }
     /// Retire a stopped child's storage.
     pub fn release_scope<W: Wake>(&mut self, scope: ScopeId, now: EngineTime, wake: &mut W) {
         self.bindings.release_scope(scope, now, wake);

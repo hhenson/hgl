@@ -15,6 +15,7 @@ use hgl_semantics::value_check::{binding, ordinary, writable};
 use hgl_semantics::value_eval::atomic_argument;
 use hgl_source::execution_phase::ExecutionPhase as Phase;
 use std::collections::{BTreeMap, BTreeSet};
+mod conditional;
 
 #[derive(Default)]
 struct Checker {
@@ -658,11 +659,28 @@ impl Checker {
         let previous_locals = std::mem::replace(&mut self.graph_locals, locals);
         let previous_hint = self.result_hint.replace(result.clone());
         let statements = hgl_semantics::body_check::composition_body(cursor)?;
+        let output = self.graph_body(module, &statements, env);
+        self.graph_locals = previous_locals;
+        self.result_hint = previous_hint;
+        Ok(hgl_semantics::local_check::graph_result(output?, result)?)
+    }
+    fn graph_body(
+        &mut self,
+        module: &str,
+        statements: &[Stmt],
+        env: &mut Env,
+    ) -> Result<Value, Issue> {
         let mut output = Value::new(Ty::Void, Kind::Void);
         let mut mutable_ports = BTreeSet::new();
         for (position, statement) in statements.iter().enumerate() {
             match statement {
+                Stmt::DeclareVar(name, annotation) => {
+                    self.graph_declaration(module, name, annotation, env)?;
+                }
                 Stmt::Let(name, annotation, expr) | Stmt::Var(name, annotation, expr) => {
+                    if self.graph_locals.declaration(name).is_some() {
+                        return Err(format!("duplicate local {name}").into());
+                    }
                     let value =
                         self.local_initializer(module, annotation.as_deref(), expr, env, false)?;
                     if matches!(statement, Stmt::Var(..)) && matches!(value.kind, Kind::Wire(_)) {
@@ -687,6 +705,15 @@ impl Checker {
                     }
                 }
                 Stmt::Assign(Expr::Name(name), expr) | Stmt::Add(Expr::Name(name), expr) => {
+                    if self.initialize_graph_local(
+                        module,
+                        (name, expr),
+                        env,
+                        &mut mutable_ports,
+                        matches!(statement, Stmt::Add(..)),
+                    )? {
+                        continue;
+                    }
                     self.graph_assignment(
                         module,
                         (name, expr),
@@ -695,17 +722,10 @@ impl Checker {
                         matches!(statement, Stmt::Add(..)),
                     )?;
                 }
-                Stmt::If(..) if hgl_semantics::wiring_locals::handles(statement, env) => {
-                    hgl_semantics::wiring_locals::conditional(
-                        statement,
-                        env,
-                        &mutable_ports,
-                        (&self.graph_locals, &self.static_values),
-                        (&mut self.plan, &mut self.wiring),
-                        &mut self.next_wiring_local,
-                    )?;
+                Stmt::If(..) => {
+                    self.graph_conditional(module, statement, env, &mut mutable_ports)?;
                 }
-                Stmt::Add(..) | Stmt::Assign(..) | Stmt::If(..) => {
+                Stmt::Add(..) | Stmt::Assign(..) => {
                     let mut next = self.next_wiring_local;
                     let checked = self.statement(module, statement, env, &Ty::Void, &mut next)?;
                     self.next_wiring_local = next;
@@ -720,9 +740,48 @@ impl Checker {
                 }
             }
         }
-        self.graph_locals = previous_locals;
-        self.result_hint = previous_hint;
-        Ok(hgl_semantics::local_check::graph_result(output, result)?)
+        Ok(output)
+    }
+    fn graph_declaration(
+        &mut self,
+        module: &str,
+        name: &str,
+        annotation: &str,
+        env: &Env,
+    ) -> Result<(), Issue> {
+        if env.contains_key(name) {
+            return Err(format!("duplicate local {name}").into());
+        }
+        let ty = self.local_annotation(module, annotation, env)?;
+        if !matches!(ty, Ty::Ref(_)) {
+            return Err("uninitialized ordinary graph declarations require an initializer; expected = after type in this backend profile".into());
+        }
+        self.graph_locals.declare(name, ty)?;
+        Ok(())
+    }
+    fn initialize_graph_local(
+        &mut self,
+        module: &str,
+        (name, expr): (&str, &Expr),
+        env: &mut Env,
+        mutable_ports: &mut BTreeSet<String>,
+        compound: bool,
+    ) -> Result<bool, Issue> {
+        let Some(ty) = self.graph_locals.declaration(name).cloned() else {
+            return Ok(false);
+        };
+        if compound {
+            return Err(format!("local {name} is read before definite assignment").into());
+        }
+        let value = self.expected_expression(module, expr, env, false, Some(&ty))?;
+        let value = hgl_semantics::local_check::initializer(value, Some(&ty))?;
+        if matches!(value.kind, Kind::Wire(_)) {
+            mutable_ports.insert(name.into());
+        }
+        self.graph_locals.initialized(name);
+        self.graph_locals.bind(name, expr);
+        self.wiring_local(name, value, true, true, env)?;
+        Ok(true)
     }
     fn graph_assignment(
         &mut self,
@@ -1023,21 +1082,7 @@ impl Checker {
         runtime: bool,
     ) -> Result<Value, Issue> {
         let mut ty = annotation
-            .map(|name| {
-                let name = self.type_sizes(module, name, env)?;
-                resolve_type(&name, &self.types).map_or_else(
-                    || {
-                        hgl_semantics::value_types::substitute(
-                            &self.library,
-                            module,
-                            &name,
-                            &self.types,
-                            &mut BTreeSet::new(),
-                        )
-                    },
-                    Ok,
-                )
-            })
+            .map(|name| self.local_annotation(module, name, env))
             .transpose()?;
         let hint = ty.as_ref().map(|ty| {
             if matches!(ty, Ty::Atomic(_)) {
@@ -1056,6 +1101,21 @@ impl Checker {
             ty = hint;
         }
         Ok(hgl_semantics::local_check::initializer(value, ty.as_ref())?)
+    }
+    fn local_annotation(&mut self, module: &str, name: &str, env: &Env) -> Result<Ty, Issue> {
+        let name = self.type_sizes(module, name, env)?;
+        resolve_type(&name, &self.types).map_or_else(
+            || {
+                hgl_semantics::value_types::substitute(
+                    &self.library,
+                    module,
+                    &name,
+                    &self.types,
+                    &mut BTreeSet::new(),
+                )
+            },
+            Ok,
+        )
     }
     fn struct_declaration(&self, module: &str, name: &str) -> Result<Option<&Decl>, Issue> {
         Ok(hgl_semantics::value_types::declaration(
@@ -1231,6 +1291,9 @@ impl Checker {
         next_local: &mut usize,
     ) -> Result<Statement, Issue> {
         Ok(match statement {
+            Stmt::DeclareVar(..) => {
+                return Err("uninitialized runtime locals are unsupported by this backend".into());
+            }
             Stmt::Let(name, annotation, expr) | Stmt::Var(name, annotation, expr) => {
                 let value =
                     self.local_initializer(module, annotation.as_deref(), expr, env, true)?;
@@ -1493,6 +1556,7 @@ impl Checker {
             Expr::TemporalLiteral(l) if self.value_context == ValueContext::Preparation && !self.preparing_graph => Ok(Value::new(l.ty(), Kind::TemporalLiteral(l.clone()))),
             Expr::TemporalLiteral(_) => Err("contextual temporal construction requires run preparation; node-hook construction is unsupported".into()),
             Expr::Name(name) => {
+                if !env.contains_key(name) { self.graph_locals.read(name)?; }
                 if !env.contains_key(name) && let Some(value) = hgl_semantics::enums::member(&self.library, module, name)? { return Ok(Value::new(value.ty(), Kind::Literal(value))); }
                 let value = env
                     .get(name)
@@ -1861,7 +1925,14 @@ impl Checker {
         {
             return Err("contextual temporal default requires run preparation; node-hook construction is unsupported".into());
         }
-        Ok(value)
+        if runtime {
+            Ok(value)
+        } else {
+            Ok(hgl_semantics::graph_assemblies::constructor(
+                value,
+                &mut self.plan,
+            )?)
+        }
     }
     fn delta_constructor(
         &mut self,

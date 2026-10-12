@@ -15,6 +15,7 @@ pub mod eval_data;
 pub mod family_types;
 pub use hgl_eval::family_values;
 pub mod flow_check;
+pub mod graph_assemblies;
 pub mod harness;
 pub mod harness_check;
 pub use hgl_eval::harness_ir;

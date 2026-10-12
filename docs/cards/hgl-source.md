@@ -140,3 +140,8 @@ Optional reporting targets after the execution split are Source 1130, Model
 `Expr::children` exposes immediate expression operands in source order, omitting absent cells and preserving each operand's origin wrapper. It does not descend or select lambda scope; source policies control those boundaries.
 
 NativeType is an opaque source declaration role. native_descriptor and native_package parse inert provider metadata; execution_phase, native_value and native_contracts reexport syntax-neutral model data.
+
+Stmt::DeclareVar(name, type_spelling) records a typed var declaration without an
+initializer. It supplies no Expr, ordinary value or connection. Untyped var and
+let still require '='. Phase, category and definite assignment belong to the
+checker; no empty REF constructor is introduced.

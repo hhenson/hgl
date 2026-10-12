@@ -36,6 +36,10 @@ Validate all nested descriptions before allocating ports. NodeType's
 an owner's dictionary member; an unkeyed one exposes the whole output. REF
 carriers do not change that shape check. All targets, including boundary targets,
 obey non-overlap. Fixed missing children stay unbound.
+Only a non-keyed REF owner may export a child carrier matching its whole REF
+schema instead of the designated target schema. Keyed children must match the
+dictionary member schema; whole dictionaries and REF dictionaries fail preflight
+before constructors or runtime endpoint allocation.
 
 A boundary preserves live REF subscriptions recursively; copying only today's
 designation is insufficient. Bind valid targets with current-cycle sampling,

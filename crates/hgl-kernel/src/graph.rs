@@ -106,6 +106,10 @@ impl Graph {
     pub fn scope(&self) -> ScopeId {
         self.scope
     }
+    pub(crate) fn prepare_scope(&mut self, scope: ScopeId, store: &mut Store) {
+        self.scope = scope;
+        store.prepare_scope(scope, self.slots.len());
+    }
 
     /// Where the graph is in its life.
     pub fn lifecycle(&self) -> Lifecycle {

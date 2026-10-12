@@ -346,3 +346,8 @@ the same reserved storage in every hook.
 On a primary execution/start failure followed by cleanup failure, retain the first primary and attach cleanup to NodeError.cleanup; matching negative assertions can then fail without losing either error.
 
 `Ctx::with_observations(action)` lends immutable temporal observations and mutable ordinary global storage in start, evaluation or stop, without publication authority. This is the reviewed Any lifecycle boundary reused by Native owning copies.
+
+Cold finite child construction and later activation use PreparedChild in
+[hgl-nested](hgl-nested.md). Graph's private scope preparation retains the child
+construction phase and reserves its mailbox before hooks; activation preserves
+normal once-only Graph lifecycle and next-cycle retirement semantics.

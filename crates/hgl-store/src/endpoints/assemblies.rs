@@ -18,6 +18,10 @@ pub struct Assemblies {
     index: HashMap<Key, usize>,
 }
 impl Assemblies {
+    /// Reserve reclamation entries for all currently prepared records.
+    pub fn prepare_retirement(&mut self) {
+        self.free.reserve(self.slots.len());
+    }
     /// Share an identical tree and record at most one construction claim per scope.
     pub fn intern(
         &mut self,

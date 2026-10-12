@@ -28,6 +28,7 @@ enums = { budget = 250, uses = ["library", "struct_names"] }
 eval_data = { budget = 350, uses = ["ir", "library", "publication_trace", "value_eval"] }
 family_types = { budget = 300, uses = ["inheritance", "library", "struct_names", "value_access"] }
 flow_check = { budget = 150, uses = ["ir"] }
+graph_assemblies = { budget = 100, uses = ["ir"] }
 harness = { budget = 250, uses = ["collection_values", "eval_data", "family_values", "harness_ir", "ir", "value_eval", "any_values"] }
 harness_check = { budget = 180, uses = ["eval_data", "flow_check", "harness_ir", "ir", "static_values", "library", "value_types"] }
 inheritance = { budget = 300, uses = ["enums", "library", "struct_names"] }

@@ -3,6 +3,10 @@ use crate::bindings::{Bindings, InputId, OutputId, ScopeId, Wake};
 use hgl_types::{EngineTime, NodeId};
 
 use crate::endpoints::{Phase, Scope};
+struct ConstructionWake;
+impl Wake for ConstructionWake {
+    fn wake(&mut self, _: NodeId) {}
+}
 impl Bindings {
     pub(crate) fn owns_child(&self, dict: OutputId, child: OutputId) -> bool {
         let parent = self.output(dict);
@@ -37,6 +41,13 @@ impl Bindings {
     pub fn scope(&self) -> ScopeId {
         self.scopes.current
     }
+    /// The enclosing scope and node that own a prepared child.
+    pub fn child_owner(&self, scope: ScopeId) -> Option<(ScopeId, NodeId)> {
+        self.scopes
+            .alive(scope)
+            .then(|| self.scopes.entries[scope.index].parent)
+            .flatten()
+    }
     /// A child's scope, allocated during structural graph creation.
     pub fn child_scope(&mut self, owner: NodeId) -> ScopeId {
         let parent = self.scopes.current;
@@ -55,6 +66,7 @@ impl Bindings {
         let scope = Scope {
             generation,
             parent: Some((parent, owner)),
+            parent_position: self.scopes.entries[parent.index].owned.len(),
             ..Scope::default()
         };
         if index == self.scopes.entries.len() {
@@ -62,11 +74,17 @@ impl Bindings {
         } else {
             self.scopes.entries[index] = scope;
         }
-        ScopeId { index, generation }
+        let id = ScopeId { index, generation };
+        self.scopes.entries[parent.index].owned.push(id);
+        id
     }
     /// Reserve all mailbox storage before the graph can be notified.
     pub fn reserve_scope(&mut self, scope: ScopeId, nodes: usize) {
         self.scopes.entries[scope.index].phase = Phase::Running;
+        self.prepare_scope(scope, nodes);
+    }
+    /// Provision a not-yet-started child's mailbox without admitting hooks.
+    pub fn prepare_scope(&mut self, scope: ScopeId, nodes: usize) {
         if nodes > 0 {
             self.scopes.reserve(scope, NodeId(super::index(nodes - 1)));
         }
@@ -91,10 +109,51 @@ impl Bindings {
             }
         }
     }
+    /// Roll back an unstarted construction without advancing engine time.
+    /// # Panics
+    /// The scope and its descendants must still be constructing child graphs.
+    pub fn discard_scope(&mut self, scope: ScopeId) {
+        if !self.scopes.alive(scope) {
+            return;
+        }
+        assert!(scope.index != 0);
+        assert_eq!(self.scopes.entries[scope.index].phase, Phase::Constructing);
+        while let Some(&child) = self.scopes.entries[scope.index].owned.last() {
+            self.discard_scope(child);
+        }
+        let outputs = self.scopes.entries[scope.index].outputs.clone();
+        self.release_scope(scope, self.now, &mut ConstructionWake);
+        self.retired.retain(|id| !outputs.contains(id));
+        for output in outputs {
+            self.expire(output);
+        }
+        self.scopes
+            .retired
+            .retain(|&(index, _)| index != scope.index);
+        let released = &mut self.scopes.entries[scope.index];
+        for reference in released.assemblies.drain(..) {
+            self.items.release(reference);
+        }
+        if released.generation != scope.generation {
+            self.scopes.free.push(scope.index);
+        }
+    }
     /// Disconnect a stopped child's ports; outputs expire at the next cycle.
     pub fn release_scope<W: Wake>(&mut self, scope: ScopeId, now: EngineTime, wake: &mut W) {
         if !self.scopes.alive(scope) || scope.index == 0 {
             return;
+        }
+        // Construction has no lifecycle hooks. Retire unused nested templates
+        // before their parent loses its ancestry; live children are stopped by
+        // the owning runtime node through the normal graph lifecycle.
+        loop {
+            let child = self.scopes.entries[scope.index]
+                .owned
+                .iter()
+                .copied()
+                .find(|id| self.scopes.entries[id.index].phase == Phase::Constructing);
+            let Some(child) = child else { break };
+            self.release_scope(child, now, wake);
         }
         self.scopes.entries[scope.index].phase = Phase::Releasing;
         while let Some(i) = self.scopes.entries[scope.index].inputs.pop() {
@@ -113,9 +172,14 @@ impl Bindings {
             }
         }
         if let Some((parent, owner)) = self.scopes.entries[scope.index].parent {
-            let parent = &mut self.scopes.entries[parent.index];
-            parent.child_count[owner.0 as usize] -= 1;
-            parent.children[owner.0 as usize].retain(|&id| id != scope);
+            let position = self.scopes.entries[scope.index].parent_position;
+            let p = &mut self.scopes.entries[parent.index];
+            p.child_count[owner.0 as usize] -= 1;
+            p.children[owner.0 as usize].retain(|&id| id != scope);
+            p.owned.swap_remove(position);
+            if let Some(&moved) = p.owned.get(position) {
+                self.scopes.entries[moved.index].parent_position = position;
+            }
         }
         let s = &mut self.scopes.entries[scope.index];
         s.phase = Phase::Dead;

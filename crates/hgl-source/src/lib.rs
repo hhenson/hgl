@@ -113,6 +113,8 @@ pub enum Stmt {
     Let(String, Option<String>, Expr),
     /// Mutable local binding.
     Var(String, Option<String>, Expr),
+    /// Typed mutable declaration; no initializer, value or connection exists.
+    DeclareVar(String, String),
     /// End runtime evaluation without publication.
     Exit,
     /// Result publication.
@@ -624,10 +626,13 @@ impl<'a> Cursor<'a> {
                 } else {
                     None
                 };
-                self.need("=")?;
-                if mutable {
+                if mutable && !self.at("=") && annotation.is_some() {
+                    Stmt::DeclareVar(name, annotation.unwrap_or_else(|| unreachable!()))
+                } else if mutable {
+                    self.need("=")?;
                     Stmt::Var(name, annotation, self.expr()?)
                 } else {
+                    self.need("=")?;
                     Stmt::Let(name, annotation, self.expr()?)
                 }
             } else if self.take("return") {

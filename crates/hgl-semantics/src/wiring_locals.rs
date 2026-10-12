@@ -175,6 +175,7 @@ fn block(
                     }
                 }
             }
+            Stmt::DeclareVar(..) => return Err("uninitialized wiring conditional declarations are unsupported by this backend".into()),
             Stmt::Assign(..) | Stmt::Add(..) | Stmt::Exit | Stmt::Return(_) | Stmt::Call(_) | Stmt::TimedYield(..) | Stmt::While(..) | Stmt::ForItems(..) | Stmt::For(..) => return Err("conditional connection rebinding admits local declarations, name assignments and ordinary if blocks".into()),
         }
     }

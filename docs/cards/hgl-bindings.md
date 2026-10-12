@@ -150,6 +150,7 @@ fn reserve_scope(&mut self, scope: ScopeId, nodes: usize);
 fn take_wake(&mut self, scope: ScopeId) -> Option<NodeId>;
 fn take_child(&mut self, owner: NodeId) -> Option<ScopeId>;
 fn release_scope<W: Wake>(&mut self, scope: ScopeId, now: EngineTime, wake: &mut W);
+fn discard_scope(&mut self, scope: ScopeId);
 ```
 
 A retained removed output from a stopped scope remains readable for its removal
@@ -211,3 +212,19 @@ prepares the union of possible absent child views without binding or sampling.
 These views confer no membership, validity, publication time or endpoint lifetime.
 General dynamic binding retains its separate allocation policy; finite prepared
 REF routes require zero allocations even on their first successful sample.
+
+Finite preparation also reserves the retained endpoint, scope and assembly
+reclamation queues before startup, so stopping prepared children and expiring
+old designations cannot grow those queues on a successful cycle.
+prepare_scope(ScopeId, usize) provisions a constructing child's mailbox without
+changing its phase; reserve_scope admits it for running hooks. child_owner
+returns the live enclosing scope/node pair for exact prepared activation checks.
+Each scope records its directly owned children independently of queued wakes.
+Releasing a scope first retires constructing descendants without hooks; running
+children still follow their owner's graph stop lifecycle. Constructing scopes
+retain local pending work without forwarding notifications to an inactive owner.
+
+`discard_scope(ScopeId)` rolls back a constructing child and its constructing
+descendants immediately. Inputs, outputs and assembly claims are released;
+reusable slots receive new generations. It does not advance engine time or
+reclaim other stopped scopes. Running scopes must use normal release instead.

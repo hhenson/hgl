@@ -231,6 +231,10 @@ pub fn markers(plan: &Plan) -> String {
     types.iter().map(marker).collect()
 }
 fn origin(ty: &Ty, types: &mut BTreeSet<Ty>) {
+    if let Ty::Ref(child) = ty {
+        origin(child, types);
+        return;
+    }
     if !structural(ty) || !ty.publication() {
         return;
     }
@@ -251,7 +255,7 @@ fn origin(ty: &Ty, types: &mut BTreeSet<Ty>) {
 }
 
 fn collect(ty: &Ty, types: &mut BTreeSet<Ty>) {
-    if let Ty::Delta(ty) = ty {
+    if let Ty::Delta(ty) | Ty::Ref(ty) = ty {
         origin(ty, types);
     } else if let Ty::List(child, _) = ty {
         collect(child, types);

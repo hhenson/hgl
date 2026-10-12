@@ -39,6 +39,11 @@ an ordinary bound view supplies only the selected child endpoint identity.
 Repeated designations are suppressed by the existing REF publication operation;
 child values remain independently followed. Node REF traversal stays opaque.
 
+Complete fixed nominal graph constructors with temporal child arguments reduce
+through graph_assemblies to a temporal connection assembly. Ordinary constructors
+and node-hook constructors retain their existing rules. This backend leaf leaves
+mixed ordinary/temporal fields and optional graph fields as explicit gaps.
+
 `eval` resolves ordinary `hgraph.std::replay` and `hgraph.std::record` operator
 contracts and checks their selected HGL bodies through the normal resolver.
 The supplied library must contain those declarations, implementations and
@@ -338,9 +343,13 @@ locals remain ordinary, including annotated i64-to-f64 widening. Assignments
 cannot cross categories through automatic lifting, even when unused. Temporal
 scalar binary expressions use existing checked arithmetic and ordinary nodes;
 compound assignments validate the resulting category and type. Node execution
-locals retain ordinary ownership and observation rules. Uninitialized declarations
-and temporal graph conditionals remain explicitly unsupported; this change does
-not claim definite-assignment or dynamic-branch lowering support. Ordinary wiring-time conditionals with connection assignments delegate to
+locals retain ordinary ownership and observation rules. Typed uninitialized ref<T> graph declarations record only the resolved type.
+A direct first assignment supplies the real connection, preserving exactly the
+initialized form's emitted graph; reads or compound updates before assignment
+are errors. Runtime locals and ordinary graph declarations still require an
+initializer in this backend profile. Temporal graph conditionals remain
+unsupported; this increment does not claim branch definite-assignment or
+dynamic child lowering. Ordinary wiring-time conditionals with connection assignments delegate to
 hgl-wiring-locals, retaining only the selected branch's values and binary nodes.
 Both branches check fixed categories and lexical authority. This narrow branch
 profile admits local declarations, name assignments and scalar/binary expressions;
@@ -391,3 +400,12 @@ values; ordinary overload selection shares candidate visibility with name admiss
 compile_module_suite and module_diagnostics restrict test-scoped checking to the
 root module while retaining ordinary production dependencies. Existing embedding
 suite/diagnostic APIs retain checking across every supplied module.
+
+Temporal graph conditionals with one declared REF export slot check both paths
+for definite assignment and preserve branch ownership in Plan.conditionals.
+The remapped enclosing binding retains the declared var's assignment authority
+and fixed REF type. Reassignment cannot make a let writable or change category.
+Each branch must supply a real reference producer. Scoped Rust target preparation
+handles lifecycle lowering; unproved finite activation remains an explicit target
+diagnostic. conditional_admission checks missing paths, premature reads and the
+source/target distinction for child generators.

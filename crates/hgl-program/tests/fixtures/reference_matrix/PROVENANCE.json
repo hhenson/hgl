@@ -2,15 +2,27 @@
   "repository": "https://github.com/hhenson/hgraph_std",
   "revision": "d798c88dec4b729f1e96d2adcd087ca8df7f11ba",
   "spec_revision": "69a2f8ca7b842a0fb4b62003d91dfa1b9eb122b3",
-  "installed_std_revision": "7c264341fe88203bd973641cc186bff7baabd851",
-  "named_groups": 24,
-  "evaluations": 50,
+  "installed_std_revision": "d798c88dec4b729f1e96d2adcd087ca8df7f11ba",
+  "named_groups": 28,
+  "evaluations": 58,
   "files": [
+    {
+      "file": "reference_conditional_expiry.hgl",
+      "source_path": "hgl/hgraph/tests/reference_conditional_expiry.hgl",
+      "git_blob": "bafe7f3843be70db8a439d972164bec1b57bdb2d",
+      "sha256": "c2d5943c13b8c8198830de3680eb7c0b4cb56d6a35ed7e3d9474af61391c4cff"
+    },
     {
       "file": "reference_leaf_values.hgl",
       "source_path": "hgl/hgraph/tests/reference_leaf_values.hgl",
       "git_blob": "6f76ec313ecf9ea60c5aad506f68e982a2e2734d",
       "sha256": "58236fdc220b26bca3cc56e3869674e3d032639e98492dcfcdde394fc82bb6d2"
+    },
+    {
+      "file": "reference_owner_export_values.hgl",
+      "source_path": "hgl/hgraph/tests/reference_owner_export_values.hgl",
+      "git_blob": "4c35238394b9e6588c59e5a902a24f4664a9acfb",
+      "sha256": "56e4ff796f8cb4ad47a028174b0f82009b9bd7392f80e07924cfdc1e92e1b141"
     },
     {
       "file": "reference_projection_values.hgl",

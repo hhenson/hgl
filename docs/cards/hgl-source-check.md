@@ -53,3 +53,7 @@ argument_hint supplies unique concrete argument context and the written delta re
 Argument context incorporates earlier checked operands when they constrain generics, so reduced delta type failures locate the actual supplied expression. May use value_access for the existing ordinary payload projection.
 
 Closed ordinary defaults are checked independently of reachability by hgl-default-values through the authoritative program checker. Generic and required-const declarations retain dependent checking while rejecting known closed capability failures.
+
+Declaration prevalidation admits typed var syntax without an initializer and
+checks its annotation. It records no alias value or runtime dependency;
+concrete graph checking determines the supported category and assignment paths.

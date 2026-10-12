@@ -1,0 +1,31 @@
+module hgraph.std part conditional_reassignment_controls
+
+test {
+    fn reassign_reference(value: ref<i64>) -> ref<i64> {
+        when { return value }
+    }
+    fn reassign_after_conditional(enabled: bool, first: i64, second: i64) -> i64 {
+        var selected: ref<i64>
+        if enabled { selected = reassign_reference(first) }
+        else { selected = reassign_reference(second) }
+        selected = reassign_reference(second)
+        selected = reassign_reference(first)
+        pass_through(selected)
+    }
+    test conditional_export_keeps_declared_var_reassignment_authority {
+        assert eval(reassign_after_conditional,
+            enabled: [true, false, true, false],
+            first: [7, _, 9, 10], second: [20, 21, 22, 23]
+        ) == [7, _, 9, 10]
+        assert eval(reassign_after_conditional,
+            enabled: [false, true, false, true],
+            first: [4, 5, _, 7], second: [30, 31, 32, 33]
+        ) == [4, 5, _, 7]
+    }
+    test ordinary_harness_var_keeps_its_assignment_authority {
+        var saved: i64 = 1
+        saved = 2
+        saved += 3
+        assert saved == 5
+    }
+}

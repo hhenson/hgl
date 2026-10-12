@@ -175,6 +175,11 @@ fn collect(ty: &Ty, types: &mut BTreeMap<String, Ty>) {
     if let Ty::Delta(origin) = ty {
         collect(&delta_storage(origin), types);
     }
+    if let Ty::Ref(origin) = ty
+        && origin.publication()
+    {
+        collect(&delta_type(origin), types);
+    }
     if let Some(element) = crate::collections::element(ty) {
         collect(&element, types);
     }

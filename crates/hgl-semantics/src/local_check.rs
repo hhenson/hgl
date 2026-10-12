@@ -3,7 +3,7 @@ use crate::endpoint_check::require_payload;
 use crate::ir::{Kind, Node, Plan, Statement, Value};
 use crate::value_check::{ordinary, writable};
 use hgl_source::{Expr, Ty};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// Apply ordinary widening without turning a value into a connection.
 fn widen(value: Value, expected: &Ty, allowed: bool) -> Value {
@@ -187,13 +187,42 @@ pub fn binary(op: &str, mut values: [Value; 2], plan: &mut Plan) -> Result<Value
 #[derive(Debug, Default, Clone)]
 pub struct GraphLocals {
     signals: BTreeSet<String>,
+    declarations: BTreeMap<String, Ty>,
 }
 impl GraphLocals {
     /// Seed the current callable's formal signal names.
     pub fn new(signals: impl Iterator<Item = String>) -> Self {
         Self {
             signals: signals.collect(),
+            declarations: BTreeMap::new(),
         }
+    }
+    /// A typed declaration supplies no ordinary value or temporal connection.
+    pub fn declare(&mut self, name: &str, ty: Ty) -> Result<(), String> {
+        if self.declarations.contains_key(name) {
+            return Err(format!("duplicate local {name}"));
+        }
+        self.declarations.insert(name.into(), ty);
+        Ok(())
+    }
+    /// The expected type for the first assignment, independently of category.
+    pub fn declaration(&self, name: &str) -> Option<&Ty> {
+        self.declarations.get(name)
+    }
+    /// Declared slots that still need a binding on every reaching branch.
+    pub fn declarations(&self) -> impl Iterator<Item = (&String, &Ty)> {
+        self.declarations.iter()
+    }
+    /// Retain the real first binding, then allow ordinary authority checks.
+    pub fn initialized(&mut self, name: &str) {
+        self.declarations.remove(name);
+    }
+    /// Reject reads that have no binding on the reaching path.
+    pub fn read(&self, name: &str) -> Result<(), String> {
+        if self.declarations.contains_key(name) {
+            return Err(format!("local {name} is read before definite assignment"));
+        }
+        Ok(())
     }
     /// Retain a signal initializer's access restriction across local aliases.
     pub fn bind(&mut self, name: &str, expr: &Expr) {

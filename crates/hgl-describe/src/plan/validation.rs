@@ -67,7 +67,10 @@ fn validate_child(
             };
             expected = target;
         }
-        if output != expected {
+        let reference_export = !child.keyed
+            && matches!(owner.output, Some(TsType::Reference(_)))
+            && Some(output) == owner.output.as_ref();
+        if output != expected && !reference_export {
             return Err(BuildError::InvalidChildren("child output shape".into()));
         }
     }
@@ -87,7 +90,10 @@ pub fn check_boundaries(
             .ok_or_else(|| BuildError::InvalidChildren("missing owner input".into()))?;
         let source = project(source, &edge.source_path, child.keyed)?;
         let target = input_type(&edge.target, &child.graph, registry)?;
-        if source != target && !matches!(source, TsType::Reference(t) if t.as_ref()==target) {
+        if source != target
+            && !matches!(source, TsType::Reference(t) if t.as_ref()==target)
+            && !matches!(target, TsType::Reference(t) if t.as_ref()==source)
+        {
             return Err(BuildError::InvalidChildren("boundary shape".into()));
         }
         if bound.iter().any(|previous| previous.overlaps(&edge.target)) {
