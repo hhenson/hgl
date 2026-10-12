@@ -3,8 +3,15 @@
 Status: implemented checked native type reachability and executable image union.
 
 hgl-semantics::native_images uses library, checked ir, ir_visit, harness_ir and
-hgl-source. Public scalars(Plan) and harness_scalars(&[Test]) collect canonical
-native scalar contracts recursively through retained storage and expressions.
+hgl-source. Public scalars(Plan), harness_scalars(&[Test]) and
+combined_scalars(&[Plan], &[Test]) collect canonical
+native scalar contracts recursively through retained storage and expressions,
+returning Result. They also retain non-native canonical identities and reject
+an identity shared by incompatible native and non-native shapes before layout
+assembly. This checks inferred types and the combined retained suite, including
+values whose producing declaration had a different test scope.
+Combined collection also checks graph-only identities against lexical values and
+other graph plans before shared suite layouts can merge their codec keys.
 This includes ports, globals, configuration, wiring, ordinary layouts, generator
 locals, nominal/recursive/family children and concrete values placed into Any.
 select(Library, scalars, selected_images) returns only reached inert Image mappings, using the
@@ -28,6 +35,9 @@ per provider, and emits one alias/domain per reached canonical scalar. All
 contributing modules retain their compatible marker mappings. Selected image
 identity, fingerprint and scalar ABI checks run before execution; unreachable
 providers and unused scalar mappings remain unlinked.
+Emitter collection failures return a target compile_error diagnostic before
+provider image text or layout emission, never an unchecked unwrap or runnable
+fallback.
 
 Acceptance: helper-free configured empty List<Native>, globals, silent native
 ports, generator locals, compound configuration, boxed ordinary empty native

@@ -455,3 +455,86 @@ fn selected_markers_cannot_merge_distinct_canonical_identities() -> Result<(), S
     library::load(&modules)?;
     Ok(())
 }
+
+#[test]
+fn opaque_native_identities_cannot_alias_incompatible_hgl_type_shapes() -> Result<(), String> {
+    let mut input = sources("native type Token", SCALAR);
+    input.push(("ordinary.hgl".into(), "module ordinary\nexport struct Row {value:i64}\nexport struct Box<T> {value:T}\nexport enum Label {ready=1}".into()));
+    for identity in [
+        "i64",
+        "str",
+        "any",
+        "tuple<i64,bool>",
+        "nullable<i64>",
+        "list<ordinary::Row>",
+        "tuple<ordinary::Row,i64>",
+        "ordinary::Row",
+        "ordinary::Label",
+        "ordinary::Box<i64>",
+        "ordinary::Box<list<i64>>",
+    ] {
+        let mut conflicting = input.clone();
+        conflicting[1].1 = conflicting[1].1.replace("existing.Token", identity);
+        let error = library::load(&conflicting).err().ok_or_else(|| {
+            format!("incompatible native canonical identity admitted: {identity}")
+        })?;
+        assert!(
+            error.contains("native canonical identity conflicts with non-native HGL type")
+                && error.contains("provider::Token")
+                && error.contains(identity),
+            "{error}"
+        );
+    }
+    for identity in [
+        "external::Row",
+        "ordinary::Rowish",
+        "i64 ",
+        "tuple<i64",
+        "tuple<unknown>",
+        "ordinary::Row<",
+        "ordinary::Row<>",
+        "ordinary::Box",
+        "ordinary::Box<i64,bool>",
+        "atomic<i64>",
+    ] {
+        let mut distinct = input.clone();
+        distinct[1].1 = distinct[1].1.replace("existing.Token", identity);
+        let library = library::load(&distinct)?;
+        let declaration = library
+            .declarations
+            .iter()
+            .find(|d| d.role == library::Role::NativeType)
+            .ok_or("native declaration missing")?;
+        let ty = native_contracts::resolve(&library, declaration, false).map_err(String::from)?;
+        assert!(matches!(&ty,hgl_source::Ty::Native(scalar) if scalar.identity==identity));
+        assert_eq!(ty.source_name(), identity);
+    }
+    Ok(())
+}
+
+#[test]
+fn test_local_nominal_identities_do_not_change_production_native_contracts() -> Result<(), String> {
+    let mut input = sources(
+        "native type Token",
+        &SCALAR.replace("existing.Token", "ordinary::Row"),
+    );
+    input.push(("ordinary.hgl".into(), "module ordinary\ntest {struct Row {value:i64}\ntest fixture {assert Row(value:1).value==1}}".into()));
+    let production = library::load(&input)?;
+    let declaration = production
+        .declarations
+        .iter()
+        .find(|d| d.role == library::Role::NativeType)
+        .ok_or("native declaration missing")?;
+    native_contracts::resolve(&production, declaration, false).map_err(String::from)?;
+    let mut testing = production.clone();
+    testing.test_scope = Some("ordinary".into());
+    let error = native_contracts::resolve(&testing, declaration, false)
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error
+            .contains("native canonical identity conflicts with non-native HGL type ordinary::Row"),
+        "{error}"
+    );
+    Ok(())
+}
