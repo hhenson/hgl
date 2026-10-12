@@ -1,35 +1,24 @@
 # Reference matrix implementation record
 
-The six reference suites authored at hgraph_std `d798c88` contain 28 named
-groups. The baseline is HGL `265facc`, hgraph_spec `69a2f8c`, and the compatible
-installed hgraph_std `7c26434`; the six test files were read at `d798c88` without
-changing the installed library pin. Every run uses the normal `hglc test` CLI
-with the entire `external/hgraph_std/hgl/hgraph` and `native/stdlib` libraries.
-Assertions and source spelling are unchanged.
+The supported slice executes the scalar, projection, structural and native leaf
+REF suites: 24 named groups / 50 evaluations. Four conditional ownership groups
+remain unexecuted. Installed dependencies are hgraph_spec `69a2f8c` and the
+compatible hgraph_std `7c26434`; the Std pin has not advanced.
 
-All six baseline suites failed before executing any group. Source admission
-rejected REF own-output metadata, nominal graph projections and graph variables
-without initial bindings. The structural suite reached Rust emission but its
-Set width dependency through REF had no declaration. The native leaf suite
-rejects its atomic Tuple result containing a borrowed native text helper.
+The tracked [matrix runner](../../crates/hgl-program/tests/reference_matrix.rs)
+compiles byte-for-byte snapshots of hgraph_std
+`d798c88dec4b729f1e96d2adcd087ca8df7f11ba`, with
+[paths and hashes](../../crates/hgl-program/tests/fixtures/reference_matrix/PROVENANCE.json).
+It uses normal source loading and target-module suite planning with the entire
+production Std and native/stdlib. Debug and optimized runs verify all 24 groups,
+50 evaluations and zero failures. Normal CLI execution uses the same sources
+and complete libraries. Full CI remains pending root verification.
 
-The implemented projection node captures statically resolved child identity
-through its existing bound input view and publishes a REF designation. It never
-reads the child's payload. Existing runtime suppression avoids an extra tick
-for unchanged designations; ordinary consumers follow child publications and
-sample newly selected endpoints even when values are equal. REF inputs remain
-opaque in source node handlers. Set width preparation follows REF dependencies
-without running handlers.
-
-Current focused validation executes all 24 groups / 50 evals in the scalar,
-projection, structural and native leaf suites. Four authored groups remain
-unexecuted in the two lifecycle suites. The supported transport slice was
-revalidated after merging the corrected reviewed Native implementation at `283ac5b`
-(actual main ancestry `2be08a4`). The integration revisions `94e982e` and `6e2c791` pass
-normal CLI execution for each of the four suites, the combined real allocation
-probe, focused compiler/store regressions, affected clippy and the module/card
-budget gate. Full CI remains pending host coordination; this record does not
-claim completion.
+Correction: earlier 24/50 reports used the older `d298500` scalar snapshot;
+the other three snapshots already matched `d798c88`. The latest scalar assertion
+requires signal consumers to count selected target ticks and re-point sampling
+under TS-18. The compiler now follows that contract while retaining signal
+payload opacity. All current authored assertions are unchanged.
 
 | Suite | Named group | Outcome |
 | --- | --- | --- |
@@ -62,23 +51,16 @@ claim completion.
 | `reference_values` | `reference_held_output_keeps_a_live_designation_across_later_routes` | Passed, executed |
 | `reference_values` | `reference_bindings_preserve_fixed_and_nominal_child_identity` | Passed, executed |
 
-The remaining lifecycle source contracts are already defined by
+The remaining contracts are defined in
 [control flow](../../external/hgraph_spec/language/docs/design/control-flow.md),
 [conditional expiry](../../external/hgraph_spec/compiler/cases_reference_conditional_expiry.md),
 and [owned export](../../external/hgraph_spec/compiler/cases_reference_owner_export.md).
-The current compiler rejects temporal graph conditionals; implementing them
-requires checked child graph descriptions, definite assignment and output
-boundary export rather than changing reference payload semantics.
+They require checked child graphs, definite assignment, fresh branch lifetimes
+and declared REF output exports. Temporal graph conditionals remain unsupported.
 
-The prepared generated allocation probe executes the exact 24 reference groups
-and their 50 evaluations with a real CountingAllocator. Every successful cycle,
-including first designation sampling, has zero allocations. Scalar/projection
-cases and structural/native cases were observed independently; the required-read
-failure retains its existing error behavior. Imported native test groups were
-excluded from this targeted probe, matching the normal CLI target scope.
-
-Cold route analysis follows only checked REF capture dependencies and fixed
-projection indices. It reserves target subscription buffers and the union of
-possible absent collection views without binding, sampling or publishing them.
-The focused regression covers a retained invalid Map target and distinct Native
-text payloads inside an atomic Tuple under actual allocation counting.
+A real CountingAllocator measures every successful evaluation cycle in the
+tracked 24/50 runner, including first designation sampling: zero allocations
+in both profiles. The required-read error preserves its authored expectation;
+failed cycles are not included in the successful-cycle allocation guarantee.
+Cold preparation reserves finite target subscriptions and absent collection
+views without publishing, sampling or granting membership/lifetime.

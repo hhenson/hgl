@@ -1,0 +1,71 @@
+module hgraph.std part reference_leaf_values_tests
+
+# Assemble with native/atomic_values_fixture.hgl and its checked provider.
+# Only ordinary leaf values enter eval; graph bindings obtain every REF.
+test {
+    fn ref_leaf_relay<T>(value: ref<T>) -> ref<T> {
+        when { return value }
+    }
+    fn ref_leaf_hold<T>(value: ref<T>) -> ref<T> {
+        state captured: bool = false
+        when {
+            if !captured {
+                captured = true
+                return value
+            }
+        }
+    }
+    fn ref_leaf_follow<T>(value: T) -> T => pass_through(ref_leaf_hold(ref_leaf_relay(value)))
+    fn ref_leaf_bytes(value: bytes) -> bytes => ref_leaf_follow(value)
+    fn ref_leaf_any(value: any) -> any => ref_leaf_follow(value)
+    fn ref_leaf_token(value: Token) -> Token => ref_leaf_follow(value)
+    fn ref_leaf_text_observe(value: TextOnly) -> str { when { return text_only_text(value) } }
+    fn ref_leaf_text(value: TextOnly) -> str => ref_leaf_text_observe(ref_leaf_follow(value))
+
+    test held_reference_bytes_keep_empty_equal_distinct_and_silent_values {
+        let empty: bytes = bytes()
+        let first: bytes = bytes([0, 255])
+        assert eval(ref_leaf_bytes, [_, empty, empty, _, first, first, bytes([255, 0]), _]) == [
+            _, empty, empty, _, first, first, bytes([255, 0]), _
+        ]
+        # A new evaluation owns a fresh capture latch and input designation.
+        assert eval(ref_leaf_bytes, [_, first, _, empty, _]) == [_, first, _, empty, _]
+    }
+
+    test held_reference_any_keeps_one_box_leaf_across_contained_type_changes {
+        let empty: any = any()
+        assert eval(ref_leaf_any, [_, empty, empty, any(0), any(false), _, any(bytes()), any(token("a")), _]) == [
+            _, empty, empty, any(0), any(false), _, any(bytes()), any(token("a")), _
+        ]
+        assert eval(ref_leaf_any, [_, any(""), any(""), _, empty, _]) == [_, any(""), any(""), _, empty, _]
+    }
+
+    test held_reference_native_token_keeps_owning_scalar_publications {
+        let empty: Token = token("")
+        let first: Token = token("a")
+        let second: Token = token("b")
+        assert eval(ref_leaf_token, [_, empty, empty, first, _, first, second, _]) == [_, empty, empty, first, _, first, second, _]
+        assert eval(ref_leaf_token, [_, second, _, empty, first, _]) == [_, second, _, empty, first, _]
+    }
+
+    fn ref_leaf_text_identity_observe(reference: ref<TextOnly>, alias: ref<TextOnly>, other: ref<TextOnly>, data: TextOnly, step: i64) -> atomic<tuple<bool, bool, str>> {
+        when valid(reference, alias, other, data, step) && modified(step) {
+            # REF-EQ-1 compares designation; TextOnly declares no Eq/hash/order.
+            return (reference == alias, reference == other, text_only_text(data))
+        }
+    }
+    fn ref_leaf_text_identity(value: TextOnly, other: TextOnly, step: i64) -> atomic<tuple<bool, bool, str>> {
+        let held = ref_leaf_hold(ref_leaf_relay(value))
+        ref_leaf_text_identity_observe(held, value, other, pass_through(held), step)
+    }
+    test held_reference_text_only_needs_no_payload_equality_or_hash {
+        let empty: TextOnly = text_only("")
+        let first: TextOnly = text_only("a")
+        let second: TextOnly = text_only("b")
+        assert eval(ref_leaf_text, [_, empty, empty, first, _, first, second, _]) == [_, "", "", "a", _, "a", "b", _]
+        # Fresh graph; separately wired equal-text inputs are distinct endpoints.
+        assert eval(ref_leaf_text_identity,
+            value: [first, second, _, empty], other: [first, second, _, empty], step: [1, 1, 1, 1]
+        ) == [(true, false, "a"), (true, false, "b"), (true, false, "b"), (true, false, "")]
+    }
+}
