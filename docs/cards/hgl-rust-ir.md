@@ -17,6 +17,9 @@ The frontend checks type identity, access authority, indices, and retention
 before emission. This crate performs no source checking and selects no runtime
 behavior. Construction and projection preserve the ordinary value-mutability
 contract; aggregate views explicitly retain their provenance.
+Plan.native_images retains inert executable mappings reached by native scalar
+types independently of helper calls. The native-images card defines selection
+and emission; this metadata never adds a semantic helper binding.
 
 Acceptance: program source and emitted-executable tests for required-field
 struct construction, nested independent copies, mutable assignment and

@@ -24,6 +24,7 @@ pub mod library;
 pub mod local_check;
 pub mod name_check;
 pub mod native_contracts;
+pub mod native_images;
 pub use hgl_eval::publication_trace;
 pub mod recursive_types;
 pub use hgl_eval::scalar_keys;

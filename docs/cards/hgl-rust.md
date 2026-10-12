@@ -121,6 +121,10 @@ suite. `emit_shared(&Plan)` emits nodes against those enclosing markers; standal
 `emit` retains self-contained output. Graph instances and payload stores remain
 independent. Sharing generated type definitions bounds compiler memory growth
 without changing execution or reducing test cases.
+shared_suite_layouts(&Suite) includes native type mappings reached by ordinary
+test preparation, using the native-images card. shared_test_layouts(plans, tests)
+remains available for callers whose mappings are supplied by checked plans or
+helper bindings. Provider modules and canonical aliases are shared once.
 
 Finite evaluation emits graph-local cold capacity maxima from already materialized
 configuration values and proved direct generator arrival counts. Before binding globals it allocates record slots, then after

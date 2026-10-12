@@ -110,6 +110,16 @@ pub(crate) fn compile(library: Library, module: &str, entry: &str) -> Result<Pla
         ..Checker::default()
     };
     checker.call(module, entry, &[], false)?;
+    checker.plan.native_images = hgl_semantics::native_images::select(
+        &checker.library,
+        &hgl_semantics::native_images::scalars(&checker.plan),
+        &checker
+            .plan
+            .natives
+            .iter()
+            .filter_map(|native| native.provider.clone())
+            .collect::<Vec<_>>(),
+    )?;
     hgl_rust::tuple_adapter::standalone(checker.plan)
 }
 impl Checker {
@@ -2030,6 +2040,16 @@ pub(crate) fn prepare_evaluation(
         checker.plan.recording = Some((key, recording));
         checker.plan.output = Some((record, ty));
     }
+    checker.plan.native_images = hgl_semantics::native_images::select(
+        &checker.library,
+        &hgl_semantics::native_images::scalars(&checker.plan),
+        &checker
+            .plan
+            .natives
+            .iter()
+            .filter_map(|native| native.provider.clone())
+            .collect::<Vec<_>>(),
+    )?;
     Ok((hgl_rust::tuple_adapter::prepared(checker.plan)?, prepared))
 }
 

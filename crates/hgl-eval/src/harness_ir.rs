@@ -121,6 +121,8 @@ pub struct Suite {
     pub tests: Vec<Test>,
     /// Generated graph plans addressed by each evaluation's case index.
     pub plans: Vec<crate::ir::Plan>,
+    /// Inert native scalar mappings reached by ordinary test preparation.
+    pub native_images: Vec<hgl_value_model::native_contracts::Image>,
 }
 impl Suite {
     /// Preserve the ordinary empty-suite error for callers requiring executable tests.
