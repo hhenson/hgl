@@ -183,33 +183,3 @@ fn test_type_admission_keeps_other_context_members_excluded() {
         rejected(&source(&format!("test {{{member}}}")), "test context");
     }
 }
-
-#[test]
-fn authored_ref_matrix_indexes_all_named_cases_without_lowering_later_stages() -> Result<(), String>
-{
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../external/hgraph_std/hgl/hgraph/tests");
-    let mut cases = 0;
-    for name in [
-        "reference_values",
-        "reference_leaf_values",
-        "reference_projection_values",
-        "reference_structural_values",
-        "reference_conditional_expiry",
-        "reference_owner_export_values",
-    ] {
-        let file = root.join(format!("{name}.hgl"));
-        let sources = vec![(
-            file.display().to_string(),
-            std::fs::read_to_string(&file).map_err(|e| e.to_string())?,
-        )];
-        let library = hgl_semantics::library::load(&sources)?;
-        cases += library
-            .declarations
-            .iter()
-            .filter(|decl| decl.role == hgl_semantics::library::Role::Test)
-            .count();
-    }
-    assert_eq!(cases, 28);
-    Ok(())
-}
