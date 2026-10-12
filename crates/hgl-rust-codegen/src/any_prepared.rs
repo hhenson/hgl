@@ -83,8 +83,10 @@ pub fn prepare(original: &Plan) -> Plan {
         original,
         crate::execution_proof::owning_argument,
         crate::constructor_owners::family,
-        |ty, result| {
-            matches!(result, Ty::Atomic(_)) || crate::structural_publication::ordinary_supported(ty)
+        |value, result, locals| {
+            crate::constructor_owners::complete(value, locals)
+                && (matches!(result, Ty::Atomic(_))
+                    || crate::structural_publication::ordinary_supported(&value.ty))
         },
     );
     for (node_id, node) in plan.nodes.iter_mut().enumerate() {

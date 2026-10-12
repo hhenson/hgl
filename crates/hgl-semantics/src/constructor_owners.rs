@@ -22,19 +22,23 @@ pub fn prepare(
     plan: &Plan,
     owning: impl Fn(&Ty) -> bool,
     convert: impl Fn(&Value) -> Option<Value>,
-    tuple_staging: impl Fn(&Ty, &Ty) -> bool,
+    tuple_staging: impl Fn(&Value, &Ty, &BTreeMap<usize, Value>) -> bool,
 ) -> Plan {
     let mut plan = plan.clone();
     for (node_id, node) in plan.nodes.iter_mut().enumerate() {
         let growing = crate::constructor_growth::locals(node);
         let mut owners = BTreeMap::new();
         let mut origins = BTreeMap::<usize, Value>::new();
+        let mut locals = BTreeMap::new();
         for body in std::iter::once(&mut node.start)
             .chain(std::iter::once(&mut node.stop))
             .chain(node.handlers.iter_mut().map(|(_, body)| body))
             .chain(node.generator.iter_mut())
         {
             crate::ir_visit::nodes_mut(body, &mut |s| {
+                if let Statement::Let(id, value) | Statement::Var(id, value) = s {
+                    locals.insert(*id, value.clone());
+                }
                 if let Statement::Assign(target, value) = s
                     && matches!(target.kind,Kind::MutableLocal(id) if owners.contains_key(&id))
                 {
@@ -77,7 +81,7 @@ pub fn prepare(
                 }
                 if matches!(v.kind, Kind::Construct(_))
                     && (matches!(v.ty, Ty::Struct(..) | Ty::Recursive(_))
-                        || (matches!(v.ty, Ty::Tuple(_)) && tuple_staging(&v.ty, &result)))
+                        || (matches!(v.ty, Ty::Tuple(_)) && tuple_staging(v, &result, &locals)))
                     && owning(&v.ty)
                 {
                     let key = format!("\0constructor:{node_id}:expression:{}", node.globals.len());
