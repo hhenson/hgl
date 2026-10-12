@@ -35,3 +35,6 @@ Signature, field, local and lambda annotations, constructors and qualified enum
 values enforce this before deferred specialization, including unused generic
 production bodies. Nominal schema identity remains module-wide; no runtime lookup
 or alternate test schema is introduced.
+
+Built-in scalar and type-constructor spellings retain ordinary type-resolution
+precedence; hidden test nominals cannot intercept production annotations.

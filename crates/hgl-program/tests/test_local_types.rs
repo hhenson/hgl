@@ -264,3 +264,18 @@ fn production_operator_defaults_keep_their_declaration_scope() -> Result<(), Str
     );
     Ok(())
 }
+
+#[test]
+fn test_type_names_do_not_hide_builtin_production_annotations() -> Result<(), String> {
+    let body = "struct Payload {value:map<str,list<i64,2>>}\nfn pass(value:i64)->i64 {when {return delta_value(value)}}\nfn ticks()->i64 {yield 1us:len(bytes([1]))}\nexport fn main() {pass(ticks())}";
+    let baseline = emit_rust(&compile(&source(body), "main")?);
+    for name in ["i64", "str", "bytes", "map", "list"] {
+        let sources = source(&format!("{body}\ntest {{enum {name} {{item}}}}"));
+        assert_eq!(
+            emit_rust(&compile(&sources, "main")?),
+            baseline,
+            "fixture {name} changed production resolution"
+        );
+    }
+    Ok(())
+}

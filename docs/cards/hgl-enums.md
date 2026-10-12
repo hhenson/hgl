@@ -26,3 +26,6 @@ duplicate names/numbers/declarations, overflow, import identity and private expo
 
 check_call diagnoses enum construction and enum-type enumeration as unsupported
 by the declared-member publication profile before ordinary call resolution.
+
+Nominal resolution observes the declaration test scope, so hidden fixture enums
+cannot intercept production built-in constructors.

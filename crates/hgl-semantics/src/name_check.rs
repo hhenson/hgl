@@ -212,7 +212,13 @@ pub fn type_name(
         );
     }
     let (base, args) = hgl_source::application(name).unwrap_or((name, Vec::new()));
+    let builtin = Ty::parse(base).is_some()
+        || matches!(
+            base,
+            "signal" | "atomic" | "ref" | "list" | "set" | "map" | "tuple" | "rolling" | "delta"
+        );
     if !scope.parameters.contains(base)
+        && !builtin
         && let Some(decl) = crate::struct_names::declaration(library, module, base)?.or(
             crate::struct_names::enum_declaration(library, module, base)?,
         )
@@ -226,11 +232,7 @@ pub fn type_name(
         .into());
     }
     if !scope.parameters.contains(base)
-        && Ty::parse(base).is_none()
-        && !matches!(
-            base,
-            "signal" | "atomic" | "ref" | "list" | "set" | "map" | "tuple" | "rolling" | "delta"
-        )
+        && !builtin
         && crate::struct_names::declaration(library, module, base)?.is_none()
         && crate::struct_names::enum_declaration(library, module, base)?.is_none()
     {
