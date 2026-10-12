@@ -32,3 +32,8 @@ flowchart TD
 ```
 
 Native scalar/layout conversion delegates to native_values; prepared owning-result selection and limits delegate to native_results. These modules share only checked metadata and emission, with no executable assembly/provisioning dependency.
+
+native_results uses layouts and scalars for fixed primitive observations,
+configuration and literal emission. Nested non-owning native calls need no result
+width callback; owning callbacks compose their declared cold bounds and retain
+the single borrowed result in independently reserved storage.

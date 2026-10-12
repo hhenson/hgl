@@ -12,7 +12,9 @@ fn bound(binding: &Native) -> Option<String> {
 fn expression(value: &Value) -> Option<String> {
     match &value.kind {
         Kind::Native(binding, args) => {
-            bound(binding)?;
+            if value.ty.owning_scalar() {
+                bound(binding)?;
+            }
             let image = binding.provider.as_ref()?;
             let args = args
                 .iter()
@@ -81,8 +83,32 @@ fn expression(value: &Value) -> Option<String> {
         | Kind::Query(..)
         | Kind::Output
         | Kind::Capability
-        | Kind::Void => None,
+        | Kind::Void => primitive_expression(value),
     }
+}
+fn primitive_expression(value: &Value) -> Option<String> {
+    if value.ty.scalar_kind().is_none() || value.ty.owning_scalar() {
+        return None;
+    }
+    if let Kind::Input(id, false) = value.kind {
+        return Some(format!(
+            "*observation.scalar::<{}>(self.input{id}.id())?",
+            crate::layouts::rust_type(&value.ty)
+        ));
+    }
+    if let Kind::Configuration(id) = value.kind {
+        return Some(format!("self.configuration{id}"));
+    }
+    if let Kind::Local(id) | Kind::MutableLocal(id) = value.kind {
+        return Some(format!("local{id}"));
+    }
+    if let Kind::GlobalGet(id) = value.kind {
+        return Some(format!("globals.get(self.global{id})?"));
+    }
+    if let Kind::Literal(literal) = &value.kind {
+        return Some(crate::scalars::literal(literal));
+    }
+    None
 }
 /// Only admitted borrowed result trees may select the prepared helper path.
 pub fn supported(value: &Value) -> bool {

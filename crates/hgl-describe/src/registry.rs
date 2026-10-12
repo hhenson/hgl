@@ -262,6 +262,12 @@ impl Registry {
             .descriptors
             .lock()
             .map_err(|error| NodeError::new(error.to_string()))?;
+        if let Some((&id, _)) = descriptors
+            .iter()
+            .find(|(_, retained)| std::ptr::eq(**retained, plan))
+        {
+            return Ok(id);
+        }
         let id = NEXT
             .fetch_update(Relaxed, Relaxed, |id| id.checked_add(1))
             .map_err(|_exhausted| NodeError::new("cold descriptor identity exhausted"))?;

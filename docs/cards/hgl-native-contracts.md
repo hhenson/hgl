@@ -23,6 +23,14 @@ Signal, borrowing, mutation, generic signatures, default arguments and blocking
 evaluation remain rejected in this slice. Target bindings never infer operations
 from native implementation types. Missing scalar/helper records fail loading.
 
+Logical aliases remain one canonical HGL scalar. The `hgl-rust-1` target requires
+compatible selected mappings: each canonical identity uses the same provider,
+image path, semantic fingerprint and explicit Rust marker. Different mappings
+reject during descriptor checking, before image loading or Rust emission; this
+ABI provides no conversion between opaque representations. A provider identity
+selects one image path and fingerprint across modules. Compatible modules may
+contribute distinct scalar records, all of which are retained in generated code.
+
 Acceptance: authored Std fixture identities/capabilities, canonical aliases,
 descriptor-only checking, exact helper signatures, missing/incompatible contracts,
 mode/phase/signal rejection and image fingerprint comparison. Native nominal scalar

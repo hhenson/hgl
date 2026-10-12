@@ -13,7 +13,7 @@ cold_transport = { budget = 160, uses = ["any_values", "layouts"] }
 any_expression_leaves = { budget = 50, uses = ["layouts", "any_values", "source_slots"] }
 prepared_global_writes = { budget = 60, uses = ["constructor_owners", "layouts", "prepared_hooks", "values", "any_prepared", "finite_domains", "snapshot_slots"] }
 native_owners = { budget = 80, uses = [] }
-native_results = { budget = 180, uses = ["native_image", "layouts"] }
+native_results = { budget = 180, uses = ["native_image", "layouts", "scalars"] }
 native_values = { budget = 60, uses = ["identifiers"] }
 owner_comparisons = { budget = 100, uses = ["source_slots", "any_prepared", "any_values", "values"] }
 any_expression = { budget = 180, uses = ["any_expression_leaves", "any_values", "source_slots", "constructor_owners", "observed"] }

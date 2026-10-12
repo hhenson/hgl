@@ -15,6 +15,11 @@ nor fails, and keeps the provider's declared value meaning. A sizing sink counts
 bytes without executing provider copy callbacks. This backend representation
 contract adds no HGL constructor, conversion, mutation or source spelling.
 
+An executable canonical scalar uses one compatible selected Rust target mapping.
+Distinct provider/image/fingerprint/marker mappings require a conversion contract
+that this ABI does not supply; descriptor checking rejects them before execution.
+Canonical HGL aliases using the same mapping share the typed owner and operations.
+
 Owning Any plans carry their compiled copy codec, including nested provider
 leaves. Retaining an Any value follows that codec instead of cloning opaque bytes;
 prepared Any frames append through the same sink without temporary owners.
