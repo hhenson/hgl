@@ -2,7 +2,7 @@
 
 The any_values vocabulary in hgl-types owns compiled box descriptors and independently retained encoded ordinary data. No runtime or third-party dependency is introduced. Module budget: 420 lines; 30 lines of the original allocation are transferred to Store with recursive execution.
 
-Public surface: AnyPlan {identity, operation, capabilities, execution, capture, copy}, AnyField {plan, optional}, AnyOperation, AnyValue, AnyRef, AnyView, AnyExecution, ColdCapture, Frames, AnyBuffer and AnyWidth. AnyValue exposes from_encoded, plan, data, reserve, capacity, copy_prepared, encode_prepared, retain, capture, equal, compare and key_hash. AnyPlan exposes equal, compare and hash. AnyBuffer writes and frames typed bytes, executes provider copies and writes descriptor headers; AnyWidth measures the same encoding before publication. Frames iterates compiler-produced length-framed children.
+Public surface: AnyPlan {identity, operation, capabilities, execution, capture, validate, copy}, AnyField {plan, optional}, AnyOperation, AnyValue, AnyRef, AnyView, AnyExecution, ColdCapture, ColdValidate, Frames, AnyBuffer and AnyWidth. AnyValue exposes from_encoded, plan, data, reserve, capacity, copy_prepared, encode_prepared, retain, capture, equal, compare and key_hash. AnyPlan exposes equal, compare and hash. AnyBuffer writes and frames typed bytes, executes provider copies and writes descriptor headers; AnyWidth measures the same encoding before publication. Frames iterates compiler-produced length-framed children.
 
 Descriptors hold compiled operations and exact type identity, with no name lookup or payload type validation during successful evaluation. They cover arbitrary admitted ordinary layouts, recursively including family members and boxes. Encoded bytes and descriptors are an internal compiler/runtime contract, not a user serialization API. Whole family boxing selects a concrete member; nested family fields retain their tags.
 
@@ -35,3 +35,10 @@ predicates; descriptor selection and operation semantics remain in Store.
 encoding with its independently resolved descriptor context. The caller supplies
 metadata only after validating its cold carrier identity; the view owns nothing
 and executes no callbacks. `AnyValue::data` uses the same constructor.
+
+Cold descriptor validation uses `ColdValidate = fn(AnyView) -> NodeResult` and
+`AnyPlan.validate: Option<ColdValidate>`. Generated descriptors validate complete
+typed framing before trusted decoding. Descriptors without that mapping are
+rejected at cold construction. `AnyView::checked_boxed() -> NodeResult<AnyRef>`
+checks the descriptor index and empty-box payload before returning a borrow.
+These checks do not run on the prepared publication path.

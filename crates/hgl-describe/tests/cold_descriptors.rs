@@ -4,6 +4,7 @@ use hgl_types::{AnyOperation, AnyPlan, NodeResult};
 
 static INTEGER: AnyPlan = AnyPlan {
     capture: None,
+    validate: None,
     copy: |data, out| out.write(&data),
     execution: &hgl_store::any_values::operations::EXECUTION,
     identity: std::any::TypeId::of::<i64>,
@@ -12,6 +13,7 @@ static INTEGER: AnyPlan = AnyPlan {
 };
 static OTHER_INTEGER: AnyPlan = AnyPlan {
     capture: None,
+    validate: None,
     copy: |data, out| out.write(&data),
     execution: &hgl_store::any_values::operations::EXECUTION,
     identity: std::any::TypeId::of::<i64>,

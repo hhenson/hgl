@@ -58,7 +58,9 @@ pointer-free internal Bytes carriers. Its initial module allowance is 160 under
 the unchanged codegen aggregate limit. It may use `any_values` and `layouts`.
 Each nested descriptor is enrolled in the caller's Registry-owned catalog. The
 carrier contains inert catalog IDs; decoding resolves every ID before invoking a
-typed reader. Exact original descriptors retain provider preflight/copy operations,
+typed validator and reader. Malformed payloads, frame widths, descriptor indices
+and missing cold validation mappings return construction errors before owner
+copying. Exact original descriptors retain provider preflight/copy operations,
 even when the consumer never compiled the producer's concrete type. A fresh
 unrelated Registry fails with an existing uncoded cold build error; Registry clones
 share the catalog. Description cloning copies only data and never invokes providers.

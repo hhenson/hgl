@@ -242,18 +242,20 @@ pub fn layouts(plan: &Plan) -> String {
         return String::new();
     }
     let mut out=vec!["use hgl_types::any_values::number as any_number;fn any_retain(plan:&'static hgl_types::AnyPlan,data:hgl_types::any_values::AnyView<'_>)->hgl_types::NodeResult<hgl_types::AnyValue>{let mut width=hgl_types::any_values::AnyWidth::default();(plan.copy)(data,&mut width);let size=width.finish()?;let mut out=hgl_types::AnyValue::default();out.reserve(size)?;(plan.copy)(data,&mut out);Ok(hgl_types::AnyValue::from_encoded(plan,out))}fn any_copy_frame(out:&mut dyn hgl_types::any_values::AnyBuffer,copy:impl FnOnce(&mut dyn hgl_types::any_values::AnyBuffer)){let start=out.len();out.write(&[0;8]);copy(out);out.width(start,out.len()-start-8);}".into()];
+    out.push(crate::cold_validation::support().into());
     let mut decode = Vec::new();
     for ty in types.values() {
         let n = name(ty);
         let (write, read) = codecs(ty);
         let copy = copy_codec(ty);
+        let validate = crate::cold_validation::codec(ty);
         let native = owned_type(ty);
         let marker = global_type(ty);
         let operation = operation(ty);
         let identity = crate::layouts::any_identity(ty.source_name().as_bytes());
         let caps = [0, 1, 2].map(|op| hgl_semantics::any_values::capable(ty, op));
         out.push(format!(
-                "static ANY_{n}:hgl_types::AnyPlan=hgl_types::AnyPlan {{execution:&hgl_store::any_values::operations::EXECUTION,capture:Some(any_capture_{n}),identity:std::any::TypeId::of::<{identity}>,operation:{operation},copy:any_copy_{n},capabilities:{caps:?}}};fn any_copy_{n}(data:hgl_types::any_values::AnyView<'_>,out:&mut dyn hgl_types::any_values::AnyBuffer) {{{copy}}}fn any_write_{n}<B:hgl_types::any_values::AnyBuffer>(v:&{native},out:&mut B) {{{write}}}fn any_read_{n}(data:hgl_types::any_values::AnyView<'_>)->hgl_types::NodeResult<{native}> {{Ok({read})}}fn any_size_{n}(v:&{native})->hgl_types::NodeResult<usize> {{let mut width=hgl_types::any_values::AnyWidth::default();any_write_{n}(v,&mut width);width.finish()}}\n"
+                "static ANY_{n}:hgl_types::AnyPlan=hgl_types::AnyPlan {{execution:&hgl_store::any_values::operations::EXECUTION,capture:Some(any_capture_{n}),validate:Some(any_validate_{n}),identity:std::any::TypeId::of::<{identity}>,operation:{operation},copy:any_copy_{n},capabilities:{caps:?}}};fn any_validate_{n}(data:hgl_types::any_values::AnyView<'_>)->hgl_types::NodeResult {{{validate} Ok(())}}fn any_copy_{n}(data:hgl_types::any_values::AnyView<'_>,out:&mut dyn hgl_types::any_values::AnyBuffer) {{{copy}}}fn any_write_{n}<B:hgl_types::any_values::AnyBuffer>(v:&{native},out:&mut B) {{{write}}}fn any_read_{n}(data:hgl_types::any_values::AnyView<'_>)->hgl_types::NodeResult<{native}> {{Ok({read})}}fn any_size_{n}(v:&{native})->hgl_types::NodeResult<usize> {{let mut width=hgl_types::any_values::AnyWidth::default();any_write_{n}(v,&mut width);width.finish()}}\n"
             ));
         let encoded = if let Ty::Native(scalar) = ty {
             format!(

@@ -20,6 +20,9 @@ pub type NativeCheck = fn(&[u8], usize) -> NodeResult;
 /// Fallible cold-only conversion with no dependency on the checked value model.
 pub type ColdCapture = fn(AnyView<'_>) -> NodeResult<Box<dyn std::any::Any>>;
 
+/// Cold-only validation of untrusted descriptor payloads before decoding.
+pub type ColdValidate = fn(AnyView<'_>) -> NodeResult;
+
 /// Recursive runtime operations supplied without a runtime dependency in Types.
 #[derive(Debug)]
 pub struct AnyExecution {
@@ -37,6 +40,8 @@ pub struct AnyPlan {
     pub execution: &'static AnyExecution,
     /// Generated cold conversion; its carrier belongs to the compiler layer.
     pub capture: Option<ColdCapture>,
+    /// Complete cold payload validation, absent for descriptors with no cold mapping.
+    pub validate: Option<ColdValidate>,
     /// Canonical nominal marker identity, independent of its native representation.
     pub identity: fn() -> TypeId,
     /// Precompiled operations over this layout.

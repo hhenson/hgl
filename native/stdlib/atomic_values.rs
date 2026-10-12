@@ -25,6 +25,8 @@ impl NativeType for Token {
         if data.len() > capacity {
             return Err(NodeError::new("native copy capacity exceeded"));
         }
+        std::str::from_utf8(data)
+            .map_err(|_invalid| NodeError::new("invalid native text encoding"))?;
         Ok(())
     }
     fn copy(data: &[u8], destination: &mut dyn hgl_types::any_values::AnyBuffer) {
@@ -61,6 +63,8 @@ impl NativeType for TokenOther {
         if data.len() > capacity {
             return Err(NodeError::new("native copy capacity exceeded"));
         }
+        std::str::from_utf8(data)
+            .map_err(|_invalid| NodeError::new("invalid native text encoding"))?;
         Ok(())
     }
     fn copy(data: &[u8], destination: &mut dyn hgl_types::any_values::AnyBuffer) {
@@ -97,6 +101,8 @@ impl NativeType for TextOnly {
         if data.len() > capacity {
             return Err(NodeError::new("native copy capacity exceeded"));
         }
+        std::str::from_utf8(data)
+            .map_err(|_invalid| NodeError::new("invalid native text encoding"))?;
         Ok(())
     }
     fn copy(data: &[u8], destination: &mut dyn hgl_types::any_values::AnyBuffer) {
