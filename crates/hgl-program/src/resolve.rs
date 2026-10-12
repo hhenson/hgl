@@ -128,12 +128,6 @@ impl Checker {
         };
         std::mem::replace(&mut self.value_context, context)
     }
-    fn enter_scope(&mut self, scope: Option<String>) -> (Option<String>, Option<String>) {
-        (
-            std::mem::replace(&mut self.test_scope, scope.clone()),
-            std::mem::replace(&mut self.library.test_scope, scope),
-        )
-    }
     fn call(
         &mut self,
         module: &str,
@@ -185,8 +179,9 @@ impl Checker {
         if !self.active.insert(id) {
             return Err(format!("recursive graph construction: {name}").into());
         }
-        let (previous_scope, previous_family_scope) =
-            self.enter_scope(decl.test_only.then(|| module.clone()));
+        let previous_scope = self.test_scope.clone();
+        self.test_scope = decl.test_only.then(|| module.clone());
+        let prior_family = std::mem::replace(&mut self.library.test_scope, self.test_scope.clone());
         let mut env = hgl_semantics::body_check::parameter_scope(&signature, values);
         let previous_types = std::mem::replace(&mut self.types, types);
         let mut cursor = Cursor::new(&signature.body);
@@ -218,7 +213,7 @@ impl Checker {
         self.types = previous_types;
         self.active.remove(&id);
         self.test_scope = previous_scope;
-        self.library.test_scope = previous_family_scope;
+        self.library.test_scope = prior_family;
         Ok(value)
     }
 
