@@ -1,0 +1,34 @@
+{
+  "repository": "https://github.com/hhenson/hgraph_std",
+  "revision": "d798c88dec4b729f1e96d2adcd087ca8df7f11ba",
+  "spec_revision": "69a2f8ca7b842a0fb4b62003d91dfa1b9eb122b3",
+  "installed_std_revision": "7c264341fe88203bd973641cc186bff7baabd851",
+  "named_groups": 24,
+  "evaluations": 50,
+  "files": [
+    {
+      "file": "reference_leaf_values.hgl",
+      "source_path": "hgl/hgraph/tests/reference_leaf_values.hgl",
+      "git_blob": "6f76ec313ecf9ea60c5aad506f68e982a2e2734d",
+      "sha256": "58236fdc220b26bca3cc56e3869674e3d032639e98492dcfcdde394fc82bb6d2"
+    },
+    {
+      "file": "reference_projection_values.hgl",
+      "source_path": "hgl/hgraph/tests/reference_projection_values.hgl",
+      "git_blob": "087a19aee6d30fa007f4284fa50f9e778797b83c",
+      "sha256": "053edc42a0afc127815daf7363646eefff81cfd5a7842edadfaf70ac7f232c09"
+    },
+    {
+      "file": "reference_structural_values.hgl",
+      "source_path": "hgl/hgraph/tests/reference_structural_values.hgl",
+      "git_blob": "fc107388a789603533aa57ee66ad5df3319bde25",
+      "sha256": "e7e95f4c98a106b5ad646a0a7b056941a6685056d9dde173ac5d70427d1d647d"
+    },
+    {
+      "file": "reference_values.hgl",
+      "source_path": "hgl/hgraph/tests/reference_values.hgl",
+      "git_blob": "c1e1b39c315889ccd94616312fc4b3d8db4580ec",
+      "sha256": "3e034397d95a5c36ef6fa8a60fb292f632c6b1ce4a90ec51e8b929c59fb47e68"
+    }
+  ]
+}

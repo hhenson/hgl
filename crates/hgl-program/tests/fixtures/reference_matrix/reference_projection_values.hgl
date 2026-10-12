@@ -1,0 +1,51 @@
+module hgraph.std part reference_projection_values_tests
+
+test {
+    struct ReferenceProjectionFields { left: i64
+        right: i64 }
+
+    # Graph projection through REF is specified independently of node opacity.
+    fn reference_project_left(value: ref<ReferenceProjectionFields>) -> ref<i64> => value.left
+    fn reference_project_second(value: ref<list<i64, 2>>) -> ref<i64> => value[1]
+    fn reference_project_read(value: i64) -> i64 {
+        when { return delta_value(value) }
+    }
+    fn reference_projected_fields(value: ReferenceProjectionFields) -> i64 => reference_project_read(reference_project_left(value))
+    fn reference_projected_fixed(value: list<i64, 2>) -> i64 => reference_project_read(reference_project_second(value))
+
+    test reference_graph_projections_follow_children_and_ignore_sibling_ticks {
+        assert eval(reference_projected_fields, [
+            delta<ReferenceProjectionFields>(right: 20),
+            delta<ReferenceProjectionFields>(left: 7), _,
+            delta<ReferenceProjectionFields>(right: 21),
+            delta<ReferenceProjectionFields>(left: 7)
+        ]) == [_, 7, _, _, 7]
+        assert eval(reference_projected_fixed, [
+            delta<list<i64, 2>>(items: [0: 7]), delta<list<i64, 2>>(items: [1: 20]), _,
+            delta<list<i64, 2>>(items: [0: 8, 1: 21])
+        ]) == [_, 20, _, 21]
+    }
+
+    fn reference_choose_fields(index: i64, first: ref<ReferenceProjectionFields>, second: ref<ReferenceProjectionFields>) -> ref<ReferenceProjectionFields> {
+        when {
+            if index == 0 { return first }
+            return second
+        }
+    }
+    fn reference_selected_field(index: i64, first: ReferenceProjectionFields, second: ReferenceProjectionFields) -> i64 {
+        let selected = reference_choose_fields(index, first, second)
+        reference_project_read(reference_project_left(selected))
+    }
+
+    test reference_graph_projections_retarget_even_when_child_values_are_equal {
+        assert eval(reference_selected_field,
+            index: [0, _, 1, _, 1, 0, _],
+            first: [delta<ReferenceProjectionFields>(left: 7), delta<ReferenceProjectionFields>(right: 20)],
+            second: [delta<ReferenceProjectionFields>(left: 7), _, _, delta<ReferenceProjectionFields>(left: 9)]
+        ) == [7, _, 7, 9, _, 7, _]
+        assert eval(reference_selected_field,
+            index: [0, 1, _, _, 0], first: [delta<ReferenceProjectionFields>(left: 7)],
+            second: [delta<ReferenceProjectionFields>(right: 20), _, _, delta<ReferenceProjectionFields>(left: 9)]
+        ) == [7, _, _, 9, 7]
+    }
+}
