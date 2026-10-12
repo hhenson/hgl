@@ -1197,3 +1197,62 @@ fn main(){{
     fs::remove_file(image)?;
     result
 }
+
+#[test]
+fn partial_native_order_agrees_in_cold_setup_and_generated_ticks()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut input = sources(
+        r#"
+fn less(value:Token,const other:Token)->bool {when {return value<other}}
+fn le(value:Token,const other:Token)->bool {when {return value<=other}}
+fn greater(value:Token,const other:Token)->bool {when {return value>other}}
+fn ge(value:Token,const other:Token)->bool {when {return value>=other}}
+test partial_order {
+let a=token("a")
+let b=token("b")
+assert !(a<b)
+assert !(a<=b)
+assert !(a>b)
+assert !(a>=b)
+assert !(b<a)
+assert !(b<=a)
+assert !(b>a)
+assert !(b>=a)
+assert a==a
+assert a!=b
+assert a<=a
+assert a>=a
+assert !(any(a)<any(b))
+assert !(any(a)<=any(b))
+assert !(any(a)>any(b))
+assert !(any(a)>=any(b))
+assert eval(less,value:[a,_,b],other:b)==[false,_,false]
+assert eval(le,value:[a,_,b],other:b)==[false,_,true]
+assert eval(greater,value:[a,_,b],other:b)==[false,_,false]
+assert eval(ge,value:[a,_,b],other:b)==[false,_,true]
+}
+"#,
+    )?;
+    let image = std::env::temp_dir().join(format!(
+        "hgl-partial-order-provider-{}.rs",
+        std::process::id()
+    ));
+    fs::write(
+        &image,
+        fs::read_to_string(root()?.join("native/stdlib/atomic_values.rs"))?.replace(
+            "Ok(Some(text(lhs).cmp(text(rhs))))",
+            "Ok((text(lhs)==text(rhs)).then_some(Ordering::Equal))",
+        ),
+    )?;
+    for (name, text) in &mut input {
+        if name.ends_with(".hgl-native") {
+            *text = text.replace(
+                "\"atomic_values.rs\"",
+                &format!("{:?}", image.display().to_string()),
+            );
+        }
+    }
+    let result = run_sources(&input);
+    fs::remove_file(image)?;
+    result
+}
