@@ -308,7 +308,7 @@ pub fn limits(plan: &Plan, bounds: impl Fn(&Ty) -> String) -> String {
 pub fn write(value: &Value, destination: &str) -> Option<String> {
     let method = if matches!(value.ty, Ty::Native(_)) {
         "native_result"
-    } else if value.ty == Ty::Str {
+    } else if value.ty == Ty::Str && supported(value) {
         "text_result"
     } else {
         return None;

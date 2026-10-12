@@ -49,3 +49,8 @@ target transport mapping. Primitive expressions share scalars::binary/unary;
 Direct input metadata queries and typed global/configuration projections through
 record fields and list indices remain prepared. Parent projections precede index
 evaluation and retain the existing required-read and bounds error order.
+
+Global native result staging selects text_result only for an admitted provider
+Str result. Ordinary configuration String fields retain their prepared copy
+path and independent constructor ownership; they are not borrowed helper
+results. Existing Any/recursive constructor regressions verify those copies.
