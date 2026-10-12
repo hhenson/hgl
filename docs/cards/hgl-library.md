@@ -16,13 +16,19 @@ argument types and result. `type_domain: Option<(String, Vec<String>)>` retains
 `requires T in {...}` as the generic name and distinct supported type names;
 resolution checks the inferred type against this finite domain.
 
-Parts are unique. An unnamed test context permits private functions and named
-tests, joining the module's test scope. Imports, exports, native/type/operator
-declarations and nested contexts are rejected there. Resolution and target
-selection belong to `hgl-program`; indexing does not execute a body.
+Parts are unique. An unnamed test context permits private functions, unexported
+struct/enum declarations and named tests, joining one module-wide test scope
+across contexts and parts. Test-local nominal names cannot collide with production
+declarations, imports, test helpers or other test-local types. Named test labels
+remain separate. This follows the free-name requirement in normative
+`language/docs/developer-guide/syntax-and-semantics.md` (test contexts). Selective imports of test-local
+types are rejected even when unused. Imports, exports, native declarations, operator
+implementations and nested contexts are rejected inside contexts. Resolution and
+target selection belong to `hgl-program`; indexing does not execute a body.
 
 Acceptance: unchanged multi-part library; forward helper references across
-contexts; invalid context members; production helper isolation.
+contexts; test-local nominal types and collisions; invalid context members;
+production helper/type isolation and production emission without test declarations.
 
 `Role::Struct` indexes ordinary struct declarations without treating them as
 functions. `Decl::required_struct() -> Result<RequiredStruct, String>`

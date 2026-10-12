@@ -128,14 +128,16 @@ pub fn load_checked(sources: &[(String, String)]) -> Result<Library, Box<Diagnos
         checked.map_err(|e| Box::new(Diagnostic::new(source, text, e)))?;
     }
     library.declarations = declarations.into();
-    crate::native_contracts::validate(&library).map_err(|issue| {
-        let (source, text) = sources
-            .iter()
-            .find(|(source, _)| issue.source.as_ref() == Some(source))
-            .or_else(|| sources.first())
-            .map_or(("", ""), |(source, text)| (source.as_str(), text.as_str()));
-        Box::new(Diagnostic::new(source, text, issue))
-    })?;
+    test_types(&library)
+        .and_then(|()| crate::native_contracts::validate(&library))
+        .map_err(|issue| {
+            let (source, text) = sources
+                .iter()
+                .find(|(source, _)| issue.source.as_ref() == Some(source))
+                .or_else(|| sources.first())
+                .map_or(("", ""), |(source, text)| (source.as_str(), text.as_str()));
+            Box::new(Diagnostic::new(source, text, issue))
+        })?;
     for declaration in std::sync::Arc::make_mut(&mut library.declarations) {
         declaration.ordinary_native = declaration.role == Role::Native
             && library
@@ -144,6 +146,45 @@ pub fn load_checked(sources: &[(String, String)]) -> Result<Library, Box<Diagnos
                 .is_some_and(|contract| contract.functions.contains_key(&declaration.name));
     }
     Ok(library)
+}
+fn test_types(library: &Library) -> Result<(), Issue> {
+    for (index, decl) in library.declarations.iter().enumerate() {
+        if !decl.test_only || !matches!(decl.role, Role::Struct | Role::Enum) {
+            continue;
+        }
+        // Test-local nominal names must be free in the module (syntax-and-semantics
+        // test contexts); helper names share constructor syntax, test labels do not.
+        let conflict = library
+            .imports
+            .contains_key(&(decl.module.clone(), decl.name.clone()))
+            || library
+                .declarations
+                .iter()
+                .enumerate()
+                .any(|(other_index, other)| {
+                    other_index != index
+                        && other.module == decl.module
+                        && other.name == decl.name
+                        && other.role != Role::Test
+                });
+        if conflict {
+            return Err(Issue::from(format!(
+                "conflicting test-local type {}::{}",
+                decl.module, decl.name
+            ))
+            .at(decl.tokens[0].span.clone())
+            .in_source(&decl.source));
+        }
+        let name = format!("{}::{}", decl.module, decl.name);
+        if library.imports.values().any(|target| target == &name) {
+            return Err(
+                Issue::from(format!("test-only type {name} cannot be imported"))
+                    .at(decl.tokens[0].span.clone())
+                    .in_source(&decl.source),
+            );
+        }
+    }
+    Ok(())
 }
 fn load_source(
     library: &mut Library,
@@ -232,11 +273,13 @@ fn load_items(
         let chunk = &tokens[start..c.pos];
         let mut d = Cursor::new(chunk);
         if test_context
-            && (!matches!(d.peek(), "fn" | "const" | "test")
-                || (d.at("test") && chunk.get(1).is_some_and(|t| t.text == "{")))
+            && (!matches!(
+                d.peek(),
+                "fn" | "const" | "test" | "struct" | "enum" | "abstract"
+            ) || (d.at("test") && chunk.get(1).is_some_and(|t| t.text == "{")))
         {
             return Err(
-                "test context admits only private fn/const fn helpers and named tests".into(),
+                "test context admits only private fn/const fn helpers, struct/enum types and named tests".into(),
             );
         }
         if d.take("test") && d.take("{") {

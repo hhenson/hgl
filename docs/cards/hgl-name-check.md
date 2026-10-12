@@ -29,3 +29,9 @@ Constant Tuple call boundaries use hgl-tuple-phase before deferred specializatio
 
 Scope.alias accepts an explicit runtime-binding flag. State/cache identities and
 assignment dependence remain runtime facts even when a fixed initializer exists.
+
+Test-local struct and enum identities are visible only in their module test scope.
+Signature, field, local and lambda annotations, constructors and qualified enum
+values enforce this before deferred specialization, including unused generic
+production bodies. Nominal schema identity remains module-wide; no runtime lookup
+or alternate test schema is introduced.
