@@ -64,6 +64,7 @@ size and enforces the "may use" list from the crate's
 | [hgl-list-storage](hgl-list-storage.md) | module `list_storage` | `hgl-store` |
 | [hgl-literals](hgl-literals.md) | module `literals` | `hgl-value-model` + `hgl-source` |
 | [hgl-local-check](hgl-local-check.md) | module `local_check` | `hgl-semantics` |
+| [hgl-graph-assemblies](hgl-graph-assemblies.md) | module `graph_assemblies` | `hgl-semantics`, `hgl-rust` |
 | [hgl-member-table](hgl-member-table.md) | module `member_table` | `hgl-store` |
 | [hgl-name-check](hgl-name-check.md) | module `name_check` | `hgl-semantics` |
 | [hgl-native](hgl-native.md) | module `native` | `hgl-stdlib` |

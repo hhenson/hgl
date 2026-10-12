@@ -9,6 +9,10 @@ use crate::values::{
 use hgl_source::Ty;
 
 fn node(plan: &Plan, n: &Node, index: usize, out: &mut Vec<String>) {
+    if let Some(assembly) = crate::graph_assemblies::shape(n) {
+        out.push(crate::graph_assemblies::node(index, &shape(assembly)));
+        return;
+    }
     let generator = n.generator.as_deref().map(Generator::lower);
     out.push(format!("struct Node{index} {{\n"));
     if let Some(generator) = &generator {
@@ -313,6 +317,10 @@ fn emit_inner(plan: &Plan, layouts: bool) -> String {
             format!("{}#{i}", n.name),
             crate::cold_wiring::arguments(plan, n, i)
         ));
+        if crate::graph_assemblies::shape(n).is_some() {
+            out.push(crate::graph_assemblies::connections(plan, n, i));
+            continue;
+        }
         for (name, source, _) in &n.inputs {
             out.push(format!(
                 "builder.connect(_wire{source},_wire{i},{name:?})?;\n"

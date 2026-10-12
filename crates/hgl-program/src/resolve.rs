@@ -1851,7 +1851,14 @@ impl Checker {
         {
             return Err("contextual temporal default requires run preparation; node-hook construction is unsupported".into());
         }
-        Ok(value)
+        if runtime {
+            Ok(value)
+        } else {
+            Ok(hgl_semantics::graph_assemblies::constructor(
+                value,
+                &mut self.plan,
+            )?)
+        }
     }
     fn delta_constructor(
         &mut self,
