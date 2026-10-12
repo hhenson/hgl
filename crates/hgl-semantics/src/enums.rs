@@ -76,6 +76,9 @@ pub fn validate(library: &Library) -> Result<(), String> {
 /// Resolve a visible declared enum, retaining its canonical identity.
 pub fn resolve(library: &Library, module: &str, name: &str) -> Result<Option<EnumType>, String> {
     crate::struct_names::enum_declaration(library, module, name)?
+        .filter(|decl| {
+            !decl.test_only || library.test_scope.as_deref() == Some(decl.module.as_str())
+        })
         .map(parse)
         .transpose()
 }
