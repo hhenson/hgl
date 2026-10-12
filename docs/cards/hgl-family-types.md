@@ -30,3 +30,9 @@ same normalized length as explicit specialization.
 
 The bounded-application reconstruction also handles rolling payload patterns,
 preserving declared bound expressions and exact count/duration kinds.
+
+Canonical recovery re-specializes a known nominal in its exact declaration's
+production or module test scope. This permits a test-local struct's enum fields
+to retain their lexical identities when passed through a production generic
+replay operator, while the production callable's own source scope stays closed
+to test-only names. The test_local_types control checks both directions.

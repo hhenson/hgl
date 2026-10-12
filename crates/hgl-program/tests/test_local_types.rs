@@ -279,3 +279,26 @@ fn test_type_names_do_not_hide_builtin_production_annotations() -> Result<(), St
     }
     Ok(())
 }
+
+#[test]
+fn generic_replay_recovers_test_nominal_fields_in_their_declaration_scope() -> Result<(), String> {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut sources = hgl_program::library_files::sources(
+        &[],
+        &[
+            root.join("external/hgraph_std/hgl/hgraph"),
+            root.join("native/stdlib"),
+        ],
+    )?;
+    sources.insert(0,("fixture.hgl".into(),"module hgraph.std part scoped_replay_fixture\ntest {enum ScopedChoice {first,second}\nstruct ScopedPayload {mode:ScopedChoice\nlabel:str}\nfn copied(value:ScopedPayload)->ScopedPayload => pass_through(value)\ntest scoped_replay {assert eval(copied,[delta<ScopedPayload>(mode:ScopedChoice::first),delta<ScopedPayload>(label:\"\"),_,delta<ScopedPayload>(mode:ScopedChoice::second)])==[delta<ScopedPayload>(mode:ScopedChoice::first),delta<ScopedPayload>(label:\"\"),_,delta<ScopedPayload>(mode:ScopedChoice::second)]}}".into()));
+    let suite = hgl_program::compile_module_suite(&sources)?;
+    assert_eq!((suite.tests.len(), suite.plans.len()), (1, 1));
+    assert!(hgl_program::emit_tests(&suite).contains("ScopedChoice"));
+    sources.push(("production.hgl".into(),"module hgraph.std part forbidden_scope\nfn forbidden(value:ScopedPayload)->ScopedPayload => pass_through(value)".into()));
+    assert!(
+        hgl_program::compile_module_suite(&sources)
+            .unwrap_err()
+            .contains("test-only type")
+    );
+    Ok(())
+}

@@ -381,6 +381,8 @@ fn size(library: &Library, module: &str, expr: &str) -> Result<hgl_source::Liter
 /// Recover canonical declaration-owned arguments from ordinary projected payloads.
 pub fn source_argument(library: &Library, ty: &Ty) -> Result<Ty, String> {
     crate::family_types::source_argument(library, ty, &mut |decl, args| {
-        specialize(library, decl, args, &mut BTreeSet::new())
+        let mut owner = library.clone();
+        owner.test_scope = decl.test_only.then(|| decl.module.clone());
+        specialize(&owner, decl, args, &mut BTreeSet::new())
     })
 }
