@@ -108,11 +108,109 @@ fn primitive_expression(value: &Value) -> Option<String> {
     if let Kind::Literal(literal) = &value.kind {
         return Some(crate::scalars::literal(literal));
     }
+    if let Kind::Binary(op, left, right) = &value.kind {
+        if matches!(left.ty, Ty::Native(_) | Ty::Any) {
+            return None;
+        }
+        return Some(crate::scalars::binary(
+            &value.ty,
+            op,
+            &expression(left)?,
+            &expression(right)?,
+        ));
+    }
+    if let Kind::Unary(op, operand) = &value.kind {
+        return Some(crate::scalars::unary(
+            &operand.ty,
+            op,
+            &expression(operand)?,
+        ));
+    }
+    scalar_query(value).or_else(|| primitive_projection(value))
+}
+fn primitive_projection(value: &Value) -> Option<String> {
+    if let Kind::Index(parent, index) = &value.kind
+        && let Kind::Configuration(id) = parent.kind
+    {
+        return Some(format!(
+            "*hgl_store::list_index(&self.configuration{id},{})?",
+            expression(index)?
+        ));
+    }
+    if let Kind::Index(parent, index) = &value.kind {
+        let parent = if let Kind::BorrowedLocal(id, _, _) = parent.kind {
+            format!("local{id}")
+        } else if let Kind::GlobalGet(id) = parent.kind {
+            format!("globals.borrow(self.global{id})?")
+        } else {
+            return None;
+        };
+        return Some(format!(
+            "{{let parent={parent};let index={};globals.list_index(parent,index)?.read(globals.values())?}}",
+            expression(index)?
+        ));
+    }
+    if let Kind::BorrowedLocal(id, _, _) = value.kind {
+        return Some(format!("local{id}.read(globals.values())?"));
+    }
     None
+}
+fn scalar_query(value: &Value) -> Option<String> {
+    let Kind::Query(op, args) = &value.kind else {
+        return None;
+    };
+    if !matches!(
+        op.as_str(),
+        "valid" | "all_valid" | "last_modified" | "modified"
+    ) {
+        return None;
+    }
+    let args = args
+        .iter()
+        .map(|value| {
+            let Kind::Input(id, _) = value.kind else {
+                return None;
+            };
+            let input = if matches!(value.ty, Ty::Ref(_)) {
+                format!("self.input{id}")
+            } else {
+                format!("self.input{id}.id()")
+            };
+            Some(format!(
+                "observation.bindings.{op}({input}{})",
+                if op == "modified" { ",now" } else { "" }
+            ))
+        })
+        .collect::<Option<Vec<_>>>()?;
+    Some(format!(
+        "({})",
+        args.join(if op == "modified" { " || " } else { " && " })
+    ))
 }
 /// Only admitted borrowed result trees may select the prepared helper path.
 pub fn supported(value: &Value) -> bool {
     matches!(value.kind, Kind::Native(..)) && expression(value).is_some()
+}
+/// Reject missing runtime target transport before a checked plan can execute.
+pub fn validate(plan: &Plan) -> Result<(), String> {
+    let mut unsupported = None;
+    for node in &plan.nodes {
+        hgl_semantics::ir_visit::hooks(node, &mut |value| {
+            if value.cold_call {
+                return false;
+            }
+            if let Kind::Native(binding, _) = &value.kind
+                && binding.provider.is_some()
+                && value.ty.owning_scalar()
+                && !value.snapshot
+                && !supported(value)
+            {
+                unsupported.get_or_insert_with(|| format!("Rust native target does not support prepared owning result transport for {}", binding.name));
+            }
+            true
+        });
+    }
+    unsupported.map_or(Ok(()), Err)
 }
 /// Evaluate a provider helper once and copy its view into independent reserved storage.
 pub fn publication(value: &Value) -> Option<String> {
@@ -127,7 +225,7 @@ pub fn publication(value: &Value) -> Option<String> {
         return None;
     };
     Some(format!(
-        "_ctx.prepared().{method}(self._output,|observation,globals|{{Ok({})}})?;",
+        "{{let now=_ctx.evaluation_time();_ctx.prepared().{method}(self._output,|observation,globals|{{Ok({})}})?;}}",
         expression(value)?
     ))
 }
@@ -180,6 +278,6 @@ pub fn write(value: &Value, destination: &str) -> Option<String> {
     }
     let expression = expression(value)?;
     Some(format!(
-        "_ctx.with_observations(|observation,globals|globals.native_result(observation,{destination},|observation,globals|{{Ok({expression})}}))?;"
+        "{{let now=_ctx.evaluation_time();_ctx.with_observations(|observation,globals|globals.native_result(observation,{destination},|observation,globals|{{Ok({expression})}}))?;}}"
     ))
 }

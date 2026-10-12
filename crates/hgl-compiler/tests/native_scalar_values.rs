@@ -46,6 +46,7 @@ fn run_sources_with_counts(
         "#[global_allocator] static ALLOCATOR:hgl_alloc_count::CountingAllocator=hgl_alloc_count::CountingAllocator;\n{generated}"
     );
     if let Some(calls) = calls {
+        generated = generated.replace("store.prepare_collection_inputs();", "{let choices=store.global_state().bind::<hgl_store::List<i64>>(\"choices\").map_err(|e|e.message)?;store.global_state().set(choices,&vec![1,2]).map_err(|e|e.message)?;}store.prepare_collection_inputs();");
         generated = generated.replace("fn main() {", "fn authored_main() {");
         writeln!(
             generated,
@@ -57,7 +58,7 @@ fn run_sources_with_counts(
 #[test]
 fn native_owning_helpers_prepare_primitive_inputs_configuration_literals_and_nested_calls()
 -> Result<(), Box<dyn std::error::Error>> {
-    let mut input = sources(
+    let input = primitive_sources(
         r#"
 use hgraph.std::{primitive_token,primitive_text,primitive_size}
 fn make(value:i64,flag:bool,const fixed:i64)->Token {when {return primitive_token(value,flag,fixed)}}
@@ -71,6 +72,12 @@ fn globals(value:i64,flag:bool)->Token {inject global_state
 when {set(global_state,"number",value)
 return primitive_token(get(global_state,"number"),flag,1)}}
 fn literal(value:i64)->str {when {return primitive_text(value,true,1)}}
+fn expression(value:i64)->Token {when {return primitive_token(value+1,(value>=0)&&!(value>1),1)}}
+fn modulo(value:i64)->Token {when {return primitive_token((value*2-1)%5,true,1)}}
+fn queried(value:i64)->Token {when {return primitive_token(value,valid(value),1)}}
+fn indexed(value:i64)->Token {inject global_state
+when {let choices:list<i64> =get(global_state,"choices")
+return primitive_token(choices[value],true,1)}}
 test primitive_helpers {
 assert eval(make,value:[1,_,2],flag:[true,_,false],fixed:1)==[token("yes"),_,token("no")]
 assert eval(text,value:[1,_,2],flag:[true,_,false])==["yes",_,"no"]
@@ -79,9 +86,17 @@ assert eval(configured,value:[1,_,2],flag:true)==[token("yes"),_,token("no")]
 assert eval(locals,value:[1,_,2],flag:[true,_,false])==[token("yes"),_,token("no")]
 assert eval(globals,value:[1,_,2],flag:[true,_,false])==[token("yes"),_,token("no")]
 assert eval(literal,value:[1,_,2])==["yes",_,"no"]
+assert eval(expression,value:[0,_,1,9223372036854775807])==[token("yes"),_,token("no"),token("no")]
+assert eval(modulo,value:[1,_,-2])==[token("yes"),_,token("no")]
+assert eval(queried,value:[1,_,2])==[token("yes"),_,token("no")]
+assert eval(indexed,value:[0,_,1])==[token("yes"),_,token("no")]
 }
 "#,
     )?;
+    run_sources_with_counts(&input, Some([19, 23, 2]))
+}
+fn primitive_sources(body: &str) -> Result<Vec<(String, String)>, Box<dyn std::error::Error>> {
+    let mut input = sources(body)?;
     for (name, text) in &mut input {
         if name.ends_with("atomic_values_fixture.hgl") {
             text.push_str("\nexport native const fn primitive_token(value:i64,flag:bool,fixed:i64)->Token\nexport native const fn primitive_text(value:i64,flag:bool,fixed:i64)->str\nexport native const fn primitive_size(value:str)->i64\n");
@@ -102,7 +117,46 @@ assert eval(literal,value:[1,_,2])==["yes",_,"no"]
             text.push_str("value primitive_size(value:str)->i64 symbol \"primitive_size\" ownership owned phases {setup,cold,evaluation} effects {}\n");
         }
     }
-    run_sources_with_counts(&input, Some([10, 14, 2]))
+    Ok(input)
+}
+#[test]
+fn unsupported_runtime_native_transport_rejects_planning_but_cold_calls_execute()
+-> Result<(), Box<dyn std::error::Error>> {
+    let input = primitive_sources(
+        r#"
+use hgraph.std::{primitive_token}
+const fn increment(value:i64)->i64 {return value+1}
+fn unsupported(value:i64)->Token {when {return primitive_token(increment(value),true,1)}}
+fn source()->i64 {inject alarm
+start {schedule(alarm,0us)}
+when {return 0}}
+export fn main() {unsupported(source())}
+test unsupported_runtime {assert eval(unsupported,value:[0])==[token("yes")]}
+"#,
+    )?;
+    hgl_program::check_sources(&input)?;
+    let program = hgl_program::compile(&input, "main")?;
+    let target = hgl_program::emit_rust(&program);
+    assert!(target.starts_with("compile_error!("), "{target}");
+    assert!(
+        target.contains("Rust native target does not support prepared owning result transport")
+    );
+    assert!(!target.contains("native_primitive_provider.rs") && !target.contains("native_image"));
+    let error = hgl_program::compile_module_suite(&input)
+        .err()
+        .ok_or("unmapped runtime transport admitted")?;
+    assert!(
+        error.contains("Rust native target does not support prepared owning result transport"),
+        "{error}"
+    );
+    let input = primitive_sources(
+        r#"
+use hgraph.std::{primitive_token}
+const fn increment(value:i64)->i64 {return value+1}
+test supported_cold {assert primitive_token(increment(0),true,1)==token("yes")}
+"#,
+    )?;
+    run_sources_with_counts(&input, Some([1, 1, 0]))
 }
 #[test]
 fn modules_share_one_provider_image_and_retain_all_scalar_mappings_and_aliases()
