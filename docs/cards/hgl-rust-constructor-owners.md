@@ -28,3 +28,8 @@ stage into their existing ordinary representation rather than inheriting a
 canonical slot identity. Existing list-growth source controls cover this boundary.
 
 Public destination emits the selected typed private slot handle without executing its initializer. Public source performs ordered staging and returns that typed handle. The executable generator assembler uses those emitter boundaries; resume handles alone never reexecute a constructor.
+
+May also use native_results. Complete atomic Tuple expression stages write
+selected bounded native text results into separate canonical fields before
+publishing from the finished owner. Each helper executes once in written field
+order, with no ordinary String intermediary or early output replacement.

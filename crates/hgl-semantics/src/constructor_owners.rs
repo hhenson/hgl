@@ -74,7 +74,7 @@ pub fn prepare(
                     return false;
                 }
                 if matches!(v.kind, Kind::Construct(_))
-                    && matches!(v.ty, Ty::Struct(..) | Ty::Recursive(_))
+                    && matches!(v.ty, Ty::Struct(..) | Ty::Recursive(_) | Ty::Tuple(_))
                     && owning(&v.ty)
                 {
                     let key = format!("\0constructor:{node_id}:expression:{}", node.globals.len());

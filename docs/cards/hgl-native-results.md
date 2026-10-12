@@ -22,3 +22,11 @@ using NativeView::retain or text ownership conversion. Reserved Native snapshots
 and constructor operand staging apply only to prepared plans. Generic comparison
 emission holds both owning operands through the fallible provider operation;
 finite prepared views keep the allocation-free path described above.
+
+GlobalState::text_result(observation, ValueSlot<String>, execute) retains a
+borrowed helper result into a distinct reserved ordinary slot. It runs the
+helper once, preflights capacity before modifying the prior buffer, and restores
+that buffer after either helper or preflight failure. It publishes no temporal
+endpoint. The compiler reserves canonical Tuple construction stages for selected
+bounded text helpers at complete atomic result positions; source REF operands
+retain endpoint identity and require no native payload equality or hash.

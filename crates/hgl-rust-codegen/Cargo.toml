@@ -17,7 +17,7 @@ native_results = { budget = 180, uses = ["native_image", "layouts"] }
 native_values = { budget = 60, uses = ["identifiers"] }
 owner_comparisons = { budget = 100, uses = ["source_slots", "any_prepared", "any_values", "values"] }
 any_expression = { budget = 180, uses = ["any_expression_leaves", "any_values", "source_slots", "constructor_owners", "observed"] }
-constructor_owners = { budget = 180, uses = ["constructor_fields", "prepared_hooks", "layouts"] }
+constructor_owners = { budget = 180, uses = ["constructor_fields", "prepared_hooks", "layouts", "native_results"] }
 constructor_fields = { budget = 100, uses = ["layouts"] }
 identifiers = { budget = 40, uses = [] }
 any_values = { budget = 600, uses = ["native_values", "deltas", "layouts", "collections", "families", "scalars", "value_convert", "checked_data"] }

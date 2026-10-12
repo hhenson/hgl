@@ -244,3 +244,77 @@ fn ordinary_helper_result_uses_a_separate_reserved_owner() -> NodeResult {
     );
     Ok(())
 }
+
+#[test]
+fn ordinary_text_helper_keeps_independent_reserved_storage_and_failed_results() -> NodeResult {
+    let mut globals = hgl_store::GlobalState::default();
+    let source = String::allocate(globals.values_mut(), &16)?;
+    let destination = String::allocate(globals.values_mut(), &8)?;
+    String::copy_native(globals.values_mut(), source, &String::from("retained"));
+    let mut store = hgl_store::Store::new();
+    let mut prepared = store.prepared();
+    let (observation, _) = prepared.observations();
+    let mut calls = 0;
+    let (result, allocations) = hgl_alloc_count::count_in(|| {
+        globals.text_result(observation, destination, |_, globals| {
+            calls += 1;
+            Ok(globals.values().scalar::<String>(source.fields()).as_str())
+        })
+    });
+    result?;
+    assert_eq!(calls, 1);
+    assert_eq!(allocations, 0);
+    String::copy_native(globals.values_mut(), source, &String::from("changed"));
+    assert_eq!(
+        globals.values().scalar::<String>(destination.fields()),
+        "retained"
+    );
+    assert!(
+        globals
+            .text_result(observation, destination, |_, _| {
+                calls += 1;
+                Ok("a result longer than the independent prepared buffer")
+            })
+            .is_err()
+    );
+    assert_eq!(calls, 2);
+    assert_eq!(
+        globals.values().scalar::<String>(destination.fields()),
+        "retained"
+    );
+    let failure = globals
+        .text_result(observation, destination, |_, _| {
+            calls += 1;
+            Err(hgl_types::NodeError::coded(
+                "helper failed",
+                "provider.operation",
+            ))
+        })
+        .unwrap_err();
+    assert_eq!(failure.code, Some("provider.operation"));
+    assert_eq!(calls, 3);
+    assert_eq!(
+        globals.values().scalar::<String>(destination.fields()),
+        "retained"
+    );
+    let (result, allocations) = hgl_alloc_count::count_in(|| {
+        globals.text_result(observation, destination, |_, _| {
+            calls += 1;
+            Ok("")
+        })
+    });
+    result?;
+    assert_eq!(calls, 4);
+    assert_eq!(allocations, 0);
+    assert!(
+        globals
+            .values()
+            .scalar::<String>(destination.fields())
+            .is_empty()
+    );
+    assert_eq!(
+        globals.values().scalar::<String>(source.fields()),
+        "changed"
+    );
+    Ok(())
+}

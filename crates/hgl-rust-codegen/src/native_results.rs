@@ -149,11 +149,15 @@ pub fn limits(plan: &Plan, bounds: impl Fn(&Ty) -> String) -> String {
 
 /// Execute a borrowed native result once before independently copying into a reserved local.
 pub fn write(value: &Value, destination: &str) -> Option<String> {
-    if !matches!(value.ty, Ty::Native(_)) {
+    let method = if matches!(value.ty, Ty::Native(_)) {
+        "native_result"
+    } else if value.ty == Ty::Str {
+        "text_result"
+    } else {
         return None;
-    }
+    };
     let expression = expression(value)?;
     Some(format!(
-        "_ctx.with_observations(|observation,globals|globals.native_result(observation,{destination},|observation,globals|{{Ok({expression})}}))?;"
+        "_ctx.with_observations(|observation,globals|globals.{method}(observation,{destination},|observation,globals|{{Ok({expression})}}))?;"
     ))
 }

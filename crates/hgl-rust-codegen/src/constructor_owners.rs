@@ -63,6 +63,9 @@ pub fn source(plan: &Plan, value: &Value) -> Option<String> {
 
 /// Retain each operand into a private owner before the next operand executes.
 fn stage(plan: &Plan, value: &Value, slot: &str) -> String {
+    if let Some(code) = crate::native_results::write(value, slot) {
+        return code;
+    }
     if let Some(code) = crate::constructor_fields::fields(
         value,
         slot,
