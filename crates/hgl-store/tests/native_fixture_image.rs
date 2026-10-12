@@ -6,6 +6,8 @@ use hgl_store::{PreparedValue, ValueColumns};
 use hgl_types::{AnyOperation, AnyPlan, AnyValue, NodeResult};
 use image::{TextOnly, Token, TokenOther};
 use std::{any::TypeId, cmp::Ordering};
+#[global_allocator]
+static ALLOCATOR: hgl_alloc_count::CountingAllocator = hgl_alloc_count::CountingAllocator;
 
 #[test]
 fn provider_views_materialize_independent_native_results_without_hot_allocations() -> NodeResult {
