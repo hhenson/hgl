@@ -29,6 +29,8 @@ Post-run comparison delegates to the existing fallible cold ordinary equal_data 
 `structural(&Ty) -> bool` identifies structural endpoint emission at compilation.
 The generated delta marker provides allocate, validate, observe and apply methods. Sparse payload storage is opaque to HGL; generated
 Rust projection code is the only consumer of its internal list fields.
+Marker reachability follows REF designated shapes, including nested assemblies
+whose nominal shapes have no ordinary input or output consumer.
 
 Declared enum source types retain nominal identity through generated i64-backed
 GlobalValue markers. Enum publication uses one prepared whole-value slot without

@@ -22,6 +22,8 @@ same independently owned layouts as existing hook locals and configurations.
 Structural delta layouts use private synthetic required fields made of ordinary
 lists and child delta owners. Canonical delta origin identities are distinct
 from user nominal identities; sparse field vectors have zero or one child.
+REF-only designated shapes retain those layouts for their generated shape
+operations, independently of ordinary nominal payload consumers.
 Homogeneous sparse shapes use paired key/payload vectors; sets use addition and
 removal vectors. Generated GlobalValue implementations retain the existing
 fallible staging and infallible move-commit contract.
