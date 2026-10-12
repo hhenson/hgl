@@ -36,3 +36,8 @@ Nested calls retain source evaluation order and independently reserved owners.
 Tuple constructor staging uses structural_publication::ordinary_supported for
 ordinary results; atomic results keep whole canonical staging. Unsupported
 ordinary layouts retain their prior prepared snapshot path.
+The constructor_owners completeness predicate follows scalar-capture aliases
+through checked local initializers. Aggregate observations and projections with
+possibly unset children retain snapshot presence; no hook executes during this
+classification. Required scalar captures still stage complete byte tuples and
+retain the existing whole-output capacity preflight.
