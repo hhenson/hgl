@@ -183,6 +183,13 @@ fn executable_scalar_marker_is_required_and_preflighted() -> Result<(), String> 
     descriptor.push_str(
         "\nscalar Token canonical \"canonical.Token\" capabilities {copy,text,equality}\n",
     );
+    sources[0].1 = sources[0].1.replace(
+        "use checked_lengths::{size}",
+        "use checked_lengths::{size,Token}",
+    );
+    sources[0].1.push_str(
+        "\nfn token_configuration(value:i64,const tokens:list<Token>)->i64 {when {return value+len(tokens)}}\ntest scalar_configuration {let tokens:list<Token> =[]\nassert eval(token_configuration,value:[1],tokens:tokens)==[1]}\n",
+    );
     let error = hgl_program::compile_module_suite(&sources)
         .err()
         .ok_or("missing marker admitted")?;
@@ -205,5 +212,29 @@ fn executable_scalar_marker_is_required_and_preflighted() -> Result<(), String> 
             .contains("ProviderToken as hgl_store::native_values::NativeType>::CONTRACT.validate")
     );
     assert!(generated.contains("\"canonical.Token\",[true, true, true, false, false, false]"));
+    Ok(())
+}
+
+#[test]
+fn unused_scalar_descriptor_does_not_link_its_provider() -> Result<(), String> {
+    let mut sources = sources()?;
+    sources[0].1 = "module native_image_cases\nuse checked_lengths::{Token}\nfn identity(value:i64)->i64 {when {return value}}\ntest unused_scalar {assert eval(identity,[1])==[1]}\n".into();
+    let (_, interface) = sources
+        .iter_mut()
+        .find(|(p, _)| p.ends_with("interface.hgl"))
+        .ok_or("interface missing")?;
+    interface.push_str("\nexport native type Token\n");
+    let (_, descriptor) = sources
+        .iter_mut()
+        .find(|(p, _)| p.ends_with(".hgl-native"))
+        .ok_or("descriptor missing")?;
+    descriptor.push_str(
+        "\nscalar Token canonical \"canonical.Token\" capabilities {copy,text,equality} marker \"ProviderToken\"\n",
+    );
+    let generated = hgl_program::emit_tests(&hgl_program::compile_module_suite(&sources)?);
+    assert!(!generated.contains("ProviderToken"));
+    assert!(!generated.contains("canonical.Token"));
+    assert!(!generated.contains("checked-lengths-v1"));
+    assert!(!generated.contains("provider.rs"));
     Ok(())
 }
