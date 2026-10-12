@@ -299,6 +299,24 @@ impl Checker {
         Ok((signature, types))
     }
 
+    fn declaration_signature(
+        &mut self,
+        decl: &Decl,
+        args: &[(Option<String>, Value)],
+    ) -> Result<(Signature, BTreeMap<String, Ty>), Issue> {
+        let previous_scope = std::mem::replace(
+            &mut self.test_scope,
+            decl.test_only.then(|| decl.module.clone()),
+        );
+        let prior_family = std::mem::replace(&mut self.library.test_scope, self.test_scope.clone());
+        let result = decl
+            .signature_checked()
+            .and_then(|s| self.signature_sizes(&decl.module, s, args, &decl.source));
+        self.library.test_scope = prior_family;
+        self.test_scope = previous_scope;
+        result
+    }
+
     fn direct_call(
         &mut self,
         id: usize,
@@ -406,14 +424,7 @@ impl Checker {
             ) {
                 continue;
             }
-            let previous_family_scope = std::mem::replace(
-                &mut self.library.test_scope,
-                decl.test_only.then(|| decl.module.clone()),
-            );
-            let signature = decl
-                .signature_checked()
-                .and_then(|s| self.signature_sizes(&decl.module, s, args, &decl.source));
-            self.library.test_scope = previous_family_scope;
+            let signature = self.declaration_signature(decl, args);
             let (signature, declared) = match signature {
                 Ok(s) => s,
                 Err(e) => {
@@ -488,10 +499,7 @@ impl Checker {
                 .cloned()
                 .map(|v| (None, v))
                 .collect::<Vec<_>>();
-            let (sig, declared) = match implementation
-                .signature_checked()
-                .and_then(|s| self.signature_sizes(module, s, &positional, &implementation.source))
-            {
+            let (sig, declared) = match self.declaration_signature(implementation, &positional) {
                 Ok(sig) => sig,
                 Err(error) => {
                     errors.push(error.in_source(&implementation.source));
