@@ -13,10 +13,6 @@ pub struct PreparedChild<T> {
     graph: Graph,
     boundary: T,
 }
-struct Quiet;
-impl hgl_store::Wake for Quiet {
-    fn wake(&mut self, _: hgl_types::NodeId) {}
-}
 impl<T> PreparedChild<T> {
     /// Build in a new child scope without starting hooks or running nodes.
     /// Allocate every finite instance before startup, then prepare Store queues.
@@ -35,7 +31,7 @@ impl<T> PreparedChild<T> {
                 Ok(Self { graph, boundary })
             }
             Err(error) => {
-                store.release_scope(scope, EngineTime::NEVER, &mut Quiet);
+                store.discard_scope(scope);
                 Err(error)
             }
         }

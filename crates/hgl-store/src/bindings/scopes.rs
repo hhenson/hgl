@@ -3,6 +3,10 @@ use crate::bindings::{Bindings, InputId, OutputId, ScopeId, Wake};
 use hgl_types::{EngineTime, NodeId};
 
 use crate::endpoints::{Phase, Scope};
+struct ConstructionWake;
+impl Wake for ConstructionWake {
+    fn wake(&mut self, _: NodeId) {}
+}
 impl Bindings {
     pub(crate) fn owns_child(&self, dict: OutputId, child: OutputId) -> bool {
         let parent = self.output(dict);
@@ -103,6 +107,35 @@ impl Bindings {
                 self.scopes.entries[id.index].enqueued = false;
                 return Some(id);
             }
+        }
+    }
+    /// Roll back an unstarted construction without advancing engine time.
+    /// # Panics
+    /// The scope and its descendants must still be constructing child graphs.
+    pub fn discard_scope(&mut self, scope: ScopeId) {
+        if !self.scopes.alive(scope) {
+            return;
+        }
+        assert!(scope.index != 0);
+        assert_eq!(self.scopes.entries[scope.index].phase, Phase::Constructing);
+        while let Some(&child) = self.scopes.entries[scope.index].owned.last() {
+            self.discard_scope(child);
+        }
+        let outputs = self.scopes.entries[scope.index].outputs.clone();
+        self.release_scope(scope, self.now, &mut ConstructionWake);
+        self.retired.retain(|id| !outputs.contains(id));
+        for output in outputs {
+            self.expire(output);
+        }
+        self.scopes
+            .retired
+            .retain(|&(index, _)| index != scope.index);
+        let released = &mut self.scopes.entries[scope.index];
+        for reference in released.assemblies.drain(..) {
+            self.items.release(reference);
+        }
+        if released.generation != scope.generation {
+            self.scopes.free.push(scope.index);
         }
     }
     /// Disconnect a stopped child's ports; outputs expire at the next cycle.

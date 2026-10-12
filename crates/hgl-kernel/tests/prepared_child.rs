@@ -339,6 +339,81 @@ fn prepared_failure_cleanup_does_not_start_unused_children_or_stop_a_failed_star
     Ok(())
 }
 
+#[test]
+fn partially_allocated_failed_builds_discard_endpoints_and_reuse_cold_storage() {
+    let now = EngineTime::from_micros(9);
+    for clock in [EngineTime::NEVER, now] {
+        let mut store = Store::new();
+        let root = store.scope();
+        store.begin_cycle(clock);
+        let existing = store.add_output::<i64>(NodeId(0));
+        store.set(existing, 71, now, NodeId(0), &mut Quiet);
+        let saved = store.reference(existing.id());
+        let stopped_scope = store.child_scope(NodeId(3));
+        store.enter_scope(stopped_scope);
+        let stopped = store.add_output::<i64>(NodeId(0));
+        store.set(stopped, 19, now, NodeId(0), &mut Quiet);
+        let stopped_reference = store.reference(stopped.id());
+        store.enter_scope(root);
+        store.release_scope(stopped_scope, now, &mut Quiet);
+        let hooks = Hooks::default();
+        let mut retained = None;
+        let mut failed = Vec::new();
+        for _ in 0..64 {
+            let result = PreparedChild::<()>::new(&mut store, NodeId(1), |store| {
+                let output = store.add_shaped_output(
+                    NodeId(0),
+                    hgl_store::Kind::List(Box::new(hgl_store::Kind::Ts(ScalarType::I64)), 2),
+                );
+                failed.push(store.reference(output));
+                store.add_input::<i64>(NodeId(0), true);
+                let _child = PreparedChild::new(store, NodeId(0), |store| {
+                    let output = store.add_output::<i64>(NodeId(0));
+                    failed.push(store.reference(output.id()));
+                    Ok((
+                        Graph::new(
+                            "unused descendant".into(),
+                            vec![slot(
+                                LifecycleProbe {
+                                    hooks: hooks.clone(),
+                                    fail: false,
+                                },
+                                true,
+                            )],
+                        ),
+                        (),
+                    ))
+                })?;
+                Err(NodeError::new("partially built child failed"))
+            });
+            assert!(result.is_err());
+            assert_eq!(store.scope(), root);
+            for &reference in &failed {
+                assert!(store.bindings().resolve(reference).is_none());
+            }
+            let counts = store.bindings().storage_counts();
+            assert_eq!(*retained.get_or_insert(counts), counts);
+            assert_eq!(store.bindings().resolve(saved), Some(existing.id()));
+            assert_eq!(store.output_value(existing), Some(71));
+            assert_eq!(store.bindings().output(existing.id()).modified_at, now);
+            assert_eq!(
+                store.bindings().resolve(stopped_reference),
+                Some(stopped.id())
+            );
+            store.begin_cycle(clock);
+        }
+        store.begin_cycle(EngineTime::from_micros(10));
+        assert_eq!(store.bindings().resolve(saved), Some(existing.id()));
+        assert!(
+            failed
+                .iter()
+                .all(|r| store.bindings().resolve(*r).is_none())
+        );
+        assert!(store.bindings().resolve(stopped_reference).is_none());
+        assert_eq!((hooks.starts.get(), hooks.stops.get()), (0, 0));
+    }
+}
+
 struct UnusedNested<T> {
     children: Vec<PreparedChild<T>>,
 }

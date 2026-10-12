@@ -41,7 +41,9 @@ fn stop(&mut self, ctx: &mut Ctx<'_>) -> NodeResult;
 
 `PreparedChild<T>::new(store, owner, factory)` constructs one fresh child in
 its own scope before startup and retains its independent boundary T. It does
-not run a hook. `boundary()` reads that boundary. `start(ctx)` or
+not run a hook. A failed build immediately discards its scope and unstarted
+descendants, invalidates their endpoints and releases reusable storage without
+advancing engine time. `boundary()` reads that boundary. `start(ctx)` or
 `start_with(ctx, bind)` starts it once under the exact parent scope and node
 that prepared it. The latter binds captures in the still-constructing child
 scope before hooks start; quiet sampling queues the child's initial work.

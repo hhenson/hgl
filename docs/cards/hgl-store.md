@@ -215,7 +215,7 @@ clock. Dictionary keys are i64 in this admitted slice. No value is
 copied when attaching a child graph's output. References carry generations.
 
 Graph integration adds `scope`, `enter_scope`, `child_scope`, `reserve_scope`,
-`release_scope`, `take_wake` and `take_child`. These operate on scope identity,
+`release_scope`, `discard_scope`, `take_wake` and `take_child`. These operate on scope identity,
 not local rank. Existing scalar handles retain their size and indexed reads.
 
 The new handles are `Copy`; both have `fn id(self)` returning their
@@ -246,6 +246,7 @@ fn enter_scope(&mut self, scope: ScopeId) -> ScopeId;
 fn child_scope(&mut self, owner: NodeId) -> ScopeId;
 fn reserve_scope(&mut self, scope: ScopeId, nodes: usize);
 fn release_scope<W: Wake>(&mut self, scope: ScopeId, now: EngineTime, wake: &mut W);
+fn discard_scope(&mut self, scope: ScopeId);
 fn take_wake(&mut self, scope: ScopeId) -> Option<NodeId>;
 fn take_child(&mut self, owner: NodeId) -> Option<ScopeId>;
 ```
@@ -367,3 +368,8 @@ without mutation authority. Typed snapshot scalar arguments and projections can
 share this immutable view with temporal scalar observations during native calls.
 
 The native_keys module owns typed prepared key domains; native_results owns prepared single-call result publication. Both depend only on existing runtime storage and typed ABI operations, never compiler metadata.
+
+`discard_scope` immediately rolls back failed cold child construction, including
+unstarted descendants, without running hooks or changing the Store clock. It
+preserves other endpoints and their ordinary next-cycle retirement. Its scope
+and descendants must still be constructing child graphs.
