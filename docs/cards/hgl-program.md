@@ -338,9 +338,13 @@ locals remain ordinary, including annotated i64-to-f64 widening. Assignments
 cannot cross categories through automatic lifting, even when unused. Temporal
 scalar binary expressions use existing checked arithmetic and ordinary nodes;
 compound assignments validate the resulting category and type. Node execution
-locals retain ordinary ownership and observation rules. Uninitialized declarations
-and temporal graph conditionals remain explicitly unsupported; this change does
-not claim definite-assignment or dynamic-branch lowering support. Ordinary wiring-time conditionals with connection assignments delegate to
+locals retain ordinary ownership and observation rules. Typed uninitialized ref<T> graph declarations record only the resolved type.
+A direct first assignment supplies the real connection, preserving exactly the
+initialized form's emitted graph; reads or compound updates before assignment
+are errors. Runtime locals and ordinary graph declarations still require an
+initializer in this backend profile. Temporal graph conditionals remain
+unsupported; this increment does not claim branch definite-assignment or
+dynamic child lowering. Ordinary wiring-time conditionals with connection assignments delegate to
 hgl-wiring-locals, retaining only the selected branch's values and binary nodes.
 Both branches check fixed categories and lexical authority. This narrow branch
 profile admits local declarations, name assignments and scalar/binary expressions;
