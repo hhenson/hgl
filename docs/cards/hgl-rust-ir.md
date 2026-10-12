@@ -120,3 +120,13 @@ Internal Query("\0reference", [projected_input]) designates a checked child
 endpoint for a compiler-generated graph projection. It reads no scalar payload
 and grants no source node access through REF. Its result retains the child's
 declared REF schema and lifetime.
+
+Cold subscription preparation follows checked designation publications and
+ordinary helper yields through local replacements, branch alternatives, held
+output values and projection paths. A REF used only by a guard or metadata
+operation supplies no returned target. All possible published targets receive
+their typed input views and subscription capacity before the first tick.
+Returned designation origins without a cold transport mapping produce a Rust
+target diagnostic during finite preparation emission. Collection REF element
+selection is one such target gap; a guard-only occurrence does not create a
+returned route. Source admission remains separate from this transport check.

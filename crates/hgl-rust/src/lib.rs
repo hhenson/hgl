@@ -17,6 +17,7 @@ mod conditionals;
 mod emit;
 mod graph_assemblies;
 mod native_images;
+mod reference_designations;
 mod reference_routes;
 /// A checked source graph may exceed this Rust target's finite activation proof.
 pub fn conditional_target_error(plan: &Plan) -> Option<String> {

@@ -54,3 +54,7 @@ Global native result staging selects text_result only for an admitted provider
 Str result. Ordinary configuration String fields retain their prepared copy
 path and independent constructor ownership; they are not borrowed helper
 results. Existing Any/recursive constructor regressions verify those copies.
+
+Reading a checked REF own output emits its lifetime-checked designation through
+Bindings::reference_value. It reads no designated payload; publishing that same
+designation again retains the existing REF timestamp and subscriptions.
