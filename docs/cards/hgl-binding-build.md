@@ -25,3 +25,11 @@ retention, removal and first/repeated allocation-free activation.
 
 Projection preparation mirrors an output's bounded runtime-key pool in each input
 view; child subscriptions remain attached to matching prepared slot indices.
+
+reference_projection(&mut Endpoints,&mut Scopes,InputId,OutputId) allocates
+absent finite child views for a potential REF target without attaching its
+subscriptions. Multiple potential targets merge their prepared key domains;
+fixed children keep their existing handles. All views preserve consumer scope
+and activity. Actual binding, membership, sampling and notifications remain with
+Bindings. Store exposes reserve_reference_target and prepare_reference_input as
+cold wrappers around this preparation.

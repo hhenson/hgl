@@ -709,6 +709,7 @@ fn instantiate(plan: &Plan, horizon: &str) -> String {
     code += "let mut built=hgl_describe::instantiate_complete(&graph,&registry,&mut store).map_err(|e|format!(\"{e:?}\"))?;\n";
     if finite {
         code += "prepare_outputs(&capacity,&mut store,&graph,&built).map_err(|e|e.message)?;\n";
+        code += &crate::reference_routes::reserve(plan);
     }
     code
 }

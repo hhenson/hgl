@@ -21,19 +21,19 @@ sample newly selected endpoints even when values are equal. REF inputs remain
 opaque in source node handlers. Set width preparation follows REF dependencies
 without running handlers.
 
-Current focused validation executes all 20 groups / 42 evals in the scalar,
-projection and structural suites. Eight authored groups remain unexecuted in
-the two lifecycle suites and the native leaf suite. Full CI is pending
+Current focused validation executes all 24 groups / 50 evals in the scalar,
+projection, structural and native leaf suites. Four authored groups remain
+unexecuted in the two lifecycle suites. Full CI is pending
 integration and host coordination; this record does not claim completion.
 
 | Suite | Named group | Outcome |
 | --- | --- | --- |
 | `reference_conditional_expiry` | `reference_stopped_branch_target_expires_at_next_cycle_and_never_revives` | Admission blocked, unexecuted |
 | `reference_conditional_expiry` | `reference_stopping_a_forwarding_branch_preserves_outer_target` | Admission blocked, unexecuted |
-| `reference_leaf_values` | `held_reference_bytes_keep_empty_equal_distinct_and_silent_values` | Admission blocked, unexecuted |
-| `reference_leaf_values` | `held_reference_any_keeps_one_box_leaf_across_contained_type_changes` | Admission blocked, unexecuted |
-| `reference_leaf_values` | `held_reference_native_token_keeps_owning_scalar_publications` | Admission blocked, unexecuted |
-| `reference_leaf_values` | `held_reference_text_only_needs_no_payload_equality_or_hash` | Admission blocked, unexecuted |
+| `reference_leaf_values` | `held_reference_bytes_keep_empty_equal_distinct_and_silent_values` | Passed, executed |
+| `reference_leaf_values` | `held_reference_any_keeps_one_box_leaf_across_contained_type_changes` | Passed, executed |
+| `reference_leaf_values` | `held_reference_native_token_keeps_owning_scalar_publications` | Passed, executed |
+| `reference_leaf_values` | `held_reference_text_only_needs_no_payload_equality_or_hash` | Passed, executed |
 | `reference_owner_export_values` | `reference_exports_compose_through_two_conditional_owners` | Admission blocked, unexecuted |
 | `reference_owner_export_values` | `reference_exported_child_tree_keeps_sparse_ticks_and_samples_changed_children` | Admission blocked, unexecuted |
 | `reference_projection_values` | `reference_graph_projections_follow_children_and_ignore_sibling_ticks` | Passed, executed |
@@ -64,3 +64,16 @@ and [owned export](../../external/hgraph_spec/compiler/cases_reference_owner_exp
 The current compiler rejects temporal graph conditionals; implementing them
 requires checked child graph descriptions, definite assignment and output
 boundary export rather than changing reference payload semantics.
+
+The prepared generated allocation probe executes the exact 24 reference groups
+and their 50 evaluations with a real CountingAllocator. Every successful cycle,
+including first designation sampling, has zero allocations. Scalar/projection
+cases and structural/native cases were observed independently; the required-read
+failure retains its existing error behavior. Imported native test groups were
+excluded from this targeted probe, matching the normal CLI target scope.
+
+Cold route analysis follows only checked REF capture dependencies and fixed
+projection indices. It reserves target subscription buffers and the union of
+possible absent collection views without binding, sampling or publishing them.
+The focused regression covers a retained invalid Map target and distinct Native
+text payloads inside an atomic Tuple under actual allocation counting.

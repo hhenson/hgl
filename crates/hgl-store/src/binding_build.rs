@@ -89,6 +89,56 @@ pub fn projections(endpoints: &mut Endpoints, scopes: &mut Scopes) {
     }
 }
 
+/// Reserve absent child views for a finite potential target without establishing a binding.
+pub fn reference_projection(
+    endpoints: &mut Endpoints,
+    scopes: &mut Scopes,
+    id: InputId,
+    source: OutputId,
+) {
+    for index in 0..endpoints.input(id).fixed.len() {
+        reference_projection(
+            endpoints,
+            scopes,
+            endpoints.input(id).fixed[index],
+            endpoints.output(source).fixed[index],
+        );
+    }
+    if !endpoints.output(source).members.live.prepared() {
+        return;
+    }
+    let view = endpoints.input(id);
+    let (owner, active, scope) = (view.owner, view.active, view.scope);
+    let previous = std::mem::replace(&mut scopes.current, scope);
+    let mut children = view.members.prepared.clone();
+    for index in 0..endpoints.output(source).members.prepared.len() {
+        let (key, output) = endpoints.output(source).members.prepared[index];
+        let child =
+            if let Some((_, child)) = children.iter().find(|(candidate, _)| *candidate == key) {
+                *child
+            } else {
+                let child = input(
+                    endpoints,
+                    scopes,
+                    owner,
+                    endpoints.output(output).kind.clone(),
+                    active,
+                );
+                endpoints.inputs[child.0 as usize].parent = Some((id, key));
+                children.push((key, child));
+                child
+            };
+        reference_projection(endpoints, scopes, child, output);
+    }
+    let pooled =
+        endpoints.input(id).members.live.pooled() || endpoints.output(source).members.live.pooled();
+    endpoints.inputs[id.0 as usize].members.prepare(children);
+    if pooled {
+        endpoints.inputs[id.0 as usize].members.pool();
+    }
+    scopes.current = previous;
+}
+
 /// Establish an absent finite output domain whose children were allocated cold.
 /// # Panics
 /// Children must have the root member shape, owner and scope, and no parent.
@@ -122,6 +172,15 @@ pub fn member_input(
     }
     let child = members
         .prepared_child(key)
+        .or_else(|| {
+            if endpoints.input(parent).members.live.pooled() {
+                let child = endpoints.inputs[parent.0 as usize].members.claim(key);
+                endpoints.inputs[child.0 as usize].parent = Some((parent, key));
+                Some(child)
+            } else {
+                None
+            }
+        })
         .or_else(|| {
             endpoints.inputs[parent.0 as usize]
                 .members

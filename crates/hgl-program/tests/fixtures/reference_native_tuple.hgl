@@ -1,0 +1,67 @@
+module hgraph.std part reference_native_tuple_tests
+
+test {
+    fn held<T>(value: ref<T>) -> ref<T> {
+        state captured: bool = false
+        when {
+            if !captured {
+                captured = true
+                return value
+            }
+        }
+    }
+    fn observed(reference: ref<TextOnly>, alias: ref<TextOnly>, other: ref<TextOnly>, data: TextOnly, step: i64) -> atomic<tuple<bool, bool, str>> {
+        when valid(reference, alias, other, data, step) && modified(step) {
+            return (reference == alias, reference == other, text_only_text(data))
+        }
+    }
+    fn identity(value: TextOnly, other: TextOnly, step: i64) -> atomic<tuple<bool, bool, str>> {
+        let retained = held(value)
+        observed(retained, value, other, pass_through(retained), step)
+    }
+    test held_native_identity_and_text_are_independently_owned {
+        let first: TextOnly = text_only("first")
+        let second: TextOnly = text_only("longer")
+        let empty: TextOnly = text_only("")
+        assert eval(identity,
+            value: [first, second, _, empty], other: [first, second, _, empty], step: [1, 1, 1, 1]
+        ) == [(true, false, "first"), (true, false, "longer"), (true, false, "longer"), (true, false, "")]
+        assert eval(identity,
+            value: [empty, _, first], other: [empty, _, first], step: [1, 1, 1]
+        ) == [(true, false, ""), (true, false, ""), (true, false, "first")]
+    }
+    fn choose<T>(index: i64, first: ref<T>, second: ref<T>) -> ref<T> {
+        when {
+            if index == 0 { return first }
+            return second
+        }
+    }
+    fn retained_map(index: i64, first: map<i64, i64>, second: map<i64, i64>) -> map<i64, i64> {
+        pass_through(held(choose(index, first, second)))
+    }
+    test prepared_reference_members_remain_absent_until_selected_target_publishes {
+        assert eval(retained_map,
+            index: [0, 1, _, 0, _],
+            first: [delta<map<i64, i64>>(upsert: [1: 7]), delta<map<i64, i64>>(upsert: [1: 8]), _, delta<map<i64, i64>>(upsert: [2: 20]), delta<map<i64, i64>>(remove: [1])],
+            second: [delta<map<i64, i64>>(upsert: [9: 70]), _, delta<map<i64, i64>>(upsert: [9: 71])]
+        ) == [delta<map<i64, i64>>(upsert: [1: 7]), delta<map<i64, i64>>(upsert: [1: 8]), _, delta<map<i64, i64>>(upsert: [2: 20]), delta<map<i64, i64>>(remove: [1])]
+        assert eval(retained_map,
+            index: [1, 0, _, _, 0],
+            first: [delta<map<i64, i64>>(upsert: [1: 7]), _, _, delta<map<i64, i64>>(upsert: [1: 8])],
+            second: [_, _, delta<map<i64, i64>>(upsert: [9: 70]), _, delta<map<i64, i64>>(remove: [9])]
+        ) == [_, _, delta<map<i64, i64>>(upsert: [9: 70]), _, delta<map<i64, i64>>(remove: [9])]
+    }
+    fn live_members(value: i64) -> set<i64> {
+        inject out
+        when {
+            if value >= 0 { upsert(out, value) }
+            else { discard(out, -value) }
+        }
+    }
+    fn retained_members(value: i64) -> set<i64> => pass_through(held(live_members(value)))
+    test prepared_reference_pool_claims_first_runtime_keys_without_allocation {
+        assert eval(retained_members, [7, 8, -7, _, 9]) == [
+            delta<set<i64>>(added: [7]), delta<set<i64>>(added: [8]), delta<set<i64>>(removed: [7]), _, delta<set<i64>>(added: [9])
+        ]
+    }
+}
