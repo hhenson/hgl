@@ -91,7 +91,6 @@ fn bind_type(
     types: &mut BTreeMap<String, Ty>,
 ) -> Result<Value, String> {
     if !p.constant
-        && p.ty != "signal"
         && !p.ty.starts_with("ref<")
         && matches!(value.kind, Kind::Wire(_))
         && let Ty::Ref(child) = &value.ty

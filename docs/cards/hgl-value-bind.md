@@ -71,3 +71,8 @@ May use struct_declarations for the shared declared type-domain check.
 `infer_arguments` gathers substitutions from already checked argument types before
 required defaults supply dependent bounds. Final `signature_types` resolution
 retains exact width and type checks; neither pass executes supplied values.
+
+Temporal signal formals unwrap supplied REF connections to their underlying
+port schema under TS-18, while retaining signal-only access authority. Their
+runtime binding follows selected target ticks and samples re-pointing; equal
+designations add no tick. Explicit ref<T> formals remain designation inputs.
