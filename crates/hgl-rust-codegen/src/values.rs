@@ -344,7 +344,7 @@ pub fn condition_code(plan: &Plan, condition: &Value) -> String {
 
 fn reference_output_query(op: &str) -> String {
     match op {
-        "valid" => "(_ctx.store().bindings().output(self._output).modified_at != hgl_types::EngineTime::NEVER)".into(),
+        "valid" | "all_valid" => "(_ctx.store().bindings().output(self._output).modified_at != hgl_types::EngineTime::NEVER)".into(),
         "last_modified" => "_ctx.store().bindings().output(self._output).modified_at".into(),
         "modified" => "_ctx.store().output_modified(self._output,_ctx.evaluation_time())".into(),
         _ => unreachable!("checked reference output query"),
@@ -406,7 +406,7 @@ pub fn query(op: &str, args: &[Value]) -> String {
             }
             if matches!(v.ty, Ty::Ref(_)) {
                 return match op {
-                    "valid" => format!("_ctx.store().input_valid({input})"),
+                    "valid" | "all_valid" => format!("_ctx.store().input_valid({input})"),
                     "modified" => {
                         format!("_ctx.store().bindings().modified({input},_ctx.evaluation_time())")
                     }
