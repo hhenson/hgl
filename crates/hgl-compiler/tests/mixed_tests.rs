@@ -179,3 +179,20 @@ fn library_tests_keep_their_own_module_and_production_dependencies_are_checked()
     assert!(output.stdout.is_empty());
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+#[test]
+fn canonical_test_context_types_execute_through_the_public_cli() {
+    let output = run(&spec("language/examples/test-contexts.hgl"), &[], &[]).unwrap();
+    let text = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(text.contains("fixture_ticks ... ok [executed]"), "{text}");
+    assert!(text.contains("shared_fixture ... ok [executed]"), "{text}");
+    assert!(
+        text.contains("2 executed tests, 4 evaluations, 0 failures"),
+        "{text}"
+    );
+}

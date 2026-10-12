@@ -81,6 +81,14 @@ pub fn expression(
             }
         });
         let (owner, item) = crate::struct_names::identity(library, module, base);
+        if crate::struct_names::declaration(library, module, base)?
+            .or(crate::struct_names::enum_declaration(
+                library, module, base,
+            )?)
+            .is_some()
+        {
+            type_name(library, module, name, scope, test_scope)?;
+        }
         if matches!(expr.syntax(), Expr::Applied(..)) {
             if library
                 .declarations
@@ -108,17 +116,39 @@ pub fn expression(
             return Err(format!("{owner}::{item}: expected one matching declaration, found 0: unknown callable {name}").into());
         }
     } else if let Expr::Name(name) = expr.syntax() {
-        if let Some((owner, _)) = name.split_once("::")
-            && !scope.parameters.contains(owner)
-            && crate::enums::member(library, module, name)?.is_none()
+        value_name(library, module, test_scope, name, scope)?;
+    } else if let Expr::Lambda(parameters, result, body) = expr.syntax() {
+        for ty in parameters
+            .iter()
+            .map(|(_, ty)| ty)
+            .chain(std::iter::once(result))
         {
-            return Err(format!("unknown value {name}").into());
+            type_name(library, module, ty, scope, test_scope)?;
         }
-    } else if let Expr::Lambda(parameters, _, body) = expr.syntax() {
         return expression(library, module, test_scope, body, &scope.lambda(parameters));
     }
     for child in expr.children() {
         expression(library, module, test_scope, child, scope)?;
+    }
+    Ok(())
+}
+fn value_name(
+    library: &Library,
+    module: &str,
+    test_scope: Option<&str>,
+    name: &str,
+    scope: &Scope,
+) -> Result<(), Issue> {
+    if let Some((ty, _)) = name.rsplit_once("::")
+        && crate::struct_names::enum_declaration(library, module, ty)?.is_some()
+    {
+        type_name(library, module, ty, scope, test_scope)?;
+    }
+    if let Some((owner, _)) = name.split_once("::")
+        && !scope.parameters.contains(owner)
+        && crate::enums::member(library, module, name)?.is_none()
+    {
+        return Err(format!("unknown value {name}").into());
     }
     Ok(())
 }
@@ -182,6 +212,19 @@ pub fn type_name(
         );
     }
     let (base, args) = hgl_source::application(name).unwrap_or((name, Vec::new()));
+    if !scope.parameters.contains(base)
+        && let Some(decl) = crate::struct_names::declaration(library, module, base)?.or(
+            crate::struct_names::enum_declaration(library, module, base)?,
+        )
+        && decl.test_only
+        && test_scope != Some(decl.module.as_str())
+    {
+        return Err(format!(
+            "test-only type {}::{} is not visible in production",
+            decl.module, decl.name
+        )
+        .into());
+    }
     if !scope.parameters.contains(base)
         && Ty::parse(base).is_none()
         && !matches!(
