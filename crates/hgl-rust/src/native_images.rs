@@ -43,10 +43,13 @@ pub(crate) fn emit(plan: &Plan) -> Result<String, hgl_source::Issue> {
             image_module(&image.provider)
         ));
     }
-    for (domain, (scalar, marker, image)) in scalars.values().enumerate() {
+    for (scalar, marker, image) in scalars.values() {
         code.push(format!(
-            "const NATIVE_DOMAIN{}:usize={domain};type {}={}::{marker};",
+            "#[derive(Debug)] struct NativeDomain{};impl hgl_store::NativeKeyDomain for NativeDomain{} {{type Scalar={}::{marker};const MAPPING:(&'static str,&'static str)=({:?},{marker:?});fn slot()->&'static std::sync::OnceLock<usize>{{static SLOT:std::sync::OnceLock<usize>=std::sync::OnceLock::new();&SLOT}}}} type {}={}::{marker};",
             crate::native_values::domain(scalar),
+            crate::native_values::domain(scalar),
+            image_module(&image.provider),
+            image.path,
             crate::native_values::marker(scalar),
             image_module(&image.provider)
         ));
@@ -61,6 +64,7 @@ pub(crate) fn emit(plan: &Plan) -> Result<String, hgl_source::Issue> {
         let caps = ["copy", "text", "equality", "hash", "order", "serialization"]
             .map(|c| scalar.capabilities.contains(c));
         code.push(format!("<{module}::{marker} as hgl_store::native_values::NativeType>::CONTRACT.validate({:?},{:?},{:?},{caps:?}).map_err(|e|e.message.clone())?;",image.provider,image.fingerprint,scalar.identity));
+        code.push(format!("<NativeDomain{} as hgl_store::NativeKeyDomain>::prepare().map_err(|e|e.message.clone())?;",crate::native_values::domain(scalar)));
     }
     code.push("Ok(())}\n".into());
     Ok(code.concat())
