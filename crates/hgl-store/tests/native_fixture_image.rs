@@ -78,6 +78,7 @@ fn canonical_contracts_and_provider_operations_match_the_authored_fixture() -> N
 static RESTRICTED: AnyPlan = AnyPlan {
     execution: &hgl_store::any_values::operations::EXECUTION,
     capture: None,
+    validate: None,
     identity: TypeId::of::<TextOnly>,
     copy: |data, out| out.write(&data),
     operation: AnyOperation::Native {

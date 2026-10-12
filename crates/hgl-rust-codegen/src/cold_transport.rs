@@ -12,7 +12,7 @@ pub fn encode(ty: &Ty, value: &str) -> String {
 pub fn decode(ty: &Ty, bytes: &str, registry: &str) -> String {
     let name = crate::any_values::name(ty);
     format!(
-        "{{let bytes={bytes};let (data,descriptors)=cold_parts(&bytes,{registry})?;any_read_{name}(hgl_types::any_values::AnyView::from_encoded(data,&descriptors))?}}"
+        "{{let bytes={bytes};let (data,descriptors)=cold_parts(&bytes,{registry})?;let data=hgl_types::any_values::AnyView::from_encoded(data,&descriptors);any_validate_{name}(data)?;any_read_{name}(data)?}}"
     )
 }
 /// Emit cold-only framing support; no callbacks or provider handles enter descriptions.

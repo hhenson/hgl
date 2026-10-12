@@ -10,6 +10,7 @@ fn identity<T: 'static>() -> TypeId {
 }
 static INTEGER: AnyPlan = AnyPlan {
     capture: None,
+    validate: None,
     copy: |data, out| {
         out.write(&data);
     },
@@ -20,6 +21,7 @@ static INTEGER: AnyPlan = AnyPlan {
 };
 static LIST: AnyPlan = AnyPlan {
     capture: None,
+    validate: None,
     copy: |data, out| {
         out.write(&data);
     },
@@ -30,6 +32,7 @@ static LIST: AnyPlan = AnyPlan {
 };
 static DELTA: AnyPlan = AnyPlan {
     capture: None,
+    validate: None,
     copy: |data, out| {
         out.write(&data);
     },
@@ -40,6 +43,7 @@ static DELTA: AnyPlan = AnyPlan {
 };
 static NO_ORDER: AnyPlan = AnyPlan {
     capture: None,
+    validate: None,
     copy: |data, out| {
         out.write(&data);
     },
@@ -50,6 +54,7 @@ static NO_ORDER: AnyPlan = AnyPlan {
 };
 static NO_EQUAL: AnyPlan = AnyPlan {
     capture: None,
+    validate: None,
     copy: |data, out| {
         out.write(&data);
     },
@@ -160,6 +165,7 @@ fn nested_descriptor_metadata_is_independent_prepared_and_fallible() -> NodeResu
     use hgl_types::any_values::AnyBuffer as _;
     static BOXED: AnyPlan = AnyPlan {
         capture: None,
+        validate: None,
         copy: |data, out| {
             let value = data.boxed();
             out.descriptor(value.plan);
@@ -174,6 +180,7 @@ fn nested_descriptor_metadata_is_independent_prepared_and_fallible() -> NodeResu
     };
     static WRONG: AnyPlan = AnyPlan {
         capture: Some(|_| Ok(Box::new(false))),
+        validate: None,
         copy: |data, out| {
             out.write(&data);
         },

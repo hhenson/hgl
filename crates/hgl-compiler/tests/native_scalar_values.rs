@@ -916,3 +916,70 @@ fn cold_aggregate_cases() -> [ColdAggregateCase; 6] {
         ),
     ]
 }
+
+#[test]
+fn malformed_cold_aggregate_carriers_return_build_errors() -> Result<(), Box<dyn std::error::Error>>
+{
+    let body = r#"
+fn consume(const value:tuple<i64,bool,str,any,list<i64>>) {inject global_state,alarm
+start {schedule(alarm,0us)}
+when {set(global_state,"retained",any(value))}}
+export fn main(){consume(value:(42,true,"text",any(token("owner")),[1,2]))}
+"#;
+    let image = std::env::temp_dir().join(format!(
+        "hgl-cold-validation-provider-{}.rs",
+        std::process::id()
+    ));
+    let provider = fs::read_to_string(root()?.join("native/stdlib/atomic_values.rs"))?.replace(
+        "destination.write(data);",
+        "crate::COPIES.fetch_add(1,std::sync::atomic::Ordering::Relaxed);destination.write(data);",
+    );
+    fs::write(&image, provider)?;
+    let mut input = sources(body)?;
+    for (name, text) in &mut input {
+        if name.ends_with(".hgl-native") {
+            *text = text.replace(
+                "\"atomic_values.rs\"",
+                &format!("{:?}", image.display().to_string()),
+            );
+        }
+    }
+    let plan = hgl_program::compile(&input, "main")?;
+    let generated = format!(
+        r#"
+{}
+static COPIES:std::sync::atomic::AtomicUsize=std::sync::atomic::AtomicUsize::new(0);
+static UNCHECKED:hgl_types::AnyPlan=hgl_types::AnyPlan{{execution:&hgl_store::any_values::operations::EXECUTION,capture:None,validate:None,identity:std::any::TypeId::of::<i64>,operation:hgl_types::AnyOperation::Integer,copy:|_,_|panic!("unchecked cold copy"),capabilities:[true;3]}};
+fn frame(bytes:&[u8])->Vec<u8>{{let mut out=(bytes.len() as u64).to_le_bytes().to_vec();out.extend(bytes);out}}
+fn main(){{
+let mut registry=hgl_describe::Registry::new();register(&mut registry).unwrap();
+let graph=main_graph(&registry).unwrap();
+let copies=COPIES.load(std::sync::atomic::Ordering::Relaxed);
+let (node,scalar)=graph.nodes.iter().enumerate().find_map(|(node,n)|n.scalars.iter().position(|(key,_)|key.starts_with("\0cold:")).map(|scalar|(node,scalar))).unwrap();
+let hgl_types::ScalarValue::Bytes(original)=&graph.nodes[node].scalars[scalar].1 else {{panic!("carrier")}};
+let start=original.iter().position(|b|*b<32).unwrap();
+let count=u64::from_le_bytes(original[start..start+8].try_into().unwrap()) as usize;
+let payload=start+8+8*count;
+let mut fields=Vec::new();let mut rest=&original[payload..];
+while !rest.is_empty(){{let width=u64::from_le_bytes(rest[..8].try_into().unwrap()) as usize;fields.push(rest[8..8+width].to_vec());rest=&rest[8+width..];}}
+let mut bad=vec![Vec::new(),vec![0;7],u64::MAX.to_le_bytes().to_vec()];
+for (index,value) in [(0,vec![0;7]),(1,Vec::new()),(1,vec![2]),(2,vec![255]),(3,u64::MAX.to_le_bytes().to_vec()),(3,vec![0;9]),(3,[1u64.to_le_bytes().as_slice(),&[255]].concat()),(4,vec![0;7]),(4,u64::MAX.to_le_bytes().to_vec())] {{let mut changed=fields.clone();changed[index]=value;bad.push(changed.iter().flat_map(|v|frame(v)).collect());}}
+bad.push(fields[..4].iter().flat_map(|v|frame(v)).collect());
+let mut extra=original[payload..].to_vec();extra.extend(frame(&[]));bad.push(extra);
+let mut carriers:Vec<Vec<u8>>=bad.into_iter().map(|bytes|{{let mut carrier=original[..payload].to_vec();carrier.extend(bytes);carrier}}).collect();
+for (offset,value) in [(start,u64::MAX),(start+8,0),(start+8,u64::MAX)] {{let mut carrier=original.clone();carrier[offset..offset+8].copy_from_slice(&value.to_le_bytes());carriers.push(carrier);}}
+let mut missing=original.clone();missing[start+8..start+16].copy_from_slice(&registry.retain_descriptor(&UNCHECKED).unwrap().to_le_bytes());carriers.push(missing);
+assert_eq!(carriers.len(),18);
+for carrier in carriers {{let mut corrupt=graph.clone();corrupt.nodes[node].scalars[scalar].1=hgl_types::ScalarValue::Bytes(carrier);
+let outcome=std::panic::catch_unwind(std::panic::AssertUnwindSafe(||{{let mut store=hgl_store::Store::new();store.global_state().provision();hgl_describe::instantiate_complete(&corrupt,&registry,&mut store)}}));
+assert!(outcome.is_ok(),"malformed cold payload panicked");assert!(matches!(outcome.unwrap(),Err(hgl_describe::BuildError::InvalidNodeType{{..}})),"malformed cold payload was admitted");assert_eq!(COPIES.load(std::sync::atomic::Ordering::Relaxed),copies,"malformed carrier copied an owner");}}
+for description in [&graph,&graph.clone()] {{let mut store=hgl_store::Store::new();store.global_state().provision();let mut built=hgl_describe::instantiate_complete(description,&registry,&mut store).unwrap();hgl_kernel::run_simulation(&mut built.graph,&mut store,&hgl_kernel::RunConfig{{start_time:hgl_types::EngineTime::MIN_START,end_time:hgl_types::EngineTime::from_micros(10)}}).unwrap();let key=store.global_state().bind::<hgl_store::Any>("retained").unwrap();let retained=store.global_state().get(key).unwrap().capture::<hgl_semantics::ir::Value>().unwrap();let mut found=false;hgl_semantics::ir_visit::value(&retained,&mut |v|{{if let hgl_semantics::ir::Kind::Opaque(value)=&v.kind {{found|=value.data()==b"owner";}}true}});assert!(found);}}
+assert!(COPIES.load(std::sync::atomic::Ordering::Relaxed)>copies,"valid cold roundtrip did not retain owners");
+}}
+"#,
+        hgl_program::emit_rust(&plan).replace("pub fn main(", "pub fn main_graph(")
+    );
+    let result = execute(&generated);
+    fs::remove_file(image)?;
+    result
+}
