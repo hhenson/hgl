@@ -9,10 +9,8 @@ pub(super) struct Project {
     _lock: fs::File,
 }
 impl Project {
-    pub(super) fn open(root: &Path, batch: usize) -> io::Result<Self> {
-        let path = root
-            .join("target/source-test-projects")
-            .join(format!("corpus-batch-{batch:03}"));
+    pub(super) fn open(root: &Path, name: &str) -> io::Result<Self> {
+        let path = root.join("target/source-test-projects").join(name);
         fs::create_dir_all(path.join("src"))?;
         let lock = fs::OpenOptions::new()
             .read(true)

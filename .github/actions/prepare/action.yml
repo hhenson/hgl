@@ -44,6 +44,26 @@ runs:
         key: workspace-v3-${{ runner.os }}-${{ runner.arch }}-${{ inputs.stage }}-${{ steps.build-environment.outputs.key }}-${{ github.sha }}
         restore-keys: |
           workspace-v3-${{ runner.os }}-${{ runner.arch }}-${{ inputs.stage }}-${{ steps.build-environment.outputs.key }}-
+    - uses: actions/cache@v4
+      with:
+        path: |
+          target/source-test-projects/prepared-*
+          target/source-test-projects/tuple-*
+          target/source-tests/debug/.fingerprint/prepared-execution-prepared-*
+          target/source-tests/debug/.fingerprint/tuple_observations-test-tuple-*
+          target/source-tests/release/.fingerprint/prepared-execution-prepared-*
+          target/source-tests/release/.fingerprint/tuple_observations-test-tuple-*
+          target/source-tests/debug/prepared-execution-prepared-*
+          target/source-tests/debug/deps/prepared_execution_prepared_*
+          target/source-tests/debug/tuple_observations-test-tuple-*
+          target/source-tests/debug/deps/tuple_observations_test_tuple_*
+          target/source-tests/release/prepared-execution-prepared-*
+          target/source-tests/release/deps/prepared_execution_prepared_*
+          target/source-tests/release/tuple_observations-test-tuple-*
+          target/source-tests/release/deps/tuple_observations_test_tuple_*
+        key: regression-executables-v1-${{ runner.os }}-${{ runner.arch }}-${{ inputs.stage }}-${{ steps.build-environment.outputs.key }}-${{ github.sha }}
+        restore-keys: |
+          regression-executables-v1-${{ runner.os }}-${{ runner.arch }}-${{ inputs.stage }}-${{ steps.build-environment.outputs.key }}-
     - name: Restore timestamps of unchanged build inputs
       shell: bash
       run: python tools/ci_build_cache.py restore

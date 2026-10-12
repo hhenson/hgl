@@ -18,7 +18,7 @@ fn cached_projects_preserve_inputs_and_validate_rebuilds() -> Result<(), Box<dyn
     ));
     fs::create_dir_all(root.join("dependency/src"))?;
     let manifest = "[package]\nname=\"cache-control\"\nversion=\"0.1.0\"\nedition=\"2024\"\n[workspace]\n[features]\nsecond=[]\ndefault=[]\n[dependencies]\nleaf={path=\"../../../dependency\"}\n";
-    let project = generated_cache::Project::open(&root, 0)?;
+    let project = generated_cache::Project::open(&root, "corpus-batch-000")?;
     let source = project.path.join("src/main.rs");
     generated_cache::write(project.path.join("Cargo.toml"), manifest)?;
     generated_cache::write(
