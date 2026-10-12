@@ -35,6 +35,9 @@ reject during descriptor checking, before image loading or Rust emission; this
 ABI provides no conversion between opaque representations. A provider identity
 selects one image path and fingerprint across modules. Compatible modules may
 contribute distinct scalar records, all of which are retained in generated code.
+One selected Rust marker belongs to only one canonical identity. Helper symbols
+shared by aliases in one provider image use one exact optional bound callback.
+These inert mapping checks finish before provider loading or target emission.
 
 Acceptance: authored Std fixture identities/capabilities, canonical aliases,
 descriptor-only checking, exact helper signatures, missing/incompatible contracts,

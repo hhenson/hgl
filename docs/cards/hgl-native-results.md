@@ -4,6 +4,13 @@ The native_results module of hgl-store provides PreparedTick::native_result and 
 
 The native_results module of hgl-rust-codegen selects supported borrowed expression trees and emits publication/write code. Its limits pass invokes descriptor-selected pure bound functions during cold provisioning. Bound composition never executes semantic helper bodies. Arithmetic overflow and unsound result sizes are failures; they cannot silently truncate. The native_values module emits exact canonical markers, inert metadata, cold encode/decode and byte-sink append calls. Source phase/type admission remains above this backend.
 
+Prepared provider result transport supports Native views, borrowed str and
+nonowning builtin scalars. A pure bound does not supply a result transport:
+bytes, timezone and zoned owning results reject concrete runtime Rust target
+emission until a reserved publisher exists. Checked HGL and cold provider calls
+remain available; rejected target output contains only the diagnostic, before
+provider image emission or execution.
+
 Controls count helper execution, reject missing and unsound bounds, preserve old destinations after failure, exercise empty results and aliases, and run generated source simulations under allocation counting.
 
 Initial module ceilings: Store native_results 80 lines; codegen native_results 180 and native_values 60 lines. All remain within their unchanged aggregate ceilings.
