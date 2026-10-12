@@ -12,6 +12,7 @@ pub(super) fn split(suite: Suite, count: usize) -> Vec<Suite> {
         let mut batch = Suite {
             tests: tests.by_ref().take(count).collect(),
             plans: Vec::new(),
+            native_images: suite.native_images.clone(),
         };
         if batch.tests.is_empty() {
             break;

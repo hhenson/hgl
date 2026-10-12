@@ -260,17 +260,41 @@ pub fn shared_layouts(plans: &[Plan]) -> String {
 }
 /// Share payload codecs with surrounding lexical test preparation.
 pub fn shared_test_layouts(plans: &[Plan], tests: &[hgl_semantics::harness_ir::Test]) -> String {
+    shared_layouts_inner(plans, tests, &[])
+}
+/// Share native type mappings reached by lexical setup independently of graph helper calls.
+pub fn shared_suite_layouts(suite: &hgl_semantics::harness_ir::Suite) -> String {
+    shared_layouts_inner(&suite.plans, &suite.tests, &suite.native_images)
+}
+fn shared_layouts_inner(
+    plans: &[Plan],
+    tests: &[hgl_semantics::harness_ir::Test],
+    images: &[hgl_source::native_contracts::Image],
+) -> String {
     let nodes = plans
         .iter()
         .flat_map(|plan| crate::snapshot_slots::prepare(plan).nodes.into_iter())
         .collect();
     let types = Plan {
         nodes,
-        ordinary_types: crate::layouts::harness_types(tests).into_values().collect(),
+        ordinary_types: plans
+            .iter()
+            .flat_map(|plan| plan.ordinary_types.iter().cloned())
+            .chain(crate::layouts::harness_types(tests).into_values())
+            .collect(),
+        wiring: plans
+            .iter()
+            .flat_map(|plan| plan.wiring.iter().cloned())
+            .collect(),
         natives: crate::preparation::native_bindings(plans, tests),
+        native_images: plans
+            .iter()
+            .flat_map(|plan| plan.native_images.iter().cloned())
+            .chain(images.iter().cloned())
+            .collect(),
         ..Plan::default()
     };
-    native_images(&types)
+    crate::native_images::emit(&types)
         + &crate::preparation::native_context(&types)
         + &global_markers(&types)
         + &crate::preparation::recursive_markers(&types)
@@ -289,7 +313,7 @@ fn emit_inner(plan: &Plan, layouts: bool) -> String {
     }
     out.push(native_interfaces(plan, false));
     if layouts {
-        out.push(native_images(plan));
+        out.push(crate::native_images::emit(plan));
     }
     if let Some(error) = &plan.construction_error {
         out.push(format!("pub fn register(_: &mut hgl_describe::Registry) -> Result<(), hgl_describe::BuildError> {{ Ok(()) }}\npub fn main(_: &hgl_describe::Registry) -> Result<hgl_describe::GraphDescription, hgl_describe::BuildError> {{ Err(hgl_describe::BuildError::InvalidNodeType {{ node: \"hgl.program\", what: {error:?}.into() }}) }}\n"));
@@ -445,59 +469,6 @@ fn native_signature(native: &crate::ir::Native) -> String {
     };
     format!("fn {}({args})->{result}", native.method)
 }
-use hgl_rust_codegen::native_image::image_module;
-
-fn native_images(plan: &Plan) -> String {
-    let providers = plan
-        .natives
-        .iter()
-        .filter_map(|n| n.provider.as_ref())
-        .map(|p| (&p.provider, p))
-        .collect::<std::collections::BTreeMap<_, _>>();
-    let mut code = Vec::new();
-    for provider in providers.values() {
-        code.push(format!(
-            "#[path={:?}] mod {};\n",
-            provider.path,
-            image_module(&provider.provider)
-        ));
-    }
-    let mut identities = std::collections::BTreeSet::new();
-    for provider in plan
-        .natives
-        .iter()
-        .filter_map(|native| native.provider.as_ref())
-    {
-        for (scalar, marker) in &provider.scalars {
-            let domain = identities.len();
-            if identities.insert(&scalar.identity) {
-                code.push(format!(
-                    "const NATIVE_DOMAIN{}:usize={domain};type {}={}::{marker};",
-                    crate::native_values::domain(scalar),
-                    crate::native_values::marker(scalar),
-                    image_module(&provider.provider)
-                ));
-            }
-        }
-    }
-    code.push("fn validate_native_images()->Result<(),String>{".into());
-    for provider in plan
-        .natives
-        .iter()
-        .filter_map(|native| native.provider.as_ref())
-    {
-        let module = image_module(&provider.provider);
-        code.push(format!("if {module}::PROVIDER!={:?} || {module}::FINGERPRINT!={:?} {{return Err(\"native descriptor/provider identity or fingerprint mismatch\".into());}}",provider.provider,provider.fingerprint));
-        for (scalar, marker) in &provider.scalars {
-            let caps = ["copy", "text", "equality", "hash", "order", "serialization"]
-                .map(|c| scalar.capabilities.contains(c));
-            code.push(format!("<{module}::{marker} as hgl_store::native_values::NativeType>::CONTRACT.validate({:?},{:?},{:?},{caps:?}).map_err(|e|e.message.clone())?;",provider.provider,provider.fingerprint,scalar.identity));
-        }
-    }
-    code.push("Ok(())}\n".into());
-    code.concat()
-}
-
 fn shape(ty: &Ty) -> String {
     if crate::deltas::shaped(ty) {
         return format!(

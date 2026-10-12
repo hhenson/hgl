@@ -16,6 +16,7 @@ pub use hgl_rust_codegen::cold_transport;
 mod conditionals;
 mod emit;
 mod graph_assemblies;
+mod native_images;
 mod reference_routes;
 /// A checked source graph may exceed this Rust target's finite activation proof.
 pub fn conditional_target_error(plan: &Plan) -> Option<String> {
@@ -52,7 +53,8 @@ pub use hgl_rust_codegen::windows;
 use hgl_semantics::ir;
 
 pub use emit::{
-    emit, emit_prepared_test_body, emit_shared, emit_test_body, shared_layouts, shared_test_layouts,
+    emit, emit_prepared_test_body, emit_shared, emit_test_body, shared_layouts,
+    shared_suite_layouts, shared_test_layouts,
 };
 pub use hgl_semantics::ir::{DeltaEntry, Kind, Native, Node, Plan, Statement, Value};
 

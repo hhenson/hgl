@@ -34,6 +34,9 @@ yes,no) contains lexical step blocks. Neither form changes graph composition.
 Step::Raises(code, body) owns a lexical assertion block. Failure distinguishes Execution(NodeError) from Other(String); matches excludes cleanup-only and cleanup-failed execution. Uses hgl-node-error.
 
 Suite { tests, plans } owns the checked test inventory and graph plans. select accepts short/qualified names, rejects each unknown name, and retains their referenced graph plans, and renumbers all nested evaluation references. An empty selection retains the complete suite.
+Suite.native_images retains inert native type mappings reached by lexical
+preparation. Selection preserves mapping candidates; emission filters them
+against the retained tests and graph layouts before linking provider modules.
 
 Suite is Default. require_tests preserves the ordinary empty-suite error after mixed-run orchestration.
 

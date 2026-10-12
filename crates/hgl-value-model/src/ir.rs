@@ -253,6 +253,8 @@ pub struct Plan {
     pub conditionals: Vec<Conditional>,
     /// Selected native signatures, addressed by index.
     pub natives: Vec<Native>,
+    /// Inert executable mappings reached through native scalar types independently of helpers.
+    pub native_images: Vec<crate::native_contracts::Image>,
     /// Selected source documentation retained in generated comments.
     pub docs: Vec<String>,
     /// Eval capture node index and observed scalar type, if any.

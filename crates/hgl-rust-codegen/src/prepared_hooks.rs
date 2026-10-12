@@ -8,14 +8,22 @@ pub(crate) fn publication(plan: &Plan, value: &Value, result: Option<&Ty>) -> Op
     if !crate::finite_domains::prepared(plan) || plan.recording.is_none() {
         return None;
     }
-    if matches!(result, Some(Ty::Atomic(_)))
-        && let Kind::Query(op, _) = &value.kind
+    if let Kind::Query(op, _) = &value.kind
         && op.starts_with("\0constructor:")
         && let Some(("global_values", source)) = crate::source_slots::source(plan, value)
     {
-        return Some(format!(
-            "let publication={source};_ctx.prepared().atomic_from_global(publication,self._output)?;"
-        ));
+        if matches!(result, Some(Ty::Atomic(_))) {
+            return Some(format!(
+                "let publication={source};_ctx.prepared().atomic_from_global(publication,self._output)?;"
+            ));
+        }
+        if matches!(value.ty, Ty::Tuple(_))
+            && result == Some(&value.ty)
+            && let Some(code) =
+                crate::structural_publication::ordinary(&value.ty, "self._output", "publication")
+        {
+            return Some(format!("let publication={source};{code}"));
+        }
     }
     if value.snapshot && matches!(value.ty, Ty::Native(_)) {
         let slot = crate::snapshot_slots::projection(value, |v| emit(plan, v));

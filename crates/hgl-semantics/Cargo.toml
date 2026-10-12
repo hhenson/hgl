@@ -36,6 +36,7 @@ library = { budget = 500, uses = ["struct_declarations", "ir", "native_contracts
 local_check = { budget = 220, uses = ["endpoint_check", "ir", "structural_admission", "tuple_admission", "value_check"] }
 name_check = { budget = 250, uses = ["tuple_flow", "tuple_phase", "enums", "library", "struct_names", "type_sizes"] }
 native_contracts = { budget = 350, uses = ["library", "struct_names", "ir"] }
+native_images = { budget = 200, uses = ["library", "ir", "ir_visit", "harness_ir"] }
 recursive_types = { budget = 350, uses = ["enums", "library", "shape_obligations", "struct_names", "value_access", "struct_declarations"] }
 shape_obligations = { budget = 150, uses = ["library", "struct_names", "value_access"] }
 source_check = { budget = 550, uses = ["tuple_writes", "tuple_flow", "tuple_phase", "ir", "enums", "eval_data", "library", "name_check", "type_sizes", "value_access", "value_check", "value_types"] }

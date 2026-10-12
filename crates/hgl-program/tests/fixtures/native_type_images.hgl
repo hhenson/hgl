@@ -1,0 +1,41 @@
+module native_type_images
+use hgraph.std::{Token,TokenOther}
+
+struct EmptyNativeFields {first:list<Token>
+    second:list<TokenOther>}
+fn configured(value:i64,const values:list<Token>)->i64 {when {return value+len(values)}}
+fn global(value:i64)->i64 {inject global_state
+    when {let empty:list<Token> =[]
+        set(global_state,"empty",empty)
+        let stored:list<Token> =get(global_state,"empty")
+        return value+len(stored)}}
+fn compound(value:i64,const fields:EmptyNativeFields)->i64 {
+    when {return value+len(fields.first)+len(fields.second)}}
+fn silent_port(value:Token)->i64 {when {return 1}}
+fn generator(const ignored:i64)->i64 {
+    let local:list<Token> =[]
+    yield 0us:len(local)
+    yield 1us:len(local)}
+
+test native_type_configuration_without_helpers {
+    let empty:list<Token> =[]
+    assert eval(configured,value:[1,_,2],values:empty) == [1,_,2]
+}
+test native_type_global_without_helpers {
+    assert eval(global,value:[1,_,2]) == [1,_,2]
+}
+test native_type_compound_provider_union_without_helpers {
+    let fields=EmptyNativeFields(first:[],second:[])
+    assert eval(compound,value:[1,_,2],fields:fields) == [1,_,2]
+}
+test native_type_silent_port_without_helpers {
+    assert eval(silent_port,value:[_,_,_]) == [_,_,_]
+}
+test native_type_generator_local_without_helpers {
+    assert eval(generator,ignored:0) == [0,0]
+}
+test native_type_ordinary_any_without_helpers {
+    let empty:list<Token> =[]
+    let boxed=any(empty)
+    assert boxed==any(empty)
+}
