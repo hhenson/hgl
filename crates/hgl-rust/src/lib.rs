@@ -15,6 +15,7 @@ mod cold_wiring;
 pub use hgl_rust_codegen::cold_transport;
 mod emit;
 mod native_images;
+mod reference_designations;
 mod reference_routes;
 pub use hgl_rust_codegen::enums;
 pub use hgl_rust_codegen::execution_proof;

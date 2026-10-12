@@ -1,5 +1,5 @@
 //! Finite checked designation targets reserve their subscriptions before evaluation.
-use crate::ir::{Kind, Plan, Statement};
+use crate::ir::Plan;
 use hgl_source::Ty;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
@@ -15,22 +15,9 @@ fn targets(
         result.insert((source, path));
         return;
     }
-    if let [(Some(_), body)] = node.handlers.as_slice()
-        && let [Statement::Return(value)] = body.as_slice()
-        && let Kind::Query(op, args) = &value.kind
-        && op == "\0reference"
-        && let Kind::Field(parent, index) = &args[0].kind
-        && let Kind::Input(input, false) = parent.kind
-    {
-        let mut child = vec![*index];
-        child.extend(path);
+    for (input, mut child) in crate::reference_designations::inputs(node) {
+        child.extend_from_slice(&path);
         targets(plan, node.inputs[input].1, child, result);
-        return;
-    }
-    for (_, source, ty) in &node.inputs {
-        if matches!(ty, Ty::Ref(_)) {
-            targets(plan, *source, path.clone(), result);
-        }
     }
 }
 
