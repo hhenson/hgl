@@ -27,7 +27,10 @@ the frame and runs the typed provider's fallible ownership preflight before reta
 an independent owner. Builtin scalar results use the existing Scalar carriers.
 Provider codes remain in cold construction diagnostics. Aggregate and Any carriers
 use the same compiled owning codecs as prepared storage, with complete width and
-provider preflight before any retention. These carriers preserve recursively
+provider preflight before any retention. Aggregate carrier identity includes a
+stable deduplicated union of helper and reached type-only provider identities
+and descriptor fingerprints, including empty Native collection payloads. These
+carriers preserve recursively
 retained aliases and independently mutable owner versions.
 
 Controls cover retained aliases and replacement, nested helpers, unused empty
