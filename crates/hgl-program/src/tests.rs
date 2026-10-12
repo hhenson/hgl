@@ -47,6 +47,26 @@ fn suite(sources: &[(String, String)], module_only: bool) -> Result<Suite, Strin
     for plan in &suite.plans {
         emit::native_results::validate(plan)?;
     }
+    let mut selected_images = suite
+        .plans
+        .iter()
+        .flat_map(|plan| plan.natives.iter())
+        .filter_map(|native| native.provider.clone())
+        .collect::<Vec<_>>();
+    hgl_semantics::ir_visit::harness(&suite.tests, &mut |value| {
+        if let hgl_semantics::ir::Kind::Native(binding, _) = &value.kind
+            && let Some(image) = &binding.provider
+        {
+            selected_images.push(image.clone());
+        }
+        true
+    });
+    suite.native_images = hgl_semantics::native_images::select(
+        &library,
+        &hgl_semantics::native_images::harness_scalars(&suite.tests),
+        &selected_images,
+    )
+    .map_err(|issue| hgl_source::diagnostics::render_issue(sources, issue))?;
     Ok(suite)
 }
 /// Check named source tests, retaining the ordinary no-tests error.
@@ -55,7 +75,7 @@ pub fn compile_tests(sources: &[(String, String)]) -> Result<Suite, String> {
 }
 /// Emit ordered test setup, prepared graph factories and owning capture comparison.
 pub fn emit_tests(suite: &Suite) -> String {
-    let mut out = vec![emit::shared_test_layouts(&suite.plans, &suite.tests)];
+    let mut out = vec![emit::shared_suite_layouts(suite)];
     for (i, plan) in suite.plans.iter().enumerate() {
         out.push(format!(
             "mod case{i} {{ use super::*;\n{}\n{}\n}}\n",
