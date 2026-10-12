@@ -77,6 +77,9 @@ fn value(plan: &Plan, v: &Value) -> String {
         }
         Kind::Unary(op, v) => unary(plan, op, v),
         Kind::Query(op, args) => query_value(plan, op, args),
+        Kind::Output if matches!(v.ty, Ty::Ref(_)) => {
+            "_ctx.store().bindings().reference_value(self._output)".into()
+        }
         Kind::Output => "_ctx.output_value(self._output).expect(\"valid output\")".into(),
         Kind::Captured(..) | Kind::Wire(_) | Kind::Void | Kind::Capability => {
             unreachable!("checked runtime value")
