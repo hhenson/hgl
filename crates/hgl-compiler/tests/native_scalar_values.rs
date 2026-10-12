@@ -1011,3 +1011,68 @@ test {
     }
     run_sources(&input)
 }
+
+#[test]
+fn complete_native_tuple_results_publish_from_reserved_slots()
+-> Result<(), Box<dyn std::error::Error>> {
+    run(r#"
+test {
+ fn complete(value:Token,text:bytes)->tuple<Token,bytes,i64> {when {
+  let retained=value
+  let held_text=text
+  return (retained,held_text,1)
+ }}
+ test complete_native_tuple {
+  let owner=token("owner")
+  let empty=token("")
+  assert eval(complete,value:[owner,empty,_,owner],text:[bytes([0,255]),bytes(),_,bytes([0,255])]) == [(owner,bytes([0,255]),1),(empty,bytes(),1),_,(owner,bytes([0,255]),1)]
+ }
+}
+"#)
+}
+
+#[test]
+fn complete_tuple_capacity_failure_preserves_every_output_child()
+-> Result<(), Box<dyn std::error::Error>> {
+    let input = sources(
+        r"test {
+fn pair(value:bytes,other:bytes)->tuple<bytes,bytes> {when {
+let first=value
+let second=other
+return (first,second)}}
+test capacity {eval(pair,value:[bytes([1,2])],other:[bytes([3,4])])}
+}",
+    )?;
+    let suite = hgl_program::compile_module_suite(&input)?;
+    let generated = hgl_program::emit_tests(&suite)
+        .replace("fn main() {", "fn authored_main() {")
+        .replace("hgl_kernel::run_simulation(", "crate::capacity_failure_simulation(")
+        .replace("store.prepare_collection_inputs();", "store.prepare_collection_inputs();let node=graph.nodes.iter().position(|node|node.implementation.contains(\"::pair#\")).unwrap();crate::shrink_destination(&mut store,built.outputs[node].unwrap());");
+    let generated = format!(
+        r#"{generated}
+static ROOT:std::sync::atomic::AtomicUsize=std::sync::atomic::AtomicUsize::new(0);
+static FAILURES:std::sync::atomic::AtomicUsize=std::sync::atomic::AtomicUsize::new(0);
+fn shrink_destination(store:&mut hgl_store::Store,root:hgl_store::OutputId){{
+ ROOT.store(root.0 as usize,std::sync::atomic::Ordering::Relaxed);
+ let storage=store.prepared();let children=storage.bindings.output(root).fixed.clone();
+ let first=storage.bindings.output(children[0]).slot as usize;
+ let second=storage.bindings.output(children[1]).slot as usize;
+ let columns=<Vec<u8> as hgl_store::columns::Column>::column_mut(storage.columns);
+ let mut retained=Vec::with_capacity(2);retained.push(9);columns[first]=retained;columns[second]=Vec::new();
+}}
+fn capacity_failure_simulation(graph:&mut hgl_kernel::Graph,store:&mut hgl_store::Store,config:&hgl_kernel::RunConfig)->Result<u64,hgl_kernel::EngineError>{{
+ let outcome=hgl_kernel::run_simulation(graph,store,config);
+ assert!(matches!(&outcome,Err(hgl_kernel::EngineError::Node(error)) if error.message.contains("prepared scalar capacity exceeded")));
+ let root=hgl_store::OutputId(ROOT.load(std::sync::atomic::Ordering::Relaxed) as u32);
+ let storage=store.prepared();let children=&storage.bindings.output(root).fixed;
+ let first=storage.bindings.output(children[0]);let second=storage.bindings.output(children[1]);
+ let columns=<Vec<u8> as hgl_store::columns::Column>::column(storage.columns);
+ assert_eq!(columns[first.slot as usize].as_slice(),&[9]);assert!(columns[second.slot as usize].is_empty());
+ assert_eq!(first.modified_at,hgl_types::EngineTime::NEVER);assert_eq!(second.modified_at,hgl_types::EngineTime::NEVER);
+ FAILURES.fetch_add(1,std::sync::atomic::Ordering::Relaxed);outcome
+}}
+fn main(){{let error=test0::test().unwrap_err();assert!(error.contains("prepared scalar capacity exceeded"));assert_eq!(FAILURES.load(std::sync::atomic::Ordering::Relaxed),1);}}
+"#
+    );
+    execute(&generated)
+}

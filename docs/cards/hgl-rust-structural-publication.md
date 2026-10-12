@@ -49,3 +49,11 @@ transport without terminating the handler.
 
 This module now lives in hgl-rust-codegen below executable program assembly;
 its hgl-rust facade path and module ceiling remain unchanged.
+
+The private `ordinary` emitter publishes complete canonical Tuple staging slots
+(including nested fixed fields) directly to scalar, Native or atomic child
+outputs. It returns no path for unsupported child layouts. Its ordinary_supported predicate also bounds private Tuple staging. All leaf
+capacity/provider checks finish before any output mutation. All constructor
+operands are retained in source order before publication; typed slot publication
+never materializes or clones an owning tuple value. Partial snapshot publication
+continues to use its existing presence-aware layout.

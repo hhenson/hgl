@@ -22,6 +22,7 @@ pub fn prepare(
     plan: &Plan,
     owning: impl Fn(&Ty) -> bool,
     convert: impl Fn(&Value) -> Option<Value>,
+    tuple_staging: impl Fn(&Ty, &Ty) -> bool,
 ) -> Plan {
     let mut plan = plan.clone();
     for (node_id, node) in plan.nodes.iter_mut().enumerate() {
@@ -65,6 +66,7 @@ pub fn prepare(
             node.global_state = true;
         }
         crate::ir_visit::hooks_mut(node, &mut |v| references(v, &owners));
+        let result = node.result.clone();
         for (_, body) in &mut node.handlers {
             crate::ir_visit::statements_mut(body, &mut |v| {
                 if matches!(&v.kind, Kind::Query(op, _) if op.starts_with("\0constructor:")) {
@@ -74,7 +76,8 @@ pub fn prepare(
                     return false;
                 }
                 if matches!(v.kind, Kind::Construct(_))
-                    && matches!(v.ty, Ty::Struct(..) | Ty::Recursive(_) | Ty::Tuple(_))
+                    && (matches!(v.ty, Ty::Struct(..) | Ty::Recursive(_))
+                        || (matches!(v.ty, Ty::Tuple(_)) && tuple_staging(&v.ty, &result)))
                     && owning(&v.ty)
                 {
                     let key = format!("\0constructor:{node_id}:expression:{}", node.globals.len());

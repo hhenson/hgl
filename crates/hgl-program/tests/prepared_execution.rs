@@ -294,6 +294,15 @@ test independent {assert eval(independent,[bytes([0,255]),bytes(),bytes([1,2,3,4
 fn pair(value:bytes)->tuple<bytes,i64> {when {let held=value
 return (held,len(held))}}
 test pair {assert eval(pair,[bytes([0,255]),bytes(),_,bytes([1,2,3,4])])==[(bytes([0,255]),2),(bytes(),0),_,(bytes([1,2,3,4]),4)]}
+fn nested(value:bytes,other:bytes)->tuple<tuple<bytes,i64>,bytes> {when {
+let original=value
+let later=other
+return ((original,len(original)),later)}}
+test nested {assert eval(nested,value:[bytes([0,255]),bytes(),_,bytes([1,2,3,4])],other:[bytes([9]),bytes([7,8]),_,bytes()])==[((bytes([0,255]),2),bytes([9])),((bytes(),0),bytes([7,8])),_,((bytes([1,2,3,4]),4),bytes())]}
+enum Label {ready=7}
+fn enumerated(value:bytes)->tuple<bytes,Label> {when {let retained=value
+return (retained,Label::ready)}}
+test enumerated {assert eval(enumerated,[bytes([0,255]),bytes(),bytes([1,2,3,4])])==[(bytes([0,255]),Label::ready),(bytes(),Label::ready),(bytes([1,2,3,4]),Label::ready)]}
 test ordinary_locals {let original=bytes([0,255])
 var owned=original
 owned=bytes()
