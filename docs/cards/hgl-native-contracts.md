@@ -68,10 +68,23 @@ interfaces. Ordinary library discovery selects it once; fixture-specific API tes
 use that same root, so shared Std declarations require no bespoke test injection.
 
 Executable package binding projects each scalar's explicit target marker along
-with its portable contract. A missing marker rejects that executable binding;
+with its portable contract when a marker is supplied. Unused portable scalar
+records do not need target mappings merely because a helper shares their package.
+Reached native scalar storage still requires a compatible marker through
+native_images selection. A missing marker rejects that executable type binding;
 the checker never guesses a Rust type name from an HGL alias or canonical string.
 The generated image gate checks the marker's full native ABI contract before
 setup, cold preparation or runtime helper execution.
+
+Canonical native identities cannot occupy an incompatible builtin, structural
+or loaded ordinary nominal type identity. Pure contract validation compares
+canonical type forms and declaration-owned nominal applications before binding;
+it never infers equivalence from layouts, aliases or matching text. Opaque native
+aliases remain compatible, and unrelated or malformed identity strings are not
+silently interpreted as source types.
+Nominal visibility follows Library.test_scope: hidden test fixtures do not
+change production contracts. Binding in a test scope checks that scope's visible
+nominal identities again before constructing a native checked type.
 
 Portable Image, Scalar and Function metadata belongs to hgl-value-model, below
 source parsing and checked execution. Its existing 40-line module ceiling moves

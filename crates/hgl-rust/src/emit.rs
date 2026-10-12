@@ -271,6 +271,9 @@ fn shared_layouts_inner(
     tests: &[hgl_semantics::harness_ir::Test],
     images: &[hgl_source::native_contracts::Image],
 ) -> String {
+    if let Err(issue) = hgl_semantics::native_images::combined_scalars(plans, tests) {
+        return format!("compile_error!({:?});", issue.to_string());
+    }
     let nodes = plans
         .iter()
         .flat_map(|plan| crate::snapshot_slots::prepare(plan).nodes.into_iter())
@@ -294,7 +297,11 @@ fn shared_layouts_inner(
             .collect(),
         ..Plan::default()
     };
-    crate::native_images::emit(&types)
+    let images = match crate::native_images::emit(&types) {
+        Ok(images) => images,
+        Err(issue) => return format!("compile_error!({:?});", issue.to_string()),
+    };
+    images
         + &crate::preparation::native_context(&types)
         + &global_markers(&types)
         + &crate::preparation::recursive_markers(&types)
@@ -302,6 +309,10 @@ fn shared_layouts_inner(
         + &crate::any_values::layouts(&types)
 }
 fn emit_inner(plan: &Plan, layouts: bool) -> String {
+    let images = match crate::native_images::emit(plan) {
+        Ok(images) => images,
+        Err(issue) => return format!("compile_error!({:?});", issue.to_string()),
+    };
     let prepared = crate::families::prepare(plan);
     let normalized = crate::snapshot_slots::prepare(&crate::direct_deltas::prepare(&prepared));
     let plan = &normalized;
@@ -313,7 +324,7 @@ fn emit_inner(plan: &Plan, layouts: bool) -> String {
     }
     out.push(native_interfaces(plan, false));
     if layouts {
-        out.push(crate::native_images::emit(plan));
+        out.push(images);
     }
     if let Some(error) = &plan.construction_error {
         out.push(format!("pub fn register(_: &mut hgl_describe::Registry) -> Result<(), hgl_describe::BuildError> {{ Ok(()) }}\npub fn main(_: &hgl_describe::Registry) -> Result<hgl_describe::GraphDescription, hgl_describe::BuildError> {{ Err(hgl_describe::BuildError::InvalidNodeType {{ node: \"hgl.program\", what: {error:?}.into() }}) }}\n"));

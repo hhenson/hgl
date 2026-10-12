@@ -66,7 +66,8 @@ fn suite(sources: &[(String, String)], module_only: bool) -> Result<Suite, Strin
     });
     suite.native_images = hgl_semantics::native_images::select(
         &library,
-        &hgl_semantics::native_images::harness_scalars(&suite.tests),
+        &hgl_semantics::native_images::combined_scalars(&suite.plans, &suite.tests)
+            .map_err(|issue| hgl_source::diagnostics::render_issue(sources, issue))?,
         &selected_images,
     )
     .map_err(|issue| hgl_source::diagnostics::render_issue(sources, issue))?;

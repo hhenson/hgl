@@ -3,8 +3,8 @@ use crate::ir::Plan;
 use hgl_rust_codegen::native_image::image_module;
 use std::collections::{BTreeMap, BTreeSet};
 
-pub(crate) fn emit(plan: &Plan) -> String {
-    let reached = hgl_semantics::native_images::scalars(plan);
+pub(crate) fn emit(plan: &Plan) -> Result<String, hgl_source::Issue> {
+    let reached = hgl_semantics::native_images::scalars(plan)?;
     let helper_providers = plan
         .natives
         .iter()
@@ -63,5 +63,5 @@ pub(crate) fn emit(plan: &Plan) -> String {
         code.push(format!("<{module}::{marker} as hgl_store::native_values::NativeType>::CONTRACT.validate({:?},{:?},{:?},{caps:?}).map_err(|e|e.message.clone())?;",image.provider,image.fingerprint,scalar.identity));
     }
     code.push("Ok(())}\n".into());
-    code.concat()
+    Ok(code.concat())
 }
