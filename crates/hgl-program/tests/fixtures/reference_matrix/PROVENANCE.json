@@ -2,7 +2,7 @@
   "repository": "https://github.com/hhenson/hgraph_std",
   "revision": "d798c88dec4b729f1e96d2adcd087ca8df7f11ba",
   "spec_revision": "69a2f8ca7b842a0fb4b62003d91dfa1b9eb122b3",
-  "installed_std_revision": "7c264341fe88203bd973641cc186bff7baabd851",
+  "installed_std_revision": "d798c88dec4b729f1e96d2adcd087ca8df7f11ba",
   "named_groups": 28,
   "evaluations": 58,
   "files": [

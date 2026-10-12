@@ -4,8 +4,12 @@ All six authored REF suites execute unchanged: 28 named groups / 58
 evaluations. The tracked transport and ownership runners use byte-for-byte
 snapshots of hgraph_std `d798c88dec4b729f1e96d2adcd087ca8df7f11ba`, with
 [paths and hashes](../../crates/hgl-program/tests/fixtures/reference_matrix/PROVENANCE.json).
-Installed dependencies are hgraph_spec `69a2f8c` and compatible hgraph_std
-`7c26434`; whole-Std adoption and full CI remain pending.
+Installed dependencies are hgraph_spec `69a2f8c` and hgraph_std `d798c88`.
+The complete loaded Std corpus passes in both profiles: 360 named tests / 957
+evaluations, including test blocks in production modules. The existing
+contextual fixtures add 12 tests / 22 evaluations; the combined checked source
+corpus is 372 / 979. Separate existing harness regression and expected-failure
+images also pass. Full CI and platform validation remain pending.
 
 Normal CLI execution uses the complete production Std and native/stdlib.
 The [transport runner](../../crates/hgl-program/tests/reference_matrix.rs)

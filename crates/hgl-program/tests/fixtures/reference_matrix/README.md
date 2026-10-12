@@ -12,5 +12,9 @@ cycle from first activation in both profiles. The ownership runner also measures
 startup and cleanup. Required-read failures keep their authored expectations.
 
 These immutable snapshots preserve focused coverage independently of the
-installed Std revision. Whole-Std pin adoption and validation are tracked
-separately; the compatible pin is still installed at this checkpoint.
+installed Std revision. The installed Std pin is the same immutable revision. Its complete loaded
+corpus passes in both profiles: 360 named Std tests / 957 evaluations, including
+test blocks in production modules. The existing contextual fixtures add
+12 tests / 22 evaluations; the combined checked corpus is 372 / 979. Separate
+existing harness regression and expected-failure images also pass. Full CI
+and platform validation remain separate gates.
