@@ -126,3 +126,7 @@ ordinary helper yields through local replacements, branch alternatives, held
 output values and projection paths. A REF used only by a guard or metadata
 operation supplies no returned target. All possible published targets receive
 their typed input views and subscription capacity before the first tick.
+Returned designation origins without a cold transport mapping produce a Rust
+target diagnostic during finite preparation emission. Collection REF element
+selection is one such target gap; a guard-only occurrence does not create a
+returned route. Source admission remains separate from this transport check.

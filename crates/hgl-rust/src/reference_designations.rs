@@ -2,16 +2,30 @@
 use crate::ir::{Kind, Node, Statement, Value};
 use std::collections::{BTreeMap, BTreeSet};
 
-type Routes = BTreeSet<(usize, Vec<usize>)>;
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+enum Origin {
+    Input(usize, Vec<usize>),
+    Unsupported,
+}
+type Routes = BTreeSet<Origin>;
 type Locals = BTreeMap<usize, Routes>;
 
 fn value(value: &Value, locals: &Locals, output: &Routes) -> Routes {
     match &value.kind {
-        Kind::Input(input, false) => BTreeSet::from([(*input, Vec::new())]),
+        Kind::Input(input, false) => BTreeSet::from([Origin::Input(*input, Vec::new())]),
         Kind::Local(id) | Kind::MutableLocal(id) | Kind::GeneratorLocal(id) => {
-            locals.get(id).cloned().unwrap_or_default()
+            locals.get(id).cloned().unwrap_or_else(|| {
+                if matches!(value.ty, hgl_source::Ty::Ref(_)) {
+                    BTreeSet::from([Origin::Unsupported])
+                } else {
+                    Routes::new()
+                }
+            })
         }
         Kind::Output => output.clone(),
+        Kind::Field(_, _) if matches!(value.ty, hgl_source::Ty::Ref(_)) => {
+            BTreeSet::from([Origin::Unsupported])
+        }
         Kind::Field(parent, index) => project(self::value(parent, locals, output), *index),
         Kind::Query(op, args) if op == "\0reference" => self::value(&args[0], locals, output),
         Kind::ValueCall(args, body) => {
@@ -52,16 +66,25 @@ fn value(value: &Value, locals: &Locals, output: &Routes) -> Routes {
         | Kind::Unary(..)
         | Kind::Query(..)
         | Kind::Capability
-        | Kind::Void => Routes::new(),
+        | Kind::Void => {
+            if matches!(value.ty, hgl_source::Ty::Ref(_)) {
+                BTreeSet::from([Origin::Unsupported])
+            } else {
+                Routes::new()
+            }
+        }
     }
 }
 
 fn project(routes: Routes, index: usize) -> Routes {
     routes
         .into_iter()
-        .map(|(input, mut path)| {
-            path.push(index);
-            (input, path)
+        .map(|origin| match origin {
+            Origin::Input(input, mut path) => {
+                path.push(index);
+                Origin::Input(input, path)
+            }
+            Origin::Unsupported => Origin::Unsupported,
         })
         .collect()
 }
@@ -134,7 +157,7 @@ fn statements(
     true
 }
 
-pub(crate) fn inputs(node: &Node) -> Routes {
+pub(crate) fn inputs(node: &Node) -> Result<BTreeSet<(usize, Vec<usize>)>, String> {
     let mut output = Routes::new();
     loop {
         let mut returned = Routes::new();
@@ -147,14 +170,23 @@ pub(crate) fn inputs(node: &Node) -> Routes {
         let previous = output.clone();
         output.extend(returned);
         if output == previous {
-            return output;
+            return output
+                .into_iter()
+                .map(|origin| match origin {
+                    Origin::Input(input, path) => Ok((input, path)),
+                    Origin::Unsupported => Err(format!(
+                        "Rust target cannot prepare returned designation flow in {}",
+                        node.name
+                    )),
+                })
+                .collect();
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Locals, Routes, statements, value};
+    use super::{Locals, Origin, Routes, statements, value};
     use crate::ir::{Kind, Statement, Value};
     use hgl_source::Ty;
     use std::collections::BTreeSet;
@@ -182,7 +214,7 @@ mod tests {
         ];
         let mut routes = Routes::new();
         statements(&body, &mut Locals::new(), &Routes::new(), &mut routes);
-        assert_eq!(routes, BTreeSet::from([(1, Vec::new())]));
+        assert_eq!(routes, BTreeSet::from([Origin::Input(1, Vec::new())]));
     }
 
     #[test]
@@ -204,7 +236,7 @@ mod tests {
         ];
         let mut routes = Routes::new();
         statements(&body, &mut Locals::new(), &Routes::new(), &mut routes);
-        assert_eq!(routes, BTreeSet::from([(0, Vec::new())]));
+        assert_eq!(routes, BTreeSet::from([Origin::Input(0, Vec::new())]));
     }
 
     #[test]
@@ -226,11 +258,53 @@ mod tests {
             vec![projected, reference(Kind::Input(3, false))],
             vec![Statement::Yield(reference(Kind::Local(0)))],
         ));
-        let held = BTreeSet::from([(4, vec![0])]);
+        let held = BTreeSet::from([Origin::Input(4, vec![0])]);
         assert_eq!(
             value(&call, &Locals::new(), &held),
-            BTreeSet::from([(2, vec![1])])
+            BTreeSet::from([Origin::Input(2, vec![1])])
         );
         assert_eq!(value(&reference(Kind::Output), &Locals::new(), &held), held);
+    }
+
+    #[test]
+    fn unsupported_reference_origins_survive_aliases_but_not_replacements() {
+        for kind in [
+            Kind::Cache(0),
+            Kind::GlobalGet(0),
+            Kind::Index(
+                Box::new(Value::new(
+                    Ty::List(Box::new(Ty::Ref(Box::new(Ty::I64))), Some(2)),
+                    Kind::Input(0, false),
+                )),
+                Box::new(Value::new(Ty::I64, Kind::Input(1, false))),
+            ),
+        ] {
+            let mut locals = Locals::new();
+            let mut routes = Routes::new();
+            statements(
+                &[
+                    Statement::Let(0, reference(kind)),
+                    Statement::Return(reference(Kind::Local(0))),
+                ],
+                &mut locals,
+                &Routes::new(),
+                &mut routes,
+            );
+            assert_eq!(routes, BTreeSet::from([Origin::Unsupported]));
+            routes.clear();
+            statements(
+                &[
+                    Statement::Assign(
+                        reference(Kind::MutableLocal(0)),
+                        reference(Kind::Input(2, false)),
+                    ),
+                    Statement::Return(reference(Kind::MutableLocal(0))),
+                ],
+                &mut locals,
+                &Routes::new(),
+                &mut routes,
+            );
+            assert_eq!(routes, BTreeSet::from([Origin::Input(2, Vec::new())]));
+        }
     }
 }
