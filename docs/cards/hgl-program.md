@@ -38,6 +38,8 @@ gets a fresh graph. Length comes from input cells and actual output ticks,
 never the expected sequence. A mismatch or node error fails the executable.
 
 Test helpers have a module-wide scope; production calls cannot see them.
+Resolve callable and implementation signatures, defaults and bodies in their
+declaration scope, including the concrete membership of abstract families.
 The current test body accepts direct `assert eval(...) == [...]`, outputless
 `eval(...)`, deterministic ordinary bool assertions, ordinary test bindings,
 bound eval captures and guarded test branches.

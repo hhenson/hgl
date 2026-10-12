@@ -94,11 +94,10 @@ pub fn resolve(
         .map(|p| nominal(library, p, &root_bindings, &mut resolve))
         .collect::<Result<Vec<_>, _>>()?;
     let mut members = Vec::new();
-    for candidate in library
-        .declarations
-        .iter()
-        .filter(|d| d.role == Role::Struct)
-    {
+    for candidate in library.declarations.iter().filter(|d| {
+        d.role == Role::Struct
+            && (!d.test_only || library.test_scope.as_deref() == Some(d.module.as_str()))
+    }) {
         let schema = candidate.required_struct()?;
         if schema.abstract_type {
             continue;
