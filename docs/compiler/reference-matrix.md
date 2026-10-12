@@ -9,7 +9,7 @@ The complete loaded Std corpus passes in both profiles: 360 named tests / 957
 evaluations, including test blocks in production modules. The existing
 contextual fixtures add 12 tests / 22 evaluations; the combined checked source
 corpus is 372 / 979. Separate existing harness regression and expected-failure
-images also pass. Full CI and platform validation remain pending.
+images also pass. CI and platform evidence is recorded in [PR #83](https://github.com/hhenson/hgl/pull/83).
 
 Normal CLI execution uses the complete production Std and native/stdlib.
 The [transport runner](../../crates/hgl-program/tests/reference_matrix.rs)
