@@ -37,6 +37,13 @@ impl Bindings {
     pub fn scope(&self) -> ScopeId {
         self.scopes.current
     }
+    /// The enclosing scope and node that own a prepared child.
+    pub fn child_owner(&self, scope: ScopeId) -> Option<(ScopeId, NodeId)> {
+        self.scopes
+            .alive(scope)
+            .then(|| self.scopes.entries[scope.index].parent)
+            .flatten()
+    }
     /// A child's scope, allocated during structural graph creation.
     pub fn child_scope(&mut self, owner: NodeId) -> ScopeId {
         let parent = self.scopes.current;
@@ -67,6 +74,10 @@ impl Bindings {
     /// Reserve all mailbox storage before the graph can be notified.
     pub fn reserve_scope(&mut self, scope: ScopeId, nodes: usize) {
         self.scopes.entries[scope.index].phase = Phase::Running;
+        self.prepare_scope(scope, nodes);
+    }
+    /// Provision a not-yet-started child's mailbox without admitting hooks.
+    pub fn prepare_scope(&mut self, scope: ScopeId, nodes: usize) {
         if nodes > 0 {
             self.scopes.reserve(scope, NodeId(super::index(nodes - 1)));
         }

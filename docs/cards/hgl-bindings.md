@@ -211,3 +211,10 @@ prepares the union of possible absent child views without binding or sampling.
 These views confer no membership, validity, publication time or endpoint lifetime.
 General dynamic binding retains its separate allocation policy; finite prepared
 REF routes require zero allocations even on their first successful sample.
+
+Finite preparation also reserves the retained endpoint, scope and assembly
+reclamation queues before startup, so stopping prepared children and expiring
+old designations cannot grow those queues on a successful cycle.
+prepare_scope(ScopeId, usize) provisions a constructing child's mailbox without
+changing its phase; reserve_scope admits it for running hooks. child_owner
+returns the live enclosing scope/node pair for exact prepared activation checks.

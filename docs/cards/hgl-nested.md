@@ -36,3 +36,27 @@ fn stop(&mut self, ctx: &mut Ctx<'_>) -> NodeResult;
 ```
 
 `Children` implements `Debug` and `Default`. Keys are unique per manager.
+
+## Prepared finite instances
+
+`PreparedChild<T>::new(store, owner, factory)` constructs one fresh child in
+its own scope before startup and retains its independent boundary T. It does
+not run a hook. `boundary()` reads that boundary. `start(ctx)` or
+`start_with(ctx, bind)` starts it once under the exact parent scope and node
+that prepared it. The latter binds captures in the still-constructing child
+scope before hooks start; quiet sampling queues the child's initial work.
+`evaluate(ctx)`, `next_scheduled_time()` and `stop(ctx)` drive that instance.
+Evaluation before start and foreign-owner activation/stop are errors. Failed
+binding or start releases its scope; successfully started nodes stop once,
+and the failing start node never receives stop. Repeated stop is harmless.
+Never-started prepared instances can be discarded without running stop hooks.
+
+Finite compiler preparation must construct sufficient independent instances,
+reserve target subscriptions and call Store::prepare_collection_inputs before
+startup. It must consume fresh instances on reentry and drive only selected
+children; no stopped instance is resumed. This surface does not change the
+general dynamic Children allocation policy or imply compiler conditional
+lowering is complete. The prepared_child regression measures every successful
+cycle, including first activation, branch changes, next-cycle expiry and stop,
+with a real allocator. Scalar state starts fresh and held old designations do
+not revive when a different prepared instance starts.
