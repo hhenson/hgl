@@ -230,3 +230,37 @@ fn production_helpers_keep_production_resolution_when_called_from_tests() -> Res
     );
     Ok(())
 }
+
+#[test]
+fn production_operator_defaults_keep_their_declaration_scope() -> Result<(), String> {
+    let mut sources = source(
+        "const fn seed()->i64 => 1\noperator copy(const value:i64=seed())->i64\nimpl fn copy(const value:i64=seed())->i64 {when {return value}}\ntest {const fn seed()->i64 => 2\nfn run()->i64 => copy()\ntest production {assert eval(run)==[]}}",
+    );
+    for (name, text) in [
+        (
+            "replay.hgl",
+            include_str!("../../../external/hgraph_std/hgl/hgraph/replay_record.hgl"),
+        ),
+        (
+            "replay-impl.hgl",
+            include_str!("../../../external/hgraph_std/hgl/hgraph/impl/replay_record.hgl"),
+        ),
+    ] {
+        sources.push((name.into(), text.into()));
+    }
+    let suite = compile_suite(&sources)?;
+    let node = suite.plans[0]
+        .nodes
+        .iter()
+        .find(|node| node.name == "contexts::copy")
+        .expect("production operator node");
+    assert!(
+        matches!(
+            &node.handlers[0].1[0],
+            hgl_rust::Statement::Return(value)
+                if matches!(value.kind, hgl_rust::Kind::Literal(hgl_source::Literal::Int(1)))
+        ),
+        "production default selected a test helper: {node:?}"
+    );
+    Ok(())
+}
