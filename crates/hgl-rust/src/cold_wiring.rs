@@ -3,19 +3,19 @@ use crate::{Node, Plan};
 use hgl_source::Ty;
 use std::fmt::Write as _;
 fn header(plan: &Plan, ty: &Ty) -> String {
+    let mut images = plan
+        .native_images
+        .iter()
+        .chain(plan.natives.iter().filter_map(|n| n.provider.as_ref()));
     let Ty::Native(scalar) = ty else {
-        let providers = plan
-            .natives
-            .iter()
-            .filter_map(|n| n.provider.as_ref())
+        let providers = images
             .map(|p| (&p.provider, &p.fingerprint))
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
             .collect::<Vec<_>>();
         return format!("HGL-COLD-2:{:?}", (ty.source_name(), providers));
     };
-    let image = plan
-        .natives
-        .iter()
-        .filter_map(|n| n.provider.as_ref())
+    let image = images
         .find(|p| p.scalars.iter().any(|(s, _)| s.identity == scalar.identity))
         .unwrap_or_else(|| unreachable!("checked native image"));
     format!(

@@ -1256,3 +1256,92 @@ assert eval(ge,value:[a,_,b],other:b)==[false,_,true]
     fs::remove_file(image)?;
     result
 }
+
+#[test]
+fn empty_native_aggregate_cold_carriers_include_type_only_provider_identity()
+-> Result<(), Box<dyn std::error::Error>> {
+    let directory =
+        std::env::temp_dir().join(format!("hgl-type-only-carrier-{}", std::process::id()));
+    fs::create_dir_all(&directory)?;
+    let image = directory.join("provider.rs");
+    let alternate = directory.join("alternate.rs");
+    let carrier = directory.join("carrier.bin");
+    let compatible_carrier = directory.join("compatible.bin");
+    let provider=fs::read_to_string(root()?.join("native/stdlib/atomic_values.rs"))?.replace("if data.len() > capacity {","crate::PREFLIGHTS.fetch_add(1,std::sync::atomic::Ordering::Relaxed);if data.len() > capacity {").replace("destination.write(data);","crate::COPIES.fetch_add(1,std::sync::atomic::Ordering::Relaxed);destination.write(data);");
+    fs::write(&image, &provider)?;
+    fs::write(
+        &alternate,
+        provider.replace("native-atomic-values-v1", "native-atomic-values-alternate"),
+    )?;
+    let plan = type_only_carrier_plan(&image, "native-atomic-values-v1")?;
+    let other = type_only_carrier_plan(&alternate, "native-atomic-values-alternate")?;
+    let emitted = hgl_program::emit_rust(&plan);
+    assert!(emitted.contains("cold_configurations"));
+    assert!(emitted.contains("NativeDomain") && emitted.contains("native-atomic-values-v1"));
+    let counters = "static COPIES:std::sync::atomic::AtomicUsize=std::sync::atomic::AtomicUsize::new(0);static PREFLIGHTS:std::sync::atomic::AtomicUsize=std::sync::atomic::AtomicUsize::new(0);";
+    for (program, path) in [(&other, &carrier), (&plan, &compatible_carrier)] {
+        execute(&format!(
+            r"
+{} {counters}
+fn main(){{let mut registry=hgl_describe::Registry::new();register(&mut registry).unwrap();let graph=main_graph(&registry).unwrap();let bytes=graph.nodes.iter().flat_map(|n|&n.scalars).find_map(|(_,v)|match v{{hgl_types::ScalarValue::Bytes(bytes)=>Some(bytes),_=>None}}).unwrap();std::fs::write({:?},bytes).unwrap();}}
+",
+            hgl_program::emit_rust(program).replace("pub fn main(", "pub fn main_graph("),
+            path.to_string_lossy()
+        ))?;
+    }
+    execute(&format!(
+        r#"
+{} {counters}
+fn main(){{
+ let mut registry=hgl_describe::Registry::new();register(&mut registry).unwrap();let graph=main_graph(&registry).unwrap();
+ let(node,scalar)=graph.nodes.iter().enumerate().find_map(|(node,n)|n.scalars.iter().position(|(_,v)|matches!(v,hgl_types::ScalarValue::Bytes(_))).map(|scalar|(node,scalar))).unwrap();
+ let mut incompatible=graph.clone();incompatible.nodes[node].scalars[scalar].1=hgl_types::ScalarValue::Bytes(std::fs::read({:?}).unwrap());
+ let copies=COPIES.load(std::sync::atomic::Ordering::Relaxed);let preflights=PREFLIGHTS.load(std::sync::atomic::Ordering::Relaxed);
+ let result=std::panic::catch_unwind(std::panic::AssertUnwindSafe(||{{let mut store=hgl_store::Store::new();store.global_state().provision();hgl_describe::instantiate_complete(&incompatible,&registry,&mut store)}}));
+ assert!(result.is_ok(),"incompatible type-only carrier panicked");assert!(matches!(result.unwrap(),Err(hgl_describe::BuildError::InvalidNodeType{{what,..}}) if what=="cold carrier identity mismatch"),"incompatible type-only provider carrier was admitted");
+ assert_eq!(COPIES.load(std::sync::atomic::Ordering::Relaxed),copies);assert_eq!(PREFLIGHTS.load(std::sync::atomic::Ordering::Relaxed),preflights);
+ let mut compatible=graph.clone();compatible.nodes[node].scalars[scalar].1=hgl_types::ScalarValue::Bytes(std::fs::read({:?}).unwrap());
+ for description in [&graph,&graph.clone(),&compatible]{{let mut store=hgl_store::Store::new();store.global_state().provision();let mut built=hgl_describe::instantiate_complete(description,&registry,&mut store).unwrap();hgl_kernel::run_simulation(&mut built.graph,&mut store,&hgl_kernel::RunConfig{{start_time:hgl_types::EngineTime::MIN_START,end_time:hgl_types::EngineTime::from_micros(10)}}).unwrap();for(key,want)in [("count",0),("number",2)]{{let handle=store.global_state().bind::<i64>(key).unwrap();assert_eq!(store.global_state().get(handle).unwrap(),want);}}}}
+ assert_eq!(COPIES.load(std::sync::atomic::Ordering::Relaxed),copies);assert_eq!(PREFLIGHTS.load(std::sync::atomic::Ordering::Relaxed),preflights);
+}}
+"#,
+        hgl_program::emit_rust(&plan).replace("pub fn main(", "pub fn main_graph("),
+        carrier.to_string_lossy(),
+        compatible_carrier.to_string_lossy()
+    ))?;
+    fs::remove_dir_all(directory)?;
+    Ok(())
+}
+
+fn type_only_carrier_plan(
+    image: &std::path::Path,
+    fingerprint: &str,
+) -> Result<hgl_program::Program, Box<dyn std::error::Error>> {
+    let mut input = sources(
+        r#"
+use carrier_seed::{seed}
+fn consume(const keys:list<Token>,const number:i64) {inject global_state,alarm
+start {schedule(alarm,0us)}
+when {set(global_state,"count",len(keys))
+set(global_state,"number",number)}}
+export fn main(){let deferred=seed(1)
+consume(keys:[],number:deferred)}
+"#,
+    )?;
+    for (name, text) in &mut input {
+        if name.ends_with(".hgl-native") {
+            *text = text
+                .replace(
+                    "\"atomic_values.rs\"",
+                    &format!("{:?}", image.to_string_lossy()),
+                )
+                .replace("native-atomic-values-v1", fingerprint);
+        }
+    }
+    input.push((
+        "carrier_seed.hgl".into(),
+        "module carrier_seed\nexport native const fn seed(value:i64)->i64".into(),
+    ));
+    input.push((root()?.join("crates/hgl-compiler/tests/fixtures/carrier-seed.hgl-native").to_string_lossy().into_owned(),"native_descriptor 1 target \"hgl-rust-1\"\nmodule carrier_seed\nprovider \"hgl.test.builtin_results\" fingerprint \"builtin-results-v1\" image \"native_builtin_results.rs\"\nvalue seed(value:i64)->i64 symbol \"fixed\" ownership owned phases {cold} effects {}\n".into()));
+    Ok(hgl_program::compile(&input, "main")?)
+}
