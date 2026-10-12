@@ -38,6 +38,7 @@ fn compare(a: &[u8], b: &[u8]) -> NodeResult<Option<Ordering>> {
 static PLAN: AnyPlan = AnyPlan {
     execution: &hgl_store::any_values::operations::EXECUTION,
     capture: None,
+    validate: None,
     identity,
     copy: |data, out| out.native(&data, copy, |_, _| Ok(())),
     operation: AnyOperation::Native {
@@ -50,6 +51,7 @@ static PLAN: AnyPlan = AnyPlan {
 static RESTRICTED: AnyPlan = AnyPlan {
     execution: &hgl_store::any_values::operations::EXECUTION,
     capture: None,
+    validate: None,
     identity,
     copy: |data, out| out.native(&data, copy, |_, _| Ok(())),
     operation: AnyOperation::Native {
@@ -91,6 +93,7 @@ fn checked_capability_mask_hides_extra_physical_operations() {
 static NESTED: AnyPlan = AnyPlan {
     execution: &hgl_store::any_values::operations::EXECUTION,
     capture: None,
+    validate: None,
     identity: TypeId::of::<Vec<Opaque>>,
     operation: AnyOperation::Sequence(&PLAN, false),
     copy: |data, out| {

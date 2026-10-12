@@ -39,6 +39,27 @@ impl<'a> AnyView<'a> {
             },
         }
     }
+    /// Check an untrusted cold box before its descriptor reaches a trusted codec.
+    pub fn checked_boxed(self) -> NodeResult<AnyRef<'a>> {
+        let error = || super::NodeError::new("invalid cold box descriptor");
+        let bytes = self.get(..8).ok_or_else(error)?;
+        let id = usize::try_from(u64::from_le_bytes(
+            bytes.try_into().map_err(|_invalid| error())?,
+        ))
+        .map_err(|_invalid| error())?;
+        let plan = if id == 0 {
+            if self.len() != 8 {
+                return Err(error());
+            }
+            None
+        } else {
+            Some(*self.descriptors.get(id - 1).ok_or_else(error)?)
+        };
+        Ok(AnyRef {
+            plan,
+            data: self.slice(8..self.len()),
+        })
+    }
     /// Read the descriptor retained with a nested box, without registry lookup.
     pub fn boxed(self) -> AnyRef<'a> {
         let index = index(number(&self[..8]));

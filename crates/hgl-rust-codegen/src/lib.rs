@@ -7,6 +7,7 @@ pub mod any_values;
 pub mod checked_data;
 /// Checked cold byte carriers for ordinary configuration owners.
 pub mod cold_transport;
+mod cold_validation;
 pub mod collections;
 pub mod composite_keys;
 mod constructor_fields;

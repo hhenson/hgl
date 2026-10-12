@@ -1,5 +1,7 @@
 //! Each module owns a different compiled layout table; retained boxes cross that boundary.
 use std::{fmt::Write as _, fs, process::Command};
+// Concurrent fixtures must stay distinct even when the host clock repeats a timestamp.
+static FIXTURE_SEQUENCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 #[test]
 fn independently_emitted_any_descriptors_survive_nested_retention()
 -> Result<(), Box<dyn std::error::Error>> {
@@ -257,11 +259,12 @@ fn run(source: &str) -> Result<(), Box<dyn std::error::Error>> {
         .join("../..")
         .canonicalize()?;
     let directory = std::env::temp_dir().join(format!(
-        "hgl-cross-any-{}-{}",
+        "hgl-cross-any-{}-{}-{}",
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)?
-            .as_nanos()
+            .as_nanos(),
+        FIXTURE_SEQUENCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
     fs::create_dir_all(directory.join("src"))?;
     let package = directory
@@ -360,11 +363,12 @@ fn native_fixture() -> Result<NativeFixture, Box<dyn std::error::Error>> {
         &[],
     )?;
     let provider_file = std::env::temp_dir().join(format!(
-        "cross-native-provider-{}-{}.rs",
+        "cross-native-provider-{}-{}-{}.rs",
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)?
-            .as_nanos()
+            .as_nanos(),
+        FIXTURE_SEQUENCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
     let provider=fs::read_to_string(root.join("native/stdlib/atomic_values.rs"))?.replacen("if data.len() > capacity {", "if crate::REJECT.load(std::sync::atomic::Ordering::Relaxed) {return Err(NodeError::coded(\"retention rejected\",\"native.copy.failure\"));} if data.len() > capacity {",1).replacen("destination.write(data);", "crate::COPIES.fetch_add(1,std::sync::atomic::Ordering::Relaxed);destination.write(data);",1);
     fs::write(&provider_file, provider)?;

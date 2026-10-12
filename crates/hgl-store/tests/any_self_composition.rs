@@ -7,6 +7,7 @@ use std::{any::TypeId, cell::Cell};
 static ALLOCATOR: CountingAllocator = CountingAllocator;
 static PLAN: AnyPlan = AnyPlan {
     capture: None,
+    validate: None,
     copy: |data, out| out.write(&data),
     execution: &hgl_store::any_values::operations::EXECUTION,
     identity: TypeId::of::<i64>,
