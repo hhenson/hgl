@@ -16,9 +16,11 @@ fn expression(value: &Value) -> Option<String> {
     match &value.kind {
         Kind::Native(binding, args) => {
             if value.ty.owning_scalar() {
+                if !matches!(value.ty, Ty::Native(_) | Ty::Str) {
+                    return None;
+                }
                 bound(binding)?;
             }
-            let image = binding.provider.as_ref()?;
             let args = args
                 .iter()
                 .map(expression)
@@ -26,7 +28,7 @@ fn expression(value: &Value) -> Option<String> {
                 .join(",");
             Some(format!(
                 "{}::{}({args}){}",
-                crate::native_image::image_module(&image.provider),
+                crate::native_image::image_module(&binding.provider.as_ref()?.provider),
                 binding.method,
                 if binding.throws { "?" } else { "" }
             ))
@@ -220,7 +222,7 @@ fn scalar_query(value: &Value) -> Option<String> {
         args.join(if op == "modified" { " || " } else { " && " })
     ))
 }
-/// Only admitted borrowed result trees may select the prepared helper path.
+/// Only implemented borrowed or nonowning result trees select the prepared helper path.
 pub fn supported(value: &Value) -> bool {
     matches!(value.kind, Kind::Native(..)) && expression(value).is_some()
 }

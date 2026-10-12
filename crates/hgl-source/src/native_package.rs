@@ -90,6 +90,8 @@ pub fn validate_aliases<'a>(
 ) -> Result<(), Issue> {
     let mut identities = BTreeMap::new();
     let mut mappings = BTreeMap::new();
+    let mut marker_identities = BTreeMap::new();
+    let mut symbol_bounds = BTreeMap::new();
     let mut providers = BTreeMap::new();
     for descriptor in descriptors {
         if let Some(image) = &descriptor.image
@@ -122,6 +124,33 @@ pub fn validate_aliases<'a>(
                     )
                     .into());
                 }
+                if marker_identities
+                    .insert(mapping, &scalar.identity)
+                    .is_some_and(|old| old != &scalar.identity)
+                {
+                    return Err(format!(
+                        "Rust target marker maps to distinct canonical native scalars: {marker}"
+                    )
+                    .into());
+                }
+            }
+        }
+        for function in descriptor.functions.values() {
+            let symbol = (
+                &descriptor.provider,
+                &descriptor.fingerprint,
+                &descriptor.image,
+                &function.symbol,
+            );
+            if symbol_bounds
+                .insert(symbol, &function.bound)
+                .is_some_and(|old| old != &function.bound)
+            {
+                return Err(format!(
+                    "conflicting native helper symbol bounds: {}",
+                    function.symbol
+                )
+                .into());
             }
         }
     }

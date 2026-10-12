@@ -158,6 +158,80 @@ test supported_cold {assert primitive_token(increment(0),true,1)==token("yes")}
     )?;
     run_sources_with_counts(&input, Some([1, 1, 0]))
 }
+
+#[test]
+fn unsupported_owning_builtin_provider_results_preserve_source_and_cold_support()
+-> Result<(), Box<dyn std::error::Error>> {
+    let declarations = [
+        ("owned_bytes", "bytes"),
+        ("owned_zone", "timezone"),
+        ("owned_time", "zoned_time"),
+        ("owned_datetime", "zoned_datetime"),
+    ];
+    let mut interface =
+        "module builtin_results\nexport native const fn fixed(value:i64)->i64\n".to_owned();
+    let mut descriptor = "native_descriptor 1 target \"hgl-rust-1\"\nmodule builtin_results\nprovider \"hgl.test.builtin_results\" fingerprint \"builtin-results-v1\" image \"native_builtin_results.rs\"\nvalue fixed(value:i64)->i64 symbol \"fixed\" ownership owned phases {setup,cold,evaluation} effects {}\n".to_owned();
+    for (helper, result) in declarations {
+        writeln!(
+            interface,
+            "export native const fn {helper}(value:i64)->{result}"
+        )?;
+        writeln!(
+            descriptor,
+            "value {helper}(value:i64)->{result} symbol {helper:?} bound \"builtin_width\" ownership owned phases {{setup,cold,evaluation}} effects {{allocation}}"
+        )?;
+    }
+    let fixture = root()?.join("crates/hgl-compiler/tests/fixtures");
+    let input = |body: &str| -> Result<Vec<(String, String)>, String> {
+        let mut input = sources(body)?;
+        input.push(("builtin-results.hgl".into(), interface.clone()));
+        input.push((
+            fixture
+                .join("builtin-results.hgl-native")
+                .to_string_lossy()
+                .into_owned(),
+            descriptor.clone(),
+        ));
+        Ok(input)
+    };
+    for (helper, result) in declarations {
+        let input = input(&format!(
+            "use builtin_results::{{{helper}}}\nfn unsupported(value:i64)->{result} {{when {{return {helper}(value)}}}}\nfn source()->i64 {{yield 0us:1}}\nexport fn main() {{unsupported(source())}}\ntest runtime {{eval(unsupported,[1])}}"
+        ))?;
+        hgl_program::check_sources(&input)?;
+        let program = hgl_program::compile(&input, "main")?;
+        let target = hgl_program::emit_rust(&program);
+        assert!(target.starts_with("compile_error!("), "{helper}: {target}");
+        assert!(
+            target.contains("Rust native target does not support prepared owning result transport")
+        );
+        assert!(!target.contains("native_builtin_results.rs") && !target.contains("native_image"));
+        let error = hgl_program::compile_module_suite(&input)
+            .err()
+            .ok_or("unsupported owning builtin target admitted")?;
+        assert!(
+            error.contains("Rust native target does not support prepared owning result transport"),
+            "{helper}: {error}"
+        );
+    }
+    let input = input(
+        r"
+use builtin_results::{owned_bytes,owned_zone,owned_time,owned_datetime,fixed}
+fn copy(value:i64)->i64 {when {return fixed(value)}}
+test cold_results {
+assert owned_bytes(1)==bytes([1])
+assert owned_zone(1)==owned_zone(1)
+assert owned_zone(1)!=owned_zone(2)
+assert owned_time(1)==owned_time(1)
+assert owned_time(1)!=owned_time(2)
+assert owned_datetime(1)==owned_datetime(1)
+assert owned_datetime(1)!=owned_datetime(2)
+assert eval(copy,[1,_,2])==[2,_,3]
+}
+",
+    )?;
+    run_sources(&input)
+}
 #[test]
 fn modules_share_one_provider_image_and_retain_all_scalar_mappings_and_aliases()
 -> Result<(), Box<dyn std::error::Error>> {
