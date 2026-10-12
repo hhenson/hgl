@@ -358,7 +358,7 @@ fn standard_batches(
         .into_iter()
         .enumerate()
     {
-        let project = generated_cache::Project::open(root, index)?;
+        let project = generated_cache::Project::open(root, &format!("corpus-batch-{index:03}"))?;
         let dir = &project.path;
         manifest(root, dir)?;
         generated_cache::workspace_lock(root, dir)?;

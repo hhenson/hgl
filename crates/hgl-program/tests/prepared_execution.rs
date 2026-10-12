@@ -1,11 +1,12 @@
 //! The complete generated replay, target and recording path must not allocate in ticks.
-use std::{fmt::Write as _, fs, process::Command, time::SystemTime};
+use std::{fmt::Write as _, fs, process::Command};
 #[path = "support/checked_batches.rs"]
 mod checked_batches;
 
-// Two tests can start within the same clock tick, and on Windows a second test
-// in the same directory then fights the first for its executable.
-static NEXT_DIR: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+#[path = "support/generated_cache.rs"]
+mod generated_cache;
+#[path = "support/regression_cache.rs"]
+mod regression_cache;
 const SOURCE: &str = r#"module prepared_execution
 fn constructed_map(value:i64)->map<str,i64> {when {return delta<map<str,i64>>(upsert:["retained":value])}}
 test constructed_map {assert eval(constructed_map,value:[1,2]) == [delta<map<str,i64>>(upsert:["retained":1]),delta<map<str,i64>>(upsert:["retained":2])]}
@@ -544,14 +545,8 @@ fn execute_suite(
     runtime: &str,
     measured: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let dir = std::env::temp_dir().join(format!(
-        "hgl-prepared-execution-{}-{}",
-        SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)?
-            .as_nanos(),
-        NEXT_DIR.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-    ));
-    fs::create_dir_all(dir.join("src"))?;
+    let project = regression_cache::open(root, "prepared")?;
+    let dir = &project.path;
     let mut code = hgl_program::emit_tests(suite);
     if measured {
         code = code
@@ -567,8 +562,9 @@ fn execute_suite(
         );
     }
     code.push_str(runtime);
-    fs::write(dir.join("src/main.rs"), code)?;
-    manifest(root, &dir)?;
+    generated_cache::write(dir.join("src/main.rs"), code)?;
+    manifest(root, dir)?;
+    generated_cache::workspace_lock(root, dir)?;
     // The gate runs the suite in both profiles; each build follows the profile of this test binary.
     let profile: Vec<&str> = if cfg!(debug_assertions) {
         vec![]
@@ -581,7 +577,7 @@ fn execute_suite(
         .env("CARGO_TARGET_DIR", concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/source-tests"))
         .env("CARGO_INCREMENTAL", "0")
         .args(profile)
-        .current_dir(&dir)
+        .current_dir(dir)
         .output()?;
     assert!(
         output.status.success(),
@@ -605,7 +601,6 @@ fn execute_suite(
         reported, expected,
         "every prepared test must execute once in source order"
     );
-    fs::remove_dir_all(dir)?;
     Ok(())
 }
 
@@ -634,7 +629,7 @@ fn manifest(
             .replace('"', "\\\"");
         writeln!(manifest, "{name}={{path=\"{path}\"}}")?;
     }
-    fs::write(dir.join("Cargo.toml"), unique_package(&manifest, dir))?;
+    generated_cache::write(dir.join("Cargo.toml"), unique_package(&manifest, dir))?;
     Ok(())
 }
 

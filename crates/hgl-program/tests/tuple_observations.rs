@@ -1,9 +1,10 @@
 //! Ordinary tuple construction and retained observations from the shared specification.
 use hgl_program::compile_tests;
 
-// Two tests can start within the same clock tick, and on Windows a second test
-// in the same directory then fights the first for its executable.
-static NEXT_DIR: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+#[path = "support/generated_cache.rs"]
+mod generated_cache;
+#[path = "support/regression_cache.rs"]
+mod regression_cache;
 fn sources(source: &str) -> Vec<(String, String)> {
     vec![
         ("tuple_observations.hgl".into(), source.into()),
@@ -163,12 +164,12 @@ fn run_suite(
     expect_failure: bool,
     expected_error: Option<&str>,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    use std::{fs, process::Command};
+    use std::process::Command;
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .canonicalize()?;
-    let dir = scratch_dir("hgl-tuple-observations")?;
-    fs::create_dir_all(dir.join("src"))?;
+    let project = regression_cache::open(&root, "tuple")?;
+    let dir = &project.path;
     let mut code = hgl_program::emit_tests(suite);
     if measure {
         code = code.replace("hgl_kernel::run_simulation(", "crate::measured_simulation(");
@@ -196,8 +197,9 @@ fn measured_simulation(graph:&mut hgl_kernel::Graph, store:&mut hgl_store::Store
     }
     code.push_str("struct Provider;mod native {pub use hgl_stdlib::std_native::log_info_str;pub fn echo_i64(value:i64)->i64 {value} pub fn text_len_str(value:&str)->i64 {value.len() as i64} pub fn both_str_str(first:&str,second:&str)->i64 {(first.len()+second.len()) as i64}}\n");
 
-    fs::write(dir.join("src/main.rs"), code)?;
-    manifest(&root, &dir)?;
+    generated_cache::write(dir.join("src/main.rs"), code)?;
+    manifest(&root, dir)?;
+    generated_cache::workspace_lock(&root, dir)?;
     // The gate runs the suite in both profiles; each build follows the profile of this test binary.
     let profile: Vec<&str> = if cfg!(debug_assertions) {
         vec![]
@@ -210,7 +212,7 @@ fn measured_simulation(graph:&mut hgl_kernel::Graph, store:&mut hgl_store::Store
         .env("CARGO_TARGET_DIR", concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/source-tests"))
         .env("CARGO_INCREMENTAL", "0")
         .args(profile)
-        .current_dir(&dir)
+        .current_dir(dir)
         .output()?;
     if expect_failure {
         assert!(
@@ -233,7 +235,6 @@ fn measured_simulation(graph:&mut hgl_kernel::Graph, store:&mut hgl_store::Store
         );
     }
 
-    fs::remove_dir_all(dir)?;
     Ok(String::from_utf8_lossy(&output.stderr).into_owned())
 }
 #[test]
@@ -427,12 +428,12 @@ fn fixed_updates_resets_and_guarded_fresh_bindings_preserve_constant_tuple_phase
 #[test]
 fn tuple_elements_run_once_in_written_order_and_failure_stops_later_elements()
 -> Result<(), Box<dyn std::error::Error>> {
-    use std::{fmt::Write as _, fs, process::Command};
+    use std::{fmt::Write as _, process::Command};
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .canonicalize()?;
-    let dir = scratch_dir("hgl-tuple-order")?;
-    fs::create_dir_all(dir.join("src"))?;
+    let project = regression_cache::open(&root, "tuple")?;
+    let dir = &project.path;
     let mut runner = include_str!("fixtures/tuple_order_runner.rs").to_owned();
     let mut calls = "fn main(){".to_owned();
     for (entry, trace, after) in [
@@ -447,7 +448,7 @@ fn tuple_elements_run_once_in_written_order_and_failure_stops_later_elements()
             )],
             entry,
         )?;
-        fs::write(
+        generated_cache::write(
             dir.join(format!("src/{entry}.rs")),
             hgl_program::emit_rust(&program),
         )?;
@@ -462,8 +463,9 @@ fn tuple_elements_run_once_in_written_order_and_failure_stops_later_elements()
     }
     runner += &calls;
     runner += "}";
-    fs::write(dir.join("src/main.rs"), runner)?;
-    manifest(&root, &dir)?;
+    generated_cache::write(dir.join("src/main.rs"), runner)?;
+    manifest(&root, dir)?;
+    generated_cache::workspace_lock(&root, dir)?;
     let profile = if cfg!(debug_assertions) {
         vec![]
     } else {
@@ -471,19 +473,19 @@ fn tuple_elements_run_once_in_written_order_and_failure_stops_later_elements()
     };
     let output = Command::new(env!("CARGO"))
         .args(["run", "--offline", "--quiet"])
+        .env("CARGO_INCREMENTAL", "0")
         .args(profile)
         .env(
             "CARGO_TARGET_DIR",
             concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/source-tests"),
         )
-        .current_dir(&dir)
+        .current_dir(dir)
         .output()?;
     assert!(
         output.status.success(),
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    fs::remove_dir_all(dir)?;
     Ok(())
 }
 
@@ -491,7 +493,7 @@ fn manifest(
     root: &std::path::Path,
     dir: &std::path::Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    use std::{fmt::Write as _, fs};
+    use std::fmt::Write as _;
     let mut manifest = String::from(
         "[package]\nname=\"tuple_observations-test\"\nversion=\"0.0.0\"\nedition=\"2024\"\n[workspace]\n[dependencies]\n",
     );
@@ -514,7 +516,7 @@ fn manifest(
             .replace('"', "\\\"");
         writeln!(manifest, "{name}={{path=\"{path}\"}}")?;
     }
-    fs::write(dir.join("Cargo.toml"), unique_package(&manifest, dir))?;
+    generated_cache::write(dir.join("Cargo.toml"), unique_package(&manifest, dir))?;
     Ok(())
 }
 
@@ -525,15 +527,6 @@ fn unique_package(manifest: &str, dir: &std::path::Path) -> String {
         .file_name()
         .map_or_else(String::new, |name| name.to_string_lossy().into_owned());
     manifest.replacen("\"\n", &format!("-{suffix}\"\n"), 1)
-}
-
-/// A directory of this test's own under the temp root; see `NEXT_DIR`.
-fn scratch_dir(prefix: &str) -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
-    let tick = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)?
-        .as_nanos();
-    let serial = NEXT_DIR.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    Ok(std::env::temp_dir().join(format!("{prefix}-{}-{tick}-{serial}", std::process::id())))
 }
 
 #[test]

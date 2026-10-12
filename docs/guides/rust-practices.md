@@ -54,12 +54,17 @@ can itself include compilation of generated HGL programs. Explicit `-p` or
 `--package` selections replace the default workspace selection; `--exclude`
 continues to apply to the workspace.
 
-The shared HGL corpus uses stable generated projects under
-`target/source-test-projects`. It is checked and emitted on every run; unchanged
-Rust files keep their timestamps, and Cargo validates each build before execution.
-Changed workspace lockfiles seed the generated lockfiles. CI retains these
-projects and their executables, while per-batch file locks prevent concurrent
-writers from changing a program between its build and execution.
+The shared HGL corpus, prepared-publication and tuple regression tests keep
+stable generated projects under `target/source-test-projects`. Regressions use
+one slot per named Rust test and invocation within that test, independent of
+cross-test scheduling; source changes overwrite a slot rather than accumulating
+new projects. Each run checks and emits the HGL, preserves unchanged Rust file
+timestamps, invokes Cargo, and executes the program. Workspace lockfile changes
+seed generated lockfiles. File locks cover generation, build and execution.
+CI retains the projects and executables. Regression projects, Cargo fingerprints
+and executables form one separate archive, restored together after the existing
+compiler/dependency cache. Its older project snapshots are compared with freshly
+emitted Rust before Cargo runs.
 
 ### Building on the Linux validation host
 
