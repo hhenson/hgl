@@ -67,7 +67,10 @@ fn validate_child(
             };
             expected = target;
         }
-        if output != expected && Some(output) != owner.output.as_ref() {
+        let reference_export = !child.keyed
+            && matches!(owner.output, Some(TsType::Reference(_)))
+            && Some(output) == owner.output.as_ref();
+        if output != expected && !reference_export {
             return Err(BuildError::InvalidChildren("child output shape".into()));
         }
     }
