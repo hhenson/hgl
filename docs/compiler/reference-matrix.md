@@ -23,8 +23,13 @@ without running handlers.
 
 Current focused validation executes all 24 groups / 50 evals in the scalar,
 projection, structural and native leaf suites. Four authored groups remain
-unexecuted in the two lifecycle suites. Full CI is pending
-integration and host coordination; this record does not claim completion.
+unexecuted in the two lifecycle suites. The supported transport slice was
+revalidated after merging the reviewed Native implementation at `b49993f`
+(actual main ancestry `2be08a4`). The integration revision `94e982e` passes
+normal CLI execution for each of the four suites, the combined real allocation
+probe, focused compiler/store regressions, affected clippy and the module/card
+budget gate. Full CI remains pending host coordination; this record does not
+claim completion.
 
 | Suite | Named group | Outcome |
 | --- | --- | --- |
