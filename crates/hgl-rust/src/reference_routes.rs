@@ -9,16 +9,17 @@ fn targets(
     source: usize,
     path: Vec<usize>,
     result: &mut BTreeSet<(usize, Vec<usize>)>,
-) {
+) -> Result<(), String> {
     let node = &plan.nodes[source];
     if !matches!(node.result, Ty::Ref(_)) {
         result.insert((source, path));
-        return;
+        return Ok(());
     }
-    for (input, mut child) in crate::reference_designations::inputs(node) {
+    for (input, mut child) in crate::reference_designations::inputs(node)? {
         child.extend_from_slice(&path);
-        targets(plan, node.inputs[input].1, child, result);
+        targets(plan, node.inputs[input].1, child, result)?;
     }
+    Ok(())
 }
 
 pub(crate) fn reserve(plan: &Plan) -> String {
@@ -30,7 +31,9 @@ pub(crate) fn reserve(plan: &Plan) -> String {
                 continue;
             }
             let mut possible = BTreeSet::new();
-            targets(plan, *source, Vec::new(), &mut possible);
+            if let Err(issue) = targets(plan, *source, Vec::new(), &mut possible) {
+                return format!("compile_error!({issue:?});");
+            }
             for target in possible {
                 *subscriptions.entry(target.clone()).or_default() += 1;
                 views.push((consumer, input, target));
@@ -59,4 +62,68 @@ fn endpoint(source: usize, path: &[usize]) -> String {
         format!("built.outputs[{source}].expect(\"checked reference target\")"),
         |output, index| format!("store.bindings().fixed_output({output},{index})"),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::reserve;
+    use crate::ir::{Kind, Node, Plan, Statement, Value};
+    use hgl_source::{Literal, Ty};
+
+    fn node(
+        name: &str,
+        result: Ty,
+        inputs: Vec<(String, usize, Ty)>,
+        body: Vec<Statement>,
+    ) -> Node {
+        Node {
+            name: name.into(),
+            result,
+            inputs,
+            handlers: vec![(None, body)],
+            alarm: false,
+            generator: None,
+            start: Vec::new(),
+            stop: Vec::new(),
+            global_state: false,
+            globals: Vec::new(),
+            configuration: Vec::new(),
+            caches: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn finite_preparation_rejects_unmapped_reference_selection_before_execution() {
+        let reference = Ty::Ref(Box::new(Ty::I64));
+        let collection = Ty::List(Box::new(reference.clone()), Some(2));
+        let selected = Value::new(
+            reference.clone(),
+            Kind::Index(
+                Box::new(Value::new(collection.clone(), Kind::Input(0, false))),
+                Box::new(Value::new(Ty::I64, Kind::Literal(Literal::Int(0)))),
+            ),
+        );
+        let plan = Plan {
+            nodes: vec![
+                node("source", collection.clone(), Vec::new(), Vec::new()),
+                node(
+                    "select",
+                    reference,
+                    vec![("values".into(), 0, collection)],
+                    vec![Statement::Return(selected)],
+                ),
+                node(
+                    "consume",
+                    Ty::I64,
+                    vec![("value".into(), 1, Ty::I64)],
+                    Vec::new(),
+                ),
+            ],
+            ..Plan::default()
+        };
+        let code = reserve(&plan);
+        assert!(code.starts_with("compile_error!("));
+        assert!(code.contains("Rust target cannot prepare returned designation flow in select"));
+        assert!(!code.contains("prepare_reference_input"));
+    }
 }
