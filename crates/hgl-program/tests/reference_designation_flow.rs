@@ -18,7 +18,7 @@ fn designation_dataflow_executes_without_unrelated_views_or_tick_allocations()
     ];
     let sources = hgl_program::library_files::sources(&files, &[])?;
     let suite = hgl_program::compile_module_suite(&sources)?;
-    assert_eq!(suite.tests.len(), 5);
+    assert_eq!(suite.tests.len(), 6);
     check_metadata_routes(&suite, &sources)?;
     let project = regression_cache::open(&root, "reference-designation-flow")?;
     let directory = &project.path;
@@ -66,7 +66,7 @@ fn designation_dataflow_executes_without_unrelated_views_or_tick_allocations()
     );
     assert!(
         String::from_utf8_lossy(&output.stdout)
-            .contains("5 executed tests, 6 evaluations, 0 failures")
+            .contains("6 executed tests, 8 evaluations, 0 failures")
     );
     assert!(String::from_utf8_lossy(&output.stderr).contains("designation flow measured cycles="));
     Ok(())

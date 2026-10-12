@@ -41,6 +41,8 @@ fn hold(value:ref<Pair>,observed:ref<i64>)->ref<Pair> {
     when valid(value) {
         let seen=all_valid(observed)
         if !valid(out) {return value}
+        else {let held=out
+            return held}
     }
 }
 fn held(index:i64,first:Pair,second:Pair,observed:i64)->i64 {
@@ -48,6 +50,29 @@ fn held(index:i64,first:Pair,second:Pair,observed:i64)->i64 {
 }
 test held_output_values_keep_original_target {
     assert eval(held,index:[0,1,_,1],first:[delta<Pair>(left:7),delta<Pair>(left:8),_,delta<Pair>(left:9)],second:[delta<Pair>(left:20),_,delta<Pair>(left:21)],observed:[1,2,3,4]) == [7,8,_,9]
+    assert eval(held,index:[0,1,0,1],first:[_,_,delta<Pair>(left:7),delta<Pair>(left:8)],second:[delta<Pair>(left:20)],observed:[1,2,3,4]) == [_,_,7,8]
+}
+
+fn repeat_own(value:ref<i64>,step:i64)->ref<i64> {
+    inject out
+    when valid(step) && modified(step) {
+        if valid(out) {return out}
+        return value
+    }
+}
+fn own_state(reference:ref<i64>,data:i64,step:i64)->atomic<tuple<bool,bool,bool,bool,i64>> {
+    when valid(step) && modified(step) {
+        var seen:i64 =-1
+        if valid(data) {seen=data}
+        return (valid(reference),modified(reference),valid(data),modified(data),seen)
+    }
+}
+fn own_observed(value:i64,step:i64)->atomic<tuple<bool,bool,bool,bool,i64>> {
+    let selected=repeat_own(value,step)
+    own_state(selected,selected,step)
+}
+test repeated_own_designation_keeps_metadata_and_target_ticks_separate {
+    assert eval(own_observed,value:[_,7,_,7,8],step:[1,1,1,1,1]) == [(true,true,false,false,-1),(true,false,true,true,7),(true,false,true,false,7),(true,false,true,true,7),(true,false,true,true,8)]
 }
 
 fn alias_route(value:ref<Pair>,observed:ref<Pair>)->ref<Pair> {
