@@ -1,0 +1,32 @@
+module reference_only_nominal
+
+struct Pair {left:i64
+right:i64}
+struct Nested {pair:Pair
+extra:i64}
+
+fn pair_metadata(value:ref<Pair>,other:ref<Pair>,step:i64)->atomic<tuple<bool,bool,bool>> {
+    when valid(step) && modified(step) {
+        return (valid(value),modified(value),value == other)
+    }
+}
+fn pair_assembled(left:i64,right:i64,step:i64)->atomic<tuple<bool,bool,bool>> {
+    pair_metadata(Pair(left:left,right:right),Pair(left:left,right:right),step)
+}
+fn pair_duplicated(left:i64,step:i64)->atomic<tuple<bool,bool,bool>> {
+    pair_metadata(Pair(left:left,right:left),Pair(left:left,right:left),step)
+}
+test assemblies_reached_only_through_ref_keep_designations {
+    assert eval(pair_assembled,left:[_,7,_,8],right:[_,_,20,_],step:[1,1,1,1]) == [(true,true,true),(true,false,true),(true,false,true),(true,false,true)]
+    assert eval(pair_duplicated,left:[_,7,_,8],step:[1,1,1,1]) == [(true,true,true),(true,false,true),(true,false,true),(true,false,true)]
+}
+
+fn nested_metadata(value:ref<Nested>,step:i64)->bool {
+    when valid(step) && modified(step) {return valid(value) && modified(value)}
+}
+fn nested_assembled(left:i64,right:i64,extra:i64,step:i64)->bool {
+    nested_metadata(Nested(pair:Pair(left:left,right:right),extra:extra),step)
+}
+test nested_assemblies_reached_only_through_ref_retain_child_shapes {
+    assert eval(nested_assembled,left:[_,7,_,8],right:[_,_,20,_],extra:[_,30,31,_],step:[1,1,1,1]) == [true,false,false,false]
+}
