@@ -22,8 +22,8 @@ constructor_owners = { budget = 180, uses = ["constructor_fields", "prepared_hoo
 constructor_fields = { budget = 100, uses = ["layouts"] }
 identifiers = { budget = 40, uses = [] }
 any_values = { budget = 600, uses = ["cold_validation", "native_values", "deltas", "layouts", "collections", "families", "scalars", "value_convert", "checked_data"] }
-any_prepared = { budget = 250, uses = ["prepared_hooks", "native_results", "execution_proof", "source_slots", "layouts", "any_values", "values", "observed", "any_expression", "constructor_owners", "owner_comparisons", "native_image"] }
-prepared_hooks = { budget = 180, uses = ["prepared_global_writes", "native_results", "windows", "source_slots", "any_values", "scalars", "layouts", "direct_deltas", "finite_domains", "observed", "snapshot_slots", "execution_proof", "any_prepared", "values", "any_expression", "constructor_fields"] }
+any_prepared = { budget = 250, uses = ["structural_publication", "prepared_hooks", "native_results", "execution_proof", "source_slots", "layouts", "any_values", "values", "observed", "any_expression", "constructor_owners", "owner_comparisons", "native_image"] }
+prepared_hooks = { budget = 180, uses = ["structural_publication", "prepared_global_writes", "native_results", "windows", "source_slots", "any_values", "scalars", "layouts", "direct_deltas", "finite_domains", "observed", "snapshot_slots", "execution_proof", "any_prepared", "values", "any_expression", "constructor_fields"] }
 checked_data = { budget = 250, uses = ["enums", "type_data", "scalars"] }
 collections = { budget = 250, uses = ["families", "prepared_values", "layouts"] }
 composite_keys = { budget = 250, uses = [] }

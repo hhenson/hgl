@@ -66,6 +66,60 @@ pub fn native(ty: &Ty, output: &str, value: &str) -> String {
         format!("_ctx.set(hgl_store::Store::prepared_output({output}),{value});")
     }
 }
+/// Admit only canonical layouts with a complete prepared publication path.
+pub(crate) fn ordinary_supported(ty: &Ty) -> bool {
+    if let Ty::Tuple(children) = ty {
+        return !children.is_empty() && children.iter().all(ordinary_supported);
+    }
+    if let Ty::Struct(_, fields, optional) = ty {
+        return optional.is_empty()
+            && !fields.is_empty()
+            && fields.iter().all(|(_, child)| ordinary_supported(child));
+    }
+    ty.scalar_kind().is_some() || crate::layouts::whole_payload(ty).is_some()
+}
+/// Preflight a complete canonical owner before publishing its independently retained leaves.
+pub(crate) fn ordinary(ty: &Ty, output: &str, source: &str) -> Option<String> {
+    if !ordinary_supported(ty) {
+        return None;
+    }
+    let (checks, writes) = ordinary_parts(ty, "output", "source");
+    Some(format!(
+        "{{let output={output};let source={source};{checks}{writes}}}"
+    ))
+}
+fn ordinary_parts(ty: &Ty, output: &str, source: &str) -> (String, String) {
+    if let Some(children) = crate::snapshots::children(ty) {
+        let mut checks = String::new();
+        let mut writes = String::new();
+        for (i, child) in children.iter().enumerate() {
+            let (check, write) =
+                ordinary_parts(child, "child", &format!("({source}).fields().{i}"));
+            let binding = format!("let child=({output}).field::<{i}>(_ctx.store().bindings());");
+            append(&mut checks, format_args!("{{{binding}{check}}}"));
+            append(&mut writes, format_args!("{{{binding}{write}}}"));
+        }
+        return (checks, writes);
+    }
+    if ty.scalar_kind().is_some() {
+        let marker = rust_type(ty);
+        return (
+            format!(
+                "{{let prepared=_ctx.prepared();let storage=&prepared.storage;let from=storage.globals.values().scalar::<{marker}>(({source}).fields());let to=&<{marker} as hgl_store::columns::Column>::column(storage.columns)[storage.bindings.output(({output}).id()).slot as usize];if <{marker} as hgl_store::scalar_copy::ScalarCopy>::capacity(to) < <{marker} as hgl_store::scalar_copy::ScalarCopy>::size(from) {{return Err(hgl_types::NodeError::new(\"prepared scalar capacity exceeded\"));}}}}"
+            ),
+            format!(
+                "_ctx.prepared().scalar_from_global::<{marker}>(({output}).id(),({output}).generation(),({source}).fields())?;"
+            ),
+        );
+    }
+    let marker = global_type(ty);
+    (
+        format!(
+            "{{let prepared=_ctx.prepared();let storage=&prepared.storage;let to=storage.atomic.destination(storage.bindings,{output})?;<{marker} as hgl_store::PreparedValue>::check_slots(storage.globals.values(),{source},storage.atomic.values(),to)?;}}"
+        ),
+        format!("_ctx.prepared().atomic_from_global({source},{output})?;"),
+    )
+}
 /// Apply complete retained children directly from prepared ordinary storage.
 pub fn prepared(ty: &Ty, output: &str, source: &str) -> String {
     if let Some(children) = crate::snapshots::children(ty) {

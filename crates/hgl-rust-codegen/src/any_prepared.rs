@@ -83,6 +83,9 @@ pub fn prepare(original: &Plan) -> Plan {
         original,
         crate::execution_proof::owning_argument,
         crate::constructor_owners::family,
+        |ty, result| {
+            matches!(result, Ty::Atomic(_)) || crate::structural_publication::ordinary_supported(ty)
+        },
     );
     for (node_id, node) in plan.nodes.iter_mut().enumerate() {
         let mut globals = std::mem::take(&mut node.globals);

@@ -1,6 +1,6 @@
 # Card: hgl-rust-prepared-hooks
 
-The prepared_hooks module owns prepared publication and ordered global append/set emission. It may use layouts, values, finite_domains, any_values, scalars, observed, execution_proof, direct_deltas, source_slots, snapshot_slots and any_prepared, any_expression and constructor_fields; initial budget 180 lines.
+The prepared_hooks module owns prepared publication and ordered global append/set emission. It may use structural_publication, layouts, values, finite_domains, any_values, scalars, observed, execution_proof, direct_deltas, source_slots, snapshot_slots and any_prepared, any_expression and constructor_fields; initial budget 180 lines.
 
 Private surface: publication, append, replace, set, write and storage, consumed by the values emitter. Static source projections are evaluated before mutable storage borrowing. Appends reserve the destination, check/copy each typed field and commit length last. Inline Any construction encodes directly into its reserved child owner; complete aggregate inputs use typed source slots and nested boxes flatten without allocating an intermediate owner.
 
@@ -25,3 +25,8 @@ This instrumentation does not claim those sources naturally exceed finite bounds
 Prepared global writes recognize private staged constructor sources and commit
 through checked slot copies, retaining Native payloads without intermediate
 owners. May use constructor_owners for the checked origin predicate.
+
+Complete staged Tuple results publish directly from their canonical global slots
+through structural_publication::ordinary. This preserves independent operand
+owners and the existing whole-source evaluation order while avoiding an owning
+read of variable-width scalar children before publication.
