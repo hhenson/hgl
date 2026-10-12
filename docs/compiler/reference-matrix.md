@@ -68,9 +68,12 @@ that target's lifetime. Nested owners and fixed nominal assemblies preserve
 individual child identity and sparse sampling.
 
 The current Rust target proves finite activation from the dense horizon, checked
-direct source yields, replay configuration lengths and startup hooks. Periods
+direct source yields, replay configuration lengths, startup hooks and emitted
+startup-scheduled evaluations, including REF inputs and fixed assemblies. Periods
 may separate those arrivals into additional timestamps. A tracked control drives
 eight selector timestamps after one dense input row; it passes without allocation.
+Zero-horizon controls activate both branches from REF-input selectors and an
+assembled nominal selector; each executes one startup cycle without allocation.
 Child generators, scheduler hooks, owning cache resets and unknown finite transport proofs produce an
 explicit Rust target diagnostic while preserving checked source compilation.
 A stopped instance is never reused; bound exhaustion is an error. Cold recursive

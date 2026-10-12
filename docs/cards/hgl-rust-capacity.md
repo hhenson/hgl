@@ -62,6 +62,11 @@ Rolling outputs reserve ordinary arrival bounds independently for every retained
 ring slot before start. FiniteCapacity.arrivals carries the finite input/replay
 horizon plus proved direct generator arrivals; duration windows use it directly
 and tick windows cap it by Max. Nested structural child preparation recursively installs the same static window storage.
+Conditional activation pools also include explicit start hooks and emitted
+schedule-on-start evaluations. REF-input nodes and fixed nominal assemblies can
+produce a selector even when the dense horizon and generator count are zero.
+The metadata and activation proof share the same startup admission check;
+conditional owner nodes themselves wait for their active selector input.
 Growing outputs reserve only reachable per-parent index paths and independent descendant capacities. Sparse recording reserves all three delta fields from finite recipe widths.
 
 Byte constructor destinations are bounded by cold i64-list length capacities, including fixed sizes. Scalar copy capacity is retained across replay, publication and recording; no constructor executes while collecting bounds. Repeated struct/tuple child preparation shares one indexed field traversal.

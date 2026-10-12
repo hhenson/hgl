@@ -205,6 +205,14 @@ fn build_entry(plan: &Plan, node: &Node, index: usize, out: &mut Vec<String>) {
         .join(",");
     out.push(format!("fn build(ports:&mut hgl_describe::Ports<'_>)->Result<Self,hgl_describe::BuildError>{{{body}}}}}impl Node{index} {{fn build_prepared(ports:&mut hgl_describe::Ports<'_>,{parameters})->Result<Self,hgl_describe::BuildError>{{"));
 }
+fn schedule_on_start(plan: &Plan, node: &Node, index: usize) -> bool {
+    !plan.conditionals.iter().any(|owner| owner.owner == index)
+        && (crate::graph_assemblies::shape(node).is_some()
+            || node
+                .inputs
+                .iter()
+                .any(|(_, _, ty)| matches!(ty, Ty::Ref(_))))
+}
 fn node_type(plan: &Plan, n: &Node, index: usize, out: &mut Vec<String>) {
     out.push(format!("impl hgl_describe::Buildable for Node{index} {{\nfn node_type() -> hgl_types::NodeType {{\nhgl_types::NodeType {{ name: {:?}, inputs: vec![",format!("{}#{index}",n.name)));
     for (name, _, ty) in &n.inputs {
@@ -222,7 +230,7 @@ fn node_type(plan: &Plan, n: &Node, index: usize, out: &mut Vec<String>) {
     if n.result != Ty::Void {
         out.push(format!("output: Some({}),\n", shape(&n.result)));
     }
-    if n.inputs.iter().any(|(_, _, t)| matches!(t, Ty::Ref(_))) {
+    if schedule_on_start(plan, n, index) {
         out.push("schedule_on_start: true,\n".into());
     }
     if n.handlers.iter().any(|(guard, _)| guard.is_some()) {
@@ -647,7 +655,8 @@ fn capacities(plan: &Plan) -> String {
         let starts = plan
             .nodes
             .iter()
-            .filter(|node| !node.start.is_empty())
+            .enumerate()
+            .filter(|(index, node)| !node.start.is_empty() || schedule_on_start(plan, node, *index))
             .count();
         append(
             &mut code,
