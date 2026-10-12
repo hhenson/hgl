@@ -1,0 +1,112 @@
+module hgraph.std part reference_owner_export_values_tests
+
+test {
+    struct RefExportPair { left: i64
+        right: i64 }
+
+    fn export_route<T>(value: ref<T>) -> ref<T> {
+        when { return value }
+    }
+    fn export_inner(enabled: bool, first: i64, second: i64) -> ref<i64> {
+        var result: ref<i64>
+        if enabled {
+            let child = pass_through(first)
+            result = export_route(child)
+        } else {
+            let child = pass_through(second)
+            result = export_route(child)
+        }
+        result
+    }
+    fn export_outer(outer: bool, inner: bool, first: i64, second: i64, third: i64, fourth: i64) -> ref<i64> {
+        var result: ref<i64>
+        if outer {
+            result = export_inner(inner, first, second)
+        } else {
+            result = export_inner(inner, third, fourth)
+        }
+        result
+    }
+    fn export_nested_followed(outer: bool, inner: bool, first: i64, second: i64, third: i64, fourth: i64) -> i64 {
+        # The actual scalar designation crosses both owning output boundaries.
+        pass_through(export_outer(outer, inner, first, second, third, fourth))
+    }
+    test reference_exports_compose_through_two_conditional_owners {
+        assert eval(export_nested_followed,
+            outer: [true, _, _, false, _, true, _, _],
+            inner: [true, false, _, true, false, _, true, _],
+            first: [7, 8, 9, 10, 11, 12, 13, _],
+            second: [20, 21, 22, 23, 24, 25, 26, 27],
+            third: [70, 71, 72, 73, 74, 75, 76, 77],
+            fourth: [200, 201, 202, 203, 204, 205, 206, 207]
+        ) == [7, 21, 22, 73, 204, 25, 13, _]
+        # Reentry through each selector creates fresh branch instances.
+        assert eval(export_nested_followed,
+            outer: [true, _, _, false, _, true, _, _],
+            inner: [true, false, _, true, false, _, true, _],
+            first: [7, 8, 9, 10, 11, 12, 13, _],
+            second: [20, 21, 22, 23, 24, 25, 26, 27],
+            third: [70, 71, 72, 73, 74, 75, 76, 77],
+            fourth: [200, 201, 202, 203, 204, 205, 206, 207]
+        ) == [7, 21, 22, 73, 204, 25, 13, _]
+    }
+
+    fn export_pair_route(duplicate_left: bool, left: i64, right: i64) -> ref<RefExportPair> {
+        var result: ref<RefExportPair>
+        if duplicate_left {
+            result = export_route(RefExportPair(left: left, right: left))
+        } else {
+            # Graph construction assembles two child connections, not a payload copy.
+            result = export_route(RefExportPair(left: left, right: right))
+        }
+        result
+    }
+    fn export_pair_owner(enabled: bool, duplicate_left: bool, first_left: i64, first_right: i64, second_left: i64, second_right: i64) -> ref<RefExportPair> {
+        var result: ref<RefExportPair>
+        if enabled {
+            let left = pass_through(first_left)
+            let right = pass_through(first_right)
+            result = export_pair_route(duplicate_left, left, right)
+        } else {
+            let left = pass_through(second_left)
+            let right = pass_through(second_right)
+            result = export_pair_route(duplicate_left, left, right)
+        }
+        result
+    }
+    fn export_pair_followed(enabled: bool, duplicate_left: bool, first_left: i64, first_right: i64, second_left: i64, second_right: i64) -> RefExportPair {
+        pass_through(export_pair_owner(enabled, duplicate_left, first_left, first_right, second_left, second_right))
+    }
+    test reference_exported_child_tree_keeps_sparse_ticks_and_samples_changed_children {
+        assert eval(export_pair_followed,
+            enabled: [true, _, _, _, _, false, _, true, _, _],
+            duplicate_left: [false, _, _, true, _, false, _, false, _, _],
+            first_left: [7, 8, _, _, 9, 10, _, 7, _, _],
+            first_right: [20, _, 21, _, _, 22, _, 30, 31, _],
+            second_left: [9, _, _, _, _, 9, 10, _, _, _],
+            second_right: [40, _, _, _, _, 40, _, _, _, _]
+        ) == [
+            delta<RefExportPair>(left: 7, right: 20),
+            delta<RefExportPair>(left: 8), delta<RefExportPair>(right: 21),
+            # The left designation is unchanged; only the new right is sampled.
+            delta<RefExportPair>(right: 8), delta<RefExportPair>(left: 9, right: 9),
+            # Both endpoints change: equal-valued left still participates in sampling.
+            delta<RefExportPair>(left: 9, right: 40), delta<RefExportPair>(left: 10),
+            delta<RefExportPair>(left: 7, right: 30), delta<RefExportPair>(right: 31), _
+        ]
+        assert eval(export_pair_followed,
+            enabled: [true, _, _, _, _, false, _, true, _, _],
+            duplicate_left: [false, _, _, true, _, false, _, false, _, _],
+            first_left: [7, 8, _, _, 9, 10, _, 7, _, _],
+            first_right: [20, _, 21, _, _, 22, _, 30, 31, _],
+            second_left: [9, _, _, _, _, 9, 10, _, _, _],
+            second_right: [40, _, _, _, _, 40, _, _, _, _]
+        ) == [
+            delta<RefExportPair>(left: 7, right: 20),
+            delta<RefExportPair>(left: 8), delta<RefExportPair>(right: 21),
+            delta<RefExportPair>(right: 8), delta<RefExportPair>(left: 9, right: 9),
+            delta<RefExportPair>(left: 9, right: 40), delta<RefExportPair>(left: 10),
+            delta<RefExportPair>(left: 7, right: 30), delta<RefExportPair>(right: 31), _
+        ]
+    }
+}

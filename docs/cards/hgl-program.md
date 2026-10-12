@@ -400,3 +400,10 @@ values; ordinary overload selection shares candidate visibility with name admiss
 compile_module_suite and module_diagnostics restrict test-scoped checking to the
 root module while retaining ordinary production dependencies. Existing embedding
 suite/diagnostic APIs retain checking across every supplied module.
+
+Temporal graph conditionals with one declared REF export slot check both paths
+for definite assignment and preserve branch ownership in Plan.conditionals.
+Each branch must supply a real reference producer. Scoped Rust target preparation
+handles lifecycle lowering; unproved finite activation remains an explicit target
+diagnostic. conditional_admission checks missing paths, premature reads and the
+source/target distinction for child generators.

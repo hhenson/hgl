@@ -53,12 +53,25 @@ fn copy_binding(
     now: EngineTime,
 ) -> Result<(), BuildError> {
     let input = store.bindings().input(source);
+    if input.source.is_none()
+        && matches!(&store.bindings().input(target).kind,hgl_types::TsType::Reference(child) if child.as_ref()==&input.kind)
+    {
+        return Err(BuildError::InvalidPath(
+            "reference boundary capture requires a direct output or reference producer".into(),
+        ));
+    }
     if let Some(reference) = input.reference_source {
         return store
             .follow(target, reference, now, &mut Quiet)
             .map_err(BuildError::Bind);
     }
     if let Some(output) = input.source {
+        if matches!(&store.bindings().input(target).kind,hgl_types::TsType::Reference(child) if child.as_ref()==&input.kind)
+        {
+            return store
+                .bind_designation(target, output)
+                .map_err(BuildError::Bind);
+        }
         return if input.kind == store.bindings().input(target).kind {
             store.sample(target, store.reference(output), now, &mut Quiet)
         } else {

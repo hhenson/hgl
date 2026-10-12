@@ -60,12 +60,20 @@ impl<T> PreparedChild<T> {
         ctx: &mut Ctx<'_>,
         bind: impl FnOnce(&mut Store) -> NodeResult,
     ) -> NodeResult {
+        self.start_bound(ctx, |store, _| bind(store))
+    }
+    /// Bind using the retained boundary without cloning it during activation.
+    pub fn start_bound(
+        &mut self,
+        ctx: &mut Ctx<'_>,
+        bind: impl FnOnce(&mut Store, &T) -> NodeResult,
+    ) -> NodeResult {
         self.check_owner(ctx)?;
         if self.graph.lifecycle() != crate::Lifecycle::Instantiated {
             return Err(NodeError::new("GRF-20: a graph is started once"));
         }
         let previous = ctx.store.enter_scope(self.graph.scope());
-        let result = bind(ctx.store);
+        let result = bind(ctx.store, &self.boundary);
         ctx.store.enter_scope(previous);
         let result = result.and_then(|()| self.graph.start(ctx.store, ctx.now));
         if self.graph.stop_requested() {
@@ -109,6 +117,73 @@ impl<T> PreparedChild<T> {
             return Err(NodeError::new("prepared child belongs to another owner"));
         }
         Ok(())
+    }
+}
+
+/// Finite fresh branch instances; exhaustion never resumes a stopped graph.
+#[derive(Debug)]
+pub struct PreparedSwitch<T> {
+    children: [Vec<PreparedChild<T>>; 2],
+    next: [usize; 2],
+    selected: Option<(usize, usize)>,
+}
+impl<T> PreparedSwitch<T> {
+    /// Cold pools contain independent instances owned by this exact node.
+    pub fn new(children: [Vec<PreparedChild<T>>; 2]) -> Self {
+        Self {
+            children,
+            next: [0, 0],
+            selected: None,
+        }
+    }
+    /// Switch before evaluating, sample fresh captures, and drive pending work.
+    pub fn evaluate(
+        &mut self,
+        enabled: bool,
+        ctx: &mut Ctx<'_>,
+        bind: impl FnOnce(&mut Store, &T) -> NodeResult,
+    ) -> NodeResult<Option<&T>> {
+        let branch = usize::from(!enabled);
+        let fresh = self.selected.is_none_or(|(selected, _)| selected != branch);
+        if fresh {
+            if let Some((previous, slot)) = self.selected.take() {
+                self.children[previous][slot].stop(ctx)?;
+            }
+            let slot = self.next[branch];
+            let child = self.children[branch]
+                .get_mut(slot)
+                .ok_or_else(|| NodeError::new("prepared conditional activation bound exhausted"))?;
+            child.start_bound(ctx, bind)?;
+            self.next[branch] += 1;
+            self.selected = Some((branch, slot));
+        }
+        let (_, slot) = self
+            .selected
+            .unwrap_or_else(|| unreachable!("selected branch"));
+        let child = &mut self.children[branch][slot];
+        let mut notified = false;
+        while let Some(scope) = ctx.take_child() {
+            notified |= scope == child.scope();
+        }
+        if fresh || notified || child.next_scheduled_time() <= ctx.evaluation_time() {
+            child.evaluate(ctx)?;
+        }
+        ctx.schedule_children(child.next_scheduled_time());
+        Ok(Some(child.boundary()))
+    }
+    /// Stop the active instance and discard all unused prepared descendants.
+    pub fn stop(&mut self, ctx: &mut Ctx<'_>) -> NodeResult {
+        let mut result = Ok(());
+        for branch in &mut self.children {
+            for child in branch {
+                let stopped = child.stop(ctx);
+                if result.is_ok() {
+                    result = stopped;
+                }
+            }
+        }
+        ctx.schedule_children(EngineTime::FOREVER);
+        result
     }
 }
 

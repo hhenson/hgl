@@ -62,3 +62,10 @@ lowering is complete. The prepared_child regression measures every successful
 cycle, including first activation, branch changes, next-cycle expiry and stop,
 with a real allocator. Scalar state starts fresh and held old designations do
 not revive when a different prepared instance starts.
+
+`PreparedSwitch<T>` owns two cold instance pools, tracks the next unused slot and
+one selected child, and matches scope notifications without a lookup table.
+`evaluate(enabled,ctx,bind)` stops before switching, binds once using the retained
+boundary, and drives only fresh/notified/due work. `stop` stops the active child
+and discards unused pools. Exhaustion fails explicitly and never reuses a stopped
+instance. `start_bound` provides a borrowed boundary to activation without cloning.

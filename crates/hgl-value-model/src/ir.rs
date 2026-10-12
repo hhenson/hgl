@@ -223,6 +223,22 @@ impl Native {
     }
 }
 /// A closed graph with all source checks and eval wiring complete.
+#[derive(Debug, Clone)]
+pub struct ConditionalBranch {
+    /// Construction indices owned by this branch, including nested owners.
+    pub nodes: Vec<usize>,
+    /// The real reference producer exported by the branch.
+    pub output: usize,
+}
+/// A temporal selector owns two reusable templates and fresh runtime instances.
+#[derive(Debug, Clone)]
+pub struct Conditional {
+    /// The synthetic owner in the enclosing graph.
+    pub owner: usize,
+    /// True and false branch templates, in source order.
+    pub branches: [ConditionalBranch; 2],
+}
+/// A closed graph with all source checks and eval wiring complete.
 #[derive(Debug, Default, Clone)]
 pub struct Plan {
     /// Standalone registration has no finite evaluation preparation phase.
@@ -233,6 +249,8 @@ pub struct Plan {
     pub construction_error: Option<String>,
     /// Nodes in construction order, addressed by index.
     pub nodes: Vec<Node>,
+    /// Checked temporal branch ownership, separate from ordinary node behavior.
+    pub conditionals: Vec<Conditional>,
     /// Selected native signatures, addressed by index.
     pub natives: Vec<Native>,
     /// Selected source documentation retained in generated comments.

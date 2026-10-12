@@ -13,9 +13,14 @@ pub use hgl_rust_codegen::deltas;
 pub use hgl_rust_codegen::direct_deltas;
 mod cold_wiring;
 pub use hgl_rust_codegen::cold_transport;
+mod conditionals;
 mod emit;
 mod graph_assemblies;
 mod reference_routes;
+/// A checked source graph may exceed this Rust target's finite activation proof.
+pub fn conditional_target_error(plan: &Plan) -> Option<String> {
+    conditionals::target_error(plan)
+}
 pub use hgl_rust_codegen::enums;
 pub use hgl_rust_codegen::execution_proof;
 pub use hgl_rust_codegen::families;

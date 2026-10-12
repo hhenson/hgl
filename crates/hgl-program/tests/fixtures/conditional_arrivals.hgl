@@ -1,0 +1,32 @@
+module hgraph.std part conditional_arrival_controls
+
+test {
+    fn extra_selector() -> bool {
+        yield 0us: true
+        yield 1us: false
+        yield 2us: true
+        yield 3us: false
+        yield 4us: true
+        yield 5us: false
+        yield 6us: true
+        yield 7us: false
+    }
+    fn extra_route(value: ref<i64>) -> ref<i64> {when {return value}}
+    fn extra_choice(enabled: bool, value: i64) -> ref<i64> {
+        var result: ref<i64>
+        if enabled {let child = pass_through(value)
+            result = extra_route(child)
+        } else {let child = pass_through(value)
+            result = extra_route(child)
+        }
+        result
+    }
+    fn extra_discard(value: i64) -> void {when {}}
+    fn extra_cycles(value: i64) -> void {
+        extra_discard(extra_choice(extra_selector(), value))
+    }
+    test conditional_fresh_activation_bound_counts_extra_source_timestamps {
+        # Eight graph cycles occur after just one dense input row.
+        eval(extra_cycles, value: [7])
+    }
+}

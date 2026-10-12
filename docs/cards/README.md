@@ -278,3 +278,5 @@ Line counts and numerical targets in these cards are informational under
 Module dependency lists remain enforced; size alone never fails CI.
 
 - [Cold snapshot destination planning](hgl-snapshot-locals.md).
+
+- [Conditional ownership lowering](hgl-conditionals.md)

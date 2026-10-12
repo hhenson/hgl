@@ -423,3 +423,51 @@ fn unused_outer_retires_all_unstarted_descendants_without_hooks_or_allocations()
     graph.stop(&mut store, EngineTime::MIN_START)?;
     Ok(())
 }
+
+struct FiniteSwitch {
+    branches: hgl_kernel::nested::PreparedSwitch<()>,
+    step: usize,
+}
+impl Node for FiniteSwitch {
+    fn eval(&mut self, ctx: &mut Ctx<'_>) -> NodeResult {
+        let enabled = self.step != 1;
+        self.step += 1;
+        self.branches.evaluate(enabled, ctx, |_, ()| Ok(()))?;
+        ctx.schedule_in(EngineDelta::STEP)
+    }
+    fn stop(&mut self, ctx: &mut Ctx<'_>) -> NodeResult {
+        self.branches.stop(ctx)
+    }
+}
+#[test]
+fn exhausted_finite_switch_never_restarts_a_stopped_lifetime() -> Result<(), Box<NodeError>> {
+    let mut store = Store::new();
+    let yes = Hooks::default();
+    let no = Hooks::default();
+    let branches = hgl_kernel::nested::PreparedSwitch::new([
+        vec![lifecycle_child(&mut store, NodeId(0), yes.clone(), false)?],
+        vec![lifecycle_child(&mut store, NodeId(0), no.clone(), false)?],
+    ]);
+    let mut graph = Graph::new(
+        "bounded switch".into(),
+        vec![slot(FiniteSwitch { branches, step: 0 }, true)],
+    );
+    store.prepare_collection_inputs();
+    graph.start(&mut store, EngineTime::MIN_START)?;
+    for step in 0..2 {
+        let now = EngineTime::from_micros(EngineTime::MIN_START.micros() + step);
+        let (result, allocations) = count_in(|| graph.evaluate(&mut store, now));
+        result?;
+        assert_eq!(allocations, 0);
+    }
+    let now = EngineTime::from_micros(EngineTime::MIN_START.micros() + 2);
+    let error = graph.evaluate(&mut store, now).unwrap_err();
+    assert!(error.message.contains("activation bound exhausted"));
+    let (stopped, allocations) = count_in(|| graph.stop(&mut store, now));
+    stopped?;
+    assert_eq!(allocations, 0);
+    for hooks in [yes, no] {
+        assert_eq!((hooks.starts.get(), hooks.stops.get()), (1, 1));
+    }
+    Ok(())
+}

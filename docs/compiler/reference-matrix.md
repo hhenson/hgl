@@ -1,18 +1,19 @@
 # Reference matrix implementation record
 
-The supported slice executes the scalar, projection, structural and native leaf
-REF suites: 24 named groups / 50 evaluations. Four conditional ownership groups
-remain unexecuted. Installed dependencies are hgraph_spec `69a2f8c` and the
-compatible hgraph_std `7c26434`; the Std pin has not advanced.
-
-The tracked [matrix runner](../../crates/hgl-program/tests/reference_matrix.rs)
-compiles byte-for-byte snapshots of hgraph_std
-`d798c88dec4b729f1e96d2adcd087ca8df7f11ba`, with
+All six authored REF suites execute unchanged: 28 named groups / 58
+evaluations. The tracked transport and ownership runners use byte-for-byte
+snapshots of hgraph_std `d798c88dec4b729f1e96d2adcd087ca8df7f11ba`, with
 [paths and hashes](../../crates/hgl-program/tests/fixtures/reference_matrix/PROVENANCE.json).
-It uses normal source loading and target-module suite planning with the entire
-production Std and native/stdlib. Debug and optimized runs verify all 24 groups,
-50 evaluations and zero failures. Normal CLI execution uses the same sources
-and complete libraries. Full CI remains pending root verification.
+Installed dependencies are hgraph_spec `69a2f8c` and compatible hgraph_std
+`7c26434`; whole-Std adoption and full CI remain pending.
+
+Normal CLI execution uses the complete production Std and native/stdlib.
+The [transport runner](../../crates/hgl-program/tests/reference_matrix.rs)
+verifies 24 groups / 50 evaluations and the
+[ownership runner](../../crates/hgl-program/tests/reference_conditional.rs)
+verifies 4 groups / 8 evaluations. Both profiles pass with zero failures and
+zero allocations on every successful cycle from first activation. Ownership
+startup and final cleanup also allocate nothing.
 
 Correction: earlier 24/50 reports used the older `d298500` scalar snapshot;
 the other three snapshots already matched `d798c88`. The latest scalar assertion
@@ -22,14 +23,14 @@ payload opacity. All current authored assertions are unchanged.
 
 | Suite | Named group | Outcome |
 | --- | --- | --- |
-| `reference_conditional_expiry` | `reference_stopped_branch_target_expires_at_next_cycle_and_never_revives` | Admission blocked, unexecuted |
-| `reference_conditional_expiry` | `reference_stopping_a_forwarding_branch_preserves_outer_target` | Admission blocked, unexecuted |
+| `reference_conditional_expiry` | `reference_stopped_branch_target_expires_at_next_cycle_and_never_revives` | Passed, executed |
+| `reference_conditional_expiry` | `reference_stopping_a_forwarding_branch_preserves_outer_target` | Passed, executed |
 | `reference_leaf_values` | `held_reference_bytes_keep_empty_equal_distinct_and_silent_values` | Passed, executed |
 | `reference_leaf_values` | `held_reference_any_keeps_one_box_leaf_across_contained_type_changes` | Passed, executed |
 | `reference_leaf_values` | `held_reference_native_token_keeps_owning_scalar_publications` | Passed, executed |
 | `reference_leaf_values` | `held_reference_text_only_needs_no_payload_equality_or_hash` | Passed, executed |
-| `reference_owner_export_values` | `reference_exports_compose_through_two_conditional_owners` | Admission blocked, unexecuted |
-| `reference_owner_export_values` | `reference_exported_child_tree_keeps_sparse_ticks_and_samples_changed_children` | Admission blocked, unexecuted |
+| `reference_owner_export_values` | `reference_exports_compose_through_two_conditional_owners` | Passed, executed |
+| `reference_owner_export_values` | `reference_exported_child_tree_keeps_sparse_ticks_and_samples_changed_children` | Passed, executed |
 | `reference_projection_values` | `reference_graph_projections_follow_children_and_ignore_sibling_ticks` | Passed, executed |
 | `reference_projection_values` | `reference_graph_projections_retarget_even_when_child_values_are_equal` | Passed, executed |
 | `reference_structural_values` | `held_reference_set_and_map_consumers_publish_original_deltas` | Passed, executed |
@@ -51,16 +52,30 @@ payload opacity. All current authored assertions are unchanged.
 | `reference_values` | `reference_held_output_keeps_a_live_designation_across_later_routes` | Passed, executed |
 | `reference_values` | `reference_bindings_preserve_fixed_and_nominal_child_identity` | Passed, executed |
 
-The remaining contracts are defined in
+Conditional ownership follows
 [control flow](../../external/hgraph_spec/language/docs/design/control-flow.md),
 [conditional expiry](../../external/hgraph_spec/compiler/cases_reference_conditional_expiry.md),
 and [owned export](../../external/hgraph_spec/compiler/cases_reference_owner_export.md).
-They require checked child graphs, definite assignment, fresh branch lifetimes
-and declared REF output exports. Temporal graph conditionals remain unsupported.
+Both branches definitely assign the declared REF result. Each activation starts
+a fresh real child graph, stops the previous child first, and exports its actual
+designation. A held owned target remains readable during the stop cycle, expires
+at the next cycle and never revives. Forwarding an enclosing target preserves
+that target's lifetime. Nested owners and fixed nominal assemblies preserve
+individual child identity and sparse sampling.
 
-A real CountingAllocator measures every successful evaluation cycle in the
-tracked 24/50 runner, including first designation sampling: zero allocations
-in both profiles. The required-read error preserves its authored expectation;
-failed cycles are not included in the successful-cycle allocation guarantee.
-Cold preparation reserves finite target subscriptions and absent collection
-views without publishing, sampling or granting membership/lifetime.
+The current Rust target proves finite activation from the dense horizon, checked
+direct source yields, replay configuration lengths and startup hooks. Periods
+may separate those arrivals into additional timestamps. A tracked control drives
+eight selector timestamps after one dense input row; it passes without allocation.
+Child generators, scheduler hooks, owning cache resets and unknown finite transport proofs produce an
+explicit Rust target diagnostic while preserving checked source compilation.
+A stopped instance is never reused; bound exhaustion is an error. Cold recursive
+preparation currently reserves each child's independent pools, so its memory cost
+grows with nested ownership depth.
+
+A real CountingAllocator measures successful cycles in both tracked runners;
+failed required-read cycles retain their authored error expectation. Cold
+preparation reserves possible target subscriptions and structural input views
+without publishing payloads or extending endpoint lifetimes. Separate runtime
+controls cover foreign ownership, failed activation, unused descendants,
+repeated cleanup and pool exhaustion.

@@ -17,3 +17,8 @@ First, equal, silent, invalid and retained scalar/Native routes, fixed/nominal
 projections and sparse structural deltas execute with zero successful-cycle
 allocations in the 24-group reference transport matrix. Lifecycle-owned routes
 remain the separate conditional compiler slice.
+
+Conditional branch outputs expand to their actual possible targets. Scoped cold
+endpoint inventories include every prepared generation. Reservation counts all
+possible consumers; prepared structural views skip rank-incompatible sibling
+instances. No scoped inventory or source name lookup remains on the tick path.

@@ -46,6 +46,9 @@ fn suite(sources: &[(String, String)], module_only: bool) -> Result<Suite, Strin
     }
     for plan in &suite.plans {
         emit::native_results::validate(plan)?;
+        if let Some(error) = emit::conditional_target_error(plan) {
+            return Err(error);
+        }
     }
     Ok(suite)
 }

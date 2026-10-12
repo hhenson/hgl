@@ -12,6 +12,18 @@ fn targets(
     result: &mut BTreeSet<(usize, Vec<usize>, Vec<usize>)>,
 ) {
     let node = &plan.nodes[source];
+    if let Some(owner) = plan.conditionals.iter().find(|c| c.owner == source) {
+        for branch in &owner.branches {
+            targets(
+                plan,
+                branch.output,
+                path.clone(),
+                input_path.clone(),
+                result,
+            );
+        }
+        return;
+    }
     if crate::graph_assemblies::shape(node).is_some() {
         if let Some((&index, rest)) = path.split_first() {
             targets(
@@ -74,6 +86,36 @@ pub(crate) fn reserve(plan: &Plan) -> String {
         }
     }
     let mut code = String::new();
+    if !plan.conditionals.is_empty() {
+        for ((source, path), _) in subscriptions {
+            let count = views
+                .iter()
+                .filter(|(_, _, _, target)| target == &(source, path.clone()))
+                .map(|(consumer, _, _, _)| format!("conditional_endpoints[{consumer}].len()"))
+                .collect::<Vec<_>>()
+                .join("+");
+            let target = path
+                .iter()
+                .fold("output.expect(\"checked target\")".into(), |o, index| {
+                    format!("store.bindings().fixed_output({o},{index})")
+                });
+            writeln!(code,"for (_,output) in &conditional_endpoints[{source}] {{store.reserve_reference_target({target},{count});}}").unwrap_or_else(|_|unreachable!("String formatting"));
+        }
+        for (consumer, input, input_path, (source, path)) in views {
+            let target = path
+                .iter()
+                .fold("output.expect(\"checked target\")".into(), |o, index| {
+                    format!("store.bindings().fixed_output({o},{index})")
+                });
+            let input = input_path
+                .iter()
+                .fold(format!("inputs[{input}]"), |i, index| {
+                    format!("store.bindings().fixed_input({i},{index})")
+                });
+            writeln!(code,"for (inputs,_) in &conditional_endpoints[{consumer}] {{for (_,output) in &conditional_endpoints[{source}] {{if let Err(e)=store.prepare_reference_input({input},{target}) {{if !matches!(e,hgl_store::BindError::BackwardReference) {{return Err(format!(\"{{e:?}}\").into());}}}}}}}}").unwrap_or_else(|_|unreachable!("String formatting"));
+        }
+        return code;
+    }
     for ((source, path), subscribers) in subscriptions {
         let output = endpoint(source, &path);
         writeln!(

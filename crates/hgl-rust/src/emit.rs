@@ -9,6 +9,10 @@ use crate::values::{
 use hgl_source::Ty;
 
 fn node(plan: &Plan, n: &Node, index: usize, out: &mut Vec<String>) {
+    if plan.conditionals.iter().any(|c| c.owner == index) {
+        out.push(crate::conditionals::node(plan, index, shape));
+        return;
+    }
     if let Some(assembly) = crate::graph_assemblies::shape(n) {
         out.push(crate::graph_assemblies::node(index, &shape(assembly)));
         return;
@@ -311,6 +315,10 @@ fn emit_inner(plan: &Plan, layouts: bool) -> String {
     out.push("Ok(())\n}\n".into());
     out.push("/// Construct the checked entry graph without executing it.\npub fn main(registry: &hgl_describe::Registry) -> Result<hgl_describe::GraphDescription,hgl_describe::BuildError> {\nvalidate_native_images().map_err(|what|hgl_describe::BuildError::InvalidNodeType {node:\"hgl.program\",what})?;let mut builder = hgl_describe::Builder::new(\"hgl.program\",registry);\n" .to_owned());
     out.push(crate::cold_wiring::execute(plan));
+    if !plan.conditionals.is_empty() {
+        out.push(format!("Ok({})\n}}\n", crate::conditionals::main(plan)));
+        return out.concat();
+    }
     for (i, n) in plan.nodes.iter().enumerate() {
         out.push(format!(
             "let _wire{i} = builder.node({:?}, {})?;\n",
@@ -653,6 +661,19 @@ fn capacities(plan: &Plan) -> String {
             "cycles=cycles.checked_add({arrivals}usize).ok_or(\"finite arrival count overflow\")?;"
         ),
     );
+    if !plan.conditionals.is_empty() {
+        let starts = plan
+            .nodes
+            .iter()
+            .filter(|node| !node.start.is_empty())
+            .count();
+        append(
+            &mut code,
+            format_args!(
+                "cycles=cycles.checked_add({starts}usize).ok_or(\"finite startup count overflow\")?;"
+            ),
+        );
+    }
     for (i, node) in plan.nodes.iter().enumerate() {
         for (id, value) in node.configuration.iter().enumerate() {
             append(
@@ -663,7 +684,7 @@ fn capacities(plan: &Plan) -> String {
                 ),
             );
             if matches!(value.ty, Ty::List(..)) {
-                code += "cycles=cycles.saturating_add(value.len());";
+                code += "cycles=cycles.checked_add(value.len()).ok_or(\"finite source arrival count overflow\")?;";
             }
             code += "}";
         }
@@ -698,13 +719,28 @@ fn capacities(plan: &Plan) -> String {
             );
         }
     }
-    code += "capacity.arrivals=cycles;Ok(capacity)}\nfn prepare_outputs(capacity:&FiniteCapacity,store:&mut hgl_store::Store,graph:&hgl_describe::GraphDescription,built:&hgl_describe::BuiltGraph)->hgl_types::NodeResult {let empty=FiniteTopology::default();";
+    code += "capacity.arrivals=cycles;Ok(capacity)}\n";
+    code += &prepared_outputs(plan, &capacity);
+    code += &crate::conditionals::preparation(plan);
+    code
+}
+
+fn prepared_outputs(plan: &Plan, capacity: &crate::capacity::Capacity) -> String {
+    let mut code = String::from(
+        "fn prepare_outputs(capacity:&FiniteCapacity,store:&mut hgl_store::Store,graph:&hgl_describe::GraphDescription,built:&hgl_describe::BuiltGraph)->hgl_types::NodeResult {let empty=FiniteTopology::default();",
+    );
     for (i, node) in plan.nodes.iter().enumerate() {
         if node.result.publication() {
+            code += "if let Some(local)=graph.nodes.iter().position(|node|node.implementation==";
+            append(
+                &mut code,
+                format_args!("{:?}){{", format!("{}#{i}", node.name)),
+            );
             code += &capacity.output(
                 &node.result,
-                &format!("built.outputs[graph.nodes.iter().position(|node|node.implementation=={:?}).expect(\"checked node\")].expect(\"checked output\")",format!("{}#{i}",node.name)),
+                "built.outputs[local].expect(\"checked output\")",
             );
+            code += "}";
         }
     }
     code += "Ok(())}\n";
@@ -721,6 +757,7 @@ fn instantiate(plan: &Plan, horizon: &str) -> String {
     code += "let mut built=hgl_describe::instantiate_complete(&graph,&registry,&mut store).map_err(|e|format!(\"{e:?}\"))?;\n";
     if finite {
         code += "prepare_outputs(&capacity,&mut store,&graph,&built).map_err(|e|e.message)?;\n";
+        code += &crate::conditionals::instantiate(plan);
         code += &crate::reference_routes::reserve(plan);
     }
     code

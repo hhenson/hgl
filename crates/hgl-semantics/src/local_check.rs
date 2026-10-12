@@ -209,6 +209,10 @@ impl GraphLocals {
     pub fn declaration(&self, name: &str) -> Option<&Ty> {
         self.declarations.get(name)
     }
+    /// Declared slots that still need a binding on every reaching branch.
+    pub fn declarations(&self) -> impl Iterator<Item = (&String, &Ty)> {
+        self.declarations.iter()
+    }
     /// Retain the real first binding, then allow ordinary authority checks.
     pub fn initialized(&mut self, name: &str) {
         self.declarations.remove(name);

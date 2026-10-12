@@ -15,6 +15,7 @@ use hgl_semantics::value_check::{binding, ordinary, writable};
 use hgl_semantics::value_eval::atomic_argument;
 use hgl_source::execution_phase::ExecutionPhase as Phase;
 use std::collections::{BTreeMap, BTreeSet};
+mod conditional;
 
 #[derive(Default)]
 struct Checker {
@@ -711,17 +712,8 @@ impl Checker {
                         matches!(statement, Stmt::Add(..)),
                     )?;
                 }
-                Stmt::If(..) if hgl_semantics::wiring_locals::handles(statement, env) => {
-                    hgl_semantics::wiring_locals::conditional(
-                        statement,
-                        env,
-                        &mutable_ports,
-                        (&self.graph_locals, &self.static_values),
-                        (&mut self.plan, &mut self.wiring),
-                        &mut self.next_wiring_local,
-                    )?;
-                }
-                Stmt::Add(..) | Stmt::Assign(..) | Stmt::If(..) => {
+                Stmt::If(..) => self.graph_conditional(module, statement, env, &mutable_ports)?,
+                Stmt::Add(..) | Stmt::Assign(..) => {
                     let mut next = self.next_wiring_local;
                     let checked = self.statement(module, statement, env, &Ty::Void, &mut next)?;
                     self.next_wiring_local = next;
