@@ -30,6 +30,17 @@ fn finite_activation_bound_includes_source_cycles_after_the_dense_input_horizon(
     );
     Ok(())
 }
+#[test]
+fn conditional_export_keeps_mutable_var_authority_and_ordinary_harness_assignment()
+-> Result<(), Box<dyn std::error::Error>> {
+    run(
+        &["conditional_reassignment.hgl"],
+        "conditional-reassignment",
+        2,
+        3,
+    )?;
+    Ok(())
+}
 fn run(
     names: &[&str],
     project_name: &str,

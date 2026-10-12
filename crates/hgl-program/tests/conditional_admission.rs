@@ -64,3 +64,19 @@ fn owning_cache_reset_requires_a_separate_prepared_activation_proof()
     );
     Ok(())
 }
+
+#[test]
+fn conditional_export_cannot_grant_let_authority_or_change_the_declared_reference_type()
+-> Result<(), Box<dyn std::error::Error>> {
+    for (replacement, message) in [
+        ("let fixed=result\nfixed=route(value)", "writable var"),
+        ("result=text_route(text())", "mismatch"),
+    ] {
+        let source = sources(&format!(
+            "fn text_route(value:ref<str>)->ref<str> {{when {{return value}}}}\nfn text()->str {{yield 0us:\"text\"}}\nfn choice(enabled:bool,value:i64)->ref<i64> {{var result:ref<i64>\nif enabled {{result=route(value)}} else {{result=route(value)}}\n{replacement}\nresult}}\nfn flag()->bool {{yield 0us:true}}\nfn scalar()->i64 {{yield 0us:7}}\nfn main()->ref<i64> => choice(flag(),scalar())"
+        ))?;
+        let error = hgl_program::compile(&source, "main").unwrap_err();
+        assert!(error.contains(message), "{error}");
+    }
+    Ok(())
+}

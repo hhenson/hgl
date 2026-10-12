@@ -7,7 +7,7 @@ impl Checker {
         module: &str,
         statement: &Stmt,
         env: &mut Env,
-        ports: &BTreeSet<String>,
+        ports: &mut BTreeSet<String>,
     ) -> Result<(), Issue> {
         let Stmt::If(expr, yes, no) = statement else {
             unreachable!("checked graph if")
@@ -17,7 +17,7 @@ impl Checker {
             if condition.ty != Ty::Bool {
                 return Err("condition requires bool".into());
             }
-            return self.temporal_branches(module, selector, [yes, no], env);
+            return self.temporal_branches(module, selector, [yes, no], env, ports);
         }
         if hgl_semantics::wiring_locals::handles(statement, env) {
             hgl_semantics::wiring_locals::conditional(
@@ -42,6 +42,7 @@ impl Checker {
         selector: usize,
         bodies: [&Vec<Stmt>; 2],
         env: &mut Env,
+        ports: &mut BTreeSet<String>,
     ) -> Result<(), Issue> {
         let slots: Vec<_> = self
             .graph_locals
@@ -107,6 +108,7 @@ impl Checker {
             .unwrap_or_else(|_| unreachable!("two branches"));
         self.plan.conditionals.push(Conditional { owner, branches });
         self.graph_locals.initialized(name);
+        ports.insert(name.clone());
         env.insert(name.clone(), Value::new(ty.clone(), Kind::Wire(owner)));
         Ok(())
     }

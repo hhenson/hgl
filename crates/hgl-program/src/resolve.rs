@@ -722,7 +722,9 @@ impl Checker {
                         matches!(statement, Stmt::Add(..)),
                     )?;
                 }
-                Stmt::If(..) => self.graph_conditional(module, statement, env, &mutable_ports)?,
+                Stmt::If(..) => {
+                    self.graph_conditional(module, statement, env, &mut mutable_ports)?;
+                }
                 Stmt::Add(..) | Stmt::Assign(..) => {
                     let mut next = self.next_wiring_local;
                     let checked = self.statement(module, statement, env, &Ty::Void, &mut next)?;
