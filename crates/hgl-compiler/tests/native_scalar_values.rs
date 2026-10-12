@@ -314,7 +314,12 @@ fn scalar_native_publications_preserve_equal_ticks_silence_and_empty_values()
 fn native_evaluation_helper_results_retain_owning_destinations()
 -> Result<(), Box<dyn std::error::Error>> {
     run(r#"
+    struct TokenField {value:Token}
     fn make(value:str)->Token {when {return token(value)}}
+    fn field(value:Token)->str {inject global_state
+when {set(global_state,"field",TokenField(value:value))
+let saved:TokenField=get(global_state,"field")
+return token_text(saved.value)}}
     fn observe(value:Token)->str {when {return token_text(value)}}
     fn observe_alias(value:Token)->str {when {let alias=value
 return token_text(alias)}}
@@ -339,6 +344,7 @@ local=token("replacement")
 let stored:Token=get(global_state,"compared")
 return retained==value && stored==value && local==token("replacement") && value<=value && value>=value && value<token("z") && token("z")>value && value!=token("z")}}
  test helpers {
+assert eval(field,value:[token("a"),_,token("")])==["a",_,""]
 assert eval(lifecycle,value:[token("a"),_,token("")],initial:token("start"))==[token("a"),_,token("")]
         assert eval(compare,value:[token("a"),_,token("b"),token("")])==[true,_,true,true]
         assert eval(make,value:["","same","same",_,"last"])==[token(""),token("same"),token("same"),_,token("last")]

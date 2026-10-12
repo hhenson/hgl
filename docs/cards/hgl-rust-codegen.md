@@ -46,4 +46,6 @@ materialization, setup, already prepared snapshots and legacy native bindings
 retain their existing paths. Ordinary scalar ValueCall arguments, unsupported
 field projections and owning concatenation arguments currently require a future
 target transport mapping. Primitive expressions share scalars::binary/unary;
-direct input metadata queries and borrowed global-list indices remain prepared.
+Direct input metadata queries and typed global/configuration projections through
+record fields and list indices remain prepared. Parent projections precede index
+evaluation and retain the existing required-read and bounds error order.
