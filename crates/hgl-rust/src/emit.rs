@@ -106,7 +106,7 @@ fn node_build(
     generator: Option<&Generator>,
     out: &mut Vec<String>,
 ) {
-    node_type(n, index, out);
+    node_type(plan, n, index, out);
     build_entry(plan, n, index, out);
     out.push(crate::keyed::node_preparation(n, |v| {
         condition_code(plan, v)
@@ -177,7 +177,9 @@ fn build_entry(plan: &Plan, node: &Node, index: usize, out: &mut Vec<String>) {
         );
         return;
     }
-    let body = if node_prepared(node) {
+    let body = if let Some(body) = crate::cold_wiring::build(plan, node) {
+        body
+    } else if node_prepared(node) {
         format!(
             "Err(hgl_describe::BuildError::InvalidNodeType {{node:{:?},what:\"prepared configuration required\".into()}})",
             node.name
@@ -195,12 +197,13 @@ fn build_entry(plan: &Plan, node: &Node, index: usize, out: &mut Vec<String>) {
         .join(",");
     out.push(format!("fn build(ports:&mut hgl_describe::Ports<'_>)->Result<Self,hgl_describe::BuildError>{{{body}}}}}impl Node{index} {{fn build_prepared(ports:&mut hgl_describe::Ports<'_>,{parameters})->Result<Self,hgl_describe::BuildError>{{"));
 }
-fn node_type(n: &Node, index: usize, out: &mut Vec<String>) {
+fn node_type(plan: &Plan, n: &Node, index: usize, out: &mut Vec<String>) {
     out.push(format!("impl hgl_describe::Buildable for Node{index} {{\nfn node_type() -> hgl_types::NodeType {{\nhgl_types::NodeType {{ name: {:?}, inputs: vec![",format!("{}#{index}",n.name)));
     for (name, _, ty) in &n.inputs {
         out.push(format!("({name:?},{}),", shape(ty)));
     }
     out.push("],\n".to_owned());
+    out.push(crate::cold_wiring::schema(plan, n));
     if n.global_state {
         out.push("uses_global_state: true,\nglobal_entries: vec![".into());
         for (key, ty) in &n.globals {
@@ -249,21 +252,59 @@ pub fn shared_layouts(plans: &[Plan]) -> String {
 }
 /// Share payload codecs with surrounding lexical test preparation.
 pub fn shared_test_layouts(plans: &[Plan], tests: &[hgl_semantics::harness_ir::Test]) -> String {
+    shared_layouts_inner(plans, tests, &[])
+}
+/// Share native type mappings reached by lexical setup independently of graph helper calls.
+pub fn shared_suite_layouts(suite: &hgl_semantics::harness_ir::Suite) -> String {
+    shared_layouts_inner(&suite.plans, &suite.tests, &suite.native_images)
+}
+fn shared_layouts_inner(
+    plans: &[Plan],
+    tests: &[hgl_semantics::harness_ir::Test],
+    images: &[hgl_source::native_contracts::Image],
+) -> String {
+    if let Err(issue) = hgl_semantics::native_images::combined_scalars(plans, tests) {
+        return format!("compile_error!({:?});", issue.to_string());
+    }
     let nodes = plans
         .iter()
         .flat_map(|plan| crate::snapshot_slots::prepare(plan).nodes.into_iter())
         .collect();
     let types = Plan {
         nodes,
-        ordinary_types: crate::layouts::harness_types(tests).into_values().collect(),
+        ordinary_types: plans
+            .iter()
+            .flat_map(|plan| plan.ordinary_types.iter().cloned())
+            .chain(crate::layouts::harness_types(tests).into_values())
+            .collect(),
+        wiring: plans
+            .iter()
+            .flat_map(|plan| plan.wiring.iter().cloned())
+            .collect(),
+        natives: crate::preparation::native_bindings(plans, tests),
+        native_images: plans
+            .iter()
+            .flat_map(|plan| plan.native_images.iter().cloned())
+            .chain(images.iter().cloned())
+            .collect(),
         ..Plan::default()
     };
-    global_markers(&types)
+    let images = match crate::native_images::emit(&types) {
+        Ok(images) => images,
+        Err(issue) => return format!("compile_error!({:?});", issue.to_string()),
+    };
+    images
+        + &crate::preparation::native_context(&types)
+        + &global_markers(&types)
         + &crate::preparation::recursive_markers(&types)
         + &crate::deltas::markers(&types)
         + &crate::any_values::layouts(&types)
 }
 fn emit_inner(plan: &Plan, layouts: bool) -> String {
+    let images = match crate::native_images::emit(plan) {
+        Ok(images) => images,
+        Err(issue) => return format!("compile_error!({:?});", issue.to_string()),
+    };
     let prepared = crate::families::prepare(plan);
     let normalized = crate::snapshot_slots::prepare(&crate::direct_deltas::prepare(&prepared));
     let plan = &normalized;
@@ -273,26 +314,9 @@ fn emit_inner(plan: &Plan, layouts: bool) -> String {
             out.push(format!("// {}\n", comment(line)));
         }
     }
-    if !plan.natives.is_empty() {
-        out.push("/// Selected native scalar interfaces.\npub trait Native {\n".to_owned());
-    }
-    for native in &plan.natives {
-        out.push(format!(
-            "/// HGL `{}`.\nfn {}({}) -> {};\n",
-            native.name,
-            native.method,
-            native
-                .args
-                .iter()
-                .enumerate()
-                .map(|(i, ty)| format!("arg{i}: {}", native_arg_type(ty)))
-                .collect::<Vec<_>>()
-                .join(", "),
-            native_result(native)
-        ));
-    }
-    if !plan.natives.is_empty() {
-        out.push("}\n".to_owned());
+    out.push(native_interfaces(plan, false));
+    if layouts {
+        out.push(images);
     }
     if let Some(error) = &plan.construction_error {
         out.push(format!("pub fn register(_: &mut hgl_describe::Registry) -> Result<(), hgl_describe::BuildError> {{ Ok(()) }}\npub fn main(_: &hgl_describe::Registry) -> Result<hgl_describe::GraphDescription, hgl_describe::BuildError> {{ Err(hgl_describe::BuildError::InvalidNodeType {{ node: \"hgl.program\", what: {error:?}.into() }}) }}\n"));
@@ -304,19 +328,25 @@ fn emit_inner(plan: &Plan, layouts: bool) -> String {
         out.push(crate::deltas::markers(plan));
         out.push(crate::any_values::layouts(plan));
     }
+    if !plan.wiring.is_empty() {
+        register_prepared(plan, &mut out);
+        out.push(crate::cold_wiring::recipes(plan));
+    }
     for (i, n) in plan.nodes.iter().enumerate() {
         node(plan, n, i, &mut out);
     }
-    out.push("/// Register the selected HGL implementations.\npub fn register(registry: &mut hgl_describe::Registry) -> Result<(),hgl_describe::BuildError> {\n" .to_owned());
+    out.push("/// Register the selected HGL implementations.\npub fn register(registry: &mut hgl_describe::Registry) -> Result<(),hgl_describe::BuildError> {\nvalidate_native_images().map_err(|what|hgl_describe::BuildError::InvalidNodeType{node:\"hgl.program\",what})?;\n" .to_owned());
     for i in 0..plan.nodes.len() {
         out.push(format!("registry.register::<Node{i}>()?;\n"));
     }
     out.push("Ok(())\n}\n".into());
-    out.push("/// Construct the checked entry graph without executing it.\npub fn main(registry: &hgl_describe::Registry) -> Result<hgl_describe::GraphDescription,hgl_describe::BuildError> {\nlet mut builder = hgl_describe::Builder::new(\"hgl.program\",registry);\n" .to_owned());
+    out.push("/// Construct the checked entry graph without executing it.\npub fn main(registry: &hgl_describe::Registry) -> Result<hgl_describe::GraphDescription,hgl_describe::BuildError> {\nvalidate_native_images().map_err(|what|hgl_describe::BuildError::InvalidNodeType {node:\"hgl.program\",what})?;let mut builder = hgl_describe::Builder::new(\"hgl.program\",registry);\n" .to_owned());
+    out.push(crate::cold_wiring::execute(plan));
     for (i, n) in plan.nodes.iter().enumerate() {
         out.push(format!(
-            "let _wire{i} = builder.node({:?}, &[])?;\n",
-            format!("{}#{i}", n.name)
+            "let _wire{i} = builder.node({:?}, {})?;\n",
+            format!("{}#{i}", n.name),
+            crate::cold_wiring::arguments(plan, n, i)
         ));
         for (name, source, _) in &n.inputs {
             out.push(format!(
@@ -328,32 +358,33 @@ fn emit_inner(plan: &Plan, layouts: bool) -> String {
     out.concat()
 }
 
-fn test_native_adapters(plan: &Plan, out: &mut Vec<String>) {
-    if !plan.natives.is_empty() {
-        out.push("impl Native for crate::Provider {\n".into());
+fn native_interfaces(plan: &Plan, adapters: bool) -> String {
+    let mut methods = Vec::new();
+    for native in plan
+        .natives
+        .iter()
+        .filter(|native| native.provider.is_none())
+    {
+        let signature = native_signature(native);
+        methods.push(if adapters {
+            let call = (0..native.args.len())
+                .map(|i| format!("arg{i}"))
+                .collect::<Vec<_>>()
+                .join(",");
+            format!("{signature} {{crate::native::{}({call})}}", native.method)
+        } else {
+            format!("/// HGL `{}`.\n{signature};", native.name)
+        });
     }
-    for native in &plan.natives {
-        let args = native
-            .args
-            .iter()
-            .enumerate()
-            .map(|(i, t)| format!("arg{i}: {}", native_arg_type(t)))
-            .collect::<Vec<_>>()
-            .join(",");
-        let call = (0..native.args.len())
-            .map(|i| format!("arg{i}"))
-            .collect::<Vec<_>>()
-            .join(",");
-        out.push(format!(
-            "fn {}({args})->{} {{ crate::native::{}({call}) }}\n",
-            native.method,
-            native_result(native),
-            native.method
-        ));
+    if methods.is_empty() {
+        return String::new();
     }
-    if !plan.natives.is_empty() {
-        out.push("}\n".into());
-    }
+    let header = if adapters {
+        "impl Native for crate::Provider"
+    } else {
+        "pub trait Native"
+    };
+    format!("{header} {{{}}}\n", methods.concat())
 }
 /// Emit execution and observation of one checked eval plan.
 pub fn emit_test_body(plan: &Plan, expected: Option<&[Option<Value>]>) -> String {
@@ -362,7 +393,7 @@ pub fn emit_test_body(plan: &Plan, expected: Option<&[Option<Value>]>) -> String
     let plan = &normalized;
     let mut out = vec![crate::keyed::preparation(plan), capacities(plan)];
     register_prepared(plan, &mut out);
-    test_native_adapters(plan, &mut out);
+    out.push(native_interfaces(plan, true));
     out.push("pub fn test()->Result<(),String> {\nlet mut registry=hgl_describe::Registry::new();\nlet configurations=prepare_configurations(&[])?;register_prepared(&mut registry,&configurations)?;\nlet graph=main(&registry).map_err(|e|format!(\"{e:?}\"))?;\n".into());
     if plan.construction_error.is_some() {
         out.push("Ok(())\n}\n".into());
@@ -398,15 +429,12 @@ pub fn emit_test_body(plan: &Plan, expected: Option<&[Option<Value>]>) -> String
                 })
                 .collect::<Vec<_>>()
                 .join(",");
-            let comparison = if crate::any_values::contains(&payload) {
+            let comparison = if crate::any_values::contains(&payload)
+                || matches!(payload, Ty::Delta(_) | Ty::Native(_))
+            {
                 format!(
                     "hgl_testkit::evaluation::try_compare_by(&expected,&_observed,|a,b|{})?;",
                     crate::any_values::capture_equal(&payload, "a", "b")
-                )
-            } else if matches!(payload, Ty::Delta(_)) {
-                format!(
-                    "hgl_testkit::evaluation::compare_by(&expected,&_observed,|a,b|{})?;",
-                    crate::deltas::equivalent(&payload, "a", "b")
                 )
             } else {
                 "hgl_testkit::evaluation::compare(&expected,&_observed)?;".into()
@@ -418,17 +446,24 @@ pub fn emit_test_body(plan: &Plan, expected: Option<&[Option<Value>]>) -> String
     out.concat()
 }
 
-fn native_result(native: &crate::ir::Native) -> String {
-    if native.throws {
+fn native_signature(native: &crate::ir::Native) -> String {
+    let args = native
+        .args
+        .iter()
+        .enumerate()
+        .map(|(i, ty)| format!("arg{i}:{}", native_arg_type(ty)))
+        .collect::<Vec<_>>()
+        .join(",");
+    let result = if native.throws {
         format!(
             "Result<{},Box<hgl_kernel::NodeError>>",
             rust_type(&native.result)
         )
     } else {
-        rust_type(&native.result).to_owned()
-    }
+        rust_type(&native.result)
+    };
+    format!("fn {}({args})->{result}", native.method)
 }
-
 fn shape(ty: &Ty) -> String {
     if crate::deltas::shaped(ty) {
         return format!(
@@ -463,9 +498,9 @@ fn input_guard(n: &Node) -> String {
         .join(" && ")
 }
 
-fn native_arg_type(ty: &Ty) -> &'static str {
+fn native_arg_type(ty: &Ty) -> String {
     if *ty == Ty::Str {
-        "&str"
+        "&str".into()
     } else {
         rust_type(ty)
     }
@@ -502,7 +537,7 @@ fn register_prepared(plan: &Plan, out: &mut Vec<String>) {
         })
         .collect::<Vec<_>>()
         .concat();
-    out.push(format!("struct Configurations {{{fields}}}fn prepare_configurations(values:&[hgl_semantics::ir::Value])->Result<Configurations,String>{{"));
+    out.push(format!("struct Configurations {{{fields}}}fn prepare_configurations(values:&[hgl_semantics::ir::Value])->Result<Configurations,String>{{validate_native_images()?;"));
     let mut bindings = std::collections::BTreeMap::new();
     for node in &plan.nodes {
         for value in &node.configuration {
@@ -660,6 +695,7 @@ fn instantiate(plan: &Plan, horizon: &str) -> String {
     code += "let mut built=hgl_describe::instantiate_complete(&graph,&registry,&mut store).map_err(|e|format!(\"{e:?}\"))?;\n";
     if finite {
         code += "prepare_outputs(&capacity,&mut store,&graph,&built).map_err(|e|e.message)?;\n";
+        code += &crate::reference_routes::reserve(plan);
     }
     code
 }

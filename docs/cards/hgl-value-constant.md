@@ -17,10 +17,14 @@ execution semantics.
 Acceptance: constant bounds diagnostics, deferred mixed contextual expressions,
 external setup locals, and skipped invalid branches in hgl-program regressions.
 
+context_free also shares ir_visit traversal while pruning ordinary calls into
+their own lexical argument/local scope. Its admitted forms remain unchanged;
+provider calls are rejected as required constants without execution.
+
 Delta traversal includes typed Add/Remove keys and both Keyed map operands;
 retained keys obey the same constant/provenance checks as child expressions.
 
-`retain_closed` retains checked closed owning constructor subtrees as immutable
-configuration recipes, using the caller's static ownership predicate. It does not
-evaluate expressions or hooks. Literal family coercions retain their concrete
-payload; dynamic constructor children remain at their source positions.
+`retain_closed` retains independently closed owning constructor subtrees as
+immutable configuration recipes, preserving nested family owners. It classifies
+IR without executing provider or constructor bodies. Native recipes remain
+deferred and preserve their checked invocation phase.

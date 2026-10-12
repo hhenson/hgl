@@ -76,28 +76,35 @@ second.
 
 None.
 
-## Enforced ordinary metadata boundary
+## Enforced ordinary value model boundary
 
-hgl-value-model owns syntax-neutral ordinary metadata, checked IR definitions
-and contextual scalar materialization under reason 3. Source type-spelling and
-literal parsers remain in hgl-source. The source crate and model each exceed
-1000 lines under xtask's code-line count; the execution layer also exceeds 1000.
-The model depends only on hgl-types and the existing jiff dependency, so it
-cannot reach source AST, parsing or semantic name resolution. Type facade reexports preserve checked type identity. Rust parsing callers must
-import `hgl_source::TypeSpelling` for `Ty::parse` and `Ty::list_parts`; those calls
-are no longer inherent Model APIs. This explicit Rust API migration keeps source
-parsing in Source without changing the HGL language. The syntax-neutral IR walkers also belong to Model, with Eval facade paths
-preserved. Their optional module reporting target is 260 lines; the harness walker
-retains a 60-line target in Eval. Neither target constrains source size.
+The native-value integration separates hgl-value-model from source parsing under
+reason 3. Before extraction the moved model has 1081 code lines and the remaining
+source parser/descriptor layer has over 1100. The model depends on hgl-types and
+the already-approved jiff library; source depends on the model and cannot be
+reached from it. This prevents canonical value operations and execution-context
+materialization from reading parser syntax or discovering native implementation
+images. Checked IR and its traversal stay with this syntax-neutral model. Source spelling
+and literal parsing remain in hgl-source. Numerical reporting targets are
+informational and do not limit these modules.
 
 ## Enforced checked execution boundary
 
-hgl-eval separates ordinary/harness value execution from source
-semantics under reason 3. Each layer exceeds 1000 lines. The evaluator depends on
-hgl-value-model and hgl-types, so it cannot parse syntax or reenter declaration
-resolution. Existing hgl-semantics facade paths remain available. Expression
-admission and optional folding policy remain in semantics; executed operators,
-EvalError and materialized publication validation belong below it. Optional phase reporting targets are Source 1130, Model 1270, Eval 1540 and
-Semantics 7740 lines. Shared traversal and declaration validation keep these
-ownership boundaries compact. Cargo and module dependency rules remain
-enforced; individual and combined line counts are informational.
+hgl-eval reexports Model checked IR and owns ordinary execution, with only hgl-value-model and
+hgl-types dependencies. Both this layer and remaining semantic admission exceed
+1000 lines. Source constructor/boxing/delta admission remains in semantics,
+which reexports the lower IR and operation paths for existing consumers. Thus an
+ordinary execution operation cannot consult source declarations or discovery as
+an implicit fallback. Its aggregate reporting target is 2000; numerical targets remain informational. This is the
+second reason-3 boundary; it adds no third-party dependency.
+
+## Enforced Rust assembly boundary
+
+The Rust backend separates checked value/layout/hook emission into
+hgl-rust-codegen, below the hgl-rust program-assembly facade. The moved layer
+has 7492 code lines; the remaining graph/generator assembly, capacity provisioning
+and test adapters have 1504. This meets reason 3 on both sides. Cargo prevents
+codegen from reaching assembly or provisioning: the facade depends on codegen,
+and the reverse dependency would form a cycle. Module dependency lists remain enforced; aggregate and module line-count targets
+are informational. The facade reporting target is 1700. Public facade reexports preserve consumers. No runtime or third-party
+dependency is introduced.

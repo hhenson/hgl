@@ -1,13 +1,14 @@
 //! A replacement may read its own installed owner until the complete encoding is ready.
 use hgl_alloc_count::{CountingAllocator, count_in};
 use hgl_store::{Any, PreparedValue, ValueColumns};
-use hgl_types::any_values::AnyBuffer as _;
 use hgl_types::{AnyOperation, AnyPlan, AnyValue, NodeError, NodeResult};
 use std::{any::TypeId, cell::Cell};
 #[global_allocator]
 static ALLOCATOR: CountingAllocator = CountingAllocator;
 static PLAN: AnyPlan = AnyPlan {
     capture: None,
+    validate: None,
+    copy: |data, out| out.write(&data),
     execution: &hgl_store::any_values::operations::EXECUTION,
     identity: TypeId::of::<i64>,
     operation: AnyOperation::Integer,
@@ -29,7 +30,7 @@ fn repeated_self_composition_preserves_sources_without_allocating() -> NodeResul
                     let source = columns.any(target.fields());
                     Ok((source.plan(), source.data().len()))
                 },
-                |columns, output| output.append(columns.any(target.fields()).data()),
+                |columns, output| (PLAN.copy)(columns.any(target.fields()).data(), output),
             )?;
             assert!(columns.any(target.fields()).equal(&original)?);
         }

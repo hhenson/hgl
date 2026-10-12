@@ -23,3 +23,6 @@ Only literal-only complete family publications in Return/Yield/TimedYield become
 appended immutable node configurations. Calls, provider recipes and native hooks
 are excluded. All emission entry points normalize consistently so indices agree.
 Existing configuration slot publication bypasses an owning hot intermediary.
+
+This module now lives in hgl-rust-codegen below executable program assembly;
+its hgl-rust facade path and module ceiling remain unchanged.

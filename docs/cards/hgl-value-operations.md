@@ -17,5 +17,8 @@ Explicit constructor checking delegates to hgl-value-constructors, preserving th
 
 Complete atomic payload conversion preserves signal-only input authority.
 
-Checked execution lives in hgl-eval behind the existing hgl-semantics facade.
-Source constructor admission remains above that dependency boundary.
+Pure scalar execution and EvalError live in hgl-eval::value_operations. Semantic
+facade exports retain constructor admission from value_constructors separately;
+the execution layer cannot invoke source constructor checking.
+
+Native scalar ordering preserves provider partial order: an unordered pair makes each relational operator false, matching boxed and generated execution. Provider failures still propagate, and ordinary float NaN retains its existing policy.

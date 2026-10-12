@@ -17,6 +17,10 @@ finite replay horizon to reserve primitive runtime-key slots.
 `widths(plan, base)` emits one per-output width in dependency order. Direct
 mutation sites add, branches take maximum, and each added-element loop multiplies
 its own input publication width. Independent nodes never multiply one another.
+
+REF producers propagate the target Set width through their checked input
+dependencies, including held designations. Width preparation never follows a
+runtime payload or evaluates a routing handler.
 Constant integer induction loops use exact iteration counts from
 `hgl-rust-mutation-bounds`; unknown mutation loop bounds select existing whole-adapter
 execution via the reexported `prepared(plan)` proof decision.
@@ -25,3 +29,6 @@ Growing child paths merge by their exact constant indices without multiplying ne
 `direct_arrivals(plan)` reexports the source schedule proof count. Capacity planning
 adds this count once across independent generators; replay list lengths remain
 accounted for separately.
+
+This module now lives in hgl-rust-codegen below executable program assembly;
+its hgl-rust facade path and module ceiling remain unchanged.

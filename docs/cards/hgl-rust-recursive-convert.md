@@ -11,3 +11,6 @@ uses complete immutable batches, including empty/silent roots. Decoding checks
 exact nominal identity and required field presence. Encoding preserves every
 present descendant and complete reachable batch metadata. Owning Box allocation
 is confined to these cold materialization/capture boundaries.
+
+This module now lives in hgl-rust-codegen below executable program assembly;
+its hgl-rust facade path and module ceiling remain unchanged.

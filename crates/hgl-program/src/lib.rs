@@ -27,6 +27,9 @@ pub fn compile(sources: &[(String, String)], entry: &str) -> Result<Program, Str
 
 /// Emit node implementations, native interfaces and graph construction.
 pub fn emit_rust(program: &Program) -> String {
+    if let Err(error) = emit::native_results::validate(&program.0) {
+        return format!("compile_error!({error:?});\n");
+    }
     emit::emit(&program.0)
 }
 

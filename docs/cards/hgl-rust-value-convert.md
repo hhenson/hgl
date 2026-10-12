@@ -16,4 +16,8 @@ runs; conversion occurs outside hot evaluation and never replays provider recipe
 
 Bytes encode and decode as exact Literal::Bytes and Vec<u8>; constructor materialization precedes replay capture conversion. No text encoding or implicit conversion exists.
 
-Scalar codec spelling uses the shared scalars emitter; admitted delta shapes share their existing validation and observation paths.
+Both cold keyed collection directions use one ordinary sequence storage adapter;
+the surrounding checked source type remains exact in captured metadata.
+
+This module now lives in hgl-rust-codegen below executable program assembly;
+its hgl-rust facade path and module ceiling remain unchanged.

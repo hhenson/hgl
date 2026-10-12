@@ -39,3 +39,6 @@ text/collection descendants of configured Tuple/Struct arguments cannot escape
 by returning a scalar. Fixed positional scalar arguments remain prepared.
 
 May use scalars. Pure one-return bytes helpers consuming a complete atomic i64 list use the compiler-selected prepared constructor path; effect-bearing or other owning helper forms retain existing admission rules.
+
+This module now lives in hgl-rust-codegen below executable program assembly;
+its hgl-rust facade path and module ceiling remain unchanged.

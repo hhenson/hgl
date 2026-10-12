@@ -62,6 +62,18 @@ impl Store {
     pub fn prepare_collection_inputs(&mut self) {
         self.bindings.prepare_collection_inputs();
     }
+    /// Reserve subscriptions for one compiler-known reference target before startup.
+    pub fn reserve_reference_target(&mut self, output: OutputId, subscribers: usize) {
+        self.bindings.reserve_reference_target(output, subscribers);
+    }
+    /// Prebuild potential finite member views without following or sampling a target.
+    pub fn prepare_reference_input(
+        &mut self,
+        input: InputId,
+        target: OutputId,
+    ) -> Result<(), BindError> {
+        self.bindings.prepare_reference_input(input, target)
+    }
     /// Construct an unbound view with stable fixed child slots.
     pub fn add_shaped_input(&mut self, owner: NodeId, kind: Kind, active: bool) -> InputId {
         self.bindings.add_input(owner, kind, active)

@@ -1,6 +1,6 @@
 # Card: hgl-store-any-values
 
-The any_values module in hgl-store adds a dedicated Any owning column and marker. It may use global_arena, global_value, prepared_value, prepared_store, shapes, observation and keys; budget 480 lines (130 transferred from Types for recursive execution) within the unchanged crate cap.
+The any_values module in hgl-store adds a dedicated Any owning column and marker. It may use global_arena, global_value, prepared_value, prepared_store, shapes, observation and keys; budget 380 lines (30 transferred from Types for recursive execution) within the unchanged crate cap.
 
 Public surface: Any implementing GlobalValue and PreparedValue; ValueColumns::any, any_mut and compose_any; PreparedTick::any and any_from_global. Prepared bounds are encoded byte capacities, including reserved typed descriptor metadata in every owner. Provisioning reserves each destination independently. compose_any measures the compiled source encoding and validates capacity before writing, preserving the previous owner on failure. Whole-box observation/publication uses the ordinary atomic contract.
 
@@ -15,3 +15,8 @@ the same finite byte and descriptor bound. Measurement and composition read the
 installed owner until the replacement is complete; only then does a swap commit
 it. The old owner becomes the next spare, so repeated self-composition needs no
 hot allocation or payload copy. Atomic publication uses the same transaction.
+
+The paired owners remain in the reusable owning columns shared with Native storage.
+Typed Native preflight and provider copying remain authoritative before a write.
+Prepared Any reads from ordinary global entries use their checked readonly slot,
+then retain through the same checked copy path used by other owning aliases.

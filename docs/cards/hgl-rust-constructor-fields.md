@@ -1,6 +1,6 @@
 # Card: hgl-rust-constructor-fields
 
-Constructor field emission writes complete values into reserved typed slots. It may use layouts and the checked IR; optional module reporting target 100 lines. Numerical targets are informational; module dependencies remain enforced.
+Constructor field emission writes complete values into reserved typed slots. It may use layouts and the checked IR; initial module budget 100 lines. The crate budget remains unchanged.
 
 Private surface: fields and schema. The shared schema helper resolves ordinary storage for field writing and constructor bounds. Omitted optional fields clear presence before replacement; supplied fields execute once in written order. Optional and recursive child slots retain their prepared capacity.
 

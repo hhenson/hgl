@@ -203,3 +203,11 @@ a bounded prebuilt collection. `prepared_output` mutably claims a permanent slot
 and its prebuilt projections for the first occurrence of each key.
 
 Growing endpoints participate in prepared keyed membership, synchronization and retirement. Their i64 keys are dense source indices validated by the publication layer; removal to zero publishes a valid empty root. Held capacity and child generations survive removal/reappend.
+
+Finite compiler-known REF routes reserve target watcher capacity recursively
+through fixed/prepared children with reserve_reference_target(OutputId, usize).
+prepare_reference_input(InputId, OutputId) validates shape and rank, then
+prepares the union of possible absent child views without binding or sampling.
+These views confer no membership, validity, publication time or endpoint lifetime.
+General dynamic binding retains its separate allocation policy; finite prepared
+REF routes require zero allocations even on their first successful sample.

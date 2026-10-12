@@ -6,14 +6,12 @@ Internal surface: encoding, compose and limits. Leaves retain their static typed
 
 Acceptance: generated recursive constructor with owning list and present child, measured after preparation; retained boxed sources and compound mutable box replacement remain independent.
 
-Named constructor operands prepare in source order before fields are emitted in
-layout order. Each operand runs once; failure prevents later operands.
+Constructor operands are cached once in supplied source order before encoding in declaration order. Private canonical constructor owners contribute their checked recursive bounds to width planning.
 
-Computed text uses the shared immutable text-fragment planner: input and cold
-configuration leaves (including field/index projections) are validated in written
-operand order, then their bytes
-are encoded directly into the reserved box frame. No intermediate String is
-constructed. Text bounds are widened before ordinary and constructor Any widths
-are calculated, including concatenations beneath boxing and family wrappers.
-Private canonical constructor owners contribute their checked recursive bounds
-to width planning.
+This module now lives in hgl-rust-codegen below executable program assembly;
+its hgl-rust facade path and module ceiling remain unchanged.
+
+The any_expression_leaves sibling owns typed leaf source selection (initial ceiling 50, uses layouts, any_values and source_slots). Both plain frames and nested box leaves share its codec selection. Scalar input views validate before writing and borrow immutable observation storage during measurement/copy without allocating a String. The parent module uses this sibling and retains its existing 180-line ceiling.
+
+Named-operand controls also verify once-only written order and failure stopping
+later operands in the descriptor-stage path.

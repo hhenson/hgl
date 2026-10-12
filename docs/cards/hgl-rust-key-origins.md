@@ -15,3 +15,6 @@ cold domains through existing exact generated preparation operations.
 Known scalar Map operation keys use the same immutable StaticValues materializer
 as sparse constructor keys. Discovery records identity only; operand evaluation
 and operation preconditions remain in generated execution.
+
+This module now lives in hgl-rust-codegen below executable program assembly;
+its hgl-rust facade path and module ceiling remain unchanged.

@@ -47,8 +47,10 @@ pub mod keys;
 pub mod list;
 pub mod list_storage;
 pub mod member_table;
+pub mod native_values;
 pub mod observation;
 pub mod optional;
+mod owned_columns;
 pub mod prepared_globals;
 mod prepared_rolling;
 pub mod prepared_store;
@@ -440,3 +442,7 @@ impl<T: Scalar> Copy for In<T> {}
 impl<T: Scalar> Copy for DictOut<T> {}
 
 impl<T: Scalar> Copy for DictIn<T> {}
+
+mod native_keys;
+pub use native_keys::NativeKeyDomain;
+mod native_results;

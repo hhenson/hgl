@@ -53,6 +53,7 @@ pub fn visible(
     decl.module == module
         && decl.name == name
         && !matches!(decl.role, Role::Implementation | Role::Test | Role::Struct)
+        && decl.role != Role::NativeType
         && (!decl.test_only || test_scope == Some(module))
         && (decl.test_only
             || test_scope != Some(module)
@@ -233,8 +234,7 @@ pub fn type_name(
     }
     if !scope.parameters.contains(base)
         && !builtin
-        && crate::struct_names::declaration(library, module, base)?.is_none()
-        && crate::struct_names::enum_declaration(library, module, base)?.is_none()
+        && crate::struct_names::nominal_declaration(library, module, name)?.is_none()
     {
         return Err(format!("unresolved ordinary type {base}").into());
     }

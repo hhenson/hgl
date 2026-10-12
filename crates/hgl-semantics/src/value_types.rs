@@ -104,11 +104,11 @@ pub fn substitute(
                 .map_err(|issue| issue.shifted(4))?,
         )));
     }
-    if let Some(ty) = crate::enums::resolve(library, module, base)? {
-        if !arguments.is_empty() {
-            return Err("enum type arguments are unsupported".into());
-        }
+    if let Some(ty) = crate::enums::applied(library, module, base, !arguments.is_empty())? {
         return Ok(Ty::Enum(ty));
+    }
+    if let Some(decl) = crate::struct_names::native_declaration(library, module, base)? {
+        return crate::native_contracts::resolve(library, decl, !arguments.is_empty());
     }
     let decl = declaration(library, module, base)?
         .ok_or_else(|| format!("unresolved ordinary type {name}"))?;

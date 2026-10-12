@@ -4,6 +4,11 @@ Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-
 
 Cold finite replay capacity emission. `Capacity::new` collects exact checked ordinary payload types. `include` merges already materialized configuration values without repeating provider recipes; `bounds` emits typed descendant limits. `declaration` emits graph-local maxima, and `output` prepares every concrete output leaf including inactive finite keyed descendants. Capacities and generated record horizons are established before graph start; overflow remains an explicit error rather than hot growth.
 
+Prepared owning Native helper result types also contribute cold maxima, including
+intermediate borrowed text used only by comparisons. They need a bound variable
+even when no output or global destination has that type. Collection reads checked
+IR and target support metadata without executing the helper.
+
 Optional field limits inspect only present native payloads and reserve independent
 child capacity for every prepared destination. Logical presence remains unset
 until the complete value is copied and published.

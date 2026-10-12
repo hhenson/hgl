@@ -43,6 +43,7 @@ pub fn result(value: Value, result: &Ty, expected: &Ty, node: bool) -> Result<Va
             || (crate::tuple_values::endpoint(&value) && matches!(value.kind, Kind::Field(..))))
         && !value.snapshot
         && (collection(&value.ty) || variable(&value.ty))
+        && !(matches!(result, Ty::Atomic(_)) && prepared_tuple(&value))
     {
         return Err(
             "runtime ordinary collection children require prepared retained observations".into(),
@@ -56,6 +57,19 @@ pub fn result(value: Value, result: &Ty, expected: &Ty, node: bool) -> Result<Va
     }
     crate::endpoint_check::require_payload(&value)?;
     Ok(value)
+}
+
+fn prepared_tuple(value: &Value) -> bool {
+    let (Ty::Tuple(_), Kind::Construct(fields)) = (&value.ty, &value.kind) else {
+        return false;
+    };
+    fields.iter().all(|(_, value)| {
+        if !value.ty.owning_scalar() && value.ty.scalar_kind().is_some() {
+            return true;
+        }
+        value.ty == Ty::Str
+            && matches!(&value.kind, Kind::Native(binding, _) if binding.provider.as_ref().is_some_and(|image| image.bounds.contains_key(&binding.method)))
+    })
 }
 
 /// Preserve the ordinary node delta context without applying it to value functions.

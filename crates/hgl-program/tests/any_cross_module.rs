@@ -1,5 +1,7 @@
 //! Each module owns a different compiled layout table; retained boxes cross that boundary.
 use std::{fmt::Write as _, fs, process::Command};
+// Concurrent fixtures must stay distinct even when the host clock repeats a timestamp.
+static FIXTURE_SEQUENCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 #[test]
 fn independently_emitted_any_descriptors_survive_nested_retention()
 -> Result<(), Box<dyn std::error::Error>> {
@@ -25,7 +27,7 @@ mod consumer {{ {consumer}
 pub fn check(value:hgl_types::AnyValue)->hgl_types::NodeResult {{
  let expected=value.retain()?;let boxed={wrap};
  let retained=boxed.retain()?;drop(boxed);
- let decoded=any_read_{holder_name}(retained.data()).0;
+ let decoded=any_read_{holder_name}(retained.data())?.0;
  assert!(decoded.equal(&expected)?,"foreign descriptor was replaced by a consumer-local table entry");
  assert_eq!(decoded.key_hash()?,expected.key_hash()?);
  assert_eq!(decoded.compare(&expected)?,Some(std::cmp::Ordering::Equal));
@@ -38,9 +40,9 @@ pub fn check(value:hgl_types::AnyValue)->hgl_types::NodeResult {{
  assert_eq!(hgl_semantics::any_values::contents(&fields[0].1).unwrap().ty,hgl_source::Ty::I64);
  let expected_outer=retained.retain()?;let value=retained.retain()?;let nested={wrap};
  let nested_saved=nested.retain()?;drop(nested);drop(retained);
- let outer=any_read_{holder_name}(nested_saved.data()).0;
+ let outer=any_read_{holder_name}(nested_saved.data())?.0;
  assert!(outer.equal(&expected_outer)?);
- let inner=any_read_{holder_name}(outer.data()).0;
+ let inner=any_read_{holder_name}(outer.data())?.0;
  assert!(inner.equal(&expected)?);
  Ok(())
 }}
@@ -167,6 +169,85 @@ fn long_source_names_keep_balanced_shared_identity() -> Result<(), Box<dyn std::
         "mod first{{{emitted}pub fn make()->hgl_types::NodeResult<hgl_types::AnyValue>{{Ok({value})}}}}mod second{{{emitted}pub fn make()->hgl_types::NodeResult<hgl_types::AnyValue>{{Ok({value})}}}}fn main(){{let a=first::make().unwrap();let b=second::make().unwrap();assert!(a.equal(&b).unwrap());assert_eq!(a.key_hash().unwrap(),b.key_hash().unwrap());}}"
     ))
 }
+#[test]
+fn independently_emitted_native_boxes_retain_provider_identity_and_cold_capture()
+-> Result<(), Box<dyn std::error::Error>> {
+    let NativeFixture {
+        dependencies,
+        provider_file,
+    } = native_fixture()?;
+    let compile = |module: &str, value: &str| -> Result<String, String> {
+        let mut sources = dependencies.clone();
+        sources.insert(0,("cross_native.hgl".into(),format!("module {module}\nuse hgraph.std::{{token,token_other,text_only}}\nstruct Holder {{value:any}}\nfn main()->any {{when {{return any({value})}}}}")));
+        Ok(hgl_program::emit_rust(&hgl_program::compile(
+            &sources, "main",
+        )?))
+    };
+    let producer = compile(
+        "producer",
+        "(token(\"a\"),token_other(\"a\"),text_only(\"a\"))",
+    )?;
+    let consumer = compile("consumer", "(Holder(value:any(token(\"a\"))),true)")?;
+    let make = native_constructor("Token")?;
+    let make_other = native_constructor("TokenOther")?;
+    let make_text = native_constructor("TextOnly")?;
+    let holder = hgl_source::Ty::Struct(
+        "consumer::Holder".into(),
+        vec![("value".into(), hgl_source::Ty::Any)],
+        vec![],
+    );
+    let wrap = hgl_rust::any_values::construct(&holder, "(value,)");
+    let result = run(&format!(
+        r#"
+static REJECT:std::sync::atomic::AtomicBool=std::sync::atomic::AtomicBool::new(false);
+static COPIES:std::sync::atomic::AtomicUsize=std::sync::atomic::AtomicUsize::new(0);
+mod producer {{{producer}
+ pub fn make(value:&str)->hgl_types::NodeResult<hgl_types::AnyValue>{{Ok({make})}}
+ pub fn other(value:&str)->hgl_types::NodeResult<hgl_types::AnyValue>{{Ok({make_other})}}
+ pub fn restricted(value:&str)->hgl_types::NodeResult<hgl_types::AnyValue>{{Ok({make_text})}}
+}}
+mod consumer {{{consumer}
+ pub fn make(value:&str)->hgl_types::NodeResult<hgl_types::AnyValue>{{Ok({make})}}
+ pub fn wrap(value:hgl_types::AnyValue)->hgl_types::NodeResult<hgl_types::AnyValue>{{Ok({wrap})}}
+}}
+fn main()->hgl_types::NodeResult {{
+ let foreign=producer::make("a")?;let local=consumer::make("a")?;
+ assert!(foreign.equal(&local)?);assert_eq!(foreign.key_hash()?,local.key_hash()?);
+ assert_eq!(foreign.compare(&local)?,Some(std::cmp::Ordering::Equal));
+ assert_eq!(foreign.compare(&consumer::make("b")?)?,Some(std::cmp::Ordering::Less));
+ assert!(!foreign.equal(&producer::other("a")?)?);
+ let foreign_other=consumer::wrap(producer::other("a")?)?;
+ let captured_other=foreign_other.capture::<hgl_semantics::ir::Value>()?;
+ let hgl_semantics::ir::Kind::Construct(other_fields)=&captured_other.kind else {{panic!("foreign holder")}};
+ assert_eq!(hgl_semantics::any_values::contents(&other_fields[0].1).unwrap().ty.source_name(),"hgraph.std::TokenOther");
+ let outer=consumer::wrap(foreign)?;let retained=outer.retain()?;drop(outer);
+ let captured=retained.capture::<hgl_semantics::ir::Value>()?;
+ let hgl_semantics::ir::Kind::Construct(fields)=&captured.kind else {{panic!("holder")}};
+ let native=hgl_semantics::any_values::contents(&fields[0].1).unwrap();
+ assert_eq!(native.ty.source_name(),"hgraph.std::Token");
+ let hgl_semantics::ir::Kind::Opaque(value)=&native.kind else {{panic!("native capture")}};
+ assert_eq!(value.data(),b"a");
+ let mut destination=hgl_types::AnyValue::default();destination.reserve(retained.data().len())?;
+ let (result,allocations)=hgl_alloc_count::count_in(||->hgl_types::NodeResult{{retained.preflight()?;destination.copy_prepared(&retained);assert!(destination.equal(&retained)?);Ok(())}});result?;assert_eq!(allocations,0);
+ let restricted=consumer::wrap(producer::restricted("a")?)?;
+ assert_eq!(restricted.key_hash().unwrap_err().code,Some("value.capability"));
+ assert_eq!(restricted.equal(&restricted).unwrap_err().code,Some("value.capability"));
+ let copies=COPIES.load(std::sync::atomic::Ordering::Relaxed);
+ REJECT.store(true,std::sync::atomic::Ordering::Relaxed);
+ assert_eq!(retained.retain().unwrap_err().code,Some("native.copy.failure"));
+ assert_eq!(retained.capture::<hgl_semantics::ir::Value>().unwrap_err().code,Some("native.copy.failure"));
+ assert_eq!(local.capture::<hgl_semantics::ir::Value>().unwrap_err().code,Some("native.copy.failure"));
+ assert_eq!(retained.preflight().unwrap_err().code,Some("native.copy.failure"));
+ assert_eq!(COPIES.load(std::sync::atomic::Ordering::Relaxed),copies);
+ REJECT.store(false,std::sync::atomic::Ordering::Relaxed);
+ assert!(destination.equal(&retained)?);
+ Ok(())
+}}
+"#
+    ));
+    fs::remove_file(provider_file)?;
+    result
+}
 fn emit(source: &str) -> Result<String, String> {
     Ok(hgl_program::emit_rust(&hgl_program::compile(
         &[("module.hgl".into(), source.into())],
@@ -178,11 +259,12 @@ fn run(source: &str) -> Result<(), Box<dyn std::error::Error>> {
         .join("../..")
         .canonicalize()?;
     let directory = std::env::temp_dir().join(format!(
-        "hgl-cross-any-{}-{}",
+        "hgl-cross-any-{}-{}-{}",
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)?
-            .as_nanos()
+            .as_nanos(),
+        FIXTURE_SEQUENCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
     fs::create_dir_all(directory.join("src"))?;
     let package = directory
@@ -193,6 +275,7 @@ fn run(source: &str) -> Result<(), Box<dyn std::error::Error>> {
         "[package]\nname=\"{package}\"\nversion=\"0.0.0\"\nedition=\"2024\"\n[workspace]\n[dependencies]\n"
     );
     for name in [
+        "hgl-alloc-count",
         "hgl-types",
         "hgl-source",
         "hgl-semantics",
@@ -213,7 +296,12 @@ fn run(source: &str) -> Result<(), Box<dyn std::error::Error>> {
         )?;
     }
     fs::write(directory.join("Cargo.toml"), manifest)?;
-    fs::write(directory.join("src/main.rs"), source)?;
+    fs::write(
+        directory.join("src/main.rs"),
+        format!(
+            "#[global_allocator] static ALLOCATOR:hgl_alloc_count::CountingAllocator=hgl_alloc_count::CountingAllocator;\n{source}"
+        ),
+    )?;
 
     let output = Command::new(env!("CARGO"))
         .args(["run", "--offline", "--quiet"])
@@ -233,5 +321,279 @@ fn run(source: &str) -> Result<(), Box<dyn std::error::Error>> {
         String::from_utf8_lossy(&output.stderr)
     );
     fs::remove_dir_all(directory)?;
+    Ok(())
+}
+fn native_constructor(name: &str) -> Result<String, std::fmt::Error> {
+    let mut capabilities = ["copy", "text", "equality", "hash", "order", "serialization"]
+        .into_iter()
+        .map(String::from)
+        .collect::<std::collections::BTreeSet<_>>();
+    if name == "TextOnly" {
+        capabilities.retain(|cap| ["copy", "text", "serialization"].contains(&cap.as_str()));
+    }
+    let ty = hgl_source::Ty::Native(hgl_source::native_contracts::Scalar {
+        identity: format!("hgraph.std::{name}"),
+        capabilities,
+    });
+    let mut marker = String::from("NativeScalar");
+    for byte in ty.source_name().bytes() {
+        write!(marker, "{byte:03}")?;
+    }
+    Ok(hgl_rust::any_values::construct(
+        &ty,
+        &format!(
+            "hgl_store::native_values::NativeView::<{marker}>::from_provider(value.as_bytes()).retain()?"
+        ),
+    ))
+}
+
+struct NativeFixture {
+    dependencies: Vec<(String, String)>,
+    provider_file: std::path::PathBuf,
+}
+fn native_fixture() -> Result<NativeFixture, Box<dyn std::error::Error>> {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()?;
+    let mut dependencies = hgl_program::library_files::sources(
+        &[
+            root.join("external/hgraph_std/hgl/hgraph/native/atomic_values_fixture.hgl"),
+            root.join("native/stdlib/atomic_values.hgl-native"),
+        ],
+        &[],
+    )?;
+    let provider_file = std::env::temp_dir().join(format!(
+        "cross-native-provider-{}-{}-{}.rs",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_nanos(),
+        FIXTURE_SEQUENCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    ));
+    let provider=fs::read_to_string(root.join("native/stdlib/atomic_values.rs"))?.replacen("if data.len() > capacity {", "if crate::REJECT.load(std::sync::atomic::Ordering::Relaxed) {return Err(NodeError::coded(\"retention rejected\",\"native.copy.failure\"));} if data.len() > capacity {",1).replacen("destination.write(data);", "crate::COPIES.fetch_add(1,std::sync::atomic::Ordering::Relaxed);destination.write(data);",1);
+    fs::write(&provider_file, provider)?;
+    let descriptor = &mut dependencies
+        .iter_mut()
+        .find(|(name, _)| name.ends_with(".hgl-native"))
+        .ok_or("descriptor")?
+        .1;
+    *descriptor = descriptor.replace(
+        "\"atomic_values.rs\"",
+        &format!("{:?}", provider_file.to_string_lossy()),
+    );
+    Ok(NativeFixture {
+        dependencies,
+        provider_file,
+    })
+}
+
+#[test]
+fn cold_carriers_retain_unknown_foreign_any_descriptors() -> Result<(), Box<dyn std::error::Error>>
+{
+    let NativeFixture {
+        dependencies,
+        provider_file,
+    } = native_fixture()?;
+    let long_name = format!("Foreign{}", "x".repeat(4096));
+    let mut producer_sources = dependencies.clone();
+    producer_sources.insert(0,("producer.hgl".into(),format!("module producer\nuse hgraph.std::{{token}}\nstruct {long_name} {{payload:any}}\nfn main()->any {{when {{return any({long_name}(payload:any(token(\"foreign\"))))}}}}")));
+    let producer = hgl_program::emit_rust(&hgl_program::compile(&producer_sources, "main")?);
+    let foreign = hgl_source::Ty::Struct(
+        format!("producer::{long_name}").into(),
+        vec![("payload".into(), hgl_source::Ty::Any)],
+        vec![],
+    );
+    let token = native_constructor("Token")?;
+    let make = hgl_rust::any_values::construct(&foreign, &format!("({token},)"));
+    let mut consumer_sources = dependencies;
+    consumer_sources.insert(0,("consumer.hgl".into(),"module consumer\nstruct Holder {value:any}\nfn main()->any {when {return any(Holder(value:any(true)))}}".into()));
+    let consumer = hgl_program::emit_rust(&hgl_program::compile(&consumer_sources, "main")?);
+    let holder = hgl_source::Ty::Struct(
+        "consumer::Holder".into(),
+        vec![("value".into(), hgl_source::Ty::Any)],
+        vec![],
+    );
+    let wrap = hgl_rust::any_values::construct(&holder, "(value,)");
+    let support = hgl_rust::cold_transport::support();
+    let encode = hgl_rust::cold_transport::encode(&hgl_source::Ty::Any, "value");
+    let decode = hgl_rust::cold_transport::decode(&hgl_source::Ty::Any, "bytes", "registry");
+    let result = run(&format!(
+        r#"
+static REJECT:std::sync::atomic::AtomicBool=std::sync::atomic::AtomicBool::new(false);
+static COPIES:std::sync::atomic::AtomicUsize=std::sync::atomic::AtomicUsize::new(0);
+mod producer {{{producer} pub fn make(value:&str)->hgl_types::NodeResult<hgl_types::AnyValue>{{Ok({make})}}}}
+mod consumer {{{consumer}{support}
+ pub fn wrap(value:hgl_types::AnyValue)->hgl_types::NodeResult<hgl_types::AnyValue>{{Ok({wrap})}}
+ pub fn pack(value:hgl_types::AnyValue,registry:&hgl_describe::Registry)->hgl_types::NodeResult<Vec<u8>>{{Ok({encode})}}
+ pub fn unpack(bytes:&[u8],registry:&hgl_describe::Registry)->hgl_types::NodeResult<hgl_types::AnyValue>{{Ok({decode})}}
+}}
+fn main()->hgl_types::NodeResult {{
+ let registry=hgl_describe::Registry::new();let mut retained=Vec::new();
+ for value in ["retained","replacement",""] {{
+ let owner=consumer::wrap(producer::make(value)?)?;
+ let expected=owner.retain()?;
+ let bytes=consumer::pack(owner,&registry)?;
+ for registry in [&registry,&registry.clone()] {{for bytes in [&bytes,&bytes.clone()] {{
+ let decoded=consumer::unpack(bytes,registry)?;assert!(decoded.equal(&expected)?);
+ let captured=decoded.capture::<hgl_semantics::ir::Value>()?;let mut found=false;
+ hgl_semantics::ir_visit::value(&captured,&mut |v|{{if let hgl_semantics::ir::Kind::Opaque(native)=&v.kind {{found|=native.data()==value.as_bytes();}}true}});assert!(found);
+ }}}}
+ let unrelated=hgl_describe::Registry::new();let copies=COPIES.load(std::sync::atomic::Ordering::Relaxed);
+ let error=consumer::unpack(&bytes,&unrelated).unwrap_err();assert_eq!(error.code,None);assert!(error.message.contains("cold descriptor belongs to another registry"));
+ assert_eq!(COPIES.load(std::sync::atomic::Ordering::Relaxed),copies);
+ REJECT.store(true,std::sync::atomic::Ordering::Relaxed);
+ assert_eq!(consumer::unpack(&bytes,&registry).unwrap_err().code,Some("native.copy.failure"));
+ assert_eq!(COPIES.load(std::sync::atomic::Ordering::Relaxed),copies);
+ assert_eq!(consumer::pack(expected,&registry).unwrap_err().code,Some("native.copy.failure"));
+ assert_eq!(COPIES.load(std::sync::atomic::Ordering::Relaxed),copies);
+ REJECT.store(false,std::sync::atomic::Ordering::Relaxed);
+ retained.push(bytes);
+ }}
+ let surviving=registry.clone();drop(registry);
+ for bytes in retained {{consumer::unpack(&bytes,&surviving)?;}}
+ Ok(())
+}}
+"#
+    ));
+    fs::remove_file(provider_file)?;
+    result
+}
+
+#[test]
+fn cold_foreign_any_source_profiles_remain_explicit() -> Result<(), Box<dyn std::error::Error>> {
+    let NativeFixture {
+        dependencies,
+        provider_file,
+    } = native_fixture()?;
+    for descriptor in [false, true] {
+        let mut sources = dependencies.clone();
+        sources.insert(0,("consumer.hgl".into(),"module consumer\nuse hgraph.std::{foreign}\nexport fn main(){let value=foreign(\"value\")}".into()));
+        sources.push(("foreign.hgl".into(),"module hgraph.std part foreign\nnative const fn foreign(value:str)->any throws\nnative const fn foreign(value:str)->any throws {}".into()));
+        let expected = if descriptor {
+            sources.iter_mut().find(|(name,_)|name.ends_with(".hgl-native")).ok_or("descriptor")?.1.push_str("\nvalue foreign(value:str)->any throws symbol \"foreign_str\" ownership owned phases {cold} effects {allocation}\n");
+            "native descriptor requires an exact canonical scalar value type: any"
+        } else {
+            "native value calls in composition are not yet supported"
+        };
+        assert!(
+            hgl_program::compile(&sources, "main")
+                .unwrap_err()
+                .contains(expected)
+        );
+    }
+    fs::remove_file(provider_file)?;
+    Ok(())
+}
+
+#[test]
+fn independently_emitted_native_key_domains_share_only_compatible_contracts()
+-> Result<(), Box<dyn std::error::Error>> {
+    let NativeFixture {
+        dependencies,
+        provider_file,
+    } = native_fixture()?;
+
+    let first = native_key_module("first", "Token", "token", &dependencies)?;
+    let second = native_key_module("second", "TokenOther", "token_other", &dependencies)?;
+    let alias = native_key_module("alias", "Token", "token", &dependencies)?;
+    let incompatible_file = provider_file.with_extension("incompatible.rs");
+    fs::write(
+        &incompatible_file,
+        fs::read_to_string(&provider_file)?.replace(
+            "native-atomic-values-v1",
+            "native-atomic-values-incompatible",
+        ),
+    )?;
+    let mut incompatible = dependencies;
+    for (name, text) in &mut incompatible {
+        if name.ends_with(".hgl-native") {
+            *text = replace_native_image(
+                &text.replace(
+                    "native-atomic-values-v1",
+                    "native-atomic-values-incompatible",
+                ),
+                &provider_file.to_string_lossy(),
+                &incompatible_file.to_string_lossy(),
+            );
+        }
+    }
+    let incompatible = native_key_module("incompatible", "Token", "token", &incompatible)?;
+    let result = run(&format!(
+        r#"
+static REJECT:std::sync::atomic::AtomicBool=std::sync::atomic::AtomicBool::new(false);
+static COPIES:std::sync::atomic::AtomicUsize=std::sync::atomic::AtomicUsize::new(0);
+mod first{{{first}}} mod second{{{second}}} mod alias{{{alias}}} mod incompatible{{{incompatible}}}
+fn main()->hgl_types::NodeResult{{
+ let mut keys=hgl_store::Keys::default();first::prepare(&mut keys,"first")?;second::prepare(&mut keys,"second")?;
+ assert_eq!(first::ids(&keys),[0]);assert_eq!(second::ids(&keys),[0]);
+ assert!(first::id(&keys,"second").is_err());assert!(second::id(&keys,"first").is_err());
+ assert_eq!(first::data(&keys,0)?,b"first");assert_eq!(second::data(&keys,0)?,b"second");
+ alias::initialize()?;assert_eq!(alias::id(&keys,"first")?,0);assert_eq!(alias::ids(&keys),[0]);
+ alias::prepare(&mut keys,"alias")?;assert_eq!(first::ids(&keys),[0,1]);assert_eq!(alias::ids(&keys),[0,1]);assert_eq!(second::ids(&keys),[0]);
+ let (result,allocations)=hgl_alloc_count::count_in(||->hgl_types::NodeResult{{for _ in 0..100 {{assert_eq!(first::id(&keys,"first")?,0);assert_eq!(alias::id(&keys,"alias")?,1);assert_eq!(second::id(&keys,"second")?,0);assert_eq!(first::data(&keys,1)?,b"alias");}}Ok(())}});result?;assert_eq!(allocations,0);
+ let copies=COPIES.load(std::sync::atomic::Ordering::Relaxed);let error=incompatible::initialize().unwrap_err();assert_eq!(COPIES.load(std::sync::atomic::Ordering::Relaxed),copies);assert!(error.message.contains("incompatible native key domain contract"),"unexpected cold mapping rejection: {{error:?}}");assert_eq!(first::ids(&keys),[0,1]);
+ let mut another=hgl_store::Keys::default();second::prepare(&mut another,"new-second")?;alias::prepare(&mut another,"new-first")?;assert_eq!(first::data(&another,0)?,b"new-first");assert_eq!(second::data(&another,0)?,b"new-second");
+ Ok(())
+}}
+"#
+    ));
+    fs::remove_file(provider_file)?;
+    fs::remove_file(incompatible_file)?;
+    result
+}
+
+fn native_key_module(
+    module: &str,
+    nominal: &str,
+    helper: &str,
+    dependencies: &[(String, String)],
+) -> Result<String, String> {
+    let mut input = dependencies.to_vec();
+    input.insert(0,(format!("{module}.hgl"),format!("module {module}\nuse hgraph.std::{{{helper}}}\nfn main()->any {{when {{return any({helper}(\"first\"))}}}}")));
+    let generated = hgl_program::emit_rust(&hgl_program::compile(&input, "main")?);
+    let scalar = hgl_source::native_contracts::Scalar {
+        identity: format!("hgraph.std::{nominal}"),
+        capabilities: ["copy", "text", "equality", "hash", "order", "serialization"]
+            .into_iter()
+            .map(String::from)
+            .collect(),
+    };
+    let ty = hgl_source::Ty::Native(scalar.clone());
+    let mut marker = String::from("NativeScalar");
+    for byte in scalar.identity.bytes() {
+        write!(marker, "{byte:03}").map_err(|e| e.to_string())?;
+    }
+    let global = hgl_rust::layouts::global_type(&ty);
+    Ok(format!(
+        r#"{generated}
+        type M={global};
+        fn owner(value:&str)->hgl_types::NodeResult<hgl_store::native_values::NativeValue<{marker}>>{{hgl_store::native_values::NativeView::<{marker}>::from_provider(value.as_bytes()).retain()}}
+        pub fn initialize()->hgl_types::NodeResult{{register(&mut hgl_describe::Registry::new()).map_err(|e|hgl_types::NodeError::new(format!("{{e:?}}")))}}
+        pub fn prepare(keys:&mut hgl_store::Keys,value:&str)->hgl_types::NodeResult{{<M as hgl_store::Key>::prepare(keys,&owner(value)?)}}
+        pub fn id(keys:&hgl_store::Keys,value:&str)->hgl_types::NodeResult<i64>{{M::key_view_id(keys,hgl_store::native_values::NativeView::from_provider(value.as_bytes()))}}
+        pub fn ids(keys:&hgl_store::Keys)->&[i64]{{<M as hgl_store::Key>::ids(keys)}}
+        pub fn data(keys:&hgl_store::Keys,id:i64)->hgl_types::NodeResult<&[u8]>{{Ok(M::key_view(keys,id)?.data())}}
+        "#
+    ))
+}
+
+fn replace_native_image(text: &str, from: &str, to: &str) -> String {
+    text.replace(&format!("{from:?}"), &format!("{to:?}"))
+}
+#[test]
+fn native_fixture_image_replacement_preserves_escaped_descriptor_paths() -> Result<(), String> {
+    for from in [
+        r"C:\Users\fixture\AppData\Local\Temp\provider.rs",
+        r#"C:\fixture with spaces\quoted"provider.rs"#,
+    ] {
+        let to = format!("{from}.incompatible.rs");
+        let original = format!("image {from:?}");
+        let changed = replace_native_image(&original, from, &to);
+        assert_eq!(changed, format!("image {to:?}"));
+        let tokens = hgl_source::lex::lex(changed.strip_prefix("image ").ok_or("missing image")?)?;
+        let decoded = hgl_source::native_descriptor::text(&mut hgl_source::Cursor::new(&tokens))
+            .map_err(|e| e.to_string())?;
+        assert_eq!(decoded, to);
+    }
     Ok(())
 }

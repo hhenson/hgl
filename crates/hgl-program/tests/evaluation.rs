@@ -262,8 +262,7 @@ fn actual_stdlib_and_harness_regressions_run_on_rust() -> Result<(), Box<dyn std
         .collect::<Result<Vec<_>, _>>()?;
     parts.retain(|p| p.extension().is_some_and(|e| e == "hgl"));
     parts.sort();
-    parts.push(root.join("native/stdlib/rust.hgl"));
-    parts.push(root.join("native/stdlib/interfaces.hgl"));
+
     parts.push(root.join("external/hgraph_spec/language/examples/contextual-local-bindings.hgl"));
     for fixture in [
         "graph_compound",
@@ -277,7 +276,8 @@ fn actual_stdlib_and_harness_regressions_run_on_rust() -> Result<(), Box<dyn std
         )));
     }
     parts.push(root.join("crates/hgl-program/tests/fixtures/contextual_locals.hgl"));
-    let sources = hgl_program::library_files::sources(&parts, &[library])?;
+    let sources =
+        hgl_program::library_files::sources(&parts, &[library, root.join("native/stdlib")])?;
     let summary = expected_summary(&sources)?;
     let dir = std::env::temp_dir().join(format!(
         "hgl-eval-{}-{}-{}",
@@ -976,9 +976,18 @@ fn signal_count(ts: signal) -> i64 {
         return count }
 }
 fn reference_signal(ts: i64) -> i64 => signal_count(capture(ts))
+fn reference_count(ts: ref<i64>) -> i64 {
+    state count: i64 = 0
+    when { count += 1
+        return count }
+}
+fn reference_designations(ts: i64) -> i64 => reference_count(capture(ts))
 fn follow_rebind(lhs: i64, rhs: i64, choice: bool) -> i64 => consume(choose_reference(lhs, rhs, choice))
 test reference_arguments_follow_the_target {
-    assert eval(reference_signal, [_, 1, _, 2]) == [1, _, _, _]
+    # TS-18 follows target ticks; only explicit REF inputs count designations.
+    assert eval(reference_signal, [_, 1, _, 2]) == [_, 1, _, 2]
+    assert eval(reference_signal, [_, _, _, _]) == [_, _, _, _]
+    assert eval(reference_designations, [_, 1, _, 2]) == [1, _, _, _]
     assert eval(follow_direct, [_, 1, _, 2, 2]) == [_, 1, _, 2, 2]
     assert eval(follow_generic, [_, 1, _, 2]) == [_, 1, _, 2]
     assert eval(follow_twice, [_, 1, _, 2]) == [_, 1, _, 2]

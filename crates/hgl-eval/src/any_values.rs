@@ -73,6 +73,12 @@ pub fn equal_data(a: &Value, b: &Value) -> Result<bool, EvalError> {
         return Ok(equal);
     }
     match (&a.kind, &b.kind) {
+        (Kind::Opaque(left), Kind::Opaque(right)) => {
+            if !capable(&a.ty, 0) {
+                return Err(capability());
+            }
+            Ok((left.operations().equal)(left.data(), right.data())?)
+        }
         (Kind::Literal(a), Kind::Literal(b)) => Ok(a == b),
         (Kind::Void, Kind::Void) => Ok(true),
         (Kind::List(left), Kind::List(right)) => {
@@ -169,6 +175,12 @@ fn order(a: &Value, b: &Value) -> Result<Option<Ordering>, EvalError> {
         return Ok(None);
     }
     match (&a.kind, &b.kind) {
+        (Kind::Opaque(left), Kind::Opaque(right)) => {
+            if !capable(&a.ty, 2) {
+                return Err(capability());
+            }
+            Ok((left.operations().compare)(left.data(), right.data())?)
+        }
         (Kind::Literal(a), Kind::Literal(b)) => Ok(match (a, b) {
             (Literal::Float(a), Literal::Float(b)) => a.partial_cmp(b),
             (Literal::Str(a), Literal::Str(b)) => Some(a.cmp(b)),
@@ -189,12 +201,8 @@ fn order(a: &Value, b: &Value) -> Result<Option<Ordering>, EvalError> {
             Ok(Some(left.len().cmp(&right.len())))
         }
         (Kind::Construct(left), Kind::Construct(right)) => {
-            let fields = if let Ty::Tuple(fields) = &a.ty {
-                fields.len()
-            } else {
-                a.ty.structure().map_err(EvalError::from)?.1.len()
-            };
-            for id in 0..fields {
+            let (fields, _) = fields(&a.ty).ok_or_else(capability)?;
+            for id in 0..fields.len() {
                 let (left, right) = (
                     left.iter().find(|(index, _)| *index == id),
                     right.iter().find(|(index, _)| *index == id),

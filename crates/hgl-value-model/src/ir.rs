@@ -12,6 +12,8 @@ pub struct Value {
     pub delta_required: bool,
     /// Ordinary retained temporal children use typed optional snapshot storage.
     pub snapshot: bool,
+    /// This invocation was checked for setup or cold execution, never a node hook.
+    pub cold_call: bool,
 }
 impl Value {
     /// Pair a checked expression with its resolved type.
@@ -21,12 +23,15 @@ impl Value {
             kind,
             delta_required: false,
             snapshot: false,
+            cold_call: false,
         }
     }
 }
 /// Checked expressions and frontend-only binding markers.
 #[derive(Debug, Clone)]
 pub enum Kind {
+    /// Cold independently owning native data produced by an explicit provider context.
+    Opaque(crate::native_value::NativeValue),
     /// Typed map child endpoint scoped to one modified-entry iteration.
     IterationInput(usize),
     /// Closed harness sequence with dense horizon and only present owned slots.
@@ -81,8 +86,8 @@ pub enum Kind {
     Local(usize),
     /// Writable owned scalar local binding index.
     MutableLocal(usize),
-    /// Selected native signature index and checked arguments.
-    Native(usize, Vec<Value>),
+    /// Checked native binding and arguments, retained across cold and graph phases.
+    Native(Box<Native>, Vec<Value>),
     /// Checked binary operator and operands.
     Binary(String, Box<Value>, Box<Value>),
     /// Checked unary operator or scalar conversion and operand.
@@ -201,6 +206,8 @@ pub struct Native {
     pub name: String,
     /// Rust provider method name.
     pub method: String,
+    /// Data-only image contract selected through the ordinary library package.
+    pub provider: Option<crate::native_contracts::Image>,
     /// Whether the provider returns a fallible result.
     pub throws: bool,
     /// Resolved argument types in declaration order.
@@ -208,17 +215,28 @@ pub struct Native {
     /// Resolved result type.
     pub result: Ty,
 }
+impl Native {
+    /// Preserve the exact selected binding and its owning result across execution phases.
+    pub fn invocation(&self, values: Vec<Value>, result: Ty) -> Value {
+        let binding = Box::new(self.clone());
+        Value::new(result, Kind::Native(binding, values))
+    }
+}
 /// A closed graph with all source checks and eval wiring complete.
 #[derive(Debug, Default, Clone)]
 pub struct Plan {
     /// Standalone registration has no finite evaluation preparation phase.
     pub ordinary_instantiation: bool,
+    /// Checked cold recipes executed once per standalone wiring invocation.
+    pub wiring: Vec<Value>,
     /// Deterministic wiring operation failure reported during construction.
     pub construction_error: Option<String>,
     /// Nodes in construction order, addressed by index.
     pub nodes: Vec<Node>,
     /// Selected native signatures, addressed by index.
     pub natives: Vec<Native>,
+    /// Inert executable mappings reached through native scalar types independently of helpers.
+    pub native_images: Vec<crate::native_contracts::Image>,
     /// Selected source documentation retained in generated comments.
     pub docs: Vec<String>,
     /// Eval capture node index and observed scalar type, if any.
@@ -238,7 +256,8 @@ impl Value {
         crate::ir_visit::value(self, &mut |value| {
             closed &= matches!(
                 value.kind,
-                Kind::Literal(_)
+                Kind::Opaque(_)
+                    | Kind::Literal(_)
                     | Kind::Void
                     | Kind::Delta(_)
                     | Kind::List(_)

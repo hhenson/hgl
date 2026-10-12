@@ -17,6 +17,9 @@ The frontend checks type identity, access authority, indices, and retention
 before emission. This crate performs no source checking and selects no runtime
 behavior. Construction and projection preserve the ordinary value-mutability
 contract; aggregate views explicitly retain their provenance.
+Plan.native_images retains inert executable mappings reached by native scalar
+types independently of helper calls. The native-images card defines selection
+and emission; this metadata never adds a semantic helper binding.
 
 Acceptance: program source and emitted-executable tests for required-field
 struct construction, nested independent copies, mutable assignment and
@@ -110,3 +113,20 @@ slots retain descendant validity independently.
 Plan::ordinary_types retains closed harness payload layouts hidden behind Any before startup. It supplies cold descriptor preparation, never runtime type-name discovery.
 
 Finite capacity planning keeps recording rows at the existing cycles-plus-start bound; ordinary global lists preserve initial rows before reserved appends.
+
+Checked IR also retains opaque native values, exact selected native bindings, cold-call phase flags and standalone wiring recipes. All these forms reside in hgl-value-model::ir and are reexported through hgl-eval and semantics.
+
+Internal Query("\0reference", [projected_input]) designates a checked child
+endpoint for a compiler-generated graph projection. It reads no scalar payload
+and grants no source node access through REF. Its result retains the child's
+declared REF schema and lifetime.
+
+Cold subscription preparation follows checked designation publications and
+ordinary helper yields through local replacements, branch alternatives, held
+output values and projection paths. A REF used only by a guard or metadata
+operation supplies no returned target. All possible published targets receive
+their typed input views and subscription capacity before the first tick.
+Returned designation origins without a cold transport mapping produce a Rust
+target diagnostic during finite preparation emission. Collection REF element
+selection is one such target gap; a guard-only occurrence does not create a
+returned route. Source admission remains separate from this transport check.

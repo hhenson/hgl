@@ -15,3 +15,5 @@ The declaration maximum covers start, stop, handlers and generator bodies before
 adding synthesized owners; nested helper maxima are included after callsite
 normalization. Generator declarations cannot be overwritten by scratch owners,
 including when an invoked helper has no local declarations.
+
+Public prepare_with extends prepare and receives the checked prepared-execution flag. Native snapshot result, assignment and global-write destinations use the same lexical reservation policy; mutable owners retain their complete independently prepared representation.

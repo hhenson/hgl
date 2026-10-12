@@ -1,0 +1,251 @@
+//! Cold typed conversion and checked lexical test emission.
+use crate::enums::metadata as enum_data;
+use crate::type_data::list;
+pub use crate::type_data::ty;
+use hgl_semantics::harness_ir::{Argument, Step, Test};
+use hgl_semantics::ir::{DeltaEntry, Kind, Statement, Value};
+use hgl_source::{Literal, TemporalLiteral};
+// Collection builders keep cold literal width out of a named test's debug frame.
+fn rows<T>(items: &[T], element: &str, emit: impl Fn(&T) -> String) -> String {
+    if items.len() <= 8 {
+        return list(items, emit);
+    }
+    let mut functions = String::new();
+    let mut calls = String::new();
+    for (i, item) in items.iter().enumerate() {
+        crate::append(
+            &mut functions,
+            format_args!(
+                "#[inline(never)] fn row{i}(rows:&mut Vec<{element}>) {{rows.push({});}}",
+                emit(item)
+            ),
+        );
+        crate::append(&mut calls, format_args!("row{i}(&mut rows);"));
+    }
+    format!(
+        "{{{functions}let mut rows=Vec::with_capacity({});{calls}rows}}",
+        items.len()
+    )
+}
+fn literal(l: &Literal) -> String {
+    let inner = match l {
+        Literal::Enum(e, number) => format!("Enum({}, {number})", enum_data(e)),
+        Literal::Str(s) => format!("Str({s:?}.into())"),
+        Literal::Bytes(bytes) => format!("Bytes(vec!{bytes:?})"),
+        Literal::Float(v) => format!("Float(f64::from_bits({}))", v.to_bits()),
+        Literal::TimeZone(_) => format!("TimeZone({})", crate::scalars::literal(l)),
+        Literal::ZonedTime(_) => format!("ZonedTime({})", crate::scalars::literal(l)),
+        Literal::ZonedDateTime(_) => format!("ZonedDateTime({})", crate::scalars::literal(l)),
+        Literal::Int(_)
+        | Literal::Bool(_)
+        | Literal::Duration(_)
+        | Literal::Date(_)
+        | Literal::Time(_)
+        | Literal::DateTime(_)
+        | Literal::CivilDateTime(_) => format!("{l:?}"),
+    };
+    format!("hgl_source::Literal::{inner}")
+}
+fn recipe(r: &TemporalLiteral) -> String {
+    match r {
+        TemporalLiteral::TimeZone(s) => {
+            format!("hgl_source::TemporalLiteral::TimeZone({s:?}.into())")
+        }
+        TemporalLiteral::ZonedTime { time_micros, zone } => format!(
+            "hgl_source::TemporalLiteral::ZonedTime {{time_micros:{time_micros},zone:{zone:?}.into()}}"
+        ),
+        TemporalLiteral::ZonedDateTime {
+            instant_micros,
+            zone,
+            offset_seconds,
+        } => format!(
+            "hgl_source::TemporalLiteral::ZonedDateTime {{instant_micros:{instant_micros},zone:{zone:?}.into(),offset_seconds:{offset_seconds}}}"
+        ),
+    }
+}
+fn part(p: &DeltaEntry) -> String {
+    let p = match p {
+        DeltaEntry::Add(l) => format!("Add({})", value(l)),
+        DeltaEntry::Remove(l) => format!("Remove({})", value(l)),
+        DeltaEntry::Keyed(k, v) => format!("Keyed({},{})", value(k), value(v)),
+        DeltaEntry::Child(i, v) => format!("Child({i},{})", value(v)),
+    };
+    format!("hgl_semantics::ir::DeltaEntry::{p}")
+}
+/// Emit one exact checked expression for cold preparation.
+pub fn value(v: &Value) -> String {
+    let kind = match &v.kind {
+        Kind::Native(binding, args) => format!(
+            "Native(Box::new({}),{})",
+            native(binding),
+            rows(args, "hgl_semantics::ir::Value", value)
+        ),
+        Kind::Captured(n, vs) => format!(
+            "Captured({n},{})",
+            rows(vs, "(usize,hgl_semantics::ir::Value)", |(i, v)| format!(
+                "({i},{})",
+                value(v)
+            ))
+        ),
+        Kind::IsPresent(v) => format!("IsPresent(Box::new({}))", value(v)),
+        Kind::Present(v) => format!("Present(Box::new({}))", value(v)),
+        Kind::Literal(l) => format!("Literal({})", literal(l)),
+        Kind::TemporalLiteral(r) => format!("TemporalLiteral({})", recipe(r)),
+        Kind::Delta(ps) => format!("Delta({})", rows(ps, "hgl_semantics::ir::DeltaEntry", part)),
+        Kind::List(vs) => format!("List({})", rows(vs, "hgl_semantics::ir::Value", value)),
+        Kind::Construct(fs) => format!(
+            "Construct({})",
+            rows(fs, "(usize,hgl_semantics::ir::Value)", |(i, v)| format!(
+                "({i},{})",
+                value(v)
+            ))
+        ),
+        Kind::ValueCall(args, body) => {
+            format!(
+                "ValueCall({},{})",
+                rows(args, "hgl_semantics::ir::Value", value),
+                rows(body, "hgl_semantics::ir::Statement", statement)
+            )
+        }
+        Kind::Field(v, i) => format!("Field(Box::new({}),{i})", value(v)),
+        Kind::Index(a, b) => format!("Index(Box::new({}),Box::new({}))", value(a), value(b)),
+        Kind::Push(a, b) => format!("Push(Box::new({}),Box::new({}))", value(a), value(b)),
+        Kind::Length(v) => format!("Length(Box::new({}))", value(v)),
+        Kind::Unary(op, v) => format!("Unary({op:?}.into(),Box::new({}))", value(v)),
+        Kind::Binary(op, a, b) => format!(
+            "Binary({op:?}.into(),Box::new({}),Box::new({}))",
+            value(a),
+            value(b)
+        ),
+        Kind::Local(i) => format!("Local({i})"),
+        Kind::MutableLocal(i) => format!("MutableLocal({i})"),
+        Kind::Void => "Void".into(),
+        Kind::WiringFailure(s) => format!("WiringFailure({s:?}.into())"),
+        Kind::Prepared(_)
+        | Kind::ObservedLocal(_)
+        | Kind::Configuration(_)
+        | Kind::GlobalGet(_)
+        | Kind::BorrowedLocal(..)
+        | Kind::GlobalSet(..)
+        | Kind::GeneratorLocal(_)
+        | Kind::Wire(_)
+        | Kind::IterationInput(_)
+        | Kind::Input(..)
+        | Kind::Cache(_)
+        | Kind::Query(..)
+        | Kind::Output
+        | Kind::Capability
+        | Kind::Opaque(_) => unreachable!("checked ordinary harness expression"),
+    };
+    format!(
+        "hgl_semantics::ir::Value {{cold_call:{},..hgl_semantics::ir::Value::new({},hgl_semantics::ir::Kind::{kind})}}",
+        v.cold_call,
+        ty(&v.ty)
+    )
+}
+fn native(n: &hgl_semantics::ir::Native) -> String {
+    let provider=n.provider.as_ref().map_or_else(||"None".into(),|p|format!("Some(hgl_source::native_contracts::Image {{provider:{:?}.into(),fingerprint:{:?}.into(),path:{:?}.into(),bounds:[{}].into_iter().map(|(method,bound):(&str,&str)| (String::from(method),String::from(bound))).collect(),scalars:{}}})",p.provider,p.fingerprint,p.path,p.bounds.iter().map(|(method,bound)|format!("({method:?},{bound:?})")).collect::<Vec<_>>().join(","),list(&p.scalars,|(s,m)|format!("(hgl_source::native_contracts::Scalar {{identity:{:?}.into(),capabilities:[{}].into_iter().map(String::from).collect()}},{m:?}.into())",s.identity,s.capabilities.iter().map(|c|format!("{c:?}")).collect::<Vec<_>>().join(",")))));
+    format!(
+        "hgl_semantics::ir::Native {{name:{:?}.into(),method:{:?}.into(),provider:{provider},throws:{},args:{},result:{}}}",
+        n.name,
+        n.method,
+        n.throws,
+        list(&n.args, ty),
+        ty(&n.result)
+    )
+}
+fn statement(s: &Statement) -> String {
+    let s = match s {
+        Statement::Let(i, v) => format!("Let({i},{})", value(v)),
+        Statement::Var(i, v) => format!("Var({i},{})", value(v)),
+        Statement::Assign(a, b) => format!("Assign({},{})", value(a), value(b)),
+        Statement::Call(v) => format!("Call({})", value(v)),
+        Statement::Yield(v) => format!("Yield({})", value(v)),
+        Statement::Exit => "Exit".into(),
+        Statement::If(v, a, b) => format!(
+            "If({},{},{})",
+            value(v),
+            rows(a, "hgl_semantics::ir::Statement", statement),
+            rows(b, "hgl_semantics::ir::Statement", statement)
+        ),
+        Statement::Borrow(..)
+        | Statement::Return(_)
+        | Statement::ForItems(..)
+        | Statement::For(..)
+        | Statement::While(..)
+        | Statement::TimedYield(..) => unreachable!("checked ordinary harness statement"),
+    };
+    format!("hgl_semantics::ir::Statement::{s}")
+}
+fn slots(vs: &[Option<Value>]) -> String {
+    rows(vs, "Option<hgl_semantics::ir::Value>", |v| {
+        v.as_ref()
+            .map_or_else(|| "None".into(), |v| format!("Some({})", value(v)))
+    })
+}
+fn argument(a: &Argument) -> String {
+    let a = match a {
+        Argument::Constant { binding, value: v } => {
+            format!("Constant {{binding:{binding},value:{}}}", value(v))
+        }
+        Argument::Dense {
+            parameter,
+            binding,
+            shape,
+            entry_type,
+            slots: vs,
+            sequence,
+        } => format!(
+            "Dense {{parameter:{parameter:?}.into(),binding:{binding},shape:{},entry_type:{},slots:{},sequence:{}}}",
+            ty(shape),
+            ty(entry_type),
+            slots(vs),
+            sequence.as_ref().map_or_else(
+                || "None".into(),
+                |v| format!("Some(Box::new({}))", value(v))
+            )
+        ),
+    };
+    format!("hgl_semantics::harness_ir::Argument::{a}")
+}
+fn evaluation(e: &hgl_semantics::harness_ir::Evaluation) -> String {
+    format!(
+        "hgl_semantics::harness_ir::Evaluation {{case:{},arguments:{},expected:{}}}",
+        e.case,
+        rows(
+            &e.arguments,
+            "hgl_semantics::harness_ir::Argument",
+            argument
+        ),
+        e.expected
+            .as_ref()
+            .map_or_else(|| "None".into(), |vs| format!("Some({})", slots(vs)))
+    )
+}
+fn step(s: &Step) -> String {
+    let s = match s {
+        Step::Raises(code, body) => format!(
+            "Raises({code:?}.into(),{})",
+            rows(body, "hgl_semantics::harness_ir::Step", step)
+        ),
+        Step::Ordinary(s) => format!("Ordinary({})", statement(s)),
+        Step::Assert(v) => format!("Assert({})", value(v)),
+        Step::Eval(e) => format!("Eval({})", evaluation(e)),
+        Step::BindEval(id, t, e) => format!("BindEval({id},{},{})", ty(t), evaluation(e)),
+        Step::If(v, a, b) => format!(
+            "If({},{},{})",
+            value(v),
+            rows(a, "hgl_semantics::harness_ir::Step", step),
+            rows(b, "hgl_semantics::harness_ir::Step", step)
+        ),
+    };
+    format!("hgl_semantics::harness_ir::Step::{s}")
+}
+/// Emit checked lexical test data without evaluating any expression.
+pub fn test(test: &Test) -> String {
+    format!(
+        "hgl_semantics::harness_ir::Test {{name:{:?}.into(),steps:{}}}",
+        test.name,
+        rows(&test.steps, "hgl_semantics::harness_ir::Step", step)
+    )
+}

@@ -75,8 +75,7 @@ fn copy_binding(
             now,
         )?;
     }
-    assemble(store, target, now)?;
-    Ok(())
+    assemble(store, target, now).map(|_| ())
 }
 
 /// Intern a newly wired assembly once; later ticks use its dense children.

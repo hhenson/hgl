@@ -191,7 +191,7 @@ impl Generator {
                 "let _={};self.generator_pc={next};",
                 crate::constructor_owners::source(plan,value).unwrap_or_else(||unreachable!("canonical generator constructor"))
             )),
-            Block::Bind(id, value, next) if value.snapshot && value.ty == Ty::Any => code.push(format!(
+            Block::Bind(id, value, next) if value.snapshot && matches!(value.ty,Ty::Any|Ty::Native(_)) => code.push(format!(
                 "{}self.generator_local{id}=Some(local{id});self.generator_pc={next};",
                 crate::any_prepared::local(plan,*id,value,|v|condition_code(plan,v))
             )),
@@ -260,13 +260,20 @@ fn timed_yield(plan: &Plan, time: &Value, payload: &Value, next: usize, result: 
     )
 }
 fn slot_publication(ty: &Ty, slot: &str, result: &Ty, global: &str) -> String {
-    if *ty == Ty::Any {
-        let configured =
-            crate::observed::apply(result, "self._output", "&self.configuration_columns", slot);
-        let owned = if matches!(result, Ty::Rolling(..)) {
-            format!("_ctx.prepared().rolling_from(None,{slot},self._output)?;")
+    if matches!(ty, Ty::Any | Ty::Native(_)) {
+        let marker = global_type(ty);
+        let (owned, configured) = if matches!(result, Ty::Rolling(..)) {
+            (
+                format!("_ctx.prepared().rolling_from(None,{slot},self._output)?;"),
+                crate::windows::from(result, "self._output", "&self.configuration_columns", slot),
+            )
         } else {
-            format!("_ctx.prepared().any_from_global(self._output,{slot})?;")
+            (
+                format!("_ctx.prepared().atomic_from_global::<{marker}>({slot},self._output)?;"),
+                format!(
+                    "_ctx.prepared().atomic_from::<{marker}>(&self.configuration_columns,{slot},self._output)?;"
+                ),
+            )
         };
         return format!("if {global} {{{owned}}} else {{{configured}}}");
     }
@@ -282,6 +289,7 @@ fn slot_publication(ty: &Ty, slot: &str, result: &Ty, global: &str) -> String {
             | Ty::Recursive(_)
             | Ty::Family(_)
             | Ty::Enum(_)
+            | Ty::Native(_)
             | Ty::List(..)
             | Ty::Set(_)
             | Ty::Map(..)

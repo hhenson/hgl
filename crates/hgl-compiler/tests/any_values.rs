@@ -16,9 +16,9 @@ fn generated_any_evaluation_uses_reserved_owning_buffers() -> Result<(), Box<dyn
         root.join("external/hgraph_std/hgl/hgraph/tests/any_values.hgl"),
         root.join("external/hgraph_std/hgl/hgraph/tests/any_bool_values.hgl"),
         root.join("crates/hgl-compiler/tests/fixtures/any_prepared.hgl"),
-        root.join("crates/hgl-compiler/tests/fixtures/any_generator_bindings.hgl"),
         root.join("crates/hgl-compiler/tests/fixtures/any_stage67_order.hgl"),
         root.join("crates/hgl-compiler/tests/fixtures/any_stage67_comparisons.hgl"),
+        root.join("crates/hgl-compiler/tests/fixtures/any_generator_bindings.hgl"),
         root.join("crates/hgl-compiler/tests/fixtures/any_constructor_owners.hgl"),
     ];
     run(&root, &files, None, |source| source)

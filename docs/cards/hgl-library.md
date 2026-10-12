@@ -89,6 +89,11 @@ hgl-diagnostics. Existing load/signature String APIs remain compatibility wrappe
 locate_type_issue maps normalized type-expression offsets to retained original
 annotation tokens and attaches the declaring source, preserving earlier origins.
 
+Role::NativeType indexes explicit `native type Name` and exported declarations.
+Decl::native_type validates the entire opaque declaration: no fields, inheritance,
+generic arguments, representation, or body. It never treats the type as a callable.
+Library.native_contracts retains validated data sidecars; loading rejects missing
+or incompatible native scalar/helper bindings before any execution or activation.
 `Library::declarations` is `Arc<[Decl]>`: source tables are shared across cold
 checker and overload candidates. The loader freezes its declaration vector once
 after indexing all source parts. Readers use indexing or `.iter()`; mutation

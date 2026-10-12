@@ -1,0 +1,12 @@
+native_descriptor 1 target "hgl-rust-1"
+module hgraph.std
+provider "hgl.native_atomic_fixture" fingerprint "native-atomic-values-v1" image "atomic_values.rs"
+scalar Token canonical "hgraph.std::Token" capabilities {copy,text,equality,hash,order,serialization} marker "Token"
+scalar TokenOther canonical "hgraph.std::TokenOther" capabilities {copy,text,equality,hash,order,serialization} marker "TokenOther"
+scalar TextOnly canonical "hgraph.std::TextOnly" capabilities {copy,text,serialization} marker "TextOnly"
+value token(text:str)->Token symbol "token_str" bound "identity_width" ownership owned phases {setup,cold,evaluation} effects {allocation}
+value token_text(value:Token)->str symbol "token_text_native" bound "identity_width" ownership owned phases {setup,cold,evaluation} effects {allocation}
+value token_other(text:str)->TokenOther symbol "token_other_str" bound "identity_width" ownership owned phases {setup,cold,evaluation} effects {allocation}
+value token_other_text(value:TokenOther)->str symbol "token_other_text_native" bound "identity_width" ownership owned phases {setup,cold,evaluation} effects {allocation}
+value text_only(text:str)->TextOnly symbol "text_only_str" bound "identity_width" ownership owned phases {setup,cold,evaluation} effects {allocation}
+value text_only_text(value:TextOnly)->str symbol "text_only_text_native" bound "identity_width" ownership owned phases {setup,cold,evaluation} effects {allocation}

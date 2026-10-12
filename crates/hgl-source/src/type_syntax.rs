@@ -44,26 +44,13 @@ pub fn delta_argument(name: &str) -> Option<&str> {
 }
 /// Split a list element and optional exact size without losing nested applications.
 pub fn list_parts(name: &str) -> Option<(&str, Option<usize>)> {
-    let body = name.strip_prefix("list<")?.strip_suffix('>')?;
-    let mut depth = 0;
-    for (index, ch) in body.char_indices() {
-        if matches!(ch, '<' | '(') {
-            depth += 1;
-        }
-        if matches!(ch, '>' | ')') {
-            depth -= 1;
-        }
-        if ch == ',' && depth == 0 {
-            let size = &body[index + 1..];
-            return Some((
-                &body[..index],
-                if size == "unbounded" {
-                    None
-                } else {
-                    Some(usize::try_from(size.parse::<i64>().ok()?).ok()?)
-                },
-            ));
-        }
+    let (base, arguments) = application(name)?;
+    if base != "list" || !(1..=2).contains(&arguments.len()) {
+        return None;
     }
-    Some((body, None))
+    let size = match arguments.get(1) {
+        None | Some(&"unbounded") => None,
+        Some(size) => Some(usize::try_from(size.parse::<i64>().ok()?).ok()?),
+    };
+    Some((arguments[0], size))
 }

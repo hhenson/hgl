@@ -38,8 +38,14 @@ fn equal_layout_members_are_distinct_and_subfamily_widening_remaps_tag() -> Resu
     assert_eq!(hgl_semantics::family_values::concrete(&ancestor).ty, second);
     assert!(matches!(&ancestor.kind,Kind::Construct(fields) if fields[0].0==1));
     let a = hgl_semantics::family_values::retain(&root, value(first))?;
-    assert!(!hgl_semantics::family_values::equal(&a, &ancestor));
-    assert!(hgl_semantics::family_values::equal(&ancestor, &ancestor));
+    assert_eq!(
+        hgl_semantics::family_values::equal(&a, &ancestor),
+        Ok(false)
+    );
+    assert_eq!(
+        hgl_semantics::family_values::equal(&ancestor, &ancestor),
+        Ok(true)
+    );
     Ok(())
 }
 #[test]

@@ -14,6 +14,39 @@ impl Bindings {
         self.dirty_inputs.reserve(self.endpoints.inputs.len());
         self.retired.reserve(self.endpoints.outputs.len());
     }
+    /// Reserve subscriptions for a checked finite reference target before startup.
+    pub fn reserve_reference_target(&mut self, output: OutputId, subscribers: usize) {
+        self.endpoints.outputs[output.0 as usize]
+            .watchers
+            .reserve(subscribers);
+        for index in 0..self.output(output).fixed.len() {
+            self.reserve_reference_target(self.output(output).fixed[index], subscribers);
+        }
+        for index in 0..self.output(output).members.prepared.len() {
+            self.reserve_reference_target(
+                self.output(output).members.prepared[index].1,
+                subscribers,
+            );
+        }
+    }
+    /// Prepare absent finite child views for a checked reference route before it is sampled.
+    pub fn prepare_reference_input(
+        &mut self,
+        input: InputId,
+        target: OutputId,
+    ) -> Result<(), BindError> {
+        self.check_reference(input, target)?;
+        if self.input(input).source.is_some() || !self.input(input).members.live.is_empty() {
+            return Err(BindError::AlreadyBound(input));
+        }
+        crate::binding_build::reference_projection(
+            &mut self.endpoints,
+            &mut self.scopes,
+            input,
+            target,
+        );
+        Ok(())
+    }
     /// Statically allocated output for a prepared domain; absent for legacy collections.
     /// # Panics
     /// A prepared collection must contain the requested key in its domain.

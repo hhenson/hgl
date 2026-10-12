@@ -1,11 +1,9 @@
 //! Direct ordinary evaluation of checked IR without runtime capabilities.
-use crate::ir::{DeltaEntry, Kind, Statement, Value};
+use crate::ir::{DeltaEntry, Kind, Native, Statement, Value};
 use crate::value_operations as operators;
 pub use crate::value_operations::EvalError;
+use crate::value_operations::unsupported;
 use hgl_value_model::{Literal, TemporalLiteral, Ty};
-fn unsupported(message: &str) -> EvalError {
-    EvalError::Unsupported(message.into())
-}
 fn bounds() -> EvalError {
     EvalError::Operation("ordinary list index out of bounds".into())
 }
@@ -30,7 +28,8 @@ pub fn constant(value: &Value) -> bool {
 pub struct Evaluator {
     locals: Vec<(usize, Value, bool)>,
 }
-type Materialize<'a> = dyn FnMut(&TemporalLiteral) -> Result<Literal, EvalError> + 'a;
+pub use hgl_value_model::execution_phase::ExecutionContext;
+type Materialize<'a> = dyn ExecutionContext<Value, Native, EvalError> + 'a;
 impl Evaluator {
     /// Execute a lexical scope, releasing its bindings while retaining outer writes.
     pub fn scoped<T, E>(&mut self, body: impl FnOnce(&mut Self) -> Result<T, E>) -> Result<T, E> {
@@ -41,14 +40,26 @@ impl Evaluator {
     }
     /// Preserve a checked unavailable wiring result while later source checks continue.
     pub fn bind_failed(&mut self, id: usize, value: Value, writable: bool) {
+        self.bind_checked(id, value, writable);
+    }
+    /// Bind an inert checked value without executing its construction recipe.
+    pub fn bind_checked(&mut self, id: usize, value: Value, writable: bool) {
         self.locals.push((id, value, writable));
     }
     /// Evaluate a checked expression to a closed, independently owned value.
     pub fn value(&mut self, value: &Value) -> Result<Value, EvalError> {
         self.value_with(value, &mut |_| Err(EvalError::ContextRequired))
     }
-    /// Evaluate with the host construction context, preserving expression order.
+    /// Evaluate using the existing temporal-only host callback boundary.
     pub fn value_with(
+        &mut self,
+        value: &Value,
+        materialize: &mut impl FnMut(&TemporalLiteral) -> Result<Literal, EvalError>,
+    ) -> Result<Value, EvalError> {
+        self.value_in_context(value, materialize)
+    }
+    /// Evaluate with the host construction context, preserving expression order.
+    pub fn value_in_context(
         &mut self,
         value: &Value,
         materialize: &mut Materialize<'_>,
@@ -63,8 +74,16 @@ impl Evaluator {
     pub fn statement(&mut self, statement: &Statement) -> Result<Option<Value>, EvalError> {
         self.statement_with(statement, &mut |_| Err(EvalError::ContextRequired))
     }
-    /// Execute a statement with provider-dependent literal materialization.
+    /// Execute using the existing temporal-only host callback boundary.
     pub fn statement_with(
+        &mut self,
+        statement: &Statement,
+        materialize: &mut impl FnMut(&TemporalLiteral) -> Result<Literal, EvalError>,
+    ) -> Result<Option<Value>, EvalError> {
+        self.statement_in_context(statement, materialize)
+    }
+    /// Execute a statement with provider-dependent literal materialization.
+    pub fn statement_in_context(
         &mut self,
         statement: &Statement,
         materialize: &mut Materialize<'_>,
@@ -83,10 +102,13 @@ struct Execution<'a, 'b> {
 impl Execution<'_, '_> {
     fn value(&mut self, value: &Value) -> Result<Value, EvalError> {
         let kind = match &value.kind {
-            Kind::TemporalLiteral(recipe) => Kind::Literal((self.materialize)(recipe)?),
+            Kind::TemporalLiteral(recipe) => Kind::Literal(self.materialize.temporal(recipe)?),
+            Kind::Native(binding, arguments) => return self.native(binding, arguments),
             Kind::Delta(parts) => self.delta(parts)?,
             Kind::WiringFailure(message) => return Err(EvalError::Operation(message.clone())),
-            Kind::Captured(..) | Kind::Literal(_) | Kind::Void => return Ok(value.clone()),
+            Kind::Opaque(_) | Kind::Captured(..) | Kind::Literal(_) | Kind::Void => {
+                return Ok(value.clone());
+            }
             Kind::List(items) => self.collection(&value.ty, items)?,
             Kind::Construct(fields) => Kind::Construct(
                 fields
@@ -144,7 +166,6 @@ impl Execution<'_, '_> {
             | Kind::IterationInput(_)
             | Kind::Input(..)
             | Kind::Cache(_)
-            | Kind::Native(..)
             | Kind::Query(..)
             | Kind::Output
             | Kind::Capability => {
@@ -182,6 +203,15 @@ impl Execution<'_, '_> {
                 ));
         }
         list(&parent)?.get(offset).cloned().ok_or_else(bounds)
+    }
+    fn native(&mut self, binding: &Native, arguments: &[Value]) -> Result<Value, EvalError> {
+        let arguments = arguments
+            .iter()
+            .map(|v| self.value(v))
+            .collect::<Result<Vec<_>, _>>()?;
+        self.materialize
+            .native(binding, &arguments)
+            .unwrap_or(Err(EvalError::ContextRequired))
     }
     fn binary(&mut self, op: &str, a: &Value, b: &Value) -> Result<Value, EvalError> {
         let a = self.value(a)?;
@@ -298,7 +328,7 @@ impl Execution<'_, '_> {
                 DeltaEntry::Child(..) => {}
             }
         }
-        crate::publication_trace::materialized(&parts).map_err(EvalError::Operation)?;
+        crate::publication_trace::materialized(&parts)?;
         Ok(Kind::Delta(parts))
     }
     fn path(&mut self, value: &Value, path: &mut Vec<Projection>) -> Result<usize, EvalError> {

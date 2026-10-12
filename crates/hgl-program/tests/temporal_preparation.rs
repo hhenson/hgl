@@ -385,14 +385,14 @@ fn generated_tests_validate_before_start_and_expectations_after_run()
     let mut calls = String::new();
     for (name, body, _, _, _) in CASES {
         let suite = compile_tests(&source(body))?;
+        let generated = emit_tests(&suite);
+        assert!(generated.contains("self.0.materialize(recipe)"));
         fs::write(
             dir.join(format!("src/{name}.rs")),
-            emit_tests(&suite)
-                .replace("fn main()", "pub fn main()")
-                .replace(
-                    "context.materialize(recipe)",
-                    "{println!(\"MATERIALIZED\");context.materialize(recipe)}",
-                ),
+            generated.replace("fn main()", "pub fn main()").replace(
+                "self.0.materialize(recipe)",
+                "{println!(\"MATERIALIZED\");self.0.materialize(recipe)}",
+            ),
         )?;
         writeln!(modules, "mod {name};")?;
         writeln!(calls, "Some({name:?})=>{name}::main(),")?;

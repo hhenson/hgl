@@ -1,6 +1,6 @@
 # Card: hgl-default-values
 
-The default_values policy checks general required ordinary expressions through the authoritative frontend checker. It may use ir, library, value_eval, value_types, inheritance and enums; optional reporting target 220 lines.
+The default_values policy checks general required ordinary expressions through the authoritative frontend checker. It may use ir, library, value_eval, value_types, inheritance and enums; initial budget 220 lines within the unchanged semantics cap.
 
 Public surface: error, required, parameters, declaration, bindings, pending, contextual, literal and size_environment. Concrete type formation precedes required evaluation. Exact contextual list fixedness remains required. Temporal literals retain their cold contextual recipes. Known missing Any capabilities map to source category type/value.constant_capability, distinct from runtime value.capability.
 
@@ -45,3 +45,6 @@ Eval argument preparation retains omitted ordinary value-function defaults along
 explicit const defaults. Written arguments retain source order; omitted defaults
 follow in declaration order. Each recipe is materialized once before the lifted
 node executes, even when its parameter is unused; a supplied value suppresses it.
+
+Expression dependency checks use the source AST’s immediate children in source order;
+Native concrete type formation and per-invocation phase metadata remain authoritative.

@@ -10,6 +10,8 @@ line-budget = 1130
 
 # Budgets of the modules that were crates of their own (docs/decisions/0004).
 [package.metadata.hgl.modules]
+native_package = { budget = 80, uses = ["native_descriptor"] }
+native_descriptor = { budget = 140, uses = [] }
 lex = { budget = 180, uses = [] }
 literals = { budget = 100, uses = [] }
 type_shape = { budget = 70, uses = ["type_syntax"] }

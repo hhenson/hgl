@@ -14,3 +14,8 @@ membership and index checks still apply to every nonempty instruction.
 Uses hgl-delta-check for materialized duplicate checks, hgl-composite-keys for
 complete identities, and hgl-growing-range for dense index rules. The evaluator
 reexports this function.
+
+Native key identity is scoped across the complete cold trace through key_context;
+provider equality/hash, not opaque bytes or ordering, govern membership. The
+module belongs to hgl-eval and may use key_context and value_eval. Materialized
+validation returns EvalError so ordinary evaluation retains provider error codes.

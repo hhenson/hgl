@@ -3,27 +3,12 @@ use hgl_source::diagnostics::Diagnostic;
 use hgl_source::{Cursor, Expr, Issue, Token, lex};
 use std::collections::{BTreeMap, BTreeSet};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-/// The declaration role before overload selection.
-pub enum Role {
-    /// Nominal enum declaration.
-    Enum,
-    /// Ordinary nominal struct declaration.
-    Struct,
-    /// Ordinary or const function.
-    Function,
-    /// Operator implementation.
-    Implementation,
-    /// Operator contract.
-    Operator,
-    /// Native interface or selected target part.
-    Native,
-    /// Named test case.
-    Test,
-}
+pub use hgl_source::DeclarationRole as Role;
 #[derive(Debug, Clone)]
 /// A declaration with its owning module and source tokens.
 pub struct Decl {
+    /// Ordinary value mode established only by a validated package contract.
+    pub ordinary_native: bool,
     /// Owning module name.
     pub module: String,
     /// Source identifier.
@@ -83,6 +68,8 @@ pub use crate::struct_declarations::RequiredStruct;
 #[derive(Debug, Default, Clone)]
 /// Indexed source declarations, imports and explicit instances.
 pub struct Library {
+    /// Data-only selected native package contracts; never executable providers.
+    pub native_contracts: crate::native_contracts::Contracts,
     /// Module whose test-local nominal descendants participate in type resolution.
     pub test_scope: Option<String>,
     /// Declaration-owned bound literals, retaining exact count or duration kind.
@@ -125,18 +112,41 @@ pub fn load_checked(sources: &[(String, String)]) -> Result<Library, Box<Diagnos
     let mut parts = BTreeSet::new();
     let mut declarations = Vec::new();
     for (source, text) in sources {
-        load_source(&mut library, &mut declarations, &mut parts, source, text)
-            .map_err(|e| Box::new(Diagnostic::new(source, text, e)))?;
+        let checked = if crate::native_contracts::sidecar(source) {
+            crate::native_contracts::parse(source, text).and_then(|descriptor| {
+                if library
+                    .native_contracts
+                    .insert(descriptor.module.clone(), descriptor)
+                    .is_some()
+                {
+                    Err("multiple selected native descriptors for one module".into())
+                } else {
+                    Ok(())
+                }
+            })
+        } else {
+            load_source(&mut library, &mut declarations, &mut parts, source, text)
+        };
+        checked.map_err(|e| Box::new(Diagnostic::new(source, text, e)))?;
     }
     library.declarations = declarations.into();
-    test_types(&library).map_err(|issue| {
-        let (source, text) = sources
-            .iter()
-            .find(|(source, _)| issue.source.as_ref() == Some(source))
-            .or_else(|| sources.first())
-            .map_or(("", ""), |(source, text)| (source.as_str(), text.as_str()));
-        Box::new(Diagnostic::new(source, text, issue))
-    })?;
+    test_types(&library)
+        .and_then(|()| crate::native_contracts::validate(&library))
+        .map_err(|issue| {
+            let (source, text) = sources
+                .iter()
+                .find(|(source, _)| issue.source.as_ref() == Some(source))
+                .or_else(|| sources.first())
+                .map_or(("", ""), |(source, text)| (source.as_str(), text.as_str()));
+            Box::new(Diagnostic::new(source, text, issue))
+        })?;
+    for declaration in std::sync::Arc::make_mut(&mut library.declarations) {
+        declaration.ordinary_native = declaration.role == Role::Native
+            && library
+                .native_contracts
+                .get(&declaration.module)
+                .is_some_and(|contract| contract.functions.contains_key(&declaration.name));
+    }
     Ok(library)
 }
 fn test_types(library: &Library) -> Result<(), Issue> {
@@ -305,9 +315,13 @@ fn load_items(
                 d.need("fn")?;
                 Role::Implementation
             } else if d.take("native") {
-                d.take("const");
-                d.need("fn")?;
-                Role::Native
+                if d.take("type") {
+                    Role::NativeType
+                } else {
+                    d.take("const");
+                    d.need("fn")?;
+                    Role::Native
+                }
             } else if d.take("const") {
                 d.need("fn")?;
                 Role::Function
@@ -326,6 +340,7 @@ fn load_items(
             };
             let name = d.name()?;
             declarations.push(Decl {
+                ordinary_native: false,
                 module: module.into(),
                 name,
                 role,
@@ -357,6 +372,17 @@ fn add_import(
     Ok(())
 }
 impl Decl {
+    /// Validate the complete opaque declaration without exposing representation.
+    pub fn native_type(&self) -> Result<(), Issue> {
+        let mut c = Cursor::new(&self.tokens);
+        c.take("export");
+        c.need("native")?;
+        c.need("type")?;
+        c.name()?;
+        c.lines();
+        c.need("")?;
+        Ok(())
+    }
     /// Parse declaration-owned fields, defaults and single inheritance.
     pub fn required_struct(&self) -> Result<RequiredStruct, String> {
         crate::struct_declarations::parse(&self.tokens)
@@ -383,7 +409,7 @@ impl Decl {
         if c.take("native") {
             c.need("const")?;
         }
-        let value_function = c.take("const");
+        let value_function = c.take("const") || self.ordinary_native;
         if !c.take("fn") {
             c.need("operator")?;
         }

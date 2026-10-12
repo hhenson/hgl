@@ -8,10 +8,8 @@ fn inference_keeps_effectful_operands_once_in_written_order() {
         .arg(root.join("crates/hgl-compiler/tests/fixtures/dependent_defaults.hgl"))
         .arg("--library")
         .arg(root.join("external/hgraph_std/hgl/hgraph"))
-        .arg("--part")
-        .arg(root.join("native/stdlib/interfaces.hgl"))
-        .arg("--part")
-        .arg(root.join("native/stdlib/rust.hgl"))
+        .arg("--library")
+        .arg(root.join("native/stdlib"))
         .output()
         .expect("execute authored default-inference source");
     let stderr = String::from_utf8_lossy(&output.stderr);

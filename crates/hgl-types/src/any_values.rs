@@ -13,8 +13,15 @@ pub use data::AnyView;
 #[derive(Debug)]
 pub struct IdentityChunk<const BYTES: u128, const LENGTH: usize>;
 
+/// Append a checked provider encoding into a selected owning sink.
+pub type NativeCopy = fn(&[u8], &mut dyn AnyBuffer);
+/// Validate provider retention before mutation.
+pub type NativeCheck = fn(&[u8], usize) -> NodeResult;
 /// Fallible cold-only conversion with no dependency on the checked value model.
 pub type ColdCapture = fn(AnyView<'_>) -> NodeResult<Box<dyn std::any::Any>>;
+
+/// Cold-only validation of untrusted descriptor payloads before decoding.
+pub type ColdValidate = fn(AnyView<'_>) -> NodeResult;
 
 /// Recursive runtime operations supplied without a runtime dependency in Types.
 #[derive(Debug)]
@@ -33,10 +40,14 @@ pub struct AnyPlan {
     pub execution: &'static AnyExecution,
     /// Generated cold conversion; its carrier belongs to the compiler layer.
     pub capture: Option<ColdCapture>,
+    /// Complete cold payload validation, absent for descriptors with no cold mapping.
+    pub validate: Option<ColdValidate>,
     /// Canonical nominal marker identity, independent of its native representation.
     pub identity: fn() -> TypeId,
     /// Precompiled operations over this layout.
     pub operation: AnyOperation,
+    /// Compiled provider-preserving owning copy after preflight.
+    pub copy: fn(AnyView<'_>, &mut dyn AnyBuffer),
     /// Equality, hash and order capability declarations.
     pub capabilities: [bool; 3],
 }
@@ -51,6 +62,15 @@ pub struct AnyField {
 /// Storage operations selected during compilation, never inferred from payload tags.
 #[derive(Debug)]
 pub enum AnyOperation {
+    /// Operations supplied by the checked opaque provider.
+    Native {
+        /// Provider equality.
+        equal: fn(&[u8], &[u8]) -> NodeResult<bool>,
+        /// Provider hash.
+        hash: fn(&[u8]) -> NodeResult<u64>,
+        /// Provider ordering.
+        compare: fn(&[u8], &[u8]) -> NodeResult<Option<Ordering>>,
+    },
     /// Signed integer or enum member.
     Integer,
     /// IEEE floating-point value, preserving NaN and signed-zero semantics.
@@ -69,11 +89,22 @@ pub enum AnyOperation {
     Data,
 }
 /// Complete retained bytes and the concrete layout selected before publication.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default)]
 pub struct AnyValue {
     plan: Option<&'static AnyPlan>,
     data: Vec<u8>,
-    descriptors: Vec<data::Descriptor>,
+    descriptors: Vec<&'static AnyPlan>,
+}
+impl Clone for AnyValue {
+    fn clone(&self) -> Self {
+        let mut retained = Self {
+            data: Vec::with_capacity(self.data.len()),
+            descriptors: Vec::with_capacity(self.descriptors.len()),
+            plan: None,
+        };
+        retained.copy_prepared(self);
+        retained
+    }
 }
 impl AnyValue {
     /// Install independently owned data produced by its statically selected codec.
@@ -89,11 +120,7 @@ impl AnyValue {
     }
     /// Borrow encoded owning storage within the consumer's existing lifetime.
     pub fn data(&self) -> AnyView<'_> {
-        AnyView {
-            bytes: &self.data,
-            descriptors: &self.descriptors,
-            offset: 0,
-        }
+        AnyView::from_encoded(&self.data, &self.descriptors)
     }
     /// Reserve owning capacity before hooks execute.
     pub fn reserve(&mut self, size: usize) -> NodeResult {
@@ -114,11 +141,20 @@ impl AnyValue {
                 .saturating_add(7),
         )
     }
+    /// Validate complete reserved byte and descriptor storage before mutation.
+    pub fn check_capacity(&self, width: usize) -> NodeResult {
+        if self.capacity() < width {
+            return Err(NodeError::new("prepared any capacity exceeded"));
+        }
+        Ok(())
+    }
     /// Copy only after the caller has checked the complete prepared capacity.
     pub fn copy_prepared(&mut self, source: &Self) {
-        self.data.clone_from(&source.data);
-        self.descriptors.clone_from(&source.descriptors);
-        self.plan = source.plan;
+        self.encode_prepared(source.plan, |out| {
+            if let Some(plan) = source.plan {
+                (plan.copy)(source.data(), out);
+            }
+        });
     }
     /// Assemble a completely preflighted publication in reserved owning capacity.
     pub fn encode_prepared(
@@ -135,8 +171,17 @@ impl AnyValue {
     pub fn retain(&self) -> NodeResult<Self> {
         let mut retained = Self::default();
         retained.reserve(self.data.len())?;
+        self.preflight()?;
         retained.copy_prepared(self);
         Ok(retained)
+    }
+    /// Validate provider retention before changing any owning destination.
+    pub fn preflight(&self) -> NodeResult {
+        let mut width = AnyWidth::default();
+        if let Some(plan) = self.plan {
+            (plan.copy)(self.data(), &mut width);
+        }
+        width.finish().map(|_| ())
     }
     /// Recover the compiler's cold carrier, rejecting incompatible descriptors as errors.
     pub fn capture<T: 'static>(&self) -> NodeResult<T> {
@@ -210,11 +255,16 @@ impl AnyRef<'_> {
     }
 }
 
-fn number(data: &[u8]) -> u64 {
+/// Read one compiled eight-byte scalar or frame header.
+pub fn number(data: &[u8]) -> u64 {
     u64::from_le_bytes(
         data.try_into()
             .unwrap_or_else(|_| unreachable!("compiled scalar layout")),
     )
+}
+/// Decode a compiled frame or member index on the target architecture.
+pub fn index(value: u64) -> usize {
+    usize::try_from(value).unwrap_or_else(|_| unreachable!("compiled layout index"))
 }
 /// Borrow complete child frames at cold capture boundaries.
 #[derive(Debug)]
@@ -225,8 +275,7 @@ impl<'a> Iterator for Frames<'a> {
         if self.0.is_empty() {
             return None;
         }
-        let size = usize::try_from(number(&self.0[..8]))
-            .unwrap_or_else(|_| unreachable!("compiled frame size"));
+        let size = index(number(&self.0[..8]));
         let value = self.0.slice(8..8 + size);
         self.0 = self.0.slice(8 + size..self.0.len());
         Some(value)
@@ -257,15 +306,10 @@ pub trait AnyBuffer {
     }
     /// Append exact data; storage callers preflight capacity before entering the codec.
     fn write(&mut self, bytes: &[u8]);
+    /// Preserve provider copying; sizing validates without executing the copy.
+    fn native(&mut self, data: &[u8], copy: NativeCopy, check: NativeCheck);
     /// Append a typed descriptor header into the independently owned metadata.
     fn descriptor(&mut self, plan: Option<&'static AnyPlan>);
-    /// Copy a retained encoding while preserving its descriptor references.
-    fn append(&mut self, view: AnyView<'_>)
-    where
-        Self: Sized,
-    {
-        data::append(self, view);
-    }
     /// Finish a frame's width at its reserved header.
     fn width(&mut self, index: usize, width: usize);
     /// Retain a complete child frame without temporary buffers.
@@ -281,8 +325,18 @@ pub trait AnyBuffer {
 }
 /// Preflight sink used before mutating an owning destination.
 #[derive(Debug, Default)]
-pub struct AnyWidth(pub usize);
+pub struct AnyWidth(pub usize, Option<Box<NodeError>>);
+impl AnyWidth {
+    /// Complete fallible provider preflight before publication.
+    pub fn finish(self) -> NodeResult<usize> {
+        self.1.map_or(Ok(self.0), Err)
+    }
+}
 impl AnyBuffer for AnyWidth {
+    fn native(&mut self, data: &[u8], _: NativeCopy, check: NativeCheck) {
+        self.1 = self.1.take().or_else(|| check(data, data.len()).err());
+        self.write(data);
+    }
     fn len(&self) -> usize {
         self.0
     }

@@ -53,9 +53,6 @@ impl NodeError {
             cleanup: Vec::new(),
         })
     }
-}
-
-impl NodeError {
     /// Attach a specified semantic identifier without changing graph context.
     #[expect(
         clippy::unnecessary_box_returns,

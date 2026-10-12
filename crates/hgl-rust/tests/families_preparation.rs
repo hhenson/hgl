@@ -43,7 +43,20 @@ fn preparation_is_idempotent_and_preserves_nonliteral_hook_phase() -> Result<(),
                 None,
                 vec![
                     Statement::Return(payload),
-                    Statement::Return(Value::new(ty, Kind::Native(0, Vec::new()))),
+                    Statement::Return(Value::new(
+                        ty.clone(),
+                        Kind::Native(
+                            Box::new(hgl_semantics::ir::Native {
+                                name: "test::native".into(),
+                                method: "native".into(),
+                                provider: None,
+                                throws: false,
+                                args: vec![],
+                                result: ty,
+                            }),
+                            Vec::new(),
+                        ),
+                    )),
                 ],
             )],
         }],
@@ -63,7 +76,7 @@ fn preparation_is_idempotent_and_preserves_nonliteral_hook_phase() -> Result<(),
     assert!(matches!(
         second.nodes[0].handlers[0].1[1],
         Statement::Return(Value {
-            kind: Kind::Native(0, _),
+            kind: Kind::Native(_, _),
             ..
         })
     ));

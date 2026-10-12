@@ -121,6 +121,10 @@ suite. `emit_shared(&Plan)` emits nodes against those enclosing markers; standal
 `emit` retains self-contained output. Graph instances and payload stores remain
 independent. Sharing generated type definitions bounds compiler memory growth
 without changing execution or reducing test cases.
+shared_suite_layouts(&Suite) includes native type mappings reached by ordinary
+test preparation, using the native-images card. shared_test_layouts(plans, tests)
+remains available for callers whose mappings are supplied by checked plans or
+helper bindings. Provider modules and canonical aliases are shared once.
 
 Finite evaluation emits graph-local cold capacity maxima from already materialized
 configuration values and proved direct generator arrival counts. Before binding globals it allocates record slots, then after
@@ -144,3 +148,8 @@ The standalone emit entry point marks ordinary_instantiation on its backend clon
 Its public register/graph-description API leaves instantiation to the caller and
 does not install finite evaluation capacity. Shared eval adapters retain their
 explicit preparation phase and allocation-free proved transport.
+
+The current assembly boundary is specified by hgl-rust-codegen.md. This facade
+owns emit, capacity, generators and preparation; the remaining public emission
+modules are reexported from the lower hgl-rust-codegen crate. Its aggregate
+ceiling is 1700, with moved module ceilings unchanged.

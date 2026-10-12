@@ -6,8 +6,12 @@ use hgl_types::{Date, EngineDelta, EngineTime, NodeError, NodeResult, ScalarType
 pub use crate::value_lists::ListData;
 /// Upper bounds on slots required before an infallible installation.
 #[derive(Debug, Default)]
-pub struct Capacity([usize; 15]);
+pub struct Capacity([usize; 16]);
 impl Capacity {
+    /// Count one opaque owning scalar position.
+    pub fn native(&mut self) {
+        self.0[15] = self.0[15].saturating_add(1);
+    }
     /// Count one complete owning box position.
     pub fn any(&mut self) {
         self.0[14] = self.0[14].saturating_add(1);
@@ -29,8 +33,8 @@ impl Capacity {
 /// Private payloads remain in type-specific columns; all handles are stable indices.
 #[derive(Debug, Default)]
 pub struct Columns {
-    pub(crate) anys: Vec<(hgl_types::AnyValue, hgl_types::AnyValue)>,
-    pub(crate) free_anys: Vec<usize>,
+    pub(crate) anys: crate::owned_columns::Owned<(hgl_types::AnyValue, hgl_types::AnyValue)>,
+    pub(crate) natives: crate::owned_columns::Owned<Vec<u8>>,
     values: crate::columns::Columns,
     free: [Vec<usize>; 13],
     lists: crate::value_lists::Lists,
@@ -45,7 +49,8 @@ impl Columns {
     }
     /// Obtain every capacity needed by installation and subsequent reclamation.
     pub fn reserve(&mut self, capacity: &Capacity) -> NodeResult {
-        self.reserve_any(capacity.0[14])?;
+        self.anys.reserve(capacity.0[14])?;
+        self.natives.reserve(capacity.0[15])?;
         self.reserve_scalar::<bool>(capacity)?;
         self.reserve_scalar::<i64>(capacity)?;
         self.reserve_scalar::<f64>(capacity)?;
@@ -161,7 +166,8 @@ impl Columns {
                 + count::<hgl_types::ZoneId>(&self.values)
                 + count::<hgl_types::ZonedDateTime>(&self.values)
                 + count::<hgl_types::ZonedTime>(&self.values)
-                + self.anys.len(),
+                + self.anys.len()
+                + self.natives.len(),
             self.lists.len(),
         )
     }

@@ -29,6 +29,9 @@ byte_limits(type iterator, index function)->String emits cold Bytes width propag
 
 `global_growth` keeps empty recorder row bounds separate from configured ordinary global rows plus bounded appends; it emits capacity arithmetic without executing a hook.
 
+This module now lives in hgl-rust-codegen below executable program assembly;
+its hgl-rust facade path and module ceiling remain unchanged.
+
 Capacity setup first includes native scalar envelopes and applies the checked
 text multiplier; only then does it derive Any frame widths from those bounds.
 This preserves one cold bound for direct text outputs and computed boxed leaves.

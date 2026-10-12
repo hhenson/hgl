@@ -6,6 +6,9 @@ Surface: crate-private identifier(source). Complete UTF-8 bytes are encoded as f
 
 Acceptance: exact canonical nominal specializations and arbitrary compiled box descriptors coexist in generated Rust, with import alias identity retained.
 
+This module now lives in hgl-rust-codegen below executable program assembly;
+its hgl-rust facade path and module ceiling remain unchanged.
+
 any_identity(source bytes) emits the shared Types IdentityChunk const-generic
 marker for each exact UTF-8 chunk, retaining its byte length. Balanced tuple
 composition bounds generated type nesting logarithmically in name length.

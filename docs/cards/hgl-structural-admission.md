@@ -45,3 +45,9 @@ Prepared Tuple/Struct/List/Map snapshots retain optional descendant storage and
 cannot cross whole atomic or rolling aggregate result boundaries. This profile
 rejection covers returns and own-output assignments; scalar byte snapshots retain
 their exact representation and can publish scalar or rolling byte arrivals.
+
+A complete atomic Tuple constructor may include scalar fields and selected
+provider text results with declared pure bounds. The prepared adapter stages
+those fields in an independent canonical owner. This narrow admission does not
+extend owning collection/family constructors, ordinary owning locals or retained
+partial aggregate observations across atomic/rolling boundaries.

@@ -24,14 +24,10 @@ Mutants: fill omitted children from held values; discard removals; evaluate
 fields in declaration order; retain observation at alias declaration; replace
 existing map subtree rather than merge.
 
-`equivalent(ty,left,right) -> String` emits post-run structural comparison.
-Generated equivalent methods ignore constructor ordering for sets and keyed
-sparse entries, compare exact presence and recurse on children; they never fill
-omissions from held state. No general HGL equality operator is admitted.
+Post-run comparison delegates to the existing fallible cold ordinary equal_data after typed capture. It preserves exact sparse presence, unordered keyed entries and provider error identifiers, without adding a source equality operator.
 
 `structural(&Ty) -> bool` identifies structural endpoint emission at compilation.
-The generated delta marker provides allocate, validate, observe, apply and
-post-run equivalent methods. Sparse payload storage is opaque to HGL; generated
+The generated delta marker provides allocate, validate, observe and apply methods. Sparse payload storage is opaque to HGL; generated
 Rust projection code is the only consumer of its internal list fields.
 
 Declared enum source types retain nominal identity through generated i64-backed
@@ -50,3 +46,6 @@ publish accepts complete ordinary Set/Map payloads through atomic whole-value tr
 Growing publication emission preserves sparse owning index/value/removal triples and order-independent equality. Runtime application validates append/tail rules before using typed child membership; fixed-list removal remains outside its profile.
 
 read delegates exact scoped-child payload transport to observed. collection_operation forwards checked scalar map/list effects to keyed with static child allocation/application callbacks; existing invalidation and mutation rules remain owned by Store.
+
+This module now lives in hgl-rust-codegen below executable program assembly;
+its hgl-rust facade path and module ceiling remain unchanged.

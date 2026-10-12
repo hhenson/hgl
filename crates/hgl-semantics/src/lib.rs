@@ -6,6 +6,7 @@ pub mod boxed_uses;
 pub mod collection_check;
 pub use hgl_eval::collection_values;
 pub use hgl_eval::composite_keys;
+mod constructor_growth;
 pub mod constructor_owners;
 pub mod delta_check;
 pub mod endpoint_check;
@@ -22,6 +23,8 @@ pub use hgl_eval::ir;
 pub mod library;
 pub mod local_check;
 pub mod name_check;
+pub mod native_contracts;
+pub mod native_images;
 pub use hgl_eval::publication_trace;
 pub mod recursive_types;
 pub use hgl_eval::scalar_keys;
@@ -56,10 +59,15 @@ pub use hgl_eval::ir_visit;
 /// Checked ordinary operator type algebra.
 pub mod value_operators;
 
-/// Independent lexical storage identities for emitted helper callsites.
-pub mod call_locals;
-
 /// Required ordinary defaults share checking-time retention and capability identity.
 pub mod default_values;
+
+mod wiring_mutation;
+/// Standalone checked cold wiring recipes and lexical bindings.
+pub mod wiring_values;
+
+/// Node-wide identities for checked ordinary helper locals.
+pub mod call_locals;
+
 /// Cold reservation of lexical complete observation destinations.
 pub mod snapshot_locals;

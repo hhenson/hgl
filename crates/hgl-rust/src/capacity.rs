@@ -46,6 +46,9 @@ impl Capacity {
                 {
                     collect(&child.ty, &mut types);
                 }
+                if value.ty.owning_scalar() && hgl_rust_codegen::native_results::supported(value) {
+                    collect(&value.ty, &mut types);
+                }
                 true
             });
             for (_, ty) in &node.globals {
@@ -185,7 +188,8 @@ impl Capacity {
     }
     /// Reserve the fixed textual envelope of built-in scalar formatters.
     pub fn native_limits(&self, plan: &Plan) -> String {
-        crate::pure_bounds::native_limits(plan, || self.index(&Ty::Str))
+        hgl_rust_codegen::native_results::limits(plan, |ty| self.bounds(ty))
+            + &crate::pure_bounds::native_limits(plan, || self.index(&Ty::Str))
             + &crate::pure_bounds::byte_limits(self.types.values(), |ty| self.index(ty))
             + &self.text_limits(plan)
             + &if self.types.contains_key(&global_type(&Ty::Any)) {

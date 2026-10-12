@@ -53,3 +53,6 @@ The configuration fixture executes each of its 41 checked eval steps exactly
 once in a separate generated program. This preserves its authored inputs and
 expectations while bounding the Windows debug stack; allocation measurement
 remains unchanged. Other prepared-execution fixtures keep their lexical suites.
+
+This module now lives in hgl-rust-codegen below executable program assembly;
+its hgl-rust facade path and module ceiling remain unchanged.

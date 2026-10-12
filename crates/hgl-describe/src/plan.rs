@@ -166,6 +166,10 @@ pub enum BuildError {
 
 /// From borrowed names, so that each check returns its error in one line.
 impl BuildError {
+    pub(crate) fn invalid_node(node: &'static str, what: String) -> Self {
+        Self::InvalidNodeType { node, what }
+    }
+
     /// Construct a diagnostic from borrowed names.
     pub fn unknown_input(node: &str, input: &str) -> Self {
         Self::UnknownInput {
@@ -218,8 +222,8 @@ pub fn check_scalars(node_type: &NodeType, node: &NodeDescription) -> Result<(),
         }
     }
     for &(scalar, scalar_type) in declared {
-        let matches: Vec<_> = given.iter().filter(|(name, _)| name == scalar).collect();
-        let [(_, value)] = matches.as_slice() else {
+        let mut matches = given.iter().filter(|(name, _)| name == scalar);
+        let (Some((_, value)), None) = (matches.next(), matches.next()) else {
             // Not given, or given more than once.
             return Err(BuildError::unknown_scalar(label, scalar));
         };

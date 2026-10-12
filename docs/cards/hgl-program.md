@@ -7,6 +7,13 @@ plans to `hgl-rust` for Rust emission. Uses `hgl-source`, `hgl-library`,
 dependencies. Source linking, type/phase/proof checks and eval wiring stay here;
 checked backend IR and Rust generation belong to `hgl-rust`.
 
+Program::compile resolves source and closed graph plans. emit_rust calls the Rust
+backend's native_results::validate gate before any target or provider image
+emission. A missing prepared runtime transport mapping returns only a precise
+compile_error! diagnostic; target compilation fails before execution. Concrete
+suite planning reports that error through Result before emission. Source checking
+remains separate. Cold/setup calls and already prepared copies retain their paths.
+
 Public surface: `compile`, `compile_files`, opaque `Program`, `emit_rust`;
 `compile_tests`, `compile_tests_files`, opaque `Suite`, `emit_tests`. File loaders
 include explicit parts and recursively load libraries, excluding test/example
@@ -24,6 +31,13 @@ for each fresh graph; checkpoint recovery is outside this slice. The current
 and complete atomic values. References are excluded from that test matrix;
 signal coverage observes metadata only. Type admission does not itself establish
 the separate finite prepared-execution proof.
+
+Graph bodies may project declared nominal fields and constant fixed-list or
+Tuple positions from ordinary and REF connections. Lowering creates a fixed
+reference projection node: an opaque designation input controls admission,
+an ordinary bound view supplies only the selected child endpoint identity.
+Repeated designations are suppressed by the existing REF publication operation;
+child values remain independently followed. Node REF traversal stays opaque.
 
 `eval` resolves ordinary `hgraph.std::replay` and `hgraph.std::record` operator
 contracts and checks their selected HGL bodies through the normal resolver.

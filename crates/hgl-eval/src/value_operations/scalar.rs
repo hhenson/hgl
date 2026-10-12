@@ -36,12 +36,7 @@ pub fn unary(op: &str, operand: &Value) -> Result<Value, EvalError> {
             .collect::<Result<Vec<_>, _>>()?;
         return hgl_types::bytes(&octets)
             .map(|bytes| value(Literal::Bytes(bytes)))
-            .map_err(|error| {
-                error.code.map_or_else(
-                    || EvalError::Operation(error.message.clone()),
-                    |code| EvalError::Coded(code, error.message.clone()),
-                )
-            });
+            .map_err(EvalError::from);
     }
     let result = match (op, scalar(operand)?) {
         ("!", Literal::Bool(v)) => Literal::Bool(!v),
@@ -79,6 +74,15 @@ pub fn binary(op: &str, a: &Value, b: &Value) -> Result<Value, EvalError> {
         return Ok(value(Literal::Bool(
             crate::any_values::equal_data(a, b)? == (op == "=="),
         )));
+    }
+    if let (Kind::Opaque(a), Kind::Opaque(b)) = (&a.kind, &b.kind) {
+        return if matches!(op, "==" | "!=") {
+            Ok(value(Literal::Bool(
+                (a.operations().equal)(a.data(), b.data())? == (op == "=="),
+            )))
+        } else {
+            partial_comparison(op, (a.operations().compare)(a.data(), b.data())?).map(value)
+        };
     }
     let (a, b) = (scalar(a)?, scalar(b)?);
     if a.ty() == b.ty() && matches!(op, "==" | "!=") && !matches!(a, Literal::Float(_)) {
@@ -169,6 +173,15 @@ fn floating(op: &str, a: f64, b: f64) -> Result<Literal, EvalError> {
         _ => return comparison(op, a.partial_cmp(&b)),
     };
     Ok(Literal::Float(result))
+}
+fn partial_comparison(op: &str, ordering: Option<Ordering>) -> Result<Literal, EvalError> {
+    Ok(Literal::Bool(match op {
+        "<" => ordering == Some(Ordering::Less),
+        "<=" => matches!(ordering, Some(Ordering::Less | Ordering::Equal)),
+        ">" => ordering == Some(Ordering::Greater),
+        ">=" => matches!(ordering, Some(Ordering::Greater | Ordering::Equal)),
+        _ => return Err(unsupported("unsupported ordinary binary operation")),
+    }))
 }
 fn comparison(op: &str, ordering: Option<Ordering>) -> Result<Literal, EvalError> {
     let ordering = ordering.ok_or_else(|| unsupported("NaN comparison policy is not specified"))?;

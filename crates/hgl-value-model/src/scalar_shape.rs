@@ -22,6 +22,7 @@ impl Ty {
             | Self::Family(_)
             | Self::Recursive(_)
             | Self::Enum(_)
+            | Self::Native(_)
             | Self::Atomic(_)
             | Self::Map(..)
             | Self::Tuple(_)
@@ -42,6 +43,7 @@ impl Ty {
             Self::Str
                 | Self::Bytes
                 | Self::Any
+                | Self::Native(_)
                 | Self::TimeZone
                 | Self::ZonedTime
                 | Self::ZonedDateTime

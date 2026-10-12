@@ -1,0 +1,9 @@
+# Card: Native key domains
+
+The native_keys module of hgl-store owns compiled Native<T, D> key tables. Generated D implements public hgl_store::NativeKeyDomain with associated Scalar, selected executable image/marker MAPPING and a static OnceLock<usize> returned by slot(). Its prepare() resolves cold metadata even for observer-only domains; generated image validation primes every selected marker before graph construction. Cold Key::prepare resolves canonical provider contracts to process-stable numeric slots, then prepares each Store table at that slot. Compatible canonical/provider/fingerprint/capability/image/marker contracts share slots; incompatible mappings of one canonical identity fail before callback lookup. Hot access reads the cached number and directly indexes Store storage. Provider markers are selected before execution; Store has no dependency on compiler metadata.
+
+Native::key_view and key_view_id borrow exact prepared keys; Key::prepare retains each new identity independently, Key::id resolves it, Key::value makes an explicit owning cold copy, and Key::ids exposes stable internal IDs. A hash table selects provider-hash collision buckets, then provider equality establishes identity. Distinct nominal domains remain separate even for identical bytes. Missing capabilities and provider errors propagate; no byte equality or invented ordering is substituted.
+
+Native key publication and recording copy a borrowed key view after typed destination preflight. Successful prepared paths allocate nothing. Hash collisions may require linear scans within one bucket; no worst-case bound beyond the provider Eq/Hash contract is claimed. Controls cover collision identity, retained aliases, coded provider failures, and n/2n/4n/8n callback counts.
+
+Initial module ceiling: native_keys 100 lines, within the unchanged Store aggregate.

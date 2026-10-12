@@ -1,6 +1,8 @@
 //! Validate canonical closed publication sequences before graph start.
-use crate::composite_keys::{Key, key};
+use crate::composite_keys::Key;
 use crate::ir::{DeltaEntry, Kind, Value};
+use crate::key_context::Context;
+use crate::value_eval::EvalError;
 use hgl_value_model::{Literal, Ty};
 use std::collections::{BTreeMap, BTreeSet};
 #[derive(Default)]
@@ -11,9 +13,12 @@ struct State {
 /// Validate sparse publications from a fresh endpoint, preserving prior membership.
 pub fn validate(shape: &Ty, slots: &[Option<Value>]) -> Result<(), (usize, String)> {
     let mut state = State::default();
+    let mut identities = Context::default();
     for (index, value) in slots.iter().enumerate() {
         if let Some(value) = value {
-            state.apply(shape, value).map_err(|error| (index, error))?;
+            state
+                .apply(shape, value, &mut identities)
+                .map_err(|error| (index, error.to_string()))?;
         }
     }
     Ok(())
@@ -46,7 +51,12 @@ impl State {
         }
         Ok(())
     }
-    fn apply(&mut self, shape: &Ty, value: &Value) -> Result<(), String> {
+    fn apply(
+        &mut self,
+        shape: &Ty,
+        value: &Value,
+        identities: &mut Context,
+    ) -> Result<(), EvalError> {
         let Kind::Delta(parts) = &value.kind else {
             return Ok(());
         };
@@ -58,45 +68,43 @@ impl State {
             match (shape, part) {
                 (Ty::List(_, None), DeltaEntry::Remove(_)) => {}
                 (Ty::Set(_), DeltaEntry::Add(member)) => {
-                    if !self.members.insert(key(member)?) {
+                    if !self.members.insert(identities.key(member)?) {
                         return Err("set addition is already present".into());
                     }
                 }
                 (Ty::Set(_), DeltaEntry::Remove(member)) => {
-                    if !self.members.remove(&key(member)?) {
+                    if !self.members.remove(&identities.key(member)?) {
                         return Err("set removal is absent".into());
                     }
                 }
                 (Ty::Map(..), DeltaEntry::Remove(member)) => {
-                    if self.children.remove(&key(member)?).is_none() {
+                    if self.children.remove(&identities.key(member)?).is_none() {
                         return Err("map removal is absent".into());
                     }
                 }
                 (Ty::Map(_, child), DeltaEntry::Keyed(member, value)) => self
                     .children
-                    .entry(key(member)?)
+                    .entry(identities.key(member)?)
                     .or_default()
-                    .apply(child, value)?,
-                (Ty::List(child, _), DeltaEntry::Child(index, value)) => self
-                    .children
-                    .entry(crate::composite_keys::scalar(&Literal::Int(*index))?)
-                    .or_default()
-                    .apply(child, value)?,
-                (Ty::Tuple(children), DeltaEntry::Child(index, value)) => {
-                    let index = usize::try_from(*index).map_err(|e| e.to_string())?;
-                    self.children
-                        .entry(crate::composite_keys::scalar(&Literal::Int(
-                            i64::try_from(index).map_err(|e| e.to_string())?,
-                        ))?)
-                        .or_default()
-                        .apply(&children[index], value)?;
-                }
-                (Ty::Struct(_, fields, _), DeltaEntry::Child(index, value)) => {
+                    .apply(child, value, identities)?,
+                (_, DeltaEntry::Child(index, value)) => {
                     let position = usize::try_from(*index).map_err(|e| e.to_string())?;
+                    let child = if let Ty::List(child, _) = shape {
+                        Some(child.as_ref())
+                    } else if let Ty::Tuple(children) = shape {
+                        children.get(position)
+                    } else {
+                        shape
+                            .structure()
+                            .ok()
+                            .and_then(|(_, fields, _)| fields.get(position))
+                            .map(|(_, ty)| ty)
+                    }
+                    .ok_or("delta does not match its checked publication shape")?;
                     self.children
                         .entry(crate::composite_keys::scalar(&Literal::Int(*index))?)
                         .or_default()
-                        .apply(&fields[position].1, value)?;
+                        .apply(child, value, identities)?;
                 }
                 _ => return Err("delta does not match its checked publication shape".into()),
             }
@@ -106,8 +114,9 @@ impl State {
 }
 
 /// Validate exact duplicate and overlap identities after cold materialization.
-pub fn materialized(parts: &[DeltaEntry]) -> Result<(), String> {
+pub fn materialized(parts: &[DeltaEntry]) -> Result<(), EvalError> {
     let mut added = BTreeSet::new();
+    let mut identities = Context::default();
     let mut removed = BTreeSet::new();
     for part in parts {
         let (value, keys) = match part {
@@ -115,7 +124,7 @@ pub fn materialized(parts: &[DeltaEntry]) -> Result<(), String> {
             DeltaEntry::Remove(value) => (value, &mut removed),
             DeltaEntry::Child(..) => continue,
         };
-        if !keys.insert(key(value)?) {
+        if !keys.insert(identities.key(value)?) {
             return Err("duplicate delta key/member".into());
         }
     }

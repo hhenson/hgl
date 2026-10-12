@@ -17,3 +17,5 @@ with its constructor/literal whitelist.
 DEC0004 reason 3: source, model and checked execution each exceed 1000 lines
 under xtask's code-line count. Cargo prevents lower layers from reaching source
 parsing and name resolution. The relocation changes no language behavior.
+
+Native contract metadata, cold independently owned NativeValue data and checked invocation phase metadata remain in this model. Native checked IR carries exact descriptor-backed helper bindings and cold-call flags; execution happens only in hgl-eval or selected target callbacks. The model cannot depend on source parsing, semantic checking or executable providers.

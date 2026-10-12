@@ -1,4 +1,4 @@
-//! Checked IR and ordinary execution cannot depend on source parsing or semantic binding.
+//! Checked ordinary execution cannot reach source parsing, name resolution or provider discovery.
 pub mod any_values;
 pub mod collection_values;
 pub mod composite_keys;
@@ -11,3 +11,5 @@ pub mod scalar_keys;
 pub mod value_constant;
 pub mod value_eval;
 pub mod value_operations;
+
+pub mod key_context;

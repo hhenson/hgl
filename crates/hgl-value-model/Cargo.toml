@@ -4,20 +4,23 @@ version = "0.0.0"
 edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
-description = "Syntax-neutral ordinary metadata, checked IR and contextual materialization."
+description = "Canonical ordinary value metadata independent of source syntax and binding."
 
 [package.metadata.hgl]
-line-budget = 1270
+line-budget = 1200
 
 [package.metadata.hgl.modules]
+native_value = { budget = 50, uses = [] }
+native_contracts = { budget = 40, uses = [] }
 ordinary_shape = { budget = 120, uses = ["type_shape"] }
+execution_phase = { budget = 40, uses = [] }
 scalar_shape = { budget = 80, uses = [] }
 diagnostics = { budget = 200, uses = [] }
-literals = { budget = 150, uses = ["type_shape"] }
+literals = { budget = 250, uses = ["type_shape"] }
 nominal_batch = { budget = 160, uses = [] }
 time_context = { budget = 200, uses = ["literals"] }
-type_shape = { budget = 230, uses = ["nominal_batch"] }
-ir = { budget = 180, uses = ["ir_visit"] }
+type_shape = { budget = 300, uses = ["nominal_batch", "native_contracts"] }
+ir = { budget = 180, uses = ["ir_visit", "native_contracts", "native_value"] }
 ir_visit = { budget = 260, uses = ["ir"] }
 
 [dependencies]

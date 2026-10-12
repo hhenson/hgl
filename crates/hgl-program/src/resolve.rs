@@ -11,8 +11,9 @@ use hgl_semantics::static_values::PreparedLexicalScope;
 use hgl_semantics::value_bind::{
     bind, bind_prepared, method_arguments, order_arguments, resolve_type,
 };
-use hgl_semantics::value_check::{ordinary, writable};
+use hgl_semantics::value_check::{binding, ordinary, writable};
 use hgl_semantics::value_eval::atomic_argument;
+use hgl_source::execution_phase::ExecutionPhase as Phase;
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Default)]
@@ -54,13 +55,6 @@ enum ValueContext {
     Constant,
     Preparation,
     Runtime,
-}
-#[derive(Default, Clone, Copy, PartialEq, Eq)]
-enum Phase {
-    Start,
-    #[default]
-    Evaluation,
-    Stop,
 }
 type Selection = (usize, Signature, Vec<Value>, BTreeMap<String, Ty>, Ty);
 type Env = BTreeMap<String, Value>;
@@ -109,12 +103,41 @@ pub(crate) fn prepared_assertion(
 pub(crate) fn compile(library: Library, module: &str, entry: &str) -> Result<Plan, Issue> {
     let mut checker = Checker {
         library,
+        plan: Plan {
+            ordinary_instantiation: true,
+            ..Plan::default()
+        },
         ..Checker::default()
     };
     checker.call(module, entry, &[], false)?;
+    checker.plan.native_images = hgl_semantics::native_images::select(
+        &checker.library,
+        &hgl_semantics::native_images::scalars(&checker.plan)?,
+        &checker
+            .plan
+            .natives
+            .iter()
+            .filter_map(|native| native.provider.clone())
+            .collect::<Vec<_>>(),
+    )?;
     hgl_rust::tuple_adapter::standalone(checker.plan)
 }
 impl Checker {
+    fn native_phase(&self, runtime: bool) -> &'static str {
+        match (runtime, self.value_context) {
+            (_, ValueContext::Preparation) if !self.preparing_graph => "setup",
+            (_, ValueContext::Preparation | ValueContext::Constant) | (false, _) => "cold",
+            (true, _) => self.phase.name(),
+        }
+    }
+    fn wiring_context(&mut self) -> ValueContext {
+        let context = if self.value_context == ValueContext::Preparation {
+            ValueContext::Preparation
+        } else {
+            ValueContext::Constant
+        };
+        std::mem::replace(&mut self.value_context, context)
+    }
     fn call(
         &mut self,
         module: &str,
@@ -122,11 +145,10 @@ impl Checker {
         args: &[(Option<String>, Value)],
         runtime: bool,
     ) -> Result<Value, Issue> {
-        let values = self.call_values(args, runtime)?;
-        let args = values.as_slice();
+        let args = self.call_values(args, runtime)?;
         let (module, name) = hgl_semantics::value_types::identity(&self.library, module, name);
         let (mut id, mut signature, values, mut types, result) =
-            self.select(&module, &name, args, runtime)?;
+            self.select(&module, &name, &args, runtime)?;
         if self.preparing_graph
             && values
                 .iter()
@@ -151,14 +173,14 @@ impl Checker {
                 &decl,
                 &signature,
                 (values, result),
-                runtime,
+                (runtime, self.native_phase(runtime)),
                 &mut self.plan.natives,
             )?);
         }
         let runtime_body = runtime_body(&signature)?;
         if signature.value_function && values.iter().all(|v| !matches!(v.kind, Kind::Wire(_))) {
             return self
-                .direct_call(id, &signature, (values, types, result), runtime, args)
+                .direct_call(id, &signature, (values, types, result), runtime, &args)
                 .map_err(|e| e.in_source(&decl.source));
         }
         if runtime {
@@ -169,8 +191,7 @@ impl Checker {
         }
         let previous_scope = self.test_scope.clone();
         self.test_scope = decl.test_only.then(|| module.clone());
-        let previous_family_scope =
-            std::mem::replace(&mut self.library.test_scope, self.test_scope.clone());
+        let prior_family = std::mem::replace(&mut self.library.test_scope, self.test_scope.clone());
         let mut env = hgl_semantics::body_check::parameter_scope(&signature, values);
         let previous_types = std::mem::replace(&mut self.types, types);
         let mut cursor = Cursor::new(&signature.body);
@@ -191,16 +212,18 @@ impl Checker {
             Value::new(result.clone(), kind)
         } else {
             let previous = std::mem::replace(&mut self.preparing_graph, true);
+            let previous_context = self.wiring_context();
             let value = self
                 .graph(&module, &mut cursor, &mut env, (&result, &signature))
                 .map_err(|e| e.in_source(&decl.source))?;
             self.preparing_graph = previous;
+            self.value_context = previous_context;
             value
         };
         self.types = previous_types;
         self.active.remove(&id);
         self.test_scope = previous_scope;
-        self.library.test_scope = previous_family_scope;
+        self.library.test_scope = prior_family;
         Ok(value)
     }
 
@@ -583,30 +606,11 @@ impl Checker {
         }
         true
     }
-    fn wiring_result<T>(
-        &mut self,
-        result: Result<T, hgl_semantics::value_eval::EvalError>,
-        failed: impl FnOnce(String) -> T,
-    ) -> Result<T, Issue> {
-        use hgl_semantics::value_eval::EvalError;
-        match result {
-            Ok(value) => Ok(value),
-            Err(EvalError::Operation(message)) => {
-                self.plan.construction_error.get_or_insert(message.clone());
-                Ok(failed(message))
-            }
-            Err(error) => Err(error.to_string().into()),
-        }
-    }
     fn wiring_value(&mut self, value: &Value) -> Result<Value, Issue> {
-        let result = self.wiring.value(value);
-        self.wiring_result(result, |message| {
-            Value::new(value.ty.clone(), Kind::WiringFailure(message))
-        })
+        hgl_semantics::wiring_values::value(&mut self.wiring, &mut self.plan, value)
     }
     fn wiring_statement(&mut self, statement: &Statement) -> Result<(), Issue> {
-        let result = self.wiring.statement(statement).map(|_| ());
-        self.wiring_result(result, |_| ())
+        hgl_semantics::wiring_values::statement(&mut self.wiring, &mut self.plan, statement)
     }
     fn wiring_local(
         &mut self,
@@ -627,10 +631,7 @@ impl Checker {
         }
         let id = self.next_wiring_local;
         self.next_wiring_local += 1;
-        env.insert(
-            name.into(),
-            hgl_semantics::value_check::binding(id, &value, mutable, annotated)?,
-        );
+        env.insert(name.into(), binding(id, &value, mutable, annotated)?);
         let value = self.wiring_value(&value)?;
         if matches!(value.kind, Kind::WiringFailure(_)) {
             self.wiring.bind_failed(id, value, mutable);
@@ -682,7 +683,7 @@ impl Checker {
                     }
                     output = self.expression(module, expr, env, false)?;
                     if !matches!(output.kind, Kind::Wire(_) | Kind::Void) {
-                        self.wiring_value(&output)?;
+                        output = self.wiring_value(&output)?;
                     }
                 }
                 Stmt::Assign(Expr::Name(name), expr) | Stmt::Add(Expr::Name(name), expr) => {
@@ -1485,18 +1486,8 @@ impl Checker {
             Expr::Tuple(_) => self.expected_expression(module, expr, env, runtime, None),
             Expr::Sparse(_) => Err("sparse entries require a delta constructor context".into()),
             Expr::Null => Err("null requires a contextual nullable comparison".into()),
-            Expr::Property(receiver, name) => {
-                if injected_clock(receiver, env) {
-                    return Ok(clock_property(receiver, name, env, runtime)?);
-                }
-                let parent = self.expression(module, receiver, env, runtime)?;
-                Ok(hgl_semantics::struct_check::field(&self.library, parent, name)?)
-            }
-            Expr::Index(receiver, index) => {
-                let parent = self.expression(module, receiver, env, runtime)?;
-                let index = self.expression(module, index, env, runtime)?;
-                Ok(hgl_semantics::value_check::indexed(parent, index)?)
-            }
+            Expr::Property(receiver, name) => self.property(module, receiver, name, env, runtime),
+            Expr::Index(receiver, index) => self.indexed(module, receiver, index, env, runtime),
             Expr::Sequence(elements) => Ok(hgl_semantics::value_check::list_literal(elements, None)?),
             Expr::Literal(l) => Ok(Value::new(l.ty(), Kind::Literal(l.clone()))),
             Expr::TemporalLiteral(l) if self.value_context == ValueContext::Preparation && !self.preparing_graph => Ok(Value::new(l.ty(), Kind::TemporalLiteral(l.clone()))),
@@ -1544,6 +1535,114 @@ impl Checker {
             Expr::Call(name, args) => self.call_expression(module, name, args, env, runtime),
             Expr::Binary(op, a, b) => self.binary(module, op, (a, b), env, runtime),
         }
+    }
+    fn property(
+        &mut self,
+        module: &str,
+        receiver: &Expr,
+        name: &str,
+        env: &Env,
+        runtime: bool,
+    ) -> Result<Value, Issue> {
+        if injected_clock(receiver, env) {
+            return Ok(clock_property(receiver, name, env, runtime)?);
+        }
+        let parent = self.expression(module, receiver, env, runtime)?;
+        if !runtime && matches!(parent.kind, Kind::Wire(_)) {
+            let ty = if let Ty::Ref(child) = &parent.ty {
+                child.as_ref()
+            } else {
+                &parent.ty
+            };
+            let (_, fields, _) = ty.structure()?;
+            let index = fields
+                .iter()
+                .position(|(field, _)| field == name)
+                .ok_or_else(|| format!("unknown struct field {name}"))?;
+            return self.graph_projection(parent, index);
+        }
+        Ok(hgl_semantics::struct_check::field(
+            &self.library,
+            parent,
+            name,
+        )?)
+    }
+    fn indexed(
+        &mut self,
+        module: &str,
+        receiver: &Expr,
+        index: &Expr,
+        env: &Env,
+        runtime: bool,
+    ) -> Result<Value, Issue> {
+        let parent = self.expression(module, receiver, env, runtime)?;
+        let index = self.expression(module, index, env, runtime)?;
+        if !runtime && matches!(parent.kind, Kind::Wire(_)) {
+            let Kind::Literal(Literal::Int(index)) = index.kind else {
+                return Err("graph projection requires a constant integer position".into());
+            };
+            let index =
+                usize::try_from(index).map_err(|_error| "graph projection index out of bounds")?;
+            return self.graph_projection(parent, index);
+        }
+        Ok(hgl_semantics::value_check::indexed(parent, index)?)
+    }
+    fn graph_projection(&mut self, parent: Value, index: usize) -> Result<Value, Issue> {
+        let Kind::Wire(source) = parent.kind else {
+            unreachable!("checked graph projection source")
+        };
+        let shape = if let Ty::Ref(child) = parent.ty {
+            *child
+        } else {
+            parent.ty
+        };
+        let child = if let Ty::Struct(_, fields, optional) = &shape {
+            if optional.contains(&index) {
+                return Err("optional field access is outside the admitted value profile".into());
+            }
+            fields.get(index).map(|(_, ty)| ty.clone())
+        } else if let Ty::Tuple(children) = &shape {
+            children.get(index).cloned()
+        } else if let Ty::List(child, Some(size)) = &shape {
+            (index < *size).then(|| *child.clone())
+        } else {
+            None
+        }
+        .ok_or("graph projection index out of bounds or unsupported shape")?;
+        let reference = Ty::Ref(Box::new(shape.clone()));
+        let child = Value::new(
+            child,
+            Kind::Field(
+                Box::new(Value::new(shape.clone(), Kind::Input(1, false))),
+                index,
+            ),
+        );
+        let result = Ty::Ref(Box::new(child.ty.clone()));
+        let projected = Value::new(
+            result.clone(),
+            Kind::Query("\0reference".into(), vec![child]),
+        );
+        let designation = Value::new(reference.clone(), Kind::Input(0, false));
+        let guard = Value::new(Ty::Bool, Kind::Query("valid".into(), vec![designation]));
+        let wire = self.plan.nodes.len();
+        self.plan.nodes.push(Node {
+            name: "hgl.projection".into(),
+            inputs: vec![
+                ("designation".into(), source, reference),
+                ("target".into(), source, shape),
+            ],
+            result: result.clone(),
+            alarm: false,
+            generator: None,
+            start: Vec::new(),
+            global_state: false,
+            globals: Vec::new(),
+            configuration: Vec::new(),
+            stop: Vec::new(),
+            caches: Vec::new(),
+            handlers: vec![(Some(guard), vec![Statement::Return(projected)])],
+        });
+        Ok(Value::new(result, Kind::Wire(wire)))
     }
     fn call_expression(
         &mut self,
@@ -1851,12 +1950,13 @@ impl Checker {
             self.plan.natives.push(Native {
                 name: "info(logger)".into(),
                 method: "log_info_str".into(),
+                provider: None,
                 args: vec![Ty::Str],
                 result: Ty::Void,
                 throws: false,
             });
         }
-        Ok(Value::new(Ty::Void, Kind::Native(id, values)))
+        Ok(self.plan.natives[id].invocation(values, Ty::Void))
     }
     fn binary(
         &mut self,
@@ -2038,6 +2138,16 @@ pub(crate) fn prepare_evaluation(
         checker.plan.recording = Some((key, recording));
         checker.plan.output = Some((record, ty));
     }
+    checker.plan.native_images = hgl_semantics::native_images::select(
+        &checker.library,
+        &hgl_semantics::native_images::scalars(&checker.plan)?,
+        &checker
+            .plan
+            .natives
+            .iter()
+            .filter_map(|native| native.provider.clone())
+            .collect::<Vec<_>>(),
+    )?;
     Ok((hgl_rust::tuple_adapter::prepared(checker.plan)?, prepared))
 }
 

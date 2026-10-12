@@ -176,10 +176,7 @@ fn preflight_globals(
 ) -> Result<(), BuildError> {
     for node in &description.nodes {
         let ty = &registry.find(&node.implementation)?.node_type;
-        let invalid = |what| BuildError::InvalidNodeType {
-            node: ty.name,
-            what,
-        };
+        let invalid = |what| BuildError::invalid_node(ty.name, what);
         if ty.uses_global_state && !store.global_state().provisioned() {
             return Err(invalid("global_state: unprovisioned run store".into()));
         }

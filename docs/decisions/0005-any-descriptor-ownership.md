@@ -7,9 +7,9 @@ Status: accepted implementation decision; no language extension.
 An owning Any encoding retains typed references to static compiled descriptors
 alongside its bytes. Nested headers identify entries in that owner's metadata,
 not positions in the producer's or consumer's generated layout table. Bounded
-views preserve descriptor context. Retaining a subframe copies payload bytes and
-relocates descriptor headers into independently owned metadata. Descriptor
-references have static lifetime; source replacement and teardown cannot affect
+views preserve descriptor context. The compiled owning-copy codec reconstructs
+nested headers in independent metadata while preserving provider copy operations.
+Descriptor references have static lifetime; source replacement and teardown cannot affect
 retained payloads or their dispatch.
 
 Types owns the descriptor/data vocabulary and independent storage. Store owns
@@ -35,11 +35,11 @@ a public serialization format.
 
 ## Budget ownership
 
-Under decision 0004, transfer 130 lines of the existing Any operation allowance
+Under decision 0004, transfer 30 lines of the existing Any operation allowance
 from Types to Store with the moved recursive operation executor:
 
-- Types any_values: 450 to 320.
-- Store any_values: 350 to 480.
+- Types any_values: 450 to 420.
+- Store any_values: 350 to 380.
 
 The combined allowance remains 800 lines. Types' 1200-line crate cap, Store's
 6860-line crate cap, and all other caps remain unchanged. No new crate or
@@ -66,3 +66,18 @@ registry, lazy initialization or runtime normalization. Existing canonical sourc
 normalization occurs before emission, so normalized atomic scalar spellings
 retain their common identity. Distinct nominal origins remain distinct even with
 identical payload layouts.
+
+## Native integration
+
+Native copying remains a two-pass operation. The sizing sink invokes provider
+preflight and records its first failure without executing copy callbacks; only
+a successful complete preflight permits mutation. Cold descriptor readers return
+NodeResult and propagate the original provider code without panicking. Capture
+moves its newly retained native owner into checked data, avoiding a second copy.
+
+Types owns scalar/header decoding, optional-field views, and bounded frame
+traversal with caller-supplied fallible callbacks. Store selects recursive
+comparison, capability and Native dispatch semantics. The original raw byte
+relocation helper is removed: recursive compiled copy already reconstructs the
+sidecar and is required for Native owning retention. Both crates retain their
+original crate caps; the module allowance remains 800 lines combined.

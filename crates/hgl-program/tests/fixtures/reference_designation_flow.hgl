@@ -1,0 +1,102 @@
+module reference_designation_flow
+
+struct Pair {left:i64
+right:i64}
+
+fn read_pair(value:Pair)->i64 {
+    when valid(value.left) && modified(value.left) {return value.left}
+}
+fn read_scalar(value:i64)->i64 {when {return delta_value(value)}}
+fn route(value:ref<Pair>,observed:ref<i64>)->ref<Pair> {
+    when valid(value) && valid(observed) {
+        let seen=modified(observed)
+        return value
+    }
+}
+fn whole(value:Pair,observed:i64)->i64 => read_pair(route(value,observed))
+fn projected(value:Pair,observed:i64)->i64 => read_scalar(route(value,observed).left)
+
+test unrelated_scalar_ref_is_not_a_pair_target {
+    assert eval(whole,value:[delta<Pair>(left:7),delta<Pair>(right:20),delta<Pair>(left:8)],observed:[1,2,3]) == [7,_,8]
+    assert eval(projected,value:[delta<Pair>(left:7),delta<Pair>(right:20),delta<Pair>(left:8)],observed:[1,2,3]) == [7,_,8]
+}
+
+fn choose(index:i64,first:ref<Pair>,second:ref<Pair>,observed:ref<i64>)->ref<Pair> {
+    when valid(index,first,second) {
+        let ignored=valid(observed)
+        let initial=first
+        if index == 1 {let selected=second
+            return selected}
+        let alias=initial
+        return alias
+    }
+}
+fn chosen(index:i64,first:Pair,second:Pair,observed:i64)->i64 => read_scalar(choose(index,first,second,observed).left)
+test branches_and_local_replacements_keep_both_targets {
+    assert eval(chosen,index:[0,1,1,_,0],first:[delta<Pair>(left:7),_,_,_,delta<Pair>(left:8)],second:[delta<Pair>(left:7),_,delta<Pair>(left:9)],observed:[1,2,3,4,5]) == [7,7,9,_,8]
+}
+
+fn hold(value:ref<Pair>,observed:ref<i64>)->ref<Pair> {
+    inject out
+    when valid(value) {
+        let seen=all_valid(observed)
+        if !valid(out) {return value}
+        else {let held=out
+            return held}
+    }
+}
+fn held(index:i64,first:Pair,second:Pair,observed:i64)->i64 {
+    read_scalar(hold(choose(index,first,second,observed),observed).left)
+}
+test held_output_values_keep_original_target {
+    assert eval(held,index:[0,1,_,1],first:[delta<Pair>(left:7),delta<Pair>(left:8),_,delta<Pair>(left:9)],second:[delta<Pair>(left:20),_,delta<Pair>(left:21)],observed:[1,2,3,4]) == [7,8,_,9]
+    assert eval(held,index:[0,1,0,1],first:[_,_,delta<Pair>(left:7),delta<Pair>(left:8)],second:[delta<Pair>(left:20)],observed:[1,2,3,4]) == [_,_,7,8]
+}
+
+fn repeat_own(value:ref<i64>,step:i64)->ref<i64> {
+    inject out
+    when valid(step) && modified(step) {
+        if valid(out) {return out}
+        return value
+    }
+}
+fn own_state(reference:ref<i64>,data:i64,step:i64)->atomic<tuple<bool,bool,bool,bool,i64>> {
+    when valid(step) && modified(step) {
+        var seen:i64 =-1
+        if valid(data) {seen=data}
+        return (valid(reference),modified(reference),valid(data),modified(data),seen)
+    }
+}
+fn own_observed(value:i64,step:i64)->atomic<tuple<bool,bool,bool,bool,i64>> {
+    let selected=repeat_own(value,step)
+    own_state(selected,selected,step)
+}
+test repeated_own_designation_keeps_metadata_and_target_ticks_separate {
+    assert eval(own_observed,value:[_,7,_,7,8],step:[1,1,1,1,1]) == [(true,true,false,false,-1),(true,false,true,true,7),(true,false,true,false,7),(true,false,true,true,7),(true,false,true,true,8)]
+}
+
+fn alias_route(value:ref<Pair>,observed:ref<Pair>)->ref<Pair> {
+    when valid(value) {let ignored=valid(observed)
+        let alias=value
+        return alias}
+}
+fn alias_projected(value:Pair,observed:Pair)->i64 => read_scalar(alias_route(value,observed).left)
+test same_shape_metadata_ref_is_not_a_returned_target {
+    assert eval(alias_projected,value:[delta<Pair>(left:7),delta<Pair>(right:20),delta<Pair>(left:8)],observed:[delta<Pair>(left:40),delta<Pair>(left:41),delta<Pair>(left:42)]) == [7,_,8]
+}
+
+fn repeat(index:i64,first:ref<Pair>,second:ref<Pair>,observed:ref<i64>)->ref<Pair> {
+    when valid(index,first,second) {
+        let seen=modified(observed)
+        var step:i64 =0
+        while step < index {
+            let selected=second
+            return selected
+        }
+        return first
+    }
+}
+fn repeated(index:i64,first:Pair,second:Pair,observed:i64)->i64 => read_scalar(repeat(index,first,second,observed).left)
+test loop_returns_keep_finite_target_candidates {
+    assert eval(repeated,index:[0,1,1,0],first:[delta<Pair>(left:7)],second:[delta<Pair>(left:20),_,delta<Pair>(left:21)],observed:[1,2,3,4]) == [7,20,21,7]
+}

@@ -21,6 +21,10 @@ Input activation/passivation and own-output metadata are admitted only for the
 admitted scalar endpoint types, including enums. Non-scalar publication shapes
 are rejected before emission; new structural publication shapes do not implicitly extend these operations.
 Structural input valid/modified/last_modified observations remain admitted.
+
+REF input and own-output `all_valid` use the same designation validity as
+`valid`, under TS-9 scalar equivalence. Own REF output
+valid/modified/last_modified observations use designation publication metadata; no target payload access or activity operation is added.
 Acceptance includes all fixed-list/map/tuple/nominal shapes for these boundaries,
 plus the existing scalar operation and structural input observation paths.
 

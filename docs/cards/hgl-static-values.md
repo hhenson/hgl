@@ -4,7 +4,7 @@ Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-
 
 Compiler-only lexical provenance, shared by graph selection and ordered test
 preparation. Uses hgl-rust-ir, hgl-source, hgl-library, hgl-value-constant and
-hgl-value-eval and hgl-composite-keys. Budget 150 source lines. No provider execution or runtime store.
+hgl-value-eval, hgl-composite-keys and any_values. Budget 150 source lines. No provider execution or runtime store.
 
 StaticValues derives Default/Clone and exposes prepared/configuration Vec<Value>
 and locals/cold_locals BTreeMap<usize,Value>. cold_locals are sparse-key-only
@@ -28,3 +28,5 @@ provider leaves remain recipes, and any deferred leaf withholds known identity.
 Checking-time evaluation of closed expressions is unchanged. bind only records
 provenance and does not execute initializers. Retained Local operands remain in
 source order; complete known Values carry exact fields and optional presence.
+
+Native recipes require per-invocation cold_call provenance from setup or cold checking and recursively eligible immutable operands. An evaluation-local helper call cannot become a cold recipe merely because its result has a Native type or the declaration says const. Eligible aliases retain their Local operands: checking never invokes or duplicates a helper.

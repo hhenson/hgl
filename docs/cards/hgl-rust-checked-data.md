@@ -32,3 +32,14 @@ sparse Captured data without evaluating any branch or expression.
 Serialize Step::Raises with its exact code and recursive lexical block.
 
 Constructed Literal::Bytes data serializes exact octets. Constructor expressions remain checked IR so executed range failures retain their phase.
+
+This module now lives in hgl-rust-codegen below executable program assembly;
+its hgl-rust facade path and module ceiling remain unchanged.
+
+Wide checked collections use typed cold row-builder functions that append to a
+single reserved vector. Each helper constructs checked IR only; authored setup,
+Native calls, assertions, and evaluation still execute solely through the one
+lexical harness scope. The builders bound debug-frame growth from input and
+expectation width without splitting tests, reducing fixtures, or changing stack
+limits. Short collections keep direct construction. Builders are not inlined so
+their bounded construction frames remain separate in either build profile.

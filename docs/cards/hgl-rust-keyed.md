@@ -62,3 +62,8 @@ slots so proved imperative sources can execute without per-cycle allocation.
 operations. Strict insert/remove validate absence/presence before mutation;
 tolerant upsert/discard retain their existing behavior. Arguments are evaluated
 once. Payload-free collection invalidation accepts structural children.
+
+This module now lives in hgl-rust-codegen below executable program assembly;
+its hgl-rust facade path and module ceiling remain unchanged.
+
+Cold key preparation decodes materialized Native values using their exact compiled marker. Hot key lookup borrows its typed NativeView and uses the existing provider hash/equality domain. Copying a recorded Native key borrows the prepared key domain and preflights its destination, avoiding an allocating Key::value intermediate.

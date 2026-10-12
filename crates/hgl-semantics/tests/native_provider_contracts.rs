@@ -1,0 +1,540 @@
+//! Native checking consumes inert descriptors and exact ordinary type bindings.
+use hgl_semantics::{library, native_contracts, source_check};
+
+const HEADER: &str = "native_descriptor 1 target \"hgl-rust-1\"\nmodule provider\nprovider \"owning-test\" fingerprint \"contract-v1\"\n";
+const SCALAR: &str = "scalar Token canonical \"existing.Token\" capabilities {copy,text,equality,hash,order,serialization}\n";
+const HELPER: &str = "value token(text:str)->Token symbol \"token_str\" ownership owned phases {setup,cold,evaluation} effects {allocation}\n";
+
+fn sources(interface: &str, descriptor: &str) -> Vec<(String, String)> {
+    vec![
+        (
+            "provider.hgl".into(),
+            format!("module provider\n{interface}\n"),
+        ),
+        (
+            "provider.hgl-native".into(),
+            format!("{HEADER}{descriptor}"),
+        ),
+    ]
+}
+fn interface() -> &'static str {
+    "export native type Token\nnative const fn token(text:str)->Token"
+}
+
+#[test]
+fn checking_binds_data_without_loading_or_executing_provider_code() -> Result<(), String> {
+    let sources = sources(interface(), &format!("{SCALAR}{HELPER}"));
+    assert!(source_check::validate_sources(&sources).is_empty());
+    let library = library::load(&sources)?;
+    let descriptor = &library.native_contracts["provider"];
+    assert_eq!(descriptor.scalars["Token"].identity, "existing.Token");
+    assert_eq!(descriptor.functions["token"].symbol, "token_str");
+    assert_eq!(
+        descriptor.functions["token"].parameters,
+        [("text".into(), "str".into())]
+    );
+    descriptor.verify_image("owning-test", "contract-v1")?;
+    assert!(
+        descriptor
+            .verify_image("other-provider", "contract-v1")
+            .is_err()
+    );
+    assert!(
+        descriptor
+            .verify_image("owning-test", "wrong-contract")
+            .is_err()
+    );
+    Ok(())
+}
+
+#[test]
+fn missing_and_incompatible_contracts_fail_before_execution() {
+    let cases = [
+        (interface(), String::new()),
+        (interface(), SCALAR.to_owned()),
+        (
+            interface(),
+            format!("{SCALAR}{}", HELPER.replace("text:str", "text:i64")),
+        ),
+        (
+            interface(),
+            format!("{SCALAR}{}", HELPER.replace("->Token", "->str")),
+        ),
+        (
+            interface(),
+            format!("{SCALAR}{}", HELPER.replace("->Token", "->Token throws")),
+        ),
+        (interface(), SCALAR.replace("copy,text", "text")),
+        ("native type Token", SCALAR.replace("copy,text", "copy")),
+        ("native const fn Token()->i64", SCALAR.to_owned()),
+    ];
+    for (interface, descriptor) in cases {
+        assert!(
+            library::load(&sources(interface, &descriptor)).is_err(),
+            "{descriptor}"
+        );
+    }
+    assert!(
+        library::load(&[(
+            "provider.hgl".into(),
+            format!("module provider\n{}", interface())
+        )])
+        .is_err()
+    );
+}
+
+#[test]
+fn canonical_aliases_share_capabilities_and_exact_helper_types() -> Result<(), String> {
+    let interface = "native type Token\nnative type Alias\nnative const fn token(text:str)->Alias";
+    let alias = SCALAR.replace("scalar Token", "scalar Alias");
+    library::load(&sources(interface, &format!("{SCALAR}{alias}{HELPER}")))?;
+    assert!(
+        library::load(&sources(
+            interface,
+            &format!(
+                "{SCALAR}{}{HELPER}",
+                alias.replace(",equality,hash,order", "")
+            )
+        ))
+        .is_err()
+    );
+    assert!(
+        library::load(&sources(
+            interface,
+            &format!(
+                "{SCALAR}{}{HELPER}",
+                alias.replace("existing.Token", "existing.Other")
+            )
+        ))
+        .is_err()
+    );
+    Ok(())
+}
+
+#[test]
+fn descriptor_format_modes_signals_and_phases_are_checked() {
+    for helper in [
+        HELPER.replace("text:str", "text:signal"),
+        HELPER.replace("text:str", "const text:str"),
+        HELPER.replace("text:str", "text:list<signal>"),
+        HELPER.replace("text:str", "text:str,text:str"),
+        HELPER.replace("ownership owned", "ownership borrowed"),
+        HELPER.replace("{setup,cold,evaluation}", "{required_constant}"),
+        HELPER.replace("{allocation}", "{blocking}"),
+        HELPER.replace("{allocation}", "{mutation}"),
+        HELPER.replace("token_str", "crate::arbitrary()"),
+    ] {
+        assert!(
+            library::load(&sources(interface(), &format!("{SCALAR}{helper}"))).is_err(),
+            "{helper}"
+        );
+    }
+    for header in [
+        HEADER.replace("descriptor 1", "descriptor 2"),
+        HEADER.replace("hgl-rust-1", "other-target"),
+    ] {
+        assert!(
+            native_contracts::parse("provider.hgl-native", &format!("{header}{SCALAR}")).is_err()
+        );
+    }
+}
+
+#[test]
+fn authored_fixture_has_three_distinct_identities_and_exact_shared_capabilities()
+-> Result<(), String> {
+    let source =
+        include_str!("../../../external/hgraph_std/hgl/hgraph/native/atomic_values_fixture.hgl");
+    let descriptor = include_str!("../../../native/stdlib/atomic_values.hgl-native");
+    let library = library::load(&[
+        ("fixture.hgl".into(), source.into()),
+        ("fixture.hgl-native".into(), descriptor.into()),
+    ])?;
+    let contract = &library.native_contracts["hgraph.std"];
+    assert_eq!(contract.scalars["Token"].identity, "hgraph.std::Token");
+    assert_eq!(
+        contract.scalars["TokenOther"].identity,
+        "hgraph.std::TokenOther"
+    );
+    assert_eq!(
+        contract.scalars["TextOnly"].identity,
+        "hgraph.std::TextOnly"
+    );
+    assert_eq!(contract.scalars["Token"].capabilities.len(), 6);
+    assert_eq!(contract.scalars["TextOnly"].capabilities.len(), 3);
+    assert_eq!(contract.functions.len(), 6);
+    Ok(())
+}
+
+#[test]
+fn checked_metadata_sets_value_mode_only_on_exact_native_declarations() -> Result<(), String> {
+    let interface = "native const fn size(value:str)->i64\nfn size(value:i64)->i64 {when {return value}}\nnative const fn legacy(value:signal)->i64";
+    let helper = "value size(value:str)->i64 symbol \"length\" ownership owned phases {evaluation} effects {}\n";
+    let library = library::load(&sources(interface, helper))?;
+    for declaration in library.declarations.iter() {
+        let signature = declaration.signature()?;
+        assert_eq!(
+            signature.value_function,
+            declaration.role == library::Role::Native && declaration.name == "size"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn scalar_target_markers_are_explicit_inert_backend_bindings() -> Result<(), String> {
+    let marker = SCALAR.trim_end().to_owned() + " marker \"OpaqueToken\"\n";
+    let descriptor = format!("{HEADER}{marker}").replace(
+        "fingerprint \"contract-v1\"",
+        "fingerprint \"contract-v1\" image \"missing.rs\"",
+    );
+    let parsed = native_contracts::parse("provider.hgl-native", &descriptor)?;
+    assert_eq!(parsed.markers["Token"], "OpaqueToken");
+    assert_eq!(parsed.scalars["Token"].identity, "existing.Token");
+    assert!(
+        parsed
+            .image
+            .as_ref()
+            .is_some_and(|p| p.ends_with("missing.rs"))
+    );
+    assert!(
+        native_contracts::parse("provider.hgl-native", &format!("{HEADER}{SCALAR}"))?
+            .markers
+            .is_empty()
+    );
+    for invalid in ["", "crate::Token", "Token()", "0Token"] {
+        assert!(
+            native_contracts::parse(
+                "provider.hgl-native",
+                &descriptor.replace("OpaqueToken", invalid)
+            )
+            .is_err()
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn canonical_aliases_require_compatible_selected_target_mappings() -> Result<(), String> {
+    let scalar = SCALAR.trim_end().to_owned() + " marker \"Token\"\n";
+    let mut input = sources("native type Token", &scalar);
+    input[1].1 = input[1].1.replace(
+        "fingerprint \"contract-v1\"",
+        "fingerprint \"contract-v1\" image \"unloaded.rs\"",
+    );
+    input.push(("alias.hgl".into(), "module alias\nnative type Alias".into()));
+    input.push((
+        "alias.hgl-native".into(),
+        input[1]
+            .1
+            .replace("module provider", "module alias")
+            .replace("scalar Token", "scalar Alias"),
+    ));
+    library::load(&input)?;
+    let mut equivalent = input.clone();
+    equivalent[3].0 = "nested/alias.hgl-native".into();
+    equivalent[3].1 = equivalent[3]
+        .1
+        .replace("image \"unloaded.rs\"", "image \"../unloaded.rs\"");
+    library::load(&equivalent)?;
+    for (from, to) in [
+        ("marker \"Token\"", "marker \"Other\""),
+        ("provider \"owning-test\"", "provider \"other-test\""),
+        ("image \"unloaded.rs\"", "image \"other.rs\""),
+        ("fingerprint \"contract-v1\"", "fingerprint \"contract-v2\""),
+    ] {
+        let mut incompatible = input.clone();
+        incompatible[3].1 = incompatible[3].1.replace(from, to);
+        let error = library::load(&incompatible)
+            .err()
+            .ok_or("incompatible target mapping admitted")?;
+        assert!(
+            error.contains("target mapping") || error.contains("provider image"),
+            "{error}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn shared_provider_metadata_rejects_conflicting_images_even_for_distinct_scalars()
+-> Result<(), String> {
+    let mut input = sources("native type Token", SCALAR);
+    input[1].1 = input[1].1.replace(
+        "fingerprint \"contract-v1\"",
+        "fingerprint \"contract-v1\" image \"unloaded.rs\"",
+    );
+    input.push(("other.hgl".into(), "module other\nnative type Other".into()));
+    input.push((
+        "other.hgl-native".into(),
+        input[1]
+            .1
+            .replace("module provider", "module other")
+            .replace("scalar Token", "scalar Other")
+            .replace("existing.Token", "existing.Other"),
+    ));
+    library::load(&input)?;
+    for (from, to) in [("unloaded.rs", "other.rs"), ("contract-v1", "contract-v2")] {
+        let mut incompatible = input.clone();
+        incompatible[3].1 = incompatible[3].1.replace(from, to);
+        let error = library::load(&incompatible)
+            .err()
+            .ok_or("conflicting provider image admitted")?;
+        assert!(error.contains("provider image"), "{error}");
+    }
+    Ok(())
+}
+
+#[test]
+fn rust_2024_target_keywords_fail_in_every_descriptor_role() {
+    for identifier in [
+        "gen", "async", "await", "crate", "self", "Self", "super", "_",
+    ] {
+        for descriptor in [
+            format!("{SCALAR}{}", HELPER.replace("token_str", identifier)),
+            format!(
+                "{SCALAR}{}",
+                HELPER.replace("ownership", &format!("bound {identifier:?} ownership"))
+            ),
+            format!("{} marker {identifier:?}\n{HELPER}", SCALAR.trim_end()),
+        ] {
+            let error =
+                native_contracts::parse("provider.hgl-native", &format!("{HEADER}{descriptor}"))
+                    .unwrap_err();
+            assert!(
+                error.to_string().contains("Rust 2024 target identifier"),
+                "{identifier}: {error}"
+            );
+        }
+    }
+}
+
+#[test]
+fn hgl_names_and_canonical_identities_do_not_use_rust_keyword_rules() -> Result<(), String> {
+    let scalar = SCALAR
+        .replace("scalar Token", "scalar gen")
+        .replace("existing.Token", "existing.gen");
+    let helper = HELPER
+        .replace("value token", "value gen")
+        .replace("->Token", "->gen");
+    let library = library::load(&sources(
+        "native type gen\nnative const fn gen(text:str)->gen",
+        &format!("{scalar}{helper}"),
+    ))?;
+    assert_eq!(
+        library.native_contracts["provider"].scalars["gen"].identity,
+        "existing.gen"
+    );
+    assert_eq!(
+        library.native_contracts["provider"].functions["gen"].symbol,
+        "token_str"
+    );
+    for identifier in ["generate", "gen_value", "_gen", "union", "crate_value"] {
+        native_contracts::parse(
+            "provider.hgl-native",
+            &format!(
+                "{HEADER}{SCALAR}{}",
+                HELPER.replace("token_str", identifier)
+            ),
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[test]
+fn helper_symbols_require_identical_optional_bound_callbacks() -> Result<(), String> {
+    let helper = HELPER.replace("ownership", "bound \"width\" ownership");
+    let alias = helper.replace("value token", "value alias");
+    let declarations = "native type Token\nnative const fn token(text:str)->Token\nnative const fn alias(text:str)->Token";
+    library::load(&sources(declarations, &format!("{SCALAR}{helper}{alias}")))?;
+    for replacement in ["bound \"other_width\" ", ""] {
+        let conflicting = alias.replace("bound \"width\" ", replacement);
+        let error = library::load(&sources(
+            declarations,
+            &format!("{SCALAR}{helper}{conflicting}"),
+        ))
+        .err()
+        .ok_or("conflicting symbol bound admitted")?;
+        assert!(
+            error.contains("conflicting native helper symbol bounds"),
+            "{error}"
+        );
+    }
+    let unbounded = helper.replace("bound \"width\" ", "");
+    let alias = unbounded.replace("value token", "value alias");
+    library::load(&sources(
+        declarations,
+        &format!("{SCALAR}{unbounded}{alias}"),
+    ))?;
+    let mut modules = sources(
+        "native type Token\nnative const fn token(text:str)->Token",
+        &format!("{SCALAR}{helper}"),
+    );
+    modules[1].1 = modules[1].1.replace(
+        "fingerprint \"contract-v1\"",
+        "fingerprint \"contract-v1\" image \"unloaded.rs\"",
+    );
+    modules.push((
+        "alias.hgl".into(),
+        "module alias\nnative type Token\nnative const fn alias(text:str)->Token".into(),
+    ));
+    modules.push((
+        "alias.hgl-native".into(),
+        modules[1]
+            .1
+            .replace("module provider", "module alias")
+            .replace("value token", "value alias"),
+    ));
+    library::load(&modules)?;
+    modules[3].1 = modules[3]
+        .1
+        .replace("bound \"width\"", "bound \"other_width\"");
+    let error = library::load(&modules)
+        .err()
+        .ok_or("cross-module symbol bound conflict admitted")?;
+    assert!(
+        error.contains("conflicting native helper symbol bounds"),
+        "{error}"
+    );
+    Ok(())
+}
+
+#[test]
+fn selected_markers_cannot_merge_distinct_canonical_identities() -> Result<(), String> {
+    let scalar = SCALAR.trim_end().to_owned() + " marker \"Token\"\n";
+    let other = scalar
+        .replace("scalar Token", "scalar Other")
+        .replace("existing.Token", "existing.Other");
+    let mut input = sources(
+        "native type Token\nnative type Other",
+        &format!("{scalar}{other}"),
+    );
+    input[1].1 = input[1].1.replace(
+        "fingerprint \"contract-v1\"",
+        "fingerprint \"contract-v1\" image \"unloaded.rs\"",
+    );
+    let error = library::load(&input)
+        .err()
+        .ok_or("one selected marker admitted distinct identities")?;
+    assert!(
+        error.contains("Rust target marker maps to distinct canonical native scalars"),
+        "{error}"
+    );
+    let mut distinct = input.clone();
+    distinct[1].1 = distinct[1].1.replace(
+        &other,
+        &other.replace("marker \"Token\"", "marker \"Other\""),
+    );
+    library::load(&distinct)?;
+    input[1].1 = input[1].1.replace("existing.Other", "existing.Token");
+    library::load(&input)?;
+    let mut modules = sources("native type Token", &scalar);
+    modules[1].1 = modules[1].1.replace(
+        "fingerprint \"contract-v1\"",
+        "fingerprint \"contract-v1\" image \"unloaded.rs\"",
+    );
+    modules.push(("other.hgl".into(), "module other\nnative type Other".into()));
+    modules.push((
+        "other.hgl-native".into(),
+        modules[1]
+            .1
+            .replace("module provider", "module other")
+            .replace("scalar Token", "scalar Other")
+            .replace("existing.Token", "existing.Other"),
+    ));
+    let error = library::load(&modules)
+        .err()
+        .ok_or("cross-module marker conflict admitted")?;
+    assert!(
+        error.contains("Rust target marker maps to distinct canonical native scalars"),
+        "{error}"
+    );
+    modules[3].1 = modules[3]
+        .1
+        .replace("provider \"owning-test\"", "provider \"other-test\"");
+    library::load(&modules)?;
+    Ok(())
+}
+
+#[test]
+fn opaque_native_identities_cannot_alias_incompatible_hgl_type_shapes() -> Result<(), String> {
+    let mut input = sources("native type Token", SCALAR);
+    input.push(("ordinary.hgl".into(), "module ordinary\nexport struct Row {value:i64}\nexport struct Box<T> {value:T}\nexport enum Label {ready=1}".into()));
+    for identity in [
+        "i64",
+        "str",
+        "any",
+        "tuple<i64,bool>",
+        "nullable<i64>",
+        "list<ordinary::Row>",
+        "tuple<ordinary::Row,i64>",
+        "ordinary::Row",
+        "ordinary::Label",
+        "ordinary::Box<i64>",
+        "ordinary::Box<list<i64>>",
+    ] {
+        let mut conflicting = input.clone();
+        conflicting[1].1 = conflicting[1].1.replace("existing.Token", identity);
+        let error = library::load(&conflicting).err().ok_or_else(|| {
+            format!("incompatible native canonical identity admitted: {identity}")
+        })?;
+        assert!(
+            error.contains("native canonical identity conflicts with non-native HGL type")
+                && error.contains("provider::Token")
+                && error.contains(identity),
+            "{error}"
+        );
+    }
+    for identity in [
+        "external::Row",
+        "ordinary::Rowish",
+        "i64 ",
+        "tuple<i64",
+        "tuple<unknown>",
+        "ordinary::Row<",
+        "ordinary::Row<>",
+        "ordinary::Box",
+        "ordinary::Box<i64,bool>",
+        "atomic<i64>",
+    ] {
+        let mut distinct = input.clone();
+        distinct[1].1 = distinct[1].1.replace("existing.Token", identity);
+        let library = library::load(&distinct)?;
+        let declaration = library
+            .declarations
+            .iter()
+            .find(|d| d.role == library::Role::NativeType)
+            .ok_or("native declaration missing")?;
+        let ty = native_contracts::resolve(&library, declaration, false).map_err(String::from)?;
+        assert!(matches!(&ty,hgl_source::Ty::Native(scalar) if scalar.identity==identity));
+        assert_eq!(ty.source_name(), identity);
+    }
+    Ok(())
+}
+
+#[test]
+fn test_local_nominal_identities_do_not_change_production_native_contracts() -> Result<(), String> {
+    let mut input = sources(
+        "native type Token",
+        &SCALAR.replace("existing.Token", "ordinary::Row"),
+    );
+    input.push(("ordinary.hgl".into(), "module ordinary\ntest {struct Row {value:i64}\ntest fixture {assert Row(value:1).value==1}}".into()));
+    let production = library::load(&input)?;
+    let declaration = production
+        .declarations
+        .iter()
+        .find(|d| d.role == library::Role::NativeType)
+        .ok_or("native declaration missing")?;
+    native_contracts::resolve(&production, declaration, false).map_err(String::from)?;
+    let mut testing = production.clone();
+    testing.test_scope = Some("ordinary".into());
+    let error = native_contracts::resolve(&testing, declaration, false)
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error
+            .contains("native canonical identity conflicts with non-native HGL type ordinary::Row"),
+        "{error}"
+    );
+    Ok(())
+}

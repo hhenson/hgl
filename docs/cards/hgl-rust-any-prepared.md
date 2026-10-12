@@ -1,6 +1,6 @@
 # Card: hgl-rust-any-prepared
 
-The any_prepared emitter reserves separate box destinations for finite prepared lexical owners. It may use execution_proof, source_slots, layouts, observed, any_values, any_expression, constructor_owners, owner_comparisons, prepared_hooks and values; optional reporting target 250 lines.
+The any_prepared emitter reserves separate box destinations for finite prepared lexical owners. It may use structural_publication, execution_proof, source_slots, layouts, observed, any_values, any_expression, constructor_owners, owner_comparisons and values; initial budget 250 lines. Crate budget remains unchanged.
 
 Public surface: prepare, write and local; private view borrows retained complete box data for compiled comparison. Preparation preserves lexical entry borrow authority and retains Any locals/returns independently. Helper formal-local scopes are distinct. Structural delta observation scratch uses a private typed destination and encodes the observation without applying it to an endpoint.
 
@@ -16,18 +16,28 @@ Prepared append items retain literal owning leaves in immutable configuration be
 
 Direct Any publications stage complete nonlocal expressions into private slots before scalar or rolling transport. Input and delta_value captures copy from the typed atomic or rolling observation arena; readable local bindings independently own their reserved copy.
 
-Helper call bodies receive the same Any binding preparation in their own lexical
-scopes after call_locals normalization. Formal IDs and argument order are preserved.
+Ordinary family equality over prepared owners reserves two independent comparison boxes and uses the compiled concrete-member codec. Its reads avoid native aggregate extraction and preserve ordinary equality semantics.
 
+This module now lives in hgl-rust-codegen below executable program assembly;
+its hgl-rust facade path and module ceiling remain unchanged.
+
+Any comparison preparation visits nested operands and every lifecycle hook,
+including stop. Both private operands retain in written order through the existing
+readonly observation facade; a failed left operand skips the right. All six
+comparison operations retain their descriptor capabilities and failure behavior.
 Preparation includes generator bodies, with Any locals reserved by the existing
 snapshot-local pass. Direct boxed yield payloads are retained after the time
 operand; configuration projections preserve the replay proof and existing slots.
 
-Ordinary family equality over prepared owners reserves two independent comparison boxes and uses the compiled concrete-member codec. Its reads avoid native aggregate extraction and preserve ordinary equality semantics.
-Nested inline comparison operands retain their own prepared owners.
+Before reserving helper owners, `call_locals` assigns each checked invocation
+independent node-wide declaration IDs while retaining formal argument IDs.
+Nested calls retain source evaluation order and independently reserved owners.
 
-Family owner comparisons are prepared uniformly in start, when and stop hooks. Shutdown comparisons borrow retained owning fields without cloning them.
-
-Prepared source-owner copies delegate to prepared_hooks::replace, sharing its
-ordered staging and complete capacity checks before copying within or across
-arenas. Any writes do not maintain a separate copy protocol.
+Tuple constructor staging uses structural_publication::ordinary_supported for
+ordinary results; atomic results keep whole canonical staging. Unsupported
+ordinary layouts retain their prior prepared snapshot path.
+The constructor_owners completeness predicate follows scalar-capture aliases
+through checked local initializers. Aggregate observations and projections with
+possibly unset children retain snapshot presence; no hook executes during this
+classification. Required scalar captures still stage complete byte tuples and
+retain the existing whole-output capacity preflight.

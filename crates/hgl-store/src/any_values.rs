@@ -1,42 +1,21 @@
 //! Whole boxes retain independent buffers in the existing ordinary arena.
 use crate::{Capacity, GlobalValue, Layouts, PreparedValue, ValueColumns, ValueSlot};
-use hgl_types::{AnyValue, NodeError, NodeResult, OrdinaryType};
+use hgl_types::{AnyValue, NodeResult, OrdinaryType};
 
 /// The canonical owning any marker; its contained shape never becomes endpoints.
 #[derive(Debug)]
 pub struct Any;
 impl ValueColumns {
-    pub(crate) fn reserve_any(&mut self, count: usize) -> NodeResult {
-        let extra = count.saturating_sub(self.free_anys.len());
-        self.anys
-            .try_reserve(extra)
-            .map_err(|error| NodeError::new(error.to_string()))?;
-        self.free_anys
-            .try_reserve(
-                self.anys
-                    .len()
-                    .saturating_add(extra)
-                    .saturating_sub(self.free_anys.len()),
-            )
-            .map_err(|error| NodeError::new(error.to_string()))
-    }
     /// Observe the complete held box through a typed ordinary slot.
     pub fn any(&self, slot: usize) -> &AnyValue {
-        &self.anys[slot].0
+        &self.anys.get(slot).0
     }
     /// Mutate only an authorized owning destination.
     pub fn any_mut(&mut self, slot: usize) -> &mut AnyValue {
-        &mut self.anys[slot].0
+        &mut self.anys.get_mut(slot).0
     }
     pub(crate) fn insert_any(&mut self, value: AnyValue) -> usize {
-        if let Some(slot) = self.free_anys.pop() {
-            self.anys[slot].0 = value;
-            slot
-        } else {
-            let slot = self.anys.len();
-            self.anys.push((value, AnyValue::default()));
-            slot
-        }
+        self.anys.insert((value, AnyValue::default()))
     }
 }
 impl GlobalValue for Any {
@@ -52,8 +31,7 @@ impl GlobalValue for Any {
         columns.insert_any(value)
     }
     fn release(columns: &mut ValueColumns, slot: usize) {
-        columns.anys[slot] = (AnyValue::default(), AnyValue::default());
-        columns.free_anys.push(slot);
+        columns.anys.release(slot);
     }
     fn flatten(slot: usize, layout: &mut [usize]) {
         layout[0] = slot;
@@ -73,7 +51,7 @@ impl GlobalValue for Any {
         columns.any(slot).retain()
     }
     fn commit(columns: &mut ValueColumns, slot: usize, value: AnyValue, _: &mut Layouts) {
-        columns.anys[slot].0 = value;
+        *columns.any_mut(slot) = value;
     }
 }
 impl PreparedValue for Any {
@@ -88,14 +66,14 @@ impl PreparedValue for Any {
         capacity.any();
         columns.reserve(&capacity)?;
         let slot = columns.insert_any(value);
-        columns.anys[slot].1.reserve(*bounds)?;
+        columns.anys.get_mut(slot).1.reserve(*bounds)?;
         Ok(ValueSlot::from_fields(slot))
     }
     fn check_native(columns: &ValueColumns, to: ValueSlot<Self>, value: &AnyValue) -> NodeResult {
-        if columns.any(to.fields()).capacity() < value.data().len() {
-            return Err(NodeError::new("prepared any capacity exceeded"));
-        }
-        Ok(())
+        columns
+            .any(to.fields())
+            .check_capacity(value.data().len())?;
+        value.preflight()
     }
     fn check_slots(
         source: &ValueColumns,
@@ -118,13 +96,9 @@ impl PreparedValue for Any {
     }
     fn copy_within(columns: &mut ValueColumns, from: ValueSlot<Self>, to: ValueSlot<Self>) {
         let (from, to) = (from.fields(), to.fields());
-        if from < to {
-            let (left, right) = columns.anys.split_at_mut(to);
-            right[0].0.copy_prepared(&left[from].0);
-        } else if from > to {
-            let (left, right) = columns.anys.split_at_mut(from);
-            left[to].0.copy_prepared(&right[0].0);
-        }
+        columns.anys.copy(from, to, |source, destination| {
+            destination.0.copy_prepared(&source.0);
+        });
     }
 }
 
@@ -139,24 +113,13 @@ impl<W: crate::Wake> crate::PreparedTick<'_, W> {
         compose: impl FnOnce(&mut AnyValue, crate::Observation<'_>),
     ) -> NodeResult {
         self.authorize(output.id(), output.generation());
-        let (plan, width) = measure(self.storage.observations().0)?;
-        let destination = self
-            .storage
-            .atomic
-            .destination(self.storage.bindings, output)?;
-        let mut value = self
-            .storage
-            .atomic
-            .values_mut()
-            .begin_any(destination, width)?;
-        value.encode_prepared(plan, |data| compose(data, self.storage.observations().0));
-        self.storage
-            .atomic
-            .values_mut()
-            .finish_any(destination, value);
-        self.storage
-            .bindings
-            .publish(output.id(), self.now, self.wake);
+        let storage = &mut self.storage;
+        let (plan, width) = measure(storage.observations().0)?;
+        let destination = storage.atomic.destination(storage.bindings, output)?;
+        let mut value = storage.atomic.values_mut().begin_any(destination, width)?;
+        value.encode_prepared(plan, |data| compose(data, storage.observations().0));
+        storage.atomic.values_mut().finish_any(destination, value);
+        storage.bindings.publish(output.id(), self.now, self.wake);
         Ok(())
     }
 }
@@ -166,14 +129,12 @@ pub(crate) use keys::AnyKeys;
 
 impl ValueColumns {
     fn begin_any(&mut self, destination: ValueSlot<Any>, width: usize) -> NodeResult<AnyValue> {
-        let spare = &mut self.anys[destination.fields()].1;
-        if spare.capacity() < width {
-            return Err(NodeError::new("prepared any capacity exceeded"));
-        }
+        let spare = &mut self.anys.get_mut(destination.fields()).1;
+        spare.check_capacity(width)?;
         Ok(std::mem::take(spare))
     }
     fn finish_any(&mut self, destination: ValueSlot<Any>, mut value: AnyValue) {
-        let (current, spare) = &mut self.anys[destination.fields()];
+        let (current, spare) = self.anys.get_mut(destination.fields());
         std::mem::swap(current, &mut value);
         *spare = value;
     }
@@ -200,25 +161,21 @@ impl<W: crate::Wake> crate::PreparedTick<'_, W> {
         source: ValueSlot<Any>,
     ) -> NodeResult {
         self.authorize(output.id(), output.generation());
-        let destination = self
-            .storage
-            .atomic
-            .destination(self.storage.bindings, output)?;
+        let storage = &mut self.storage;
+        let destination = storage.atomic.destination(storage.bindings, output)?;
         Any::check_slots(
-            self.storage.globals.values(),
+            storage.globals.values(),
             source,
-            self.storage.atomic.values(),
+            storage.atomic.values(),
             destination,
         )?;
         Any::copy_between(
-            self.storage.globals.values(),
+            storage.globals.values(),
             source,
-            self.storage.atomic.values_mut(),
+            storage.atomic.values_mut(),
             destination,
         );
-        self.storage
-            .bindings
-            .publish(output.id(), self.now, self.wake);
+        storage.bindings.publish(output.id(), self.now, self.wake);
         Ok(())
     }
 }

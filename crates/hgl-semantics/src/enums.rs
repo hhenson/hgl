@@ -140,3 +140,17 @@ pub fn check_call(
     }
     Ok(())
 }
+
+/// Resolve a non-generic nominal enum at a source type application.
+pub(crate) fn applied(
+    library: &Library,
+    module: &str,
+    name: &str,
+    arguments: bool,
+) -> Result<Option<EnumType>, String> {
+    let ty = resolve(library, module, name)?;
+    if ty.is_some() && arguments {
+        return Err("enum type arguments are unsupported".into());
+    }
+    Ok(ty)
+}

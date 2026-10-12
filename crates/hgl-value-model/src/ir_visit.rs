@@ -1,4 +1,4 @@
-//! Syntax-neutral checked IR traversal with explicit subtree pruning.
+//! Shared read-only checked IR traversal with explicit subtree pruning.
 use crate::ir::{Kind, Node, Statement, Value};
 /// Visit one expression before its descendants; false preserves a selected complete boundary.
 pub fn value<'a>(input: &'a Value, visit: &mut impl FnMut(&'a Value) -> bool) {
@@ -39,7 +39,8 @@ pub fn value<'a>(input: &'a Value, visit: &mut impl FnMut(&'a Value) -> bool) {
             value(a, visit);
             value(b, visit);
         }
-        Kind::ObservedLocal(_)
+        Kind::Opaque(_)
+        | Kind::ObservedLocal(_)
         | Kind::WiringFailure(_)
         | Kind::Configuration(_)
         | Kind::GlobalGet(_)
@@ -136,8 +137,14 @@ pub fn value_mut(input: &mut Value, visit: &mut impl FnMut(&mut Value) -> bool) 
         }
         Kind::Delta(parts) => {
             for part in parts {
-                for input in part.operands_mut() {
-                    value_mut(input, visit);
+                match part {
+                    crate::ir::DeltaEntry::Add(v)
+                    | crate::ir::DeltaEntry::Remove(v)
+                    | crate::ir::DeltaEntry::Child(_, v) => value_mut(v, visit),
+                    crate::ir::DeltaEntry::Keyed(k, v) => {
+                        value_mut(k, visit);
+                        value_mut(v, visit);
+                    }
                 }
             }
         }
@@ -157,7 +164,8 @@ pub fn value_mut(input: &mut Value, visit: &mut impl FnMut(&mut Value) -> bool) 
             value_mut(a, visit);
             value_mut(b, visit);
         }
-        Kind::ObservedLocal(_)
+        Kind::Opaque(_)
+        | Kind::ObservedLocal(_)
         | Kind::WiringFailure(_)
         | Kind::Configuration(_)
         | Kind::GlobalGet(_)

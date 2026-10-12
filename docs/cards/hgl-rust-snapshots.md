@@ -32,3 +32,6 @@ independent copies, and complete native constructor ordering.
 Owning observation adapters require the existing finite prepared execution proof;
 standalone/unproved private-slot use rejects before emission. Atomic ordinary
 Tuple results retain whole-value publication and cannot accept sparse snapshots.
+
+This module now lives in hgl-rust-codegen below executable program assembly;
+its hgl-rust facade path and module ceiling remain unchanged.

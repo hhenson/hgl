@@ -1,0 +1,198 @@
+module hgraph.std part reference_structural_values_tests
+
+test {
+    struct RefShapeFields { left: i64
+        right: i64 }
+
+    struct RefShapeSnapshot { value: i64
+        items: list<i64> }
+
+    enum RefShapeTag { first, second }
+
+    abstract struct RefShapeFamily { label: str }
+
+    struct RefShapeFirst: RefShapeFamily { items: list<i64> }
+
+    struct RefShapeSecond: RefShapeFamily { items: list<i64> }
+
+    fn ref_shape_relay<T>(value: ref<T>) -> ref<T> {
+        when { return value }
+    }
+    fn ref_shape_hold<T>(value: ref<T>) -> ref<T> {
+        state captured: bool = false
+        when {
+            if !captured {
+                captured = true
+                return value
+            }
+        }
+    }
+    # Only this graph connection is retained; the ordinary consumer emits delta.
+    fn ref_shape_follow<T>(value: T) -> T => pass_through(ref_shape_hold(ref_shape_relay(value)))
+    fn ref_shape_set(value: set<i64>) -> set<i64> => ref_shape_follow(value)
+    fn ref_shape_map(value: map<i64, i64>) -> map<i64, i64> => ref_shape_follow(value)
+    fn ref_shape_fixed(value: list<i64, 2>) -> list<i64, 2> => ref_shape_follow(value)
+    fn ref_shape_growing(value: list<i64>) -> list<i64> => ref_shape_follow(value)
+    fn ref_shape_tuple(value: tuple<i64, str>) -> tuple<i64, str> => ref_shape_follow(value)
+    fn ref_shape_fields(value: RefShapeFields) -> RefShapeFields => ref_shape_follow(value)
+    fn ref_shape_atomic(value: atomic<RefShapeSnapshot>) -> atomic<RefShapeSnapshot> => ref_shape_follow(value)
+    fn ref_shape_atomic_map(value: atomic<map<i64, list<i64>>>) -> atomic<map<i64, list<i64>>> => ref_shape_follow(value)
+    fn ref_shape_rolling(value: rolling<i64, 2>) -> rolling<i64, 2> => ref_shape_follow(value)
+    fn ref_shape_rolling_compound(value: rolling<RefShapeSnapshot, 2>) -> rolling<RefShapeSnapshot, 2> => ref_shape_follow(value)
+    fn ref_shape_enum(value: RefShapeTag) -> RefShapeTag => ref_shape_follow(value)
+    fn ref_shape_family(value: atomic<RefShapeFamily>) -> atomic<RefShapeFamily> => ref_shape_follow(value)
+
+    test held_reference_set_and_map_consumers_publish_original_deltas {
+        assert eval(ref_shape_set, [
+            delta<set<i64>>(added: []), delta<set<i64>>(added: [1, 2]), _,
+            delta<set<i64>>(removed: [1]), delta<set<i64>>(removed: [2]), _
+        ]) == [
+            delta<set<i64>>(added: []), delta<set<i64>>(added: [2, 1]), _,
+            delta<set<i64>>(removed: [1]), delta<set<i64>>(removed: [2]), _
+        ]
+        assert eval(ref_shape_map, [
+            delta<map<i64, i64>>(upsert: [1: 7, 2: 20]),
+            delta<map<i64, i64>>(upsert: [1: 7]), _,
+            delta<map<i64, i64>>(remove: [2]), delta<map<i64, i64>>(remove: [1]), _
+        ]) == [
+            delta<map<i64, i64>>(upsert: [2: 20, 1: 7]),
+            delta<map<i64, i64>>(upsert: [1: 7]), _,
+            delta<map<i64, i64>>(remove: [2]), delta<map<i64, i64>>(remove: [1]), _
+        ]
+    }
+
+    test held_reference_lists_keep_sparse_indices_and_tail_removal {
+        assert eval(ref_shape_fixed, [
+            delta<list<i64, 2>>(items: [1: 7]), delta<list<i64, 2>>(items: [0: 20]), _,
+            delta<list<i64, 2>>(items: [1: 7]), delta<list<i64, 2>>(items: [0: 21, 1: 8]), _
+        ]) == [
+            delta<list<i64, 2>>(items: [1: 7]), delta<list<i64, 2>>(items: [0: 20]), _,
+            delta<list<i64, 2>>(items: [1: 7]), delta<list<i64, 2>>(items: [1: 8, 0: 21]), _
+        ]
+        assert eval(ref_shape_growing, [
+            delta<list<i64>>(items: [0: 7, 1: 20]), delta<list<i64>>(items: [1: 20, 2: 30]), _,
+            delta<list<i64>>(remove: [1, 2]), delta<list<i64>>(items: [1: 21]),
+            delta<list<i64>>(remove: [0, 1]), _
+        ]) == [
+            delta<list<i64>>(items: [1: 20, 0: 7]), delta<list<i64>>(items: [2: 30, 1: 20]), _,
+            delta<list<i64>>(remove: [2, 1]), delta<list<i64>>(items: [1: 21]),
+            delta<list<i64>>(remove: [1, 0]), _
+        ]
+    }
+
+    test held_reference_tuple_and_nominal_consumers_preserve_child_omissions {
+        assert eval(ref_shape_tuple, [
+            delta<tuple<i64, str>>(items: [0: 0]), delta<tuple<i64, str>>(items: [1: ""]), _,
+            delta<tuple<i64, str>>(items: [0: 0])
+        ]) == [
+            delta<tuple<i64, str>>(items: [0: 0]), delta<tuple<i64, str>>(items: [1: ""]), _,
+            delta<tuple<i64, str>>(items: [0: 0])
+        ]
+        assert eval(ref_shape_fields, [delta<RefShapeFields>(right: 20), delta<RefShapeFields>(left: 0), _, delta<RefShapeFields>(right: 21)]) == [
+            delta<RefShapeFields>(right: 20), delta<RefShapeFields>(left: 0), _, delta<RefShapeFields>(right: 21)
+        ]
+    }
+
+    test held_reference_atomic_consumers_keep_complete_replacement_and_retention {
+        var source: RefShapeSnapshot = RefShapeSnapshot(value: 1, items: [1])
+        let retained: RefShapeSnapshot = source
+        source.value = 2
+        push(source.items, 2)
+        assert eval(ref_shape_atomic, [_, retained, retained, _, source, _]) == [
+            _, RefShapeSnapshot(value: 1, items: [1]), RefShapeSnapshot(value: 1, items: [1]), _,
+            RefShapeSnapshot(value: 2, items: [1, 2]), _
+        ]
+        assert eval(ref_shape_atomic_map, [map<i64, list<i64>>(items: [1: [7]]), _, map<i64, list<i64>>(items: []), map<i64, list<i64>>(items: [2: []]), _]) == [
+            map<i64, list<i64>>(items: [1: [7]]), _, map<i64, list<i64>>(items: []), map<i64, list<i64>>(items: [2: []]), _
+        ]
+    }
+
+    test held_reference_rolling_consumer_uses_arrivals_before_readiness {
+        assert eval(ref_shape_rolling, [_, 0, 0, _, 7, 8, _]) == [_, 0, 0, _, 7, 8, _]
+        let first: RefShapeSnapshot = RefShapeSnapshot(value: 0, items: [])
+        let second: RefShapeSnapshot = RefShapeSnapshot(value: 7, items: [1])
+        assert eval(ref_shape_rolling_compound, [_, first, first, _, second, _]) == [_, first, first, _, second, _]
+    }
+
+    test held_reference_enum_and_complete_family_preserve_nominal_identity {
+        assert eval(ref_shape_enum, [RefShapeTag::first, _, RefShapeTag::first, RefShapeTag::second, _]) == [
+            RefShapeTag::first, _, RefShapeTag::first, RefShapeTag::second, _
+        ]
+        let first: RefShapeFamily = RefShapeFirst(label: "same", items: [1])
+        let second: RefShapeFamily = RefShapeSecond(label: "same", items: [1])
+        assert eval(ref_shape_family, [first, first, _, second, first, _]) == [
+            RefShapeFirst(label: "same", items: [1]), RefShapeFirst(label: "same", items: [1]), _,
+            RefShapeSecond(label: "same", items: [1]), RefShapeFirst(label: "same", items: [1]), _
+        ]
+    }
+
+    test held_reference_structural_consumers_keep_empty_and_silent_horizons {
+        assert eval(ref_shape_map, []) == []
+        assert eval(ref_shape_fixed, [_, _, _]) == [_, _, _]
+        assert eval(ref_shape_growing, [_, delta<list<i64>>(items: []), delta<list<i64>>(items: []), _]) == [_, delta<list<i64>>(items: []), _, _]
+        assert eval(ref_shape_family, [_, _]) == [_, _]
+    }
+
+    fn ref_shape_choose<T>(index: i64, first: ref<T>, second: ref<T>) -> ref<T> {
+        when {
+            if index == 0 { return first }
+            return second
+        }
+    }
+    fn ref_shape_routed_map(index: i64, first: map<i64, i64>, second: map<i64, i64>) -> map<i64, i64> {
+        pass_through(ref_shape_hold(ref_shape_choose(index, first, second)))
+    }
+    test held_reference_map_target_remains_selected_when_route_changes {
+        assert eval(ref_shape_routed_map,
+            index: [0, 1, _, 0, _],
+            first: [delta<map<i64, i64>>(upsert: [1: 7]), delta<map<i64, i64>>(upsert: [1: 8]), _, delta<map<i64, i64>>(upsert: [2: 20]), delta<map<i64, i64>>(remove: [1])],
+            second: [delta<map<i64, i64>>(upsert: [9: 70]), _, delta<map<i64, i64>>(upsert: [9: 71])]
+        ) == [
+            delta<map<i64, i64>>(upsert: [1: 7]), delta<map<i64, i64>>(upsert: [1: 8]), _,
+            delta<map<i64, i64>>(upsert: [2: 20]), delta<map<i64, i64>>(remove: [1])
+        ]
+    }
+
+    test held_reference_to_an_invalid_map_waits_for_its_own_publication {
+        # REF designates second before its first value; route changes cannot
+        # replace that captured designation with the already valid first target.
+        assert eval(ref_shape_routed_map,
+            index: [1, 0, _, _, 0],
+            first: [delta<map<i64, i64>>(upsert: [1: 7]), _, _, delta<map<i64, i64>>(upsert: [1: 8])],
+            second: [_, _, delta<map<i64, i64>>(upsert: [9: 70]), _, delta<map<i64, i64>>(remove: [9])]
+        ) == [_, _, delta<map<i64, i64>>(upsert: [9: 70]), _, delta<map<i64, i64>>(remove: [9])]
+    }
+
+    fn ref_shape_guarded_left(value: RefShapeFields) -> i64 {
+        when valid(value.left) && modified(value.left) { return value.left }
+    }
+    fn ref_shape_followed_left(value: RefShapeFields) -> i64 => ref_shape_guarded_left(ref_shape_hold(ref_shape_relay(value)))
+    fn ref_shape_selected_left(index: i64, first: RefShapeFields, second: RefShapeFields) -> i64 {
+        ref_shape_guarded_left(ref_shape_choose(index, first, second))
+    }
+    test reference_following_guards_invalid_targets_and_unset_children {
+        assert eval(ref_shape_followed_left, [_, delta<RefShapeFields>(right: 20), _, delta<RefShapeFields>(left: 0), delta<RefShapeFields>(right: 21), delta<RefShapeFields>(left: 0), _]) == [_, _, _, 0, _, 0, _]
+        assert eval(ref_shape_selected_left,
+            index: [0, 1, _, _, 0],
+            first: [delta<RefShapeFields>(left: 7)],
+            second: [_, _, delta<RefShapeFields>(right: 20), delta<RefShapeFields>(left: 0)]
+        ) == [7, _, _, 0, 7]
+    }
+
+    fn ref_shape_required_left(value: RefShapeFields) -> i64 {
+        when {
+            let retained = value
+            let child = retained.left
+            return child + 1
+        }
+    }
+    fn ref_shape_followed_required(value: RefShapeFields) -> i64 => ref_shape_required_left(ref_shape_hold(ref_shape_relay(value)))
+    test followed_reference_partial_observation_uses_existing_required_read_failure {
+        # The ordinary struct is valid through right; retaining left is permitted.
+        # Only arithmetic on its retained unset payload raises value.unset_read.
+        assert raises("value.unset_read") {
+            eval(ref_shape_followed_required, [delta<RefShapeFields>(right: 20)])
+        }
+        assert eval(ref_shape_followed_required, [delta<RefShapeFields>(right: 20, left: 0)]) == [1]
+    }
+}

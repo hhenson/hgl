@@ -21,3 +21,6 @@ Nested composite children use their statically selected domains; source nominal
 identity belongs to the exact marker. Owning capture reconstructs a full value,
 while prepared capture copies each component without an allocating intermediary.
 Hash collisions never establish equality. Unprepared keys fail explicitly.
+
+This module now lives in hgl-rust-codegen below executable program assembly;
+its hgl-rust facade path and module ceiling remain unchanged.

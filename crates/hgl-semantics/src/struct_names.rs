@@ -38,6 +38,33 @@ pub fn enum_declaration<'a>(
 ) -> Result<Option<&'a Decl>, String> {
     find(library, module, name, &Role::Enum)
 }
+/// Find a visible opaque native scalar declaration through ordinary imports.
+pub fn native_declaration<'a>(
+    library: &'a Library,
+    module: &str,
+    name: &str,
+) -> Result<Option<&'a Decl>, String> {
+    let base = application(name).map_or(name, |(base, _)| base);
+    let declaration = find(library, module, base, &Role::NativeType)?;
+    if declaration.is_some() && base != name {
+        return Err("native scalar type arguments are not admitted".into());
+    }
+    Ok(declaration)
+}
+/// Find a visible nominal declaration in the shared type namespace.
+pub fn nominal_declaration<'a>(
+    library: &'a Library,
+    module: &str,
+    name: &str,
+) -> Result<Option<&'a Decl>, String> {
+    let base = application(name).map_or(name, |(base, _)| base);
+    Ok(declaration(library, module, base)?
+        .or(enum_declaration(library, module, base)?)
+        .or(native_declaration(library, module, name)?))
+}
+fn nominal(role: &Role) -> bool {
+    matches!(role, Role::Struct | Role::Enum | Role::NativeType)
+}
 fn find<'a>(
     library: &'a Library,
     module: &str,
@@ -45,9 +72,10 @@ fn find<'a>(
     role: &Role,
 ) -> Result<Option<&'a Decl>, String> {
     let local = !name.contains("::")
-        && library.declarations.iter().any(|d| {
-            d.module == module && d.name == name && matches!(d.role, Role::Struct | Role::Enum)
-        });
+        && library
+            .declarations
+            .iter()
+            .any(|d| d.module == module && d.name == name && nominal(&d.role));
     let (owner, item) = if local {
         (module.into(), name.into())
     } else {
@@ -62,7 +90,7 @@ fn find<'a>(
         let kind = if *role == Role::Struct {
             "struct"
         } else {
-            "enum"
+            "nominal type"
         };
         return Err(format!("duplicate {kind} declaration {owner}::{item}"));
     }
@@ -125,8 +153,7 @@ fn exported_name(
     {
         return Ok(());
     }
-    if let Some(decl) =
-        declaration(library, module, base)?.or(enum_declaration(library, module, base)?)
+    if let Some(decl) = nominal_declaration(library, module, name)?
         && !exported(decl)
     {
         return Err(format!(

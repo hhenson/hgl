@@ -182,3 +182,25 @@ test {
                 next:NestedOwningChain(dynamic:3,choice:NestedOwningMember(text:"inner",items:[]))))]
     }
 }
+
+struct MutableOwnerText { value:str }
+struct MutableOwnerFixed { value:i64 }
+test {
+    fn mutable_text_alias(value:str)->bool {when {
+        var current=MutableOwnerText(value:value)
+        let retained=current
+        let boxed=any(current)
+        current=MutableOwnerText(value:"replacement")
+        return retained.value==value && current.value=="replacement" && boxed==any(MutableOwnerText(value:value))
+    }}
+    fn mutable_scalar_alias(value:i64)->bool {when {
+        var current=MutableOwnerFixed(value:value)
+        let retained=current
+        current=MutableOwnerFixed(value:99)
+        return retained.value==value && current.value==99
+    }}
+    test mutable_owners_retain_ordinary_and_boxed_copies {
+        assert eval(mutable_text_alias,["a",_,""])==[true,_,true]
+        assert eval(mutable_scalar_alias,[1,_,2])==[true,_,true]
+    }
+}

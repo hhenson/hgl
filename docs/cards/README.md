@@ -67,6 +67,7 @@ size and enforces the "may use" list from the crate's
 | [hgl-member-table](hgl-member-table.md) | module `member_table` | `hgl-store` |
 | [hgl-name-check](hgl-name-check.md) | module `name_check` | `hgl-semantics` |
 | [hgl-native](hgl-native.md) | module `native` | `hgl-stdlib` |
+| [hgl-native-images](hgl-native-images.md) | module `native_images` | `hgl-semantics`, `hgl-rust` |
 | [hgl-nested](hgl-nested.md) | module `nested` | `hgl-kernel` |
 | [hgl-node-error](hgl-node-error.md) | module `node_error` | `hgl-types` |
 | [hgl-nominal-batch](hgl-nominal-batch.md) | module `nominal_batch` | `hgl-value-model` |
@@ -257,15 +258,23 @@ Snapshot layouts and cold capacities remain with their existing owners.
 
 Additional ordinary value contracts: [Any semantics](hgl-any-values.md), [compiled box vocabulary](hgl-types-any-values.md), [Any storage](hgl-store-any-values.md), [Any emission](hgl-rust-any-values.md), [prepared box owners](hgl-rust-any-prepared.md), [constructor frame encoding](hgl-rust-any-expression.md), [exclusive boxing uses](hgl-boxed-uses.md), [prepared hook writes](hgl-rust-prepared-hooks.md), [private identifiers](hgl-rust-identifiers.md), [checked IR traversal](hgl-ir-visit.md), [required ordinary defaults](hgl-default-values.md), [constructor checking](hgl-value-constructors.md), [operator typing](hgl-value-operators.md), and [builtin scalar metadata](hgl-scalar-shape.md).
 
-- [Constructor field emission](hgl-rust-constructor-fields.md).
+- [Native owning values](hgl-native-values.md)
+- [Reusable owning columns](hgl-owned-columns.md)
 
-- [Helper callsite storage identities](hgl-call-locals.md).
+- [Inert native contract data](hgl-native-contract-data.md)
 
-- [Cold snapshot destination planning](hgl-snapshot-locals.md).
+- [Native package metadata](hgl-native-package.md)
+- [Node execution phases](hgl-execution-phase.md)
 
+- [Canonical ordinary value model](hgl-value-model.md)
+- [Checked ordinary execution](hgl-eval.md)
+
+- [Cold native data](hgl-native-cold-values.md)
+- [Native key domains](hgl-native-key-domains.md)
+- [Prepared native results](hgl-native-results.md)
+- [Cold key identity context](hgl-key-context.md)
 Line counts and numerical targets in these cards are informational under
 [decision 0004](../decisions/0004-crates-are-programs-policies-or-walls.md).
 Module dependency lists remain enforced; size alone never fails CI.
-- [hgl-value-model](hgl-value-model.md): ordinary metadata below source parsing and checking.
 
-- [hgl-eval](hgl-eval.md): checked ordinary IR and harness value execution.
+- [Cold snapshot destination planning](hgl-snapshot-locals.md).

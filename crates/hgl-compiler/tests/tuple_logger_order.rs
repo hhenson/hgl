@@ -13,10 +13,8 @@ fn published_tuple_examples_log_elements_in_written_order() {
         ])
         .arg("--library")
         .arg(root.join("external/hgraph_std/hgl/hgraph"))
-        .arg("--part")
-        .arg(root.join("native/stdlib/interfaces.hgl"))
-        .arg("--part")
-        .arg(root.join("native/stdlib/rust.hgl"))
+        .arg("--library")
+        .arg(root.join("native/stdlib"))
         .output()
         .expect("execute the standard Rust source-test host");
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -55,10 +53,8 @@ fn used_nonconstant_text_formals_keep_their_owned_abi() {
         )
         .arg("--library")
         .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../external/hgraph_std/hgl/hgraph"))
-        .arg("--part")
-        .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../native/stdlib/interfaces.hgl"))
-        .arg("--part")
-        .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../native/stdlib/rust.hgl"))
+        .arg("--library")
+        .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../native/stdlib"))
         .output()
         .expect("execute ordinary text argument ownership control");
     assert!(

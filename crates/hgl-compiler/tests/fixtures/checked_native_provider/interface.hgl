@@ -1,0 +1,2 @@
+module checked_lengths
+export native const fn size(value:str)->i64

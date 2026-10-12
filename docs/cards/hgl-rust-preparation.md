@@ -45,6 +45,12 @@ Family decode/encode delegate to hgl-rust-families with recursive child converte
 Captures retain the actual concrete member tag and its optional/owning fields.
 
 decode and encode are reexported from hgl-rust-value-convert. This crate owns lexical runner callback emission and recursive-marker assembly.
+Native callbacks decode exact arguments in written execution order and call the
+descriptor-selected typed symbol. Suite images and callback definitions live
+once in the enclosing module. Image identity/fingerprint validation precedes
+setup; phase selection distinguishes executed setup, graph cold preparation and
+node lifecycle values. Temporal-only/default evaluators leave native calls
+deferred, and required constant contexts reject them without invoking code.
 Growing sparse delta decoding/encoding retains exact Child indices and Remove scalar indices in its three-field ordinary storage; complete atomic ordinary lists remain separate.
 
 Raises blocks are traversed when assembling graph callbacks. The callback failure channel preserves NodeError identity through Failure::Execution.

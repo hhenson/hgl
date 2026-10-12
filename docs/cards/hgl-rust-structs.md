@@ -4,7 +4,9 @@ Status: since [decision 0004](../decisions/0004-crates-are-programs-policies-or-
 
 Generate ordinary concrete struct ownership and field-presence operations.
 Depends on hgl-source and hgl-rust-prepared-values; budget 230 source lines. Type collection and spelling
-remain in hgl-rust-layouts.
+remain in hgl-rust-layouts. Canonical field markers are prepared once and reused
+by value/slot representations, retention, installation, preparation and copying;
+the shared positional tuple formatter belongs to layouts.
 
 Public `marker(&Ty, fn(&Ty)->String, fn(&Ty)->String) -> String` receives a
 checked concrete struct plus marker-name and schema emitters. Emit its complete
@@ -25,3 +27,6 @@ retention recurses through finite present values; prepared bounds and copies use
 the same declared field positions without schema lookup.
 
 Generated recursive markers include typed ordinary_equal methods. Comparison visits complete finite present fields and delegates nested collection equality to hgl-rust-collections, ignoring collection entry order without weakening nominal identity or optional presence.
+
+This module now lives in hgl-rust-codegen below executable program assembly;
+its hgl-rust facade path and module ceiling remain unchanged.

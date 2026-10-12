@@ -6,6 +6,26 @@ pub use type_shape::{
     EnumType, FamilyType, Nominal, NominalDefinition, RecursiveType, Ty, TypeSpelling, Window,
     WindowKind, application, delta_argument,
 };
+#[derive(Debug, Clone, PartialEq, Eq)]
+/// The declaration role before overload selection.
+pub enum DeclarationRole {
+    /// Opaque nominal native scalar declaration.
+    NativeType,
+    /// Nominal enum declaration.
+    Enum,
+    /// Ordinary nominal struct declaration.
+    Struct,
+    /// Ordinary or const function.
+    Function,
+    /// Operator implementation.
+    Implementation,
+    /// Operator contract.
+    Operator,
+    /// Native interface or selected target part.
+    Native,
+    /// Named test case.
+    Test,
+}
 #[derive(Debug, Clone)]
 /// An expression before name and type resolution.
 pub enum Expr {
@@ -842,6 +862,18 @@ pub use hgl_value_model::time_context;
 pub mod type_shape;
 pub mod type_syntax;
 
+pub mod native_descriptor;
 pub use hgl_value_model::ordinary_shape;
 /// Cold builtin scalar metadata preserves owning and nominal leaf boundaries.
 pub use hgl_value_model::scalar_shape;
+
+/// Inert provider package records and image location parsing.
+pub mod native_package;
+
+/// Checked node lifecycle value phases.
+pub use hgl_value_model::execution_phase;
+
+/// Cold opaque native data is supplied only by an explicit execution context.
+pub use hgl_value_model::native_value;
+
+pub use hgl_value_model::native_contracts;

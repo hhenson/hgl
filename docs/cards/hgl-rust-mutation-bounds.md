@@ -8,3 +8,6 @@ constants have exact iteration bounds, including nested independent loops. The
 analysis never executes hooks. The result is absent for unknown mutation loop
 bounds. `mutations` exposes the syntactic effect count used to recognize relevant
 loops; it is not itself an iteration bound.
+
+This module now lives in hgl-rust-codegen below executable program assembly;
+its hgl-rust facade path and module ceiling remain unchanged.

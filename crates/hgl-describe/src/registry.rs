@@ -1,11 +1,17 @@
 //! What a node supplies so that it can be built, what it is given while it is
 //! built, and where implementations are found by name.
 
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::HashMap,
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicU64, Ordering::Relaxed},
+    },
+};
 
 use hgl_kernel::Node;
 use hgl_store::{Global, GlobalValue, In, InputId, Out, OutputId, Scalar, Store};
-use hgl_types::{NodeId, NodeType, TsType};
+use hgl_types::{AnyPlan, NodeError, NodeId, NodeResult, NodeType, TsType};
 
 use crate::{BuildError, ChildDescription, NodeDescription};
 
@@ -85,10 +91,7 @@ pub struct Ports<'a> {
 impl Ports<'_> {
     /// Bind a declared global entry once, before this node can run a hook.
     pub fn global<T: GlobalValue>(&mut self, key: &str) -> Result<Global<T>, BuildError> {
-        let invalid = |what| BuildError::InvalidNodeType {
-            node: self.node_type.name,
-            what,
-        };
+        let invalid = |what| BuildError::invalid_node(self.node_type.name, what);
         if !self.node_type.uses_global_state
             || !self.node_type.global_entries.contains(&(key, T::schema()))
         {
@@ -106,21 +109,26 @@ impl Ports<'_> {
     /// Errors: the node type has no such input, or declares another type
     /// for it; the input was taken already.
     pub fn input<T: Scalar>(&mut self, name: &str) -> Result<In<T>, BuildError> {
-        let node_type = self.node_type;
+        let position = self.input_position(name, Some(TsType::Ts(T::TYPE)))?;
+        let id = self.make_input(position);
+        self.store.scalar_input(id).map_err(BuildError::Bind)
+    }
+
+    fn input_position(&self, name: &str, kind: Option<TsType>) -> Result<usize, BuildError> {
         let label = &self.description.label;
-        let inputs = &node_type.inputs;
-        let Some(position) = inputs.iter().position(|&(input, _)| input == name) else {
-            return Err(BuildError::unknown_input(label, name));
-        };
-        if inputs[position].1 != TsType::Ts(T::TYPE) {
+        let position = self
+            .node_type
+            .inputs
+            .iter()
+            .position(|(field, _)| *field == name)
+            .ok_or_else(|| BuildError::unknown_input(label, name))?;
+        if kind.is_some_and(|kind| self.node_type.inputs[position].1 != kind) {
             return Err(BuildError::wrong_type(label, name));
         }
         if self.inputs[position].is_some() {
             return Err(BuildError::bound_twice(label, name));
         }
-        let input = self.store.add_input(self.node, active(node_type, position));
-        self.inputs[position] = Some(input.id());
-        Ok(input)
+        Ok(position)
     }
 
     /// The node's output.
@@ -129,49 +137,45 @@ impl Ports<'_> {
     /// output was taken already.
     pub fn output<T: Scalar>(&mut self) -> Result<Out<T>, BuildError> {
         let label = &self.description.label;
-        let (None, Some(TsType::Ts(declared))) = (self.output, &self.node_type.output) else {
+        let TsType::Ts(declared) = self.output_kind()? else {
             return Err(BuildError::no_output(label));
         };
         if *declared != T::TYPE {
             return Err(BuildError::wrong_type(label, "output"));
         }
-        let output = self.store.add_output(self.node);
-        self.output = Some(output.id());
-        Ok(output)
+        let id = self.make_output(TsType::Ts(T::TYPE));
+        self.store.scalar_output(id).map_err(BuildError::Bind)
     }
 
     /// Allocate a recursively shaped input declared by this implementation.
     pub fn shaped_input(&mut self, name: &str) -> Result<InputId, BuildError> {
-        let label = &self.description.label;
-        let inputs = &self.node_type.inputs;
-        let Some(n) = inputs.iter().position(|(field, _)| *field == name) else {
-            return Err(BuildError::unknown_input(label, name));
-        };
-        if self.inputs[n].is_some() {
-            return Err(BuildError::bound_twice(label, name));
-        }
-        let id = self.store.add_shaped_input(
-            self.node,
-            self.node_type.inputs[n].1.clone(),
-            active(self.node_type, n),
-        );
-        self.inputs[n] = Some(id);
-        Ok(id)
+        let n = self.input_position(name, None)?;
+        Ok(self.make_input(n))
+    }
+    fn make_input(&mut self, position: usize) -> InputId {
+        *self.inputs[position].get_or_insert_with(|| {
+            self.store.add_shaped_input(
+                self.node,
+                self.node_type.inputs[position].1.clone(),
+                active(self.node_type, position),
+            )
+        })
     }
     /// Allocate the recursively shaped output declared by this implementation.
     pub fn shaped_output(&mut self) -> Result<OutputId, BuildError> {
-        let label = &self.description.label;
-        let kind = self
-            .node_type
+        let kind = self.output_kind()?.clone();
+        Ok(self.make_output(kind))
+    }
+    fn make_output(&mut self, kind: TsType) -> OutputId {
+        *self
             .output
-            .as_ref()
-            .ok_or_else(|| BuildError::no_output(label))?;
-        if self.output.is_some() {
-            return Err(BuildError::no_output(label));
+            .get_or_insert_with(|| self.store.add_shaped_output(self.node, kind))
+    }
+    fn output_kind(&self) -> Result<&TsType, BuildError> {
+        match (self.output, &self.node_type.output) {
+            (None, Some(kind)) => Ok(kind),
+            _ => Err(BuildError::no_output(&self.description.label)),
         }
-        let id = self.store.add_shaped_output(self.node, kind.clone());
-        self.output = Some(id);
-        Ok(id)
     }
     /// Finite key domains retained before node hooks can execute.
     pub fn keys(&mut self) -> &mut hgl_store::Keys {
@@ -204,21 +208,15 @@ impl Ports<'_> {
 
     /// Every port the node type declares, in its order, making each one the
     /// build did not ask for.
-    pub(crate) fn into_ids(self) -> (Vec<InputId>, Option<OutputId>) {
-        let mut inputs = Vec::with_capacity(self.inputs.len());
-        for (position, (_, declared)) in self.node_type.inputs.iter().enumerate() {
-            let active = active(self.node_type, position);
-            inputs.push(self.inputs[position].unwrap_or_else(|| {
-                self.store
-                    .add_shaped_input(self.node, declared.clone(), active)
-            }));
-        }
-        let output = self.output.or_else(|| {
-            self.node_type
-                .output
-                .as_ref()
-                .map(|declared| self.store.add_shaped_output(self.node, declared.clone()))
-        });
+    pub(crate) fn into_ids(mut self) -> (Vec<InputId>, Option<OutputId>) {
+        let inputs = (0..self.inputs.len())
+            .map(|position| self.make_input(position))
+            .collect();
+        let output = self
+            .node_type
+            .output
+            .clone()
+            .map(|kind| self.make_output(kind));
         (inputs, output)
     }
 }
@@ -253,9 +251,38 @@ impl std::fmt::Debug for Implementation {
 #[derive(Debug, Default, Clone)]
 pub struct Registry {
     implementations: HashMap<&'static str, Implementation>,
+    descriptors: Arc<Mutex<HashMap<u64, &'static AnyPlan>>>,
 }
 
 impl Registry {
+    /// Retain exact producer metadata for pointer-free cold configuration carriers.
+    pub fn retain_descriptor(&self, plan: &'static AnyPlan) -> NodeResult<u64> {
+        static NEXT: AtomicU64 = AtomicU64::new(1);
+        let mut descriptors = self
+            .descriptors
+            .lock()
+            .map_err(|error| NodeError::new(error.to_string()))?;
+        if let Some((&id, _)) = descriptors
+            .iter()
+            .find(|(_, retained)| std::ptr::eq(**retained, plan))
+        {
+            return Ok(id);
+        }
+        let id = NEXT
+            .fetch_update(Relaxed, Relaxed, |id| id.checked_add(1))
+            .map_err(|_exhausted| NodeError::new("cold descriptor identity exhausted"))?;
+        descriptors.insert(id, plan);
+        Ok(id)
+    }
+    /// Resolve only descriptors retained by this registry or one of its clones.
+    pub fn descriptor(&self, id: u64) -> NodeResult<&'static AnyPlan> {
+        self.descriptors
+            .lock()
+            .map_err(|error| NodeError::new(error.to_string()))?
+            .get(&id)
+            .copied()
+            .ok_or_else(|| NodeError::new("cold descriptor belongs to another registry"))
+    }
     /// A registry holding nothing.
     pub fn new() -> Self {
         Self::default()
@@ -278,17 +305,15 @@ impl Registry {
         if self.implementations.contains_key(name) {
             return Err(BuildError::DuplicateImplementation(name));
         }
-        for kind in node_type
+        node_type
             .inputs
             .iter()
             .map(|(_, kind)| kind)
             .chain(node_type.output.iter())
-        {
-            crate::plan::check_shape(kind)?;
-        }
+            .try_for_each(crate::plan::check_shape)?;
         node_type
             .validate_metadata()
-            .map_err(|what| BuildError::InvalidNodeType { node: name, what })?;
+            .map_err(|what| BuildError::invalid_node(name, what))?;
         let implementation = Implementation {
             node_type,
             build: Arc::new(move |ports| Ok(Box::new(constructor(ports)?))),

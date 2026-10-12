@@ -10,6 +10,10 @@ fn identity<T: 'static>() -> TypeId {
 }
 static INTEGER: AnyPlan = AnyPlan {
     capture: None,
+    validate: None,
+    copy: |data, out| {
+        out.write(&data);
+    },
     execution: &hgl_store::any_values::operations::EXECUTION,
     identity: identity::<i64>,
     operation: AnyOperation::Integer,
@@ -17,6 +21,10 @@ static INTEGER: AnyPlan = AnyPlan {
 };
 static LIST: AnyPlan = AnyPlan {
     capture: None,
+    validate: None,
+    copy: |data, out| {
+        out.write(&data);
+    },
     execution: &hgl_store::any_values::operations::EXECUTION,
     identity: identity::<Vec<i64>>,
     operation: AnyOperation::Sequence(&INTEGER, false),
@@ -24,6 +32,10 @@ static LIST: AnyPlan = AnyPlan {
 };
 static DELTA: AnyPlan = AnyPlan {
     capture: None,
+    validate: None,
+    copy: |data, out| {
+        out.write(&data);
+    },
     execution: &hgl_store::any_values::operations::EXECUTION,
     identity: identity::<(Vec<(i64, i64)>,)>,
     operation: AnyOperation::Data,
@@ -31,6 +43,10 @@ static DELTA: AnyPlan = AnyPlan {
 };
 static NO_ORDER: AnyPlan = AnyPlan {
     capture: None,
+    validate: None,
+    copy: |data, out| {
+        out.write(&data);
+    },
     execution: &hgl_store::any_values::operations::EXECUTION,
     identity: identity::<Vec<String>>,
     operation: AnyOperation::Sequence(&INTEGER, false),
@@ -38,6 +54,10 @@ static NO_ORDER: AnyPlan = AnyPlan {
 };
 static NO_EQUAL: AnyPlan = AnyPlan {
     capture: None,
+    validate: None,
+    copy: |data, out| {
+        out.write(&data);
+    },
     execution: &hgl_store::any_values::operations::EXECUTION,
     identity: identity::<Vec<(Vec<(i64, i64)>,)>>,
     operation: AnyOperation::Sequence(&DELTA, false),
@@ -145,6 +165,14 @@ fn nested_descriptor_metadata_is_independent_prepared_and_fallible() -> NodeResu
     use hgl_types::any_values::AnyBuffer as _;
     static BOXED: AnyPlan = AnyPlan {
         capture: None,
+        validate: None,
+        copy: |data, out| {
+            let value = data.boxed();
+            out.descriptor(value.plan);
+            if let Some(plan) = value.plan {
+                (plan.copy)(value.data, out);
+            }
+        },
         execution: &hgl_store::any_values::operations::EXECUTION,
         identity: identity::<AnyValue>,
         operation: AnyOperation::Boxed,
@@ -152,6 +180,10 @@ fn nested_descriptor_metadata_is_independent_prepared_and_fallible() -> NodeResu
     };
     static WRONG: AnyPlan = AnyPlan {
         capture: Some(|_| Ok(Box::new(false))),
+        validate: None,
+        copy: |data, out| {
+            out.write(&data);
+        },
         execution: &hgl_store::any_values::operations::EXECUTION,
         identity: identity::<i64>,
         operation: AnyOperation::Integer,
@@ -160,7 +192,7 @@ fn nested_descriptor_metadata_is_independent_prepared_and_fallible() -> NodeResu
     let foreign = AnyValue::from_encoded(&INTEGER, 1_i64.to_le_bytes().to_vec());
     let mut data = AnyValue::default();
     data.descriptor(foreign.plan());
-    data.append(foreign.data());
+    (INTEGER.copy)(foreign.data(), &mut data);
     let boxed = AnyValue::from_encoded(&BOXED, data);
     let mut saved = AnyValue::default();
     saved.reserve(boxed.data().len())?;
@@ -197,5 +229,37 @@ fn nested_descriptor_metadata_is_independent_prepared_and_fallible() -> NodeResu
             .message
             .contains("incompatible cold")
     );
+    Ok(())
+}
+
+#[test]
+fn framed_comparison_preserves_prefix_length_unordered_and_error_edges() -> NodeResult {
+    use hgl_types::any_values::{Frames, number};
+    let left = list(&[1, 2]);
+    let different = list(&[3, 0]);
+    let mut visited = 0;
+    assert_eq!(
+        Frames(left.data()).compare_by(Frames(different.data()), |_, a, b| {
+            visited += 1;
+            Ok(Some(number(&a).cmp(&number(&b))))
+        })?,
+        Some(Ordering::Less)
+    );
+    assert_eq!(visited, 1);
+    assert_eq!(list(&[]).compare(&list(&[1]))?, Some(Ordering::Less));
+    assert_eq!(list(&[1]).compare(&left)?, Some(Ordering::Less));
+    assert!(
+        Frames(left.data()).equal_by(Frames(list(&[2, 1]).data()), true, |a, b| Ok(
+            a[..] == b[..]
+        ))?
+    );
+    assert!(!left.equal(&list(&[2, 1]))?);
+    let failure = Frames(left.data()).compare_by(Frames(left.data()), |_, _, _| {
+        Err(hgl_types::NodeError::coded(
+            "comparison failed",
+            "test.comparison",
+        ))
+    });
+    assert_eq!(failure.unwrap_err().code, Some("test.comparison"));
     Ok(())
 }

@@ -7,8 +7,9 @@ fn scan(
     body: &mut Vec<Statement>,
     locals: &mut std::collections::BTreeMap<usize, Ty>,
     next: &mut usize,
+    prepared: bool,
 ) {
-    crate::ir_visit::statements_mut(body, &mut |v| calls(v, locals, next));
+    crate::ir_visit::statements_mut(body, &mut |v| calls(v, locals, next, prepared));
     let mut result = Vec::new();
     for mut statement in std::mem::take(body) {
         match &mut statement {
@@ -20,10 +21,9 @@ fn scan(
             | Statement::TimedYield(_, value)
                 if value.snapshot
                     && (matches!(value.kind, Kind::Unary(..) | Kind::Construct(_))
-                        || value.ty == Ty::Any
+                        || matches!(value.ty, Ty::Any | Ty::Native(_))
                             && !matches!(value.kind, Kind::Local(_) | Kind::MutableLocal(_))) =>
             {
-                // The time operand precedes payload retention, including when either fails.
                 if let Statement::TimedYield(time, _) = &mut statement {
                     let id = *next;
                     *next += 1;
@@ -34,7 +34,7 @@ fn scan(
                 | Statement::Assign(_, value)
                 | Statement::TimedYield(_, value)) = &mut statement
                 else {
-                    unreachable!("snapshot value statement")
+                    unreachable!("snapshot value statement");
                 };
                 let id = *next;
                 *next += 1;
@@ -44,13 +44,28 @@ fn scan(
                 local.snapshot = true;
                 *value = local;
             }
+            Statement::Call(Value {
+                kind: Kind::GlobalSet(_, value),
+                ..
+            }) if prepared
+                && matches!(value.ty, Ty::Native(_))
+                && matches!(value.kind, Kind::Native(..)) =>
+            {
+                let id = *next;
+                *next += 1;
+                locals.insert(id, value.ty.clone());
+                value.snapshot = true;
+                result.push(Statement::Let(id, *value.clone()));
+                **value = Value::new(value.ty.clone(), Kind::Local(id));
+                value.snapshot = true;
+            }
             Statement::If(_, a, b) => {
-                scan(a, locals, next);
-                scan(b, locals, next);
+                scan(a, locals, next, prepared);
+                scan(b, locals, next, prepared);
             }
             Statement::While(_, b)
             | Statement::For(_, _, b)
-            | Statement::ForItems(_, _, _, _, b) => scan(b, locals, next),
+            | Statement::ForItems(_, _, _, _, b) => scan(b, locals, next, prepared),
             Statement::Exit
             | Statement::Let(..)
             | Statement::Var(..)
@@ -69,19 +84,23 @@ fn calls(
     value: &mut Value,
     locals: &mut std::collections::BTreeMap<usize, Ty>,
     next: &mut usize,
+    prepared: bool,
 ) -> bool {
     if let Kind::ValueCall(args, body) = &mut value.kind {
         for arg in args {
-            crate::ir_visit::value_mut(arg, &mut |v| calls(v, locals, next));
+            crate::ir_visit::value_mut(arg, &mut |v| calls(v, locals, next, prepared));
         }
-        scan(body, locals, next);
+        scan(body, locals, next, prepared);
         return false;
     }
     true
 }
-
 /// Reserve private local destinations in the emission plan; no source type is changed.
 pub fn prepare(plan: &mut Plan, storage: impl Fn(&Ty) -> Ty) {
+    prepare_with(plan, storage, false);
+}
+/// Extend lexical destination planning for a checked prepared execution policy.
+pub fn prepare_with(plan: &mut Plan, storage: impl Fn(&Ty) -> Ty, prepared: bool) {
     for (node_id, node) in plan.nodes.iter_mut().enumerate() {
         let mut locals = std::collections::BTreeMap::new();
         let mut next = node_maximum(node);
@@ -91,13 +110,13 @@ pub fn prepare(plan: &mut Plan, storage: impl Fn(&Ty) -> Ty) {
             }
             true
         });
-        scan(&mut node.start, &mut locals, &mut next);
-        scan(&mut node.stop, &mut locals, &mut next);
+        scan(&mut node.start, &mut locals, &mut next, prepared);
+        scan(&mut node.stop, &mut locals, &mut next, prepared);
         for (_, body) in &mut node.handlers {
-            scan(body, &mut locals, &mut next);
+            scan(body, &mut locals, &mut next, prepared);
         }
         if let Some(body) = &mut node.generator {
-            scan(body, &mut locals, &mut next);
+            scan(body, &mut locals, &mut next, prepared);
         }
         if !locals.is_empty() {
             node.global_state = true;

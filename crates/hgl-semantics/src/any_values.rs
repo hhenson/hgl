@@ -1,8 +1,7 @@
-//! Source admission of owning boxes above checked value execution.
+//! Boxing syntax admission stays above checked ordinary execution.
 use crate::ir::{Kind, Value};
 pub use hgl_eval::any_values::*;
 use hgl_source::{Expr, Issue, Ty};
-
 /// Check explicit boxing while preserving the ordinary argument's evaluation phase.
 pub fn checked(
     args: &[(Option<String>, Expr)],

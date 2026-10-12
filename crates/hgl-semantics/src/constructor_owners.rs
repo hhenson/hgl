@@ -3,10 +3,11 @@ use crate::ir::{Kind, Plan, Statement, Value};
 use hgl_source::Ty;
 use std::collections::BTreeMap;
 fn references(value: &mut Value, owners: &BTreeMap<usize, usize>) -> bool {
-    if let Kind::Local(id) = value.kind
+    if let Kind::Local(id) | Kind::MutableLocal(id) = value.kind
         && let Some(entry) = owners.get(&id)
     {
-        value.kind = Kind::BorrowedLocal(id, *entry, false);
+        value.kind = Kind::BorrowedLocal(id, *entry, matches!(value.kind, Kind::MutableLocal(_)));
+        value.snapshot = false;
     }
     if let Kind::ValueCall(args, _) = &mut value.kind {
         for argument in args {
@@ -21,22 +22,34 @@ pub fn prepare(
     plan: &Plan,
     owning: impl Fn(&Ty) -> bool,
     convert: impl Fn(&Value) -> Option<Value>,
+    tuple_staging: impl Fn(&Value, &Ty, &BTreeMap<usize, Value>) -> bool,
 ) -> Plan {
     let mut plan = plan.clone();
     for (node_id, node) in plan.nodes.iter_mut().enumerate() {
+        let growing = crate::constructor_growth::locals(node);
         let mut owners = BTreeMap::new();
         let mut origins = BTreeMap::<usize, Value>::new();
+        let mut locals = BTreeMap::new();
         for body in std::iter::once(&mut node.start)
             .chain(std::iter::once(&mut node.stop))
             .chain(node.handlers.iter_mut().map(|(_, body)| body))
             .chain(node.generator.iter_mut())
         {
             crate::ir_visit::nodes_mut(body, &mut |s| {
-                if let Statement::Let(id, value) = s
+                if let Statement::Let(id, value) | Statement::Var(id, value) = s {
+                    locals.insert(*id, value.clone());
+                }
+                if let Statement::Assign(target, value) = s
+                    && matches!(target.kind,Kind::MutableLocal(id) if owners.contains_key(&id))
+                {
+                    crate::value_constant::retain_closed(value, &mut node.configuration, &owning);
+                }
+                if let Statement::Let(id, value) | Statement::Var(id, value) = s
                     && matches!(value.ty, Ty::Struct(..) | Ty::Recursive(_) | Ty::Family(_))
                     && (matches!(value.kind, Kind::Construct(_))
                         || matches!(&value.kind, Kind::Unary(op, _) if op=="family")
-                        || matches!(value.kind,Kind::Local(id) if origins.contains_key(&id)))
+                        || matches!(value.kind,Kind::Local(id)|Kind::MutableLocal(id) if origins.contains_key(&id)))
+                    && !growing.contains(id)
                     && owning(&value.ty)
                 {
                     let origin =
@@ -53,7 +66,11 @@ pub fn prepare(
                 }
             });
         }
+        if !owners.is_empty() {
+            node.global_state = true;
+        }
         crate::ir_visit::hooks_mut(node, &mut |v| references(v, &owners));
+        let result = node.result.clone();
         for (_, body) in &mut node.handlers {
             crate::ir_visit::statements_mut(body, &mut |v| {
                 if matches!(&v.kind, Kind::Query(op, _) if op.starts_with("\0constructor:")) {
@@ -63,7 +80,8 @@ pub fn prepare(
                     return false;
                 }
                 if matches!(v.kind, Kind::Construct(_))
-                    && matches!(v.ty, Ty::Struct(..) | Ty::Recursive(_))
+                    && (matches!(v.ty, Ty::Struct(..) | Ty::Recursive(_))
+                        || (matches!(v.ty, Ty::Tuple(_)) && tuple_staging(v, &result, &locals)))
                     && owning(&v.ty)
                 {
                     let key = format!("\0constructor:{node_id}:expression:{}", node.globals.len());
@@ -87,7 +105,7 @@ fn origin(
     owning: &impl Fn(&Ty) -> bool,
     convert: &impl Fn(&Value) -> Option<Value>,
 ) -> Value {
-    if let Kind::Local(source) = value.kind {
+    if let Kind::Local(source) | Kind::MutableLocal(source) = value.kind {
         return origins[&source].clone();
     }
     *value = convert(value).unwrap_or_else(|| value.clone());

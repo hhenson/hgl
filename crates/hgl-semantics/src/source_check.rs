@@ -98,6 +98,7 @@ pub fn yield_time(ty: &Ty, span: std::ops::Range<usize>) -> Result<(), Issue> {
 }
 fn declaration_issues(library: &Library, declaration: &Decl) -> Vec<Issue> {
     let checked = match declaration.role {
+        Role::NativeType => declaration.native_type(),
         Role::Test => crate::eval_data::steps_checked(&declaration.tokens).map(|_| ()),
         Role::Function | Role::Implementation | Role::Operator | Role::Native => declaration
             .signature_checked()

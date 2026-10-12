@@ -64,7 +64,7 @@ pub struct PreparedTick<'a, W: Wake> {
     pub(crate) wake: &'a mut W,
 }
 impl<W: Wake> PreparedTick<'_, W> {
-    fn publish(&mut self, output: OutputId) {
+    pub(crate) fn publish(&mut self, output: OutputId) {
         self.storage.bindings.publish(output, self.now, self.wake);
     }
     pub(crate) fn authorize(&self, output: OutputId, generation: u32) {

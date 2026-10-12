@@ -67,25 +67,5 @@ pub fn concrete(value: &Value) -> &Value {
     value
 }
 
-/// Compare cold owning descendants after checking exact concrete nominal tags.
-pub fn equal(a: &Value, b: &Value) -> bool {
-    let (a, b) = (concrete(a), concrete(b));
-    if a.ty != b.ty {
-        return false;
-    }
-    match (&a.kind, &b.kind) {
-        (Kind::Literal(a), Kind::Literal(b)) => a == b,
-        (Kind::List(a), Kind::List(b)) => {
-            a.len() == b.len() && a.iter().zip(b).all(|(a, b)| equal(a, b))
-        }
-        (Kind::Construct(a), Kind::Construct(b)) => {
-            a.len() == b.len()
-                && a.iter().all(|(id, a)| {
-                    b.iter()
-                        .find(|(i, _)| i == id)
-                        .is_some_and(|(_, b)| equal(a, b))
-                })
-        }
-        _ => false,
-    }
-}
+/// Compare exact concrete tags through the shared fallible ordinary equality.
+pub use crate::any_values::equal_data as equal;

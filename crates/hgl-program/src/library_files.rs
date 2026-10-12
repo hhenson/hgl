@@ -6,15 +6,14 @@ pub fn sources(files: &[PathBuf], libraries: &[PathBuf]) -> Result<Vec<(String, 
     for root in libraries {
         collect(root, &mut paths)?;
     }
-    let sources = paths
+    paths
         .iter()
         .map(|p| {
             std::fs::read_to_string(p)
                 .map(|text| (p.display().to_string(), text))
                 .map_err(|e| format!("{}: {e}", p.display()))
         })
-        .collect::<Result<Vec<_>, _>>()?;
-    Ok(sources)
+        .collect()
 }
 fn collect(path: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
     let mut entries = std::fs::read_dir(path)
@@ -31,7 +30,10 @@ fn collect(path: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
             ) {
                 collect(&entry, out)?;
             }
-        } else if entry.extension().is_some_and(|s| s == "hgl") {
+        } else if entry
+            .extension()
+            .is_some_and(|s| s == "hgl" || s == "hgl-native")
+        {
             out.push(entry);
         }
     }

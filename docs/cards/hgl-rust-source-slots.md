@@ -40,9 +40,9 @@ Private source/read helpers project complete global, atomic or configuration sto
 
 Exact atomic and canonical borrowed-owner projections take priority over private snapshot views. A prepared Any binding copies its selected source independently; snapshot metadata on the binding does not change the source arena.
 
-Direct typed global reads select the same checked slot as a bound global view.
-Presence is checked before copying; inline Any returns retain an independent
-prepared destination without native owning extraction or a source binding rule.
+This module now lives in hgl-rust-codegen below executable program assembly;
+its hgl-rust facade path and module ceiling remain unchanged.
+
 
 May use constructor_owners to materialize a private typed staging source at its
 original expression position. Consumers copy only after complete retention.

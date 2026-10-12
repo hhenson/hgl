@@ -1,0 +1,163 @@
+module hgraph.std part reference_values_tests
+
+test {
+    struct ReferenceFields { left: i64
+        right: i64 }
+
+    fn reference_relay(value: ref<i64>) -> ref<i64> {
+        when { return value }
+    }
+    fn reference_read(value: i64) -> i64 {
+        when { return delta_value(value) }
+    }
+    fn reference_followed(value: i64) -> i64 => reference_read(reference_relay(value))
+
+    # Eval supplies ordinary scalar publications; wiring obtains the references.
+    test reference_binding_follows_target_ticks_and_silence {
+        assert eval(reference_followed, [_, 7, 7, _, 9, _]) == [_, 7, 7, _, 9, _]
+        assert eval(reference_followed, [_, _, _]) == [_, _, _]
+        assert eval(reference_followed, []) == []
+    }
+
+    fn reference_equal(first: ref<i64>, second: ref<i64>, step: i64) -> bool {
+        when valid(step) && modified(step) {
+            if valid(first, second) { return first == second }
+            return false
+        }
+    }
+    fn reference_alias_equal(value: i64, step: i64) -> bool {
+        let alias = reference_relay(value)
+        reference_equal(alias, value, step)
+    }
+    fn reference_distinct_equal(first: i64, second: i64, step: i64) -> bool => reference_equal(first, second, step)
+
+    test reference_equality_compares_endpoints_instead_of_target_values {
+        assert eval(reference_alias_equal,
+            value: [7, 8, _, 7], step: [_, 1, 1, 1]
+        ) == [_, true, true, true]
+        assert eval(reference_distinct_equal,
+            first: [7, 8, _, 7], second: [7, 8, _, 7], step: [_, 1, 1, 1]
+        ) == [_, false, false, false]
+    }
+
+    fn reference_choose(index: i64, first: ref<i64>, second: ref<i64>) -> ref<i64> {
+        when {
+            if index == 0 { return first }
+            return second
+        }
+    }
+    fn reference_routed(index: i64, first: i64, second: i64) -> i64 => reference_read(reference_choose(index, first, second))
+    fn reference_route_ticks(index: i64, first: i64, second: i64) -> i64 => tick_count(reference_choose(index, first, second))
+    fn reference_selected_equals_first(index: i64, first: i64, second: i64, step: i64) -> bool {
+        let selected = reference_choose(index, first, second)
+        reference_equal(selected, first, step)
+    }
+
+    test reference_selection_samples_new_targets_and_suppresses_equal_designations {
+        assert eval(reference_routed,
+            index: [0, _, 0, 1, _, 1, 0, _],
+            first: [7, 8, _, _, 9], second: [7, 20, _, _, 21]
+        ) == [7, 8, _, 20, 21, _, 9, _]
+        # A signal consumer dereferences the route (TS-18): it counts the
+        # selected target's ticks and each sampled re-pointing, while an equal
+        # re-selection at cycles 2 and 5 is not a tick (TS-16).
+        assert eval(reference_route_ticks,
+            index: [0, _, 0, 1, _, 1, 0, _],
+            first: [7, 8, _, _, 9], second: [7, 20, _, _, 21]
+        ) == [1, 2, _, 3, 4, _, 5, _]
+        # A and B both hold 7: switching still changes the designation.
+        assert eval(reference_selected_equals_first,
+            index: [0, 1, 1, 0, _], first: [7], second: [7], step: [1, 1, 1, 1, 1]
+        ) == [true, false, false, true, true]
+        assert eval(reference_routed, index: [0, 1, 1], first: [7], second: [7]) == [7, 7, _]
+    }
+
+    # The same REF producer binds twice: designation is opaque; data is followed.
+    # -1 is this observer's explicit fallback for an invalid ordinary input.
+    fn reference_observed(reference: ref<i64>, data: i64, step: i64) -> atomic<tuple<bool, bool, bool, bool, i64>> {
+        when valid(step) && modified(step) {
+            var observed: i64 = -1
+            if valid(data) { observed = data }
+            return (valid(reference), modified(reference), valid(data), modified(data), observed)
+        }
+    }
+    fn reference_route_state(index: i64, first: i64, second: i64, step: i64) -> atomic<tuple<bool, bool, bool, bool, i64>> {
+        let selected = reference_choose(index, first, second)
+        reference_observed(selected, selected, step)
+    }
+
+    test reference_metadata_distinguishes_invalid_targets_from_valid_designations {
+        assert eval(reference_route_state,
+            index: [_, 0, 1, 1, _, 0],
+            first: [7, _, _, _, _, 9], second: [_, _, _, _, 20],
+            step: [1, 1, 1, 1, 1, 1]
+        ) == [
+            (false, false, false, false, -1),
+            (true, true, true, true, 7),
+            (true, true, false, false, -1),
+            (true, false, false, false, -1),
+            (true, false, true, true, 20),
+            (true, true, true, true, 9)
+        ]
+        assert eval(reference_routed,
+            index: [0, 1, 1, _, 0], first: [7, 8, _, _, 9], second: [_, _, _, 20]
+        ) == [7, _, _, 20, 9]
+    }
+
+    fn reference_observed_times(reference: ref<i64>, data: i64, producer: i64, step: i64) -> atomic<tuple<datetime, datetime, datetime>> {
+        when valid(reference, data, producer, step) && modified(step) {
+            return (last_modified(reference), last_modified(data), last_modified(producer))
+        }
+    }
+    fn reference_route_times(index: i64, first: i64, second: i64, step: i64) -> atomic<tuple<datetime, datetime, datetime>> {
+        let selected = reference_choose(index, first, second)
+        reference_observed_times(selected, selected, second, step)
+    }
+
+    test reference_rebinding_samples_the_input_without_changing_producer_time {
+        assert eval(reference_route_times,
+            index: [0, _, 1, 1], first: [7], second: [20], step: [1, 1, 1, 1]
+        ) == [
+            (@1970-01-01T00:00:00.000001Z, @1970-01-01T00:00:00.000001Z, @1970-01-01T00:00:00.000001Z),
+            (@1970-01-01T00:00:00.000001Z, @1970-01-01T00:00:00.000001Z, @1970-01-01T00:00:00.000001Z),
+            (@1970-01-01T00:00:00.000003Z, @1970-01-01T00:00:00.000003Z, @1970-01-01T00:00:00.000001Z),
+            (@1970-01-01T00:00:00.000003Z, @1970-01-01T00:00:00.000003Z, @1970-01-01T00:00:00.000001Z)
+        ]
+    }
+
+    # Holding a designation uses the node's ordinary REF output, not value state.
+    fn reference_first_designation(value: ref<i64>) -> ref<i64> {
+        inject out
+        when {
+            if !valid(out) { return value }
+        }
+    }
+    fn reference_retained_route(index: i64, first: i64, second: i64) -> i64 {
+        let selected = reference_choose(index, first, second)
+        reference_read(reference_relay(reference_first_designation(selected)))
+    }
+
+    test reference_held_output_keeps_a_live_designation_across_later_routes {
+        assert eval(reference_retained_route,
+            index: [0, 1, _, _, 1], first: [7, 8, _, 9, 10], second: [20, _, 21, _, 22]
+        ) == [7, 8, _, 9, 10]
+        assert eval(reference_retained_route,
+            index: [1, 0, _, 0], first: [7, 8, 9], second: [20, 21, _, 22]
+        ) == [20, 21, _, 22]
+    }
+
+    # These projections occur before wrapping REF and need only ordinary WIR-5.
+    fn reference_fixed_child(value: list<i64, 2>) -> i64 => reference_read(reference_relay(value[1]))
+    fn reference_named_child(value: ReferenceFields) -> i64 => reference_read(reference_relay(value.left))
+
+    test reference_bindings_preserve_fixed_and_nominal_child_identity {
+        assert eval(reference_fixed_child, [
+            delta<list<i64, 2>>(items: [0: 7]), delta<list<i64, 2>>(items: [1: 20]), _,
+            delta<list<i64, 2>>(items: [0: 8]), delta<list<i64, 2>>(items: [1: 20])
+        ]) == [_, 20, _, _, 20]
+        assert eval(reference_named_child, [
+            delta<ReferenceFields>(left: 7), delta<ReferenceFields>(right: 20), _,
+            delta<ReferenceFields>(left: 7)
+        ]) == [7, _, _, 7]
+    }
+}
