@@ -9,7 +9,8 @@ publish.workspace = true
 line-budget = 1700
 
 [package.metadata.hgl.modules]
-reference_routes = { budget = 120, uses = [] }
+reference_routes = { budget = 120, uses = ["reference_designations"] }
+reference_designations = { budget = 150, uses = [] }
 native_images = { budget = 100, uses = [] }
 capacity = { budget = 400, uses = ["snapshots", "collections", "deltas", "finite_domains", "keyed", "layouts", "pure_bounds", "windows", "any_values", "any_expression"] }
 generators = { budget = 500, uses = ["observed", "constructor_owners", "snapshot_slots", "any_prepared", "deltas", "finite_domains", "source_slots", "values", "windows"] }
