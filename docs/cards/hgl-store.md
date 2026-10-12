@@ -373,3 +373,5 @@ The native_keys module owns typed prepared key domains; native_results owns prep
 unstarted descendants, without running hooks or changing the Store clock. It
 preserves other endpoints and their ordinary next-cycle retirement. Its scope
 and descendants must still be constructing child graphs.
+
+NativeKeyDomain is reexported for generated statically selected key-domain markers; cold preparation registers compatible canonical provider contracts and hot access uses their cached numeric slots.

@@ -81,7 +81,7 @@ pub fn binary(op: &str, a: &Value, b: &Value) -> Result<Value, EvalError> {
                 (a.operations().equal)(a.data(), b.data())? == (op == "=="),
             )))
         } else {
-            comparison(op, (a.operations().compare)(a.data(), b.data())?).map(value)
+            partial_comparison(op, (a.operations().compare)(a.data(), b.data())?).map(value)
         };
     }
     let (a, b) = (scalar(a)?, scalar(b)?);
@@ -173,6 +173,15 @@ fn floating(op: &str, a: f64, b: f64) -> Result<Literal, EvalError> {
         _ => return comparison(op, a.partial_cmp(&b)),
     };
     Ok(Literal::Float(result))
+}
+fn partial_comparison(op: &str, ordering: Option<Ordering>) -> Result<Literal, EvalError> {
+    Ok(Literal::Bool(match op {
+        "<" => ordering == Some(Ordering::Less),
+        "<=" => matches!(ordering, Some(Ordering::Less | Ordering::Equal)),
+        ">" => ordering == Some(Ordering::Greater),
+        ">=" => matches!(ordering, Some(Ordering::Greater | Ordering::Equal)),
+        _ => return Err(unsupported("unsupported ordinary binary operation")),
+    }))
 }
 fn comparison(op: &str, ordering: Option<Ordering>) -> Result<Literal, EvalError> {
     let ordering = ordering.ok_or_else(|| unsupported("NaN comparison policy is not specified"))?;

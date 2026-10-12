@@ -452,4 +452,5 @@ impl<T: Scalar> Copy for DictOut<T> {}
 impl<T: Scalar> Copy for DictIn<T> {}
 
 mod native_keys;
+pub use native_keys::NativeKeyDomain;
 mod native_results;

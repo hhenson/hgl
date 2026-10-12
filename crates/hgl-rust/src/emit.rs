@@ -343,7 +343,7 @@ fn emit_inner(plan: &Plan, layouts: bool) -> String {
     for (i, n) in plan.nodes.iter().enumerate() {
         node(plan, n, i, &mut out);
     }
-    out.push("/// Register the selected HGL implementations.\npub fn register(registry: &mut hgl_describe::Registry) -> Result<(),hgl_describe::BuildError> {\n" .to_owned());
+    out.push("/// Register the selected HGL implementations.\npub fn register(registry: &mut hgl_describe::Registry) -> Result<(),hgl_describe::BuildError> {\nvalidate_native_images().map_err(|what|hgl_describe::BuildError::InvalidNodeType{node:\"hgl.program\",what})?;\n" .to_owned());
     for i in 0..plan.nodes.len() {
         out.push(format!("registry.register::<Node{i}>()?;\n"));
     }

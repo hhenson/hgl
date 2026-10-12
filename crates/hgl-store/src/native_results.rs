@@ -29,9 +29,9 @@ impl crate::GlobalState {
 }
 impl<W: Wake> PreparedTick<'_, W> {
     /// Invoke a borrowed-result provider once, retaining only after complete preflight.
-    pub fn native_result<T: NativeType, const DOMAIN: usize>(
+    pub fn native_result<T: NativeType, D: std::fmt::Debug + 'static>(
         &mut self,
-        output: Output<Atomic<Native<T, DOMAIN>>>,
+        output: Output<Atomic<Native<T, D>>>,
         execute: impl for<'v> FnOnce(
             Observation<'v>,
             &'v crate::GlobalState,

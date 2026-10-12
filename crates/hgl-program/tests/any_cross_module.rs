@@ -484,3 +484,96 @@ fn cold_foreign_any_source_profiles_remain_explicit() -> Result<(), Box<dyn std:
     fs::remove_file(provider_file)?;
     Ok(())
 }
+
+#[test]
+fn independently_emitted_native_key_domains_share_only_compatible_contracts()
+-> Result<(), Box<dyn std::error::Error>> {
+    let NativeFixture {
+        dependencies,
+        provider_file,
+    } = native_fixture()?;
+
+    let first = native_key_module("first", "Token", "token", &dependencies)?;
+    let second = native_key_module("second", "TokenOther", "token_other", &dependencies)?;
+    let alias = native_key_module("alias", "Token", "token", &dependencies)?;
+    let incompatible_file = provider_file.with_extension("incompatible.rs");
+    fs::write(
+        &incompatible_file,
+        fs::read_to_string(&provider_file)?.replace(
+            "native-atomic-values-v1",
+            "native-atomic-values-incompatible",
+        ),
+    )?;
+    let mut incompatible = dependencies;
+    for (name, text) in &mut incompatible {
+        if name.ends_with(".hgl-native") {
+            *text = text
+                .replace(
+                    "native-atomic-values-v1",
+                    "native-atomic-values-incompatible",
+                )
+                .replace(
+                    &provider_file.to_string_lossy().to_string(),
+                    &incompatible_file.to_string_lossy(),
+                );
+        }
+    }
+    let incompatible = native_key_module("incompatible", "Token", "token", &incompatible)?;
+    let result = run(&format!(
+        r#"
+static REJECT:std::sync::atomic::AtomicBool=std::sync::atomic::AtomicBool::new(false);
+static COPIES:std::sync::atomic::AtomicUsize=std::sync::atomic::AtomicUsize::new(0);
+mod first{{{first}}} mod second{{{second}}} mod alias{{{alias}}} mod incompatible{{{incompatible}}}
+fn main()->hgl_types::NodeResult{{
+ let mut keys=hgl_store::Keys::default();first::prepare(&mut keys,"first")?;second::prepare(&mut keys,"second")?;
+ assert_eq!(first::ids(&keys),[0]);assert_eq!(second::ids(&keys),[0]);
+ assert!(first::id(&keys,"second").is_err());assert!(second::id(&keys,"first").is_err());
+ assert_eq!(first::data(&keys,0)?,b"first");assert_eq!(second::data(&keys,0)?,b"second");
+ alias::initialize()?;assert_eq!(alias::id(&keys,"first")?,0);assert_eq!(alias::ids(&keys),[0]);
+ alias::prepare(&mut keys,"alias")?;assert_eq!(first::ids(&keys),[0,1]);assert_eq!(alias::ids(&keys),[0,1]);assert_eq!(second::ids(&keys),[0]);
+ let (result,allocations)=hgl_alloc_count::count_in(||->hgl_types::NodeResult{{for _ in 0..100 {{assert_eq!(first::id(&keys,"first")?,0);assert_eq!(alias::id(&keys,"alias")?,1);assert_eq!(second::id(&keys,"second")?,0);assert_eq!(first::data(&keys,1)?,b"alias");}}Ok(())}});result?;assert_eq!(allocations,0);
+ let copies=COPIES.load(std::sync::atomic::Ordering::Relaxed);let error=incompatible::initialize().unwrap_err();assert_eq!(COPIES.load(std::sync::atomic::Ordering::Relaxed),copies);assert!(error.message.contains("incompatible native key domain contract"));assert_eq!(first::ids(&keys),[0,1]);
+ let mut another=hgl_store::Keys::default();second::prepare(&mut another,"new-second")?;alias::prepare(&mut another,"new-first")?;assert_eq!(first::data(&another,0)?,b"new-first");assert_eq!(second::data(&another,0)?,b"new-second");
+ Ok(())
+}}
+"#
+    ));
+    fs::remove_file(provider_file)?;
+    fs::remove_file(incompatible_file)?;
+    result
+}
+
+fn native_key_module(
+    module: &str,
+    nominal: &str,
+    helper: &str,
+    dependencies: &[(String, String)],
+) -> Result<String, String> {
+    let mut input = dependencies.to_vec();
+    input.insert(0,(format!("{module}.hgl"),format!("module {module}\nuse hgraph.std::{{{helper}}}\nfn main()->any {{when {{return any({helper}(\"first\"))}}}}")));
+    let generated = hgl_program::emit_rust(&hgl_program::compile(&input, "main")?);
+    let scalar = hgl_source::native_contracts::Scalar {
+        identity: format!("hgraph.std::{nominal}"),
+        capabilities: ["copy", "text", "equality", "hash", "order", "serialization"]
+            .into_iter()
+            .map(String::from)
+            .collect(),
+    };
+    let ty = hgl_source::Ty::Native(scalar.clone());
+    let mut marker = String::from("NativeScalar");
+    for byte in scalar.identity.bytes() {
+        write!(marker, "{byte:03}").map_err(|e| e.to_string())?;
+    }
+    let global = hgl_rust::layouts::global_type(&ty);
+    Ok(format!(
+        r#"{generated}
+        type M={global};
+        fn owner(value:&str)->hgl_types::NodeResult<hgl_store::native_values::NativeValue<{marker}>>{{hgl_store::native_values::NativeView::<{marker}>::from_provider(value.as_bytes()).retain()}}
+        pub fn initialize()->hgl_types::NodeResult{{register(&mut hgl_describe::Registry::new()).map_err(|e|hgl_types::NodeError::new(format!("{{e:?}}")))}}
+        pub fn prepare(keys:&mut hgl_store::Keys,value:&str)->hgl_types::NodeResult{{<M as hgl_store::Key>::prepare(keys,&owner(value)?)}}
+        pub fn id(keys:&hgl_store::Keys,value:&str)->hgl_types::NodeResult<i64>{{M::key_view_id(keys,hgl_store::native_values::NativeView::from_provider(value.as_bytes()))}}
+        pub fn ids(keys:&hgl_store::Keys)->&[i64]{{<M as hgl_store::Key>::ids(keys)}}
+        pub fn data(keys:&hgl_store::Keys,id:i64)->hgl_types::NodeResult<&[u8]>{{Ok(M::key_view(keys,id)?.data())}}
+        "#
+    ))
+}
