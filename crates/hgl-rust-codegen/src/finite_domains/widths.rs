@@ -29,16 +29,16 @@ fn node(
     seen[index] = true;
     let definition = &plan.nodes[index];
     for (_, source, ty) in &definition.inputs {
-        if matches!(ty, Ty::Set(_)) {
+        if matches!(underlying(ty), Ty::Set(_)) {
             node(plan, *source, base, seen, out);
         }
     }
-    if !matches!(definition.result, Ty::Set(_)) {
+    if !matches!(underlying(&definition.result), Ty::Set(_)) {
         return;
     }
-    let mut width = base(&definition.result);
+    let mut width = base(underlying(&definition.result));
     for (_, source, ty) in &definition.inputs {
-        if matches!(ty, Ty::Set(_)) {
+        if matches!(underlying(ty), Ty::Set(_)) {
             width = format!("({width}).max(width{source})");
         }
     }
@@ -52,6 +52,12 @@ fn node(
         .collect());
     write!(out, "let width{index}=({width}).max({mutations});")
         .unwrap_or_else(|_| unreachable!("String formatting"));
+}
+fn underlying(mut ty: &Ty) -> &Ty {
+    while let Ty::Ref(child) = ty {
+        ty = child;
+    }
+    ty
 }
 /// Emit per-output finite publication widths along dependencies, including nested added loops.
 /// Constant integer induction loops have exact finite bounds; other while loops remain outside this proof.
