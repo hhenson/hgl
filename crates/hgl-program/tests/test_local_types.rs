@@ -183,3 +183,50 @@ fn test_type_admission_keeps_other_context_members_excluded() {
         rejected(&source(&format!("test {{{member}}}")), "test context");
     }
 }
+
+#[test]
+fn test_descendants_do_not_change_production_family_layout() -> Result<(), String> {
+    let body = "abstract struct Base {value:i64}\nstruct Production:Base {}\nfn ticks()->i64 {yield 1us:1}\nfn publish(value:i64)->atomic<Base> {when {return Production(value:7)}}\nexport fn main() {publish(ticks())}";
+    let baseline = emit_rust(&compile(&source(body), "main")?);
+    let with_fixture = source(&format!("{body}\ntest {{struct Fixture:Base {{}}}}"));
+    let production = emit_rust(&compile(&with_fixture, "main")?);
+    assert_eq!(
+        production, baseline,
+        "test-only descendants changed production family layouts"
+    );
+    Ok(())
+}
+
+#[test]
+fn test_scope_includes_its_own_descendants_of_production_families() -> Result<(), String> {
+    let sources = source(
+        "abstract struct Base {value:i64}\nstruct Production:Base {}\ntest {struct Fixture:Base {}\nconst fn read(value:Base)->i64 => value.value\ntest fixture {assert read(Fixture(value:7))==7}}",
+    );
+    let suite = compile_suite(&sources)?;
+    assert_eq!(
+        hgl_semantics::harness::execute(
+            &suite.tests[0],
+            |_| unreachable!(),
+            |_, _| unreachable!()
+        )?,
+        1
+    );
+    Ok(())
+}
+
+#[test]
+fn production_helpers_keep_production_resolution_when_called_from_tests() -> Result<(), String> {
+    let sources = source(
+        "const fn mark()->i64 => 1\nconst fn read()->i64 => mark()\ntest {const fn mark()->i64 => 2\ntest isolated {assert mark()==2\nassert read()==1}}",
+    );
+    let suite = compile_suite(&sources)?;
+    assert_eq!(
+        hgl_semantics::harness::execute(
+            &suite.tests[0],
+            |_| unreachable!(),
+            |_, _| unreachable!()
+        )?,
+        2
+    );
+    Ok(())
+}
