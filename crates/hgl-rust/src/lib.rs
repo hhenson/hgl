@@ -24,6 +24,7 @@ pub use hgl_rust_codegen::key_origins;
 pub use hgl_rust_codegen::keyed;
 pub use hgl_rust_codegen::layouts;
 pub use hgl_rust_codegen::mutation_bounds;
+pub use hgl_rust_codegen::native_results;
 pub use hgl_rust_codegen::observed;
 pub mod preparation;
 pub use hgl_rust_codegen::prepared_values;

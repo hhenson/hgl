@@ -104,21 +104,7 @@ fn unary(plan: &Plan, op: &str, operand: &Value) -> String {
         return crate::any_values::construct(&operand.ty, &value(plan, operand));
     }
     let value = value(plan, operand);
-    if op == "-" && operand.ty == Ty::I64 {
-        format!("(({value}).wrapping_neg())")
-    } else if op == "-" && operand.ty == Ty::Duration {
-        format!(
-            "hgl_types::EngineDelta::from_micros(({value}).micros().checked_neg().ok_or_else(|| hgl_types::NodeError::new(\"time arithmetic overflow\"))?)"
-        )
-    } else if op == "atomic_value" {
-        value
-    } else if op == "bytes" {
-        format!("hgl_types::bytes(&({value}))?")
-    } else if op == "float" {
-        format!("({value} as f64)")
-    } else {
-        format!("({op}{value})")
-    }
+    crate::scalars::unary(&operand.ty, op, &value)
 }
 
 pub(crate) fn place(plan: &Plan, v: &Value) -> String {
@@ -205,31 +191,10 @@ fn binary(plan: &Plan, result: &Ty, op: &str, a: &Value, b: &Value) -> String {
     } else {
         value(plan, b)
     };
-    if matches!(result, Ty::DateTime | Ty::Duration) && matches!(op, "+" | "-") {
-        let operation = if op == "+" {
-            "checked_add"
-        } else {
-            "checked_sub"
-        };
-        return format!(
-            "{{ let lhs = ({a}).micros(); let rhs = ({b}).micros(); {}::from_micros(lhs.{operation}(rhs).ok_or_else(|| hgl_types::NodeError::new(\"time arithmetic overflow\"))?) }}",
-            rust_type(result)
-        );
-    }
-    if *result == Ty::I64 && matches!(op, "+" | "-" | "*" | "%") {
-        crate::scalars::integer_binary(op, &a, &b)
-    } else if op == "/" {
-        format!(
-            "{{ let lhs = ({a}) as f64; let rhs = ({b}) as f64; if rhs == 0.0 {{ return Err(hgl_kernel::NodeError::new(\"division by zero\")); }} lhs / rhs }}"
-        )
-    } else if op == "%" && *result == Ty::F64 {
-        format!(
-            "{{ let lhs: f64 = {a}; let rhs: f64 = {b}; if rhs == 0.0 {{ return Err(hgl_kernel::NodeError::new(\"division by zero\")); }} let rem = lhs % rhs; if rem == 0.0 {{ 0.0_f64.copysign(rhs) }} else if (rem < 0.0) != (rhs < 0.0) {{ rem + rhs }} else {{ rem }} }}"
-        )
-    } else if op == "+" && *result == Ty::Str {
+    if op == "+" && *result == Ty::Str {
         format!("format!(\"{{}}{{}}\", {a}, {b})")
     } else {
-        format!("({a} {op} {b})")
+        crate::scalars::binary(result, op, &a, &b)
     }
 }
 fn presence(plan: &Plan, value: &Value) -> String {

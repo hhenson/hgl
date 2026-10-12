@@ -44,6 +44,9 @@ fn suite(sources: &[(String, String)], module_only: bool) -> Result<Suite, Strin
         .map_err(|e| hgl_source::diagnostics::render_issue(sources, e.in_source(&decl.source)))?;
         suite.tests.push(Test { name, steps });
     }
+    for plan in &suite.plans {
+        emit::native_results::validate(plan)?;
+    }
     Ok(suite)
 }
 /// Check named source tests, retaining the ordinary no-tests error.

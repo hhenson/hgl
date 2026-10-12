@@ -24,7 +24,16 @@ fn sources(body: &str) -> Result<Vec<(String, String)>, String> {
     Ok(sources)
 }
 fn run(body: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let suite = hgl_program::compile_module_suite(&sources(body)?)?;
+    run_sources(&sources(body)?)
+}
+fn run_sources(input: &[(String, String)]) -> Result<(), Box<dyn std::error::Error>> {
+    run_sources_with_counts(input, None)
+}
+fn run_sources_with_counts(
+    input: &[(String, String)],
+    calls: Option<[usize; 3]>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let suite = hgl_program::compile_module_suite(input)?;
     assert!(
         !suite.tests.is_empty(),
         "native fixture must execute authored tests"
@@ -33,10 +42,184 @@ fn run(body: &str) -> Result<(), Box<dyn std::error::Error>> {
     let start = "store.prepare_collection_inputs();hgl_kernel::run_simulation(";
     let end = ").map_err(|e|match e {hgl_kernel::EngineError::Node(e)=>";
     let generated = generated.replace(start,"store.prepare_collection_inputs();let (run,allocations)=hgl_alloc_count::count_in(||hgl_kernel::run_simulation(").replace(end,"));if run.is_ok(){assert_eq!(allocations,0,\"native scalar evaluation allocated\");}run.map_err(|e|match e {hgl_kernel::EngineError::Node(e)=>");
-    let generated = format!(
+    let mut generated = format!(
         "#[global_allocator] static ALLOCATOR:hgl_alloc_count::CountingAllocator=hgl_alloc_count::CountingAllocator;\n{generated}"
     );
+    if let Some(calls) = calls {
+        generated = generated.replace("store.prepare_collection_inputs();", "{let choices=store.global_state().bind::<hgl_store::List<i64>>(\"choices\").map_err(|e|e.message)?;store.global_state().set(choices,&vec![1,2]).map_err(|e|e.message)?;}store.prepare_collection_inputs();");
+        generated = generated.replace("fn main() {", "fn authored_main() {");
+        writeln!(
+            generated,
+            "static NATIVE_CALLS:[std::sync::atomic::AtomicUsize;3]=[const {{std::sync::atomic::AtomicUsize::new(0)}};3];fn main(){{authored_main();for (counter,expected) in NATIVE_CALLS.iter().zip({calls:?}) {{assert_eq!(counter.load(std::sync::atomic::Ordering::Relaxed),expected,\"native helper executed more than once per authored invocation\");}}}}"
+        )?;
+    }
     execute(&generated)
+}
+#[test]
+fn native_owning_helpers_prepare_primitive_inputs_configuration_literals_and_nested_calls()
+-> Result<(), Box<dyn std::error::Error>> {
+    let input = primitive_sources(
+        r#"
+use hgraph.std::{primitive_token,primitive_text,primitive_size}
+fn make(value:i64,flag:bool,const fixed:i64)->Token {when {return primitive_token(value,flag,fixed)}}
+fn text(value:i64,flag:bool)->str {when {return primitive_text(value,flag,1)}}
+fn nested(value:str,flag:bool)->Token {when {return primitive_token(primitive_size(value),flag,1)}}
+fn configured(value:i64,const flag:bool)->Token {when {return primitive_token(value,flag,1)}}
+fn locals(value:i64,flag:bool)->Token {when {let number=value
+var choice=flag
+return primitive_token(number,choice,1)}}
+fn globals(value:i64,flag:bool)->Token {inject global_state
+when {set(global_state,"number",value)
+return primitive_token(get(global_state,"number"),flag,1)}}
+fn literal(value:i64)->str {when {return primitive_text(value,true,1)}}
+fn expression(value:i64)->Token {when {return primitive_token(value+1,(value>=0)&&!(value>1),1)}}
+fn modulo(value:i64)->Token {when {return primitive_token((value*2-1)%5,true,1)}}
+fn queried(value:i64)->Token {when {return primitive_token(value,valid(value),1)}}
+fn indexed(value:i64)->Token {inject global_state
+when {let choices:list<i64> =get(global_state,"choices")
+return primitive_token(choices[value],true,1)}}
+test primitive_helpers {
+assert eval(make,value:[1,_,2],flag:[true,_,false],fixed:1)==[token("yes"),_,token("no")]
+assert eval(text,value:[1,_,2],flag:[true,_,false])==["yes",_,"no"]
+assert eval(nested,value:["x",_,"xx"],flag:[true,_,false])==[token("yes"),_,token("no")]
+assert eval(configured,value:[1,_,2],flag:true)==[token("yes"),_,token("no")]
+assert eval(locals,value:[1,_,2],flag:[true,_,false])==[token("yes"),_,token("no")]
+assert eval(globals,value:[1,_,2],flag:[true,_,false])==[token("yes"),_,token("no")]
+assert eval(literal,value:[1,_,2])==["yes",_,"no"]
+assert eval(expression,value:[0,_,1,9223372036854775807])==[token("yes"),_,token("no"),token("no")]
+assert eval(modulo,value:[1,_,-2])==[token("yes"),_,token("no")]
+assert eval(queried,value:[1,_,2])==[token("yes"),_,token("no")]
+assert eval(indexed,value:[0,_,1])==[token("yes"),_,token("no")]
+}
+"#,
+    )?;
+    run_sources_with_counts(&input, Some([19, 23, 2]))
+}
+fn primitive_sources(body: &str) -> Result<Vec<(String, String)>, Box<dyn std::error::Error>> {
+    let mut input = sources(body)?;
+    for (name, text) in &mut input {
+        if name.ends_with("atomic_values_fixture.hgl") {
+            text.push_str("\nexport native const fn primitive_token(value:i64,flag:bool,fixed:i64)->Token\nexport native const fn primitive_text(value:i64,flag:bool,fixed:i64)->str\nexport native const fn primitive_size(value:str)->i64\n");
+        } else if name.ends_with(".hgl-native") {
+            *text = text.replace(
+                "\"atomic_values.rs\"",
+                "\"../../crates/hgl-compiler/tests/fixtures/native_primitive_provider.rs\"",
+            );
+            for (name, result, bound) in [
+                ("primitive_token", "Token", " bound \"primitive_width\""),
+                ("primitive_text", "str", " bound \"primitive_width\""),
+            ] {
+                writeln!(
+                    text,
+                    "value {name}(value:i64,flag:bool,fixed:i64)->{result} symbol \"{name}\"{bound} ownership owned phases {{setup,cold,evaluation}} effects {{}}"
+                )?;
+            }
+            text.push_str("value primitive_size(value:str)->i64 symbol \"primitive_size\" ownership owned phases {setup,cold,evaluation} effects {}\n");
+        }
+    }
+    Ok(input)
+}
+#[test]
+fn unsupported_runtime_native_transport_rejects_planning_but_cold_calls_execute()
+-> Result<(), Box<dyn std::error::Error>> {
+    let input = primitive_sources(
+        r#"
+use hgraph.std::{primitive_token}
+const fn increment(value:i64)->i64 {return value+1}
+fn unsupported(value:i64)->Token {when {return primitive_token(increment(value),true,1)}}
+fn source()->i64 {inject alarm
+start {schedule(alarm,0us)}
+when {return 0}}
+export fn main() {unsupported(source())}
+test unsupported_runtime {assert eval(unsupported,value:[0])==[token("yes")]}
+"#,
+    )?;
+    hgl_program::check_sources(&input)?;
+    let program = hgl_program::compile(&input, "main")?;
+    let target = hgl_program::emit_rust(&program);
+    assert!(target.starts_with("compile_error!("), "{target}");
+    assert!(
+        target.contains("Rust native target does not support prepared owning result transport")
+    );
+    assert!(!target.contains("native_primitive_provider.rs") && !target.contains("native_image"));
+    let error = hgl_program::compile_module_suite(&input)
+        .err()
+        .ok_or("unmapped runtime transport admitted")?;
+    assert!(
+        error.contains("Rust native target does not support prepared owning result transport"),
+        "{error}"
+    );
+    let input = primitive_sources(
+        r#"
+use hgraph.std::{primitive_token}
+const fn increment(value:i64)->i64 {return value+1}
+test supported_cold {assert primitive_token(increment(0),true,1)==token("yes")}
+"#,
+    )?;
+    run_sources_with_counts(&input, Some([1, 1, 0]))
+}
+#[test]
+fn modules_share_one_provider_image_and_retain_all_scalar_mappings_and_aliases()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut input = sources("")?;
+    input.retain(|(name, _)| {
+        !name.ends_with("atomic_values_fixture.hgl")
+            && !name.ends_with(".hgl-native")
+            && name != "native-cases.hgl"
+    });
+    input.insert(
+        0,
+        (
+            "shared-native-cases.hgl".into(),
+            r#"
+module shared_native_cases
+use first::{Token,make}
+use second::{TokenOther,other}
+use aliases::{Alias,alias}
+fn token_pass(value:str)->Token {when {return make(value)}}
+fn other_pass(value:str)->TokenOther {when {return other(value)}}
+fn alias_pass(value:Token)->Alias {when {return value}}
+test shared_image {
+assert eval(token_pass,value:["a",_,""])==[make("a"),_,make("")]
+assert eval(other_pass,value:["b",_,""])==[other("b"),_,other("")]
+assert eval(alias_pass,value:[make("a"),_,make("")])==[alias("a"),_,alias("")]
+assert alias("same")==make("same")
+}
+"#
+            .into(),
+        ),
+    );
+    let image = root()?.join("native/stdlib/atomic_values.rs");
+    for (module, ty, helper, marker, canonical, symbol) in [
+        (
+            "first",
+            "Token",
+            "make",
+            "Token",
+            "hgraph.std::Token",
+            "token_str",
+        ),
+        (
+            "second",
+            "TokenOther",
+            "other",
+            "TokenOther",
+            "hgraph.std::TokenOther",
+            "token_other_str",
+        ),
+        (
+            "aliases",
+            "Alias",
+            "alias",
+            "Token",
+            "hgraph.std::Token",
+            "token_str",
+        ),
+    ] {
+        input.push((format!("{module}.hgl"), format!("module {module}\nexport native type {ty}\nexport native const fn {helper}(text:str)->{ty}\n")));
+        input.push((format!("{module}.hgl-native"), format!("native_descriptor 1 target \"hgl-rust-1\"\nmodule {module}\nprovider \"hgl.native_atomic_fixture\" fingerprint \"native-atomic-values-v1\" image {:?}\nscalar {ty} canonical \"{canonical}\" capabilities {{copy,text,equality,hash,order,serialization}} marker \"{marker}\"\nvalue {helper}(text:str)->{ty} symbol \"{symbol}\" bound \"identity_width\" ownership owned phases {{setup,cold,evaluation}} effects {{allocation}}\n", image.to_string_lossy())));
+    }
+    run_sources(&input)
 }
 fn execute(generated: &str) -> Result<(), Box<dyn std::error::Error>> {
     static GENERATED: std::sync::Mutex<()> = std::sync::Mutex::new(());

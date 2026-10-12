@@ -94,10 +94,11 @@ construction, so generated literal keys are retained before any hook runs.
 producer metadata. `Registry::descriptor(id)` resolves only entries owned by this
 registry or its clones. The catalog is registry-owned, shared only across explicit
 registry clones, and drops with its last owner. Static compiled metadata outlives
-all entries. Each retention receives a fresh transport handle; handles do not
-participate in semantic type or value identity. Catalog storage grows with cold
-retentions until the last registry clone drops, keeping every issued carrier
-resolvable without scanning previous descriptors.
+all entries. Repeated retention of the same static plan reuses its transport
+handle within this registry and its clones; distinct plans retain distinct
+handles even when they describe the same semantic type. Catalog storage grows
+with distinct retained plans, keeping every issued carrier directly resolvable.
+Cold retention compares plan pointers only to intern exact static metadata.
 
 A checked process-wide monotonic ID allocator stores no descriptor or callback;
 it prevents another registry from accidentally resolving a same-position entry.

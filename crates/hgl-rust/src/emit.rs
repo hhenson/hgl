@@ -447,7 +447,11 @@ fn native_images(plan: &Plan) -> String {
         ));
     }
     let mut identities = std::collections::BTreeSet::new();
-    for provider in providers.values() {
+    for provider in plan
+        .natives
+        .iter()
+        .filter_map(|native| native.provider.as_ref())
+    {
         for (scalar, marker) in &provider.scalars {
             let domain = identities.len();
             if identities.insert(&scalar.identity) {

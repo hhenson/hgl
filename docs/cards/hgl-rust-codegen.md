@@ -32,3 +32,18 @@ flowchart TD
 ```
 
 Native scalar/layout conversion delegates to native_values; prepared owning-result selection and limits delegate to native_results. These modules share only checked metadata and emission, with no executable assembly/provisioning dependency.
+
+native_results uses layouts and scalars for fixed primitive observations,
+configuration and literal emission. Nested non-owning native calls need no result
+width callback; owning callbacks compose their declared cold bounds and retain
+the single borrowed result in independently reserved storage.
+
+The hgl-rust facade reexports native_results. Its public
+validate(&Plan)->Result<(),String> checks concrete runtime owning
+provider invocations before target emission. Unsupported prepared argument/result
+transport produces a Rust target diagnostic, with no provider execution. Cold
+materialization, setup, already prepared snapshots and legacy native bindings
+retain their existing paths. Ordinary scalar ValueCall arguments, unsupported
+field projections and owning concatenation arguments currently require a future
+target transport mapping. Primitive expressions share scalars::binary/unary;
+direct input metadata queries and borrowed global-list indices remain prepared.

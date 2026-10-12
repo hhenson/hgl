@@ -212,3 +212,74 @@ fn scalar_target_markers_are_explicit_inert_backend_bindings() -> Result<(), Str
     }
     Ok(())
 }
+
+#[test]
+fn canonical_aliases_require_compatible_selected_target_mappings() -> Result<(), String> {
+    let scalar = SCALAR.trim_end().to_owned() + " marker \"Token\"\n";
+    let mut input = sources("native type Token", &scalar);
+    input[1].1 = input[1].1.replace(
+        "fingerprint \"contract-v1\"",
+        "fingerprint \"contract-v1\" image \"unloaded.rs\"",
+    );
+    input.push(("alias.hgl".into(), "module alias\nnative type Alias".into()));
+    input.push((
+        "alias.hgl-native".into(),
+        input[1]
+            .1
+            .replace("module provider", "module alias")
+            .replace("scalar Token", "scalar Alias"),
+    ));
+    library::load(&input)?;
+    let mut equivalent = input.clone();
+    equivalent[3].0 = "nested/alias.hgl-native".into();
+    equivalent[3].1 = equivalent[3]
+        .1
+        .replace("image \"unloaded.rs\"", "image \"../unloaded.rs\"");
+    library::load(&equivalent)?;
+    for (from, to) in [
+        ("marker \"Token\"", "marker \"Other\""),
+        ("provider \"owning-test\"", "provider \"other-test\""),
+        ("image \"unloaded.rs\"", "image \"other.rs\""),
+        ("fingerprint \"contract-v1\"", "fingerprint \"contract-v2\""),
+    ] {
+        let mut incompatible = input.clone();
+        incompatible[3].1 = incompatible[3].1.replace(from, to);
+        let error = library::load(&incompatible)
+            .err()
+            .ok_or("incompatible target mapping admitted")?;
+        assert!(
+            error.contains("target mapping") || error.contains("provider image"),
+            "{error}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn shared_provider_metadata_rejects_conflicting_images_even_for_distinct_scalars()
+-> Result<(), String> {
+    let mut input = sources("native type Token", SCALAR);
+    input[1].1 = input[1].1.replace(
+        "fingerprint \"contract-v1\"",
+        "fingerprint \"contract-v1\" image \"unloaded.rs\"",
+    );
+    input.push(("other.hgl".into(), "module other\nnative type Other".into()));
+    input.push((
+        "other.hgl-native".into(),
+        input[1]
+            .1
+            .replace("module provider", "module other")
+            .replace("scalar Token", "scalar Other")
+            .replace("existing.Token", "existing.Other"),
+    ));
+    library::load(&input)?;
+    for (from, to) in [("unloaded.rs", "other.rs"), ("contract-v1", "contract-v2")] {
+        let mut incompatible = input.clone();
+        incompatible[3].1 = incompatible[3].1.replace(from, to);
+        let error = library::load(&incompatible)
+            .err()
+            .ok_or("conflicting provider image admitted")?;
+        assert!(error.contains("provider image"), "{error}");
+    }
+    Ok(())
+}

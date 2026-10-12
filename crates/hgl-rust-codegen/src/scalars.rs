@@ -140,3 +140,50 @@ pub fn integer_binary(op: &str, a: &str, b: &str) -> String {
         _ => unreachable!("checked integer operation"),
     }
 }
+
+/// Emit checked primitive operations with the shared overflow and error policy.
+pub fn binary(result: &Ty, op: &str, a: &str, b: &str) -> String {
+    if matches!(result, Ty::DateTime | Ty::Duration) && matches!(op, "+" | "-") {
+        let operation = if op == "+" {
+            "checked_add"
+        } else {
+            "checked_sub"
+        };
+        return format!(
+            "{{ let lhs = ({a}).micros(); let rhs = ({b}).micros(); {}::from_micros(lhs.{operation}(rhs).ok_or_else(|| hgl_types::NodeError::new(\"time arithmetic overflow\"))?) }}",
+            rust_type(result)
+        );
+    }
+    if *result == Ty::I64 && matches!(op, "+" | "-" | "*" | "%") {
+        integer_binary(op, a, b)
+    } else if op == "/" {
+        format!(
+            "{{ let lhs = ({a}) as f64; let rhs = ({b}) as f64; if rhs == 0.0 {{ return Err(hgl_kernel::NodeError::new(\"division by zero\")); }} lhs / rhs }}"
+        )
+    } else if op == "%" && *result == Ty::F64 {
+        format!(
+            "{{ let lhs: f64 = {a}; let rhs: f64 = {b}; if rhs == 0.0 {{ return Err(hgl_kernel::NodeError::new(\"division by zero\")); }} let rem = lhs % rhs; if rem == 0.0 {{ 0.0_f64.copysign(rhs) }} else if (rem < 0.0) != (rhs < 0.0) {{ rem + rhs }} else {{ rem }} }}"
+        )
+    } else {
+        format!("({a} {op} {b})")
+    }
+}
+
+/// Emit checked scalar unary operations without changing operand evaluation.
+pub fn unary(ty: &Ty, op: &str, value: &str) -> String {
+    if op == "-" && *ty == Ty::I64 {
+        format!("(({value}).wrapping_neg())")
+    } else if op == "-" && *ty == Ty::Duration {
+        format!(
+            "hgl_types::EngineDelta::from_micros(({value}).micros().checked_neg().ok_or_else(|| hgl_types::NodeError::new(\"time arithmetic overflow\"))?)"
+        )
+    } else if op == "atomic_value" {
+        value.into()
+    } else if op == "bytes" {
+        format!("hgl_types::bytes(&({value}))?")
+    } else if op == "float" {
+        format!("({value} as f64)")
+    } else {
+        format!("({op}{value})")
+    }
+}
