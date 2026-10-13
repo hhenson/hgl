@@ -26,6 +26,14 @@ impl<T: crate::global_value::GlobalValue> Shape for Atomic<T> {
         TsType::Atomic(T::schema())
     }
 }
+/// Opaque temporal designation marker; it exposes no payload projections.
+#[derive(Debug)]
+pub struct Reference<S>(PhantomData<S>);
+impl<S: Shape> Shape for Reference<S> {
+    fn shape() -> TsType {
+        TsType::Reference(Box::new(S::shape()))
+    }
+}
 /// Fixed temporal list marker.
 #[derive(Debug)]
 pub struct Fixed<S, const N: usize>(PhantomData<S>);

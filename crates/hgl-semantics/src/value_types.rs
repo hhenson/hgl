@@ -279,6 +279,14 @@ impl Unification<'_> {
     }
 
     fn application(&mut self, base: &str, arguments: Vec<&str>, actual: &Ty) -> Result<(), String> {
+        if base == "ref" && arguments.len() == 1 {
+            let actual = if let Ty::Ref(child) = actual {
+                child.as_ref()
+            } else {
+                actual
+            };
+            return self.pattern(arguments[0], actual);
+        }
         if base == "atomic" && arguments.len() == 1 {
             let payload = atomic_payload(actual)?;
             return self.pattern(arguments[0], payload);

@@ -28,3 +28,9 @@ ordinary transport rather than entering scalar column lowering.
 Acceptance: shared retained Tuple tests, native runtime constructors, constant
 phase rejection controls, ordinary wrong-element diagnostics and existing delta
 rejection suites.
+
+indexed additionally admits runtime i64 indices into fixed temporal
+List<Ref<T>,N> inputs, retaining Index IR and opaque child type. endpoint follows
+those Index paths. Unbounded REF-list selection is an explicit Rust target
+admission gap; ordinary temporal dynamic List reads retain their existing
+constant-index restriction. No node traversal below a REF is introduced.

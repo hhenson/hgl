@@ -43,3 +43,8 @@ The exhaustive ordinary-schema carrier includes Set/Map variants; source key adm
 Growing<S> is the statically typed dense growing-list marker. Its member projections reuse construction-validated typed child tokens; Shape metadata remains distinct from Dictionary and Fixed.
 
 Vec<u8> implements Shape as TsType::Ts(ScalarType::Bytes), including typed children, map values and fixed/growing lists. It adds no structural children to bytes itself.
+
+Reference<S: Shape> is an opaque designation shape marker with metadata
+TsType::Reference(S::shape()). Its typed Input projects no S payload. Fixed
+lists may contain Reference<S>; a selected child exposes only its InputId for
+designation metadata and transport.

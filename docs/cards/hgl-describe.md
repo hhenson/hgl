@@ -111,3 +111,8 @@ invoke provider callbacks. Generated typed readers run those callbacks after all
 carrier IDs resolve. There is no catalog lookup, lock, refcount, name lookup, or
 allocation on graph ticks. Descriptions continue to hold plain data without
 pointers or executable callbacks.
+
+Cold assembly interning retains the source endpoint identity of each directly
+bound REF child. Its current held designation is not substituted into the
+assembly. Fixed-list consumers can observe child REF retargets independently
+of target payload ticks; ordinary leaf assembly behavior remains unchanged.

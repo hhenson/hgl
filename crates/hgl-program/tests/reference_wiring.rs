@@ -46,6 +46,30 @@ fn node_reference_traversal_stays_opaque() {
 }
 
 #[test]
+fn node_indexing_does_not_cross_a_reference_boundary() {
+    for (parameter, expression, setup, expected) in [
+        (
+            "ref<list<i64,3>>",
+            "value[0]",
+            "fn source()->list<i64,3> {yield 0us:delta<list<i64,3>>(items:[0:7])}\nfn main()->i64 => opaque(source(),index())",
+            "indexing",
+        ),
+        (
+            "list<ref<Pair>,3>",
+            "value[index].left",
+            "fn source()->Pair {yield 0us:delta<Pair>(left:7)}\nfn main()->i64 => opaque([source(),source(),source()],index())",
+            "field access requires an ordinary struct",
+        ),
+    ] {
+        let source = format!(
+            "module references\nstruct Pair {{left:i64\nright:i64}}\nfn index()->i64 {{yield 0us:0}}\nfn opaque(value:{parameter},index:i64)->i64 {{ when valid(index) {{ return {expression} }} }}\n{setup}"
+        );
+        let error = compile(&[("references.hgl".into(), source)], "main").unwrap_err();
+        assert!(error.contains(expected), "{parameter}: {error}");
+    }
+}
+
+#[test]
 fn reference_output_metadata_uses_designation_publication_time() {
     let source = "module references\nfn source()->i64 {yield 0us:7}\nfn hold(value:ref<i64>)->ref<i64> {inject out\nwhen {let changed=modified(out)\nlet time=last_modified(out)\nif !valid(out) {return value}}}\nfn main()->ref<i64> => hold(source())";
     let program = compile(&[("references.hgl".into(), source.into())], "main").unwrap();

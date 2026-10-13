@@ -46,3 +46,10 @@ origins, without evaluating constructor or provider bodies during planning.
 Computed constructor text fields use the same validated immutable fragments as
 boxed text. Their complete width is checked before clearing the reserved String
 destination, and each fragment is copied directly into it.
+
+input_with(value, &emit_index) renders checked fixed REF-list endpoint indices.
+It evaluates each index once at the expression's use site, converts i64 to usize
+fallibly and validates the declared fixed range before projection. Metadata
+queries preserve short-circuit guard ordering and never read collection
+payloads. input remains the static-endpoint entry point; invalid non-endpoint
+IR or dynamic Index passed without an index emitter violates its precondition.

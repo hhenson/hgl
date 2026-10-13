@@ -51,11 +51,7 @@ impl hgl_describe::Buildable for Node{index} {{
 pub(crate) fn connections(plan: &Plan, node: &Node, index: usize) -> String {
     let mut code = String::new();
     for (source, path) in connections_list(plan, node) {
-        let path = path
-            .iter()
-            .map(|name| format!("hgl_describe::Step::Field({name:?}.into())"))
-            .collect::<Vec<_>>()
-            .join(",");
+        let path = path.join(",");
         writeln!(
             code,
             "builder.connect_path(_wire{source},vec![],_wire{index},\"value\",vec![{path}])?;"
@@ -77,9 +73,14 @@ fn collect_connections(
     path: &mut Vec<String>,
     edges: &mut Vec<(usize, Vec<String>)>,
 ) {
-    for (name, source, _) in &node.inputs {
-        path.push(name.clone());
-        if shape(&plan.nodes[*source]).is_some() {
+    for (index, (name, source, ty)) in node.inputs.iter().enumerate() {
+        let step = if matches!(shape(node), Some(Ty::List(_, Some(_)))) {
+            format!("hgl_describe::Step::Index({index})")
+        } else {
+            format!("hgl_describe::Step::Field({name:?}.into())")
+        };
+        path.push(step);
+        if !matches!(ty, Ty::Ref(_)) && shape(&plan.nodes[*source]).is_some() {
             collect_connections(plan, &plan.nodes[*source], path, edges);
         } else {
             edges.push((*source, path.clone()));

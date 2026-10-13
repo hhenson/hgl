@@ -1,0 +1,73 @@
+module hgraph.std part reference_ref_child_projection_tests
+
+test {
+    fn child_projection(values:list<ref<i64>,2>)->ref<i64> => values[0]
+    fn list_relay(values:ref<list<ref<i64>,2>>)->ref<list<ref<i64>,2>> {when {return values}}
+    fn child_choose(index:i64,first:ref<i64>,second:ref<i64>)->ref<i64> {
+        when valid(index) {
+            if index == 0 {return first}
+            else {return second}
+        }
+    }
+    fn child_observer(reference:ref<i64>,data:i64,step:i64)->atomic<tuple<bool,bool,bool,bool,i64>> {
+        when valid(step) && modified(step) {
+            var observed:i64 = -1
+            if valid(data) {observed = data}
+            return (valid(reference),modified(reference),valid(data),modified(data),observed)
+        }
+    }
+    fn ordinary_child_state(index:i64,sibling:i64,first:i64,second:i64,third:i64,fourth:i64,step:i64)->atomic<tuple<bool,bool,bool,bool,i64>> {
+        let selected = child_choose(index,first,second)
+        let other = child_choose(sibling,third,fourth)
+        let values = [selected,other]
+        let projected = child_projection(values)
+        child_observer(projected,projected,step)
+    }
+    fn outer_child_state(index:i64,sibling:i64,first:i64,second:i64,third:i64,fourth:i64,step:i64)->atomic<tuple<bool,bool,bool,bool,i64>> {
+        let selected = child_choose(index,first,second)
+        let other = child_choose(sibling,third,fourth)
+        let outer = list_relay([selected,other])
+        let projected = outer[0]
+        child_observer(projected,projected,step)
+    }
+    test ordinary_graph_ref_child_projection_preserves_live_designation {
+        assert eval(ordinary_child_state,index:[0,_,1,1,_,0,_,_],sibling:[0,1,_,_,0,_,1],first:[7,8,_,_,9,_,_,10],second:[7,_,_,_,8],third:[30],fourth:[40],step:[1,1,1,1,1,1,1,1]) == [
+            (true,true,true,true,7),(true,false,true,true,8),
+            (true,true,true,true,7),(true,false,true,false,7),
+            (true,false,true,true,8),(true,true,true,true,9),
+            (true,false,true,false,9),(true,false,true,true,10)
+        ]
+    }
+    test outer_graph_ref_child_projection_preserves_live_designation {
+        assert eval(outer_child_state,index:[0,_,1,1,_,0,_,_],sibling:[0,1,_,_,0,_,1],first:[7,8,_,_,9,_,_,10],second:[7,_,_,_,8],third:[30],fourth:[40],step:[1,1,1,1,1,1,1,1]) == [
+            (true,true,true,true,7),(true,false,true,true,8),
+            (true,true,true,true,7),(true,false,true,false,7),
+            (true,false,true,true,8),(true,true,true,true,9),
+            (true,false,true,false,9),(true,false,true,true,10)
+        ]
+    }
+    fn outer_choose(index:i64,first:ref<list<ref<i64>,2>>,second:ref<list<ref<i64>,2>>)->ref<list<ref<i64>,2>> {
+        when valid(index) {
+            if index == 0 {return first}
+            else {return second}
+        }
+    }
+    fn follower_observer(outer:ref<list<ref<i64>,2>>,data:i64,step:i64)->atomic<tuple<bool,bool,i64>> {
+        when valid(step) && modified(step) {
+            var observed:i64 = -1
+            if valid(data) {observed = data}
+            return (modified(outer),valid(data),observed)
+        }
+    }
+    fn outer_retarget_state(index:i64,entry:i64,first:i64,second:i64,third:i64,step:i64)->atomic<tuple<bool,bool,i64>> {
+        let pending = child_choose(entry,second,third)
+        let outer = outer_choose(index,[first,first],[pending,first])
+        follower_observer(outer,outer[0],step)
+    }
+    test outer_retarget_to_unpublished_ref_child_unbinds_the_old_follower {
+        assert eval(outer_retarget_state,index:[0,_,1,_,_,_,_,0],entry:[_,_,_,0,_,1,1],first:[7,8,9,10,11,12,13,14],second:[_,_,_,_,20,21,22],third:[30,_,_,_,_,40],step:[1,1,1,1,1,1,1,1]) == [
+            (true,true,7),(false,true,8),(true,false,-1),(false,false,-1),
+            (false,true,20),(false,true,40),(false,true,40),(true,true,14)
+        ]
+    }
+}

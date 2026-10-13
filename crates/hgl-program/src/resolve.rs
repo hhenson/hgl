@@ -1247,6 +1247,43 @@ impl Checker {
         {
             return self.constructor(module, (name, args), env, runtime, expected);
         }
+        if let Expr::Sequence(cells) = expr.syntax()
+            && !runtime
+            && cells
+                .iter()
+                .flatten()
+                .any(|cell| !matches!(cell.syntax(), Expr::Literal(_)))
+        {
+            let child = if let Some(Ty::List(child, _)) = expected {
+                Some(child.as_ref())
+            } else {
+                None
+            };
+            let values = cells
+                .iter()
+                .map(|cell| {
+                    let cell = cell
+                        .as_ref()
+                        .ok_or("graph list cannot contain absent entries")?;
+                    self.expected_expression(module, cell, env, false, child)
+                })
+                .collect::<Result<Vec<_>, Issue>>()?;
+            if values
+                .iter()
+                .any(|value| matches!(value.kind, Kind::Wire(_)))
+            {
+                return Ok(hgl_semantics::graph_assemblies::reference_list(
+                    values,
+                    &mut self.plan,
+                )?);
+            }
+            let mut values = values.into_iter();
+            return hgl_semantics::value_check::aggregate_checked(expr, expected, true, |_, _| {
+                Ok(values
+                    .next()
+                    .unwrap_or_else(|| unreachable!("checked graph list entries")))
+            });
+        }
         if matches!(expr.syntax(), Expr::Sequence(_) | Expr::Tuple(_)) {
             return hgl_semantics::value_check::aggregate_checked(
                 expr,
@@ -1551,6 +1588,7 @@ impl Checker {
             Expr::Null => Err("null requires a contextual nullable comparison".into()),
             Expr::Property(receiver, name) => self.property(module, receiver, name, env, runtime),
             Expr::Index(receiver, index) => self.indexed(module, receiver, index, env, runtime),
+            Expr::Sequence(_) if !runtime => self.expected_expression(module, expr, env, false, None),
             Expr::Sequence(elements) => Ok(hgl_semantics::value_check::list_literal(elements, None)?),
             Expr::Literal(l) => Ok(Value::new(l.ty(), Kind::Literal(l.clone()))),
             Expr::TemporalLiteral(l) if self.value_context == ValueContext::Preparation && !self.preparing_graph => Ok(Value::new(l.ty(), Kind::TemporalLiteral(l.clone()))),
@@ -1681,7 +1719,11 @@ impl Checker {
                 index,
             ),
         );
-        let result = Ty::Ref(Box::new(child.ty.clone()));
+        let result = if matches!(child.ty, Ty::Ref(_)) {
+            child.ty.clone()
+        } else {
+            Ty::Ref(Box::new(child.ty.clone()))
+        };
         let projected = Value::new(
             result.clone(),
             Kind::Query("\0reference".into(), vec![child]),

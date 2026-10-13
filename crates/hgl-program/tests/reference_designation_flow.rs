@@ -94,11 +94,11 @@ fn check_metadata_routes(
     selected.select(&["same_shape_metadata_ref_is_not_a_returned_target"])?;
     let generated = hgl_program::emit_tests(&selected);
     assert!(generated.contains(&format!(
-        "let target=store.bindings().fixed_output(built.outputs[{}]",
+        "let target=store.bindings().fixed_output(built.outputs[reference_nodes[{}]]",
         node.inputs[0].1
     )));
     assert!(!generated.contains(&format!(
-        "let target=store.bindings().fixed_output(built.outputs[{}]",
+        "let target=store.bindings().fixed_output(built.outputs[reference_nodes[{}]]",
         node.inputs[1].1
     )));
     Ok(())

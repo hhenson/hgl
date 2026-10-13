@@ -82,3 +82,7 @@ May use struct_declarations for the shared declared type-domain check.
 list/rolling bound validation. Call preparation uses these substitutions for
 required defaults, then `unify` checks all resolved bounds exactly. No shape
 value is fabricated and no source expression is executed by either matcher.
+
+Nested ref<T> signature patterns unify the designated T while preserving the
+explicit REF wrapper in the resolved formal type. Fixed list widths and
+nominal arguments retain their existing exact checks.

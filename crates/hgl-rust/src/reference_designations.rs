@@ -23,10 +23,17 @@ fn value(value: &Value, locals: &Locals, output: &Routes) -> Routes {
             })
         }
         Kind::Output => output.clone(),
-        Kind::Field(_, _) if matches!(value.ty, hgl_source::Ty::Ref(_)) => {
-            BTreeSet::from([Origin::Unsupported])
-        }
         Kind::Field(parent, index) => project(self::value(parent, locals, output), *index),
+        Kind::Index(parent, _) if matches!(&parent.ty, hgl_source::Ty::List(child, Some(_)) if matches!(child.as_ref(), hgl_source::Ty::Ref(_))) =>
+        {
+            let hgl_source::Ty::List(_, Some(size)) = parent.ty else {
+                unreachable!()
+            };
+            let routes = self::value(parent, locals, output);
+            (0..size)
+                .flat_map(|index| project(routes.clone(), index))
+                .collect()
+        }
         Kind::Query(op, args) if op == "\0reference" => self::value(&args[0], locals, output),
         Kind::ValueCall(args, body) => {
             let mut inner = args
@@ -273,7 +280,7 @@ mod tests {
             Kind::GlobalGet(0),
             Kind::Index(
                 Box::new(Value::new(
-                    Ty::List(Box::new(Ty::Ref(Box::new(Ty::I64))), Some(2)),
+                    Ty::List(Box::new(Ty::Ref(Box::new(Ty::I64))), None),
                     Kind::Input(0, false),
                 )),
                 Box::new(Value::new(Ty::I64, Kind::Input(1, false))),

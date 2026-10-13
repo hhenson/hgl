@@ -19,7 +19,11 @@ mod graph_assemblies;
 mod native_images;
 mod reference_designations;
 mod reference_routes;
-/// A checked source graph may exceed this Rust target's finite activation proof.
+/// Reject unsupported ordinary REF-list publishers before payload emission.
+pub fn reference_target_error(plan: &Plan) -> Option<String> {
+    reference_routes::target_error(plan)
+}
+/// Explain the current Rust target boundary for conditional child graphs.
 pub fn conditional_target_error(plan: &Plan) -> Option<String> {
     conditionals::target_error(plan)
 }

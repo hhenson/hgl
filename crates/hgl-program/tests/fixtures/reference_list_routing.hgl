@@ -1,0 +1,142 @@
+module hgraph.std part reference_list_routing_tests
+
+test {
+    fn ref_list_route3<T>(index: i64, values: list<ref<T>, 3>) -> ref<T> {
+        when valid(index) && index >= 0 && index < 3 && valid(values[index]) && (modified(index) || modified(values[index])) {
+            return values[index]
+        }
+    }
+    fn ref_list_read<T>(value: T) -> T {
+        when { return delta_value(value) }
+    }
+    fn ref_list_selected<T>(index: i64, first: T, second: T, third: T) -> ref<T> => ref_list_route3(index, [first, second, third])
+    fn ref_list_followed<T>(index: i64, first: T, second: T, third: T) -> T => ref_list_read(ref_list_selected(index, first, second, third))
+
+    # The REF is observed separately from the ordinary input that follows it.
+    # -1 is an explicit observer fallback when that ordinary input is invalid.
+    fn ref_list_observed(reference: ref<i64>, data: i64, step: i64) -> atomic<tuple<bool, bool, bool, bool, i64>> {
+        when valid(step) && modified(step) {
+            var observed: i64 = -1
+            if valid(data) { observed = data }
+            return (valid(reference), modified(reference), valid(data), modified(data), observed)
+        }
+    }
+    fn ref_list_state(index: i64, first: i64, second: i64, third: i64, step: i64) -> atomic<tuple<bool, bool, bool, bool, i64>> {
+        let selected = ref_list_selected(index, first, second, third)
+        ref_list_observed(selected, selected, step)
+    }
+
+    test fixed_reference_list_guards_keep_the_previous_live_route {
+        assert eval(ref_list_state,
+            index: [_, _, 0, -1, 3, 0, 2, _, 2],
+            first: [7, 8, _, 9, 10, _, 11], second: [20],
+            third: [_, _, _, _, _, _, _, 30, 31],
+            step: [1, 1, 1, 1, 1, 1, 1, 1, 1]
+        ) == [
+            (false, false, false, false, -1), (false, false, false, false, -1),
+            (true, true, true, true, 8),
+            # Failed index guards leave the earlier route following first.
+            (true, false, true, true, 9), (true, false, true, true, 10),
+            (true, false, true, false, 10),
+            # The third designation is valid before its target publishes.
+            (true, true, false, false, -1),
+            (true, false, true, true, 30), (true, false, true, true, 31)
+        ]
+    }
+
+    fn ref_list_choose(index: i64, first: ref<i64>, second: ref<i64>) -> ref<i64> {
+        when valid(index) {
+            if index == 0 {
+                if valid(first) && (modified(index) || modified(first)) { return first }
+            } else {
+                if valid(second) && (modified(index) || modified(second)) { return second }
+            }
+        }
+    }
+    fn ref_list_changing(index: i64, selected_entry: i64, other_entry: i64,
+                          first: i64, second: i64, third: i64, fourth: i64,
+                          step: i64) -> atomic<tuple<bool, bool, bool, bool, i64>> {
+        let chosen = ref_list_choose(selected_entry, first, second)
+        let other = ref_list_choose(other_entry, third, fourth)
+        let selected = ref_list_route3(index, [chosen, other, first])
+        ref_list_observed(selected, selected, step)
+    }
+    test fixed_reference_list_selected_entry_changes_with_a_silent_index {
+        assert eval(ref_list_changing,
+            index: [0, _, 1, _, _, 1, _, 0, _, _],
+            selected_entry: [_, 0, _, 1, _, _, _, _, _, 1],
+            other_entry: [_, _, _, _, 0, 0, 1, _, 0, _],
+            first: [7, _, 8, 9], second: [20, _, _, _, _, _, _, _, 21],
+            third: [30], fourth: [40], step: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+        ) == [
+            (false, false, false, false, -1), (true, true, true, true, 7),
+            # Entry one has not published a REF: keep following first.
+            (true, false, true, true, 8), (true, false, true, true, 9),
+            # Entry one becomes valid, then retargets while index is silent.
+            (true, true, true, true, 30), (true, false, true, false, 30),
+            (true, true, true, true, 40), (true, true, true, true, 20),
+            # The unselected entry changes; only the selected payload ticks.
+            (true, false, true, true, 21), (true, false, true, false, 21)
+        ]
+    }
+
+    test fixed_reference_list_follows_target_ticks_and_suppresses_equal_designations {
+        assert eval(ref_list_followed,
+            index: [0, _, 0, 1, _, 1, 2, _],
+            first: [7, 8, _, _, 9], second: [7, 20, _, _, 21],
+            third: [7, _, _, _, _, _, _, 7]
+        ) == [7, 8, _, 20, 21, _, 7, 7]
+        # Equal values at distinct endpoints still cause a sampled rebind.
+        assert eval(ref_list_followed, index: [0, 1, 1], first: [7], second: [7], third: [7]) == [7, 7, _]
+    }
+
+    fn ref_list_duplicate(index: i64, first: i64, second: i64, step: i64) -> atomic<tuple<bool, bool, bool, bool, i64>> {
+        let selected = ref_list_route3(index, [first, first, second])
+        ref_list_observed(selected, selected, step)
+    }
+    test fixed_reference_list_duplicate_entries_share_target_identity {
+        assert eval(ref_list_duplicate,
+            index: [0, 1, 1, 2], first: [7, _, 8], second: [7], step: [1, 1, 1, 1]
+        ) == [
+            (true, true, true, true, 7), (true, false, true, false, 7),
+            (true, false, true, true, 8), (true, true, true, true, 7)
+        ]
+    }
+
+    fn ref_list_bytes(index: i64, first: bytes, second: bytes, third: bytes) -> bytes => ref_list_followed(index, first, second, third)
+    fn ref_list_map(index: i64, first: map<i64, i64>, second: map<i64, i64>, third: map<i64, i64>) -> map<i64, i64> => ref_list_followed(index, first, second, third)
+    test fixed_reference_list_routes_owning_bytes_and_sparse_maps {
+        let empty: bytes = bytes()
+        let first: bytes = bytes([0, 255])
+        let second: bytes = bytes([255, 0])
+        assert eval(ref_list_bytes,
+            index: [0, _, 0, 1, _, 1, 2, _],
+            first: [empty, empty, _, first, second],
+            second: [empty, first, _, _, first],
+            third: [second, _, _, _, _, _, _, second]
+        ) == [empty, empty, _, first, first, _, second, second]
+        assert eval(ref_list_map,
+            index: [0, _, 0, 1, _, 1, 0, _],
+            first: [
+                delta<map<i64, i64>>(upsert: [1: 7, 2: 20]),
+                delta<map<i64, i64>>(upsert: [1: 7]), _,
+                delta<map<i64, i64>>(upsert: [2: 21]), _, _, _,
+                delta<map<i64, i64>>(remove: [2])
+            ],
+            second: [
+                delta<map<i64, i64>>(upsert: [1: 7, 3: 30]),
+                delta<map<i64, i64>>(upsert: [3: 31]), _, _,
+                delta<map<i64, i64>>(upsert: [1: 8])
+            ],
+            third: [delta<map<i64, i64>>(upsert: [])]
+        ) == [
+            delta<map<i64, i64>>(upsert: [1: 7, 2: 20]),
+            delta<map<i64, i64>>(upsert: [1: 7]), _,
+            # Rebinding removes old-only keys and samples new live children.
+            delta<map<i64, i64>>(remove: [2], upsert: [1: 7, 3: 31]),
+            delta<map<i64, i64>>(upsert: [1: 8]), _,
+            delta<map<i64, i64>>(remove: [3], upsert: [1: 7, 2: 21]),
+            delta<map<i64, i64>>(remove: [2])
+        ]
+    }
+}

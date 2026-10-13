@@ -79,7 +79,8 @@ pub fn supported_type(mut ty: &Ty) -> Result<(), String> {
         }
         ty = child;
     }
-    (ty.publication() || matches!(ty, Ty::Void | Ty::Nullable(_)))
+    let fixed_reference_list = matches!(ty, Ty::List(child, Some(_)) if matches!(child.as_ref(), Ty::Ref(target) if target.publication()));
+    (ty.publication() || fixed_reference_list || matches!(ty, Ty::Void | Ty::Nullable(_)))
         .then_some(())
         .ok_or_else(|| "unsupported temporal publication shape".into())
 }

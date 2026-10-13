@@ -396,8 +396,16 @@ pub fn read(ty: &Ty, input: &str, operation: Option<String>) -> String {
 
 /// Render an exact checked input endpoint binding for scalar or shaped queries.
 /// # Panics
-/// Panics if the supplied IR is not an input or a scoped iteration input.
+/// Panics for non-endpoint IR or dynamic indices requiring `input_with`.
 pub fn input(v: &Value) -> String {
+    input_with(v, &|_| {
+        unreachable!("dynamic endpoint needs its checked index emitter")
+    })
+}
+/// Render a prepared endpoint with each runtime index evaluated once at its use site.
+/// # Panics
+/// Panics for non-endpoint IR or an index outside the checked fixed REF-list profile.
+pub fn input_with(v: &Value, emit: &impl Fn(&Value) -> String) -> String {
     if let Kind::Input(i, _) = v.kind {
         format!("self.input{i}")
     } else if let Kind::IterationInput(id) = v.kind {
@@ -406,17 +414,36 @@ pub fn input(v: &Value) -> String {
         } else {
             format!("hgl_store::Store::prepared_input(local{id})")
         }
+    } else if let Kind::Index(parent, index) = &v.kind {
+        let Ty::List(_, Some(size)) = parent.ty else {
+            unreachable!("checked fixed REF list")
+        };
+        let child = format!(
+            "{{let index={};let index=usize::try_from(index).ok().filter(|index|*index<{size}).ok_or_else(||hgl_types::NodeError::new(\"temporal list index out of bounds\"))?;({}).index(_ctx.store().bindings(),index)}}",
+            emit(index),
+            input_with(parent, emit)
+        );
+        if matches!(v.ty, Ty::Ref(_)) {
+            format!("({child}).id()")
+        } else {
+            unreachable!("checked fixed REF list index")
+        }
     } else if let Kind::Field(parent, index) = &v.kind {
         let input = if matches!(parent.ty, Ty::List(_, Some(_))) {
-            format!("({}).index(_ctx.store().bindings(),{index})", input(parent))
+            format!(
+                "({}).index(_ctx.store().bindings(),{index})",
+                input_with(parent, emit)
+            )
         } else {
             format!(
                 "({}).field::<{index}>(_ctx.store().bindings())",
-                input(parent)
+                input_with(parent, emit)
             )
         };
         if crate::deltas::shaped(&v.ty) {
             input
+        } else if matches!(v.ty, Ty::Ref(_)) {
+            format!("({input}).id()")
         } else {
             format!("hgl_store::Store::prepared_input({input})")
         }

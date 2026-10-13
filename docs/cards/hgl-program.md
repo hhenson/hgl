@@ -409,3 +409,12 @@ Each branch must supply a real reference producer. Scoped Rust target preparatio
 handles lifecycle lowering; unproved finite activation remains an explicit target
 diagnostic. conditional_admission checks missing paths, premature reads and the
 source/target distinction for child generators.
+
+Graph fixed sequences of uniform temporal connections reduce through
+graph_assemblies::reference_list to a fixed list of opaque REF carriers.
+Ordinary graph entries capture their stable designation; REF-producing entries
+retain their carrier endpoint so later retargets remain observable. Expected
+ordinary list child types and written-order checking remain unchanged. Mixed
+ordinary/temporal entries and wrong widths/types fail at admission.
+Rust emission and concrete suite planning call reference_target_error before
+unsupported ordinary REF-list producers enter payload generation.

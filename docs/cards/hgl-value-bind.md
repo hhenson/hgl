@@ -76,3 +76,7 @@ Temporal signal formals unwrap supplied REF connections to their underlying
 port schema under TS-18, while retaining signal-only access authority. Their
 runtime binding follows selected target ticks and samples re-pointing; equal
 designations add no tick. Explicit ref<T> formals remain designation inputs.
+
+Fixed List<Ref<T>,N> temporal inputs admit publication-supported T without
+forming an ordinary list value or delta<List<Ref<T>,N>>. Ordinary producers of
+REF-list outputs remain a separate unsupported Rust target boundary.

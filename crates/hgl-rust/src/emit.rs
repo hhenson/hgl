@@ -317,6 +317,9 @@ fn shared_layouts_inner(
         + &crate::any_values::layouts(&types)
 }
 fn emit_inner(plan: &Plan, layouts: bool) -> String {
+    if let Some(error) = crate::reference_routes::target_error(plan) {
+        return format!("compile_error!({error:?});\n");
+    }
     let images = match crate::native_images::emit(plan) {
         Ok(images) => images,
         Err(issue) => return format!("compile_error!({:?});", issue.to_string()),

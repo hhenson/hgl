@@ -32,11 +32,7 @@ pub(crate) fn direct(plan: &Plan, members: &[usize]) -> Vec<usize> {
         .collect()
 }
 fn path(names: &[String]) -> String {
-    names
-        .iter()
-        .map(|n| format!("hgl_describe::Step::Field({n:?}.into())"))
-        .collect::<Vec<_>>()
-        .join(",")
+    names.join(",")
 }
 fn inputs(plan: &Plan, id: usize) -> Vec<(usize, usize, Vec<String>)> {
     let n = &plan.nodes[id];

@@ -152,3 +152,8 @@ This module now lives in hgl-rust-codegen below executable program assembly;
 its hgl-rust facade path and module ceiling remain unchanged.
 
 May use native_image for pure selected provider module naming.
+
+Fixed temporal REF-list Index values read only the selected opaque designation.
+Index metadata delegates to observed::input_with using the checked expression
+emitter, preserving left-to-right guards and fallible range checks. Returning a
+selected REF neither snapshots its target nor copies collection payloads.
