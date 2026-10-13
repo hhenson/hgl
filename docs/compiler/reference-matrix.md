@@ -1,14 +1,16 @@
 # Reference matrix implementation record
 
-All six authored REF suites execute unchanged: 28 named groups / 58
-evaluations. The tracked transport and ownership runners use byte-for-byte
-snapshots of hgraph_std `d798c88dec4b729f1e96d2adcd087ca8df7f11ba`, with
+All seven authored REF suites execute unchanged: 33 named groups / 65
+evaluations. The transport and ownership snapshots remain byte-for-byte copies
+of Std `d798c88dec4b729f1e96d2adcd087ca8df7f11ba`, with
 [paths and hashes](../../crates/hgl-program/tests/fixtures/reference_matrix/PROVENANCE.json).
-Installed dependencies are hgraph_spec `69a2f8c` and hgraph_std `d798c88`.
-The complete loaded Std corpus passes in both profiles: 360 named tests / 957
+The [fixed-list routing suite](reference-list-routing.md) adds five groups/seven
+evaluations from current Std `d82bcc3`. Installed dependencies are Spec `69a2f8c`
+and Std `d82bcc3`.
+The complete loaded Std corpus passes in both profiles: 365 named tests / 964
 evaluations, including test blocks in production modules. The existing
 contextual fixtures add 12 tests / 22 evaluations; the combined checked source
-corpus is 372 / 979. Separate existing harness regression and expected-failure
+corpus is 377 / 986. Separate existing harness regression and expected-failure
 images also pass. CI and platform evidence is recorded in [PR #83](https://github.com/hhenson/hgl/pull/83).
 
 Normal CLI execution uses the complete production Std and native/stdlib.
@@ -55,6 +57,11 @@ payload opacity. All current authored assertions are unchanged.
 | `reference_values` | `reference_rebinding_samples_the_input_without_changing_producer_time` | Passed, executed |
 | `reference_values` | `reference_held_output_keeps_a_live_designation_across_later_routes` | Passed, executed |
 | `reference_values` | `reference_bindings_preserve_fixed_and_nominal_child_identity` | Passed, executed |
+| `reference_list_routing` | `fixed_reference_list_guards_keep_the_previous_live_route` | Passed, executed |
+| `reference_list_routing` | `fixed_reference_list_selected_entry_changes_with_a_silent_index` | Passed, executed |
+| `reference_list_routing` | `fixed_reference_list_follows_target_ticks_and_suppresses_equal_designations` | Passed, executed |
+| `reference_list_routing` | `fixed_reference_list_duplicate_entries_share_target_identity` | Passed, executed |
+| `reference_list_routing` | `fixed_reference_list_routes_owning_bytes_and_sparse_maps` | Passed, executed |
 
 Conditional ownership follows
 [control flow](../../external/hgraph_spec/language/docs/design/control-flow.md),
