@@ -3,7 +3,7 @@ use crate::ir::{Kind, Value};
 use hgl_source::{Literal, Ty};
 /// Whether this endpoint belongs to a statically projected tuple input.
 pub fn endpoint(value: &Value) -> bool {
-    if let Kind::Field(parent, _) = &value.kind {
+    if let Kind::Field(parent, _) | Kind::Index(parent, _) = &value.kind {
         endpoint(parent)
     } else {
         matches!(value.kind, Kind::Input(..) | Kind::IterationInput(_))
@@ -59,9 +59,14 @@ pub fn indexed(parent: Value, index: Value) -> Result<Value, String> {
     if matches!(parent.kind, Kind::Wire(_) | Kind::Output) {
         return Err("tuple indexing requires an ordinary value or runtime input".into());
     }
+    if matches!(&parent.ty, Ty::List(child, None) if matches!(child.as_ref(), Ty::Ref(_)))
+        && endpoint(&parent)
+    {
+        return Err("Rust target runtime REF-list selection requires a fixed length".into());
+    }
     let snapshot = parent.snapshot;
-    let (ty, kind) = if let Ty::List(element, _) = &parent.ty
-        && !endpoint(&parent)
+    let (ty, kind) = if let Ty::List(element, size) = &parent.ty
+        && (!endpoint(&parent) || (size.is_some() && matches!(element.as_ref(), Ty::Ref(_))))
     {
         if index.ty != Ty::I64 {
             return Err("ordinary list index requires i64".into());

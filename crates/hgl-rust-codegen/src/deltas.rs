@@ -23,7 +23,9 @@ fn identity(ty: &Ty) -> String {
 }
 /// Compile-time marker for one exact prepared temporal shape.
 pub fn shape_marker(ty: &Ty) -> String {
-    if matches!(ty, Ty::Rolling(..)) {
+    if let Ty::Ref(child) = ty {
+        format!("hgl_store::shapes::Reference<{}>", shape_marker(child))
+    } else if matches!(ty, Ty::Rolling(..)) {
         crate::windows::marker(ty)
     } else if matches!(ty, Ty::Enum(_) | Ty::Native(_) | Ty::Any) {
         format!("hgl_store::shapes::Atomic<{}>", global_type(ty))

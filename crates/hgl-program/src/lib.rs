@@ -30,6 +30,9 @@ pub fn emit_rust(program: &Program) -> String {
     if let Err(error) = emit::native_results::validate(&program.0) {
         return format!("compile_error!({error:?});\n");
     }
+    if let Some(error) = emit::reference_target_error(&program.0) {
+        return format!("compile_error!({error:?});\n");
+    }
     let mut target = program.0.clone();
     target.ordinary_instantiation = true;
     if let Some(error) = emit::conditional_target_error(&target) {

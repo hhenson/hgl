@@ -98,6 +98,11 @@ pub(crate) fn assemble(
     now: EngineTime,
 ) -> Result<Reference, BuildError> {
     let i = store.bindings().input(input);
+    if let Some(source) = i.source
+        && matches!(i.kind, hgl_types::TsType::Reference(_))
+    {
+        return Ok(store.reference(source));
+    }
     if i.source.is_some() || !i.kind.fixed() {
         return Ok(store.bindings().input_reference(input));
     }

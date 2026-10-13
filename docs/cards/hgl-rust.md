@@ -153,3 +153,7 @@ The current assembly boundary is specified by hgl-rust-codegen.md. This facade
 owns emit, capacity, generators and preparation; the remaining public emission
 modules are reexported from the lower hgl-rust-codegen crate. Its aggregate
 ceiling is 1700, with moved module ceilings unchanged.
+
+reference_target_error(&Plan) -> Option<String> diagnoses unsupported ordinary
+REF-list output producers before payload emission. Checked source planning
+remains valid; synthetic fixed connection assemblies use an opaque REF output.

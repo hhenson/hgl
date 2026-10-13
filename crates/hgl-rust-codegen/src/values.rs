@@ -36,6 +36,11 @@ fn value(plan: &Plan, v: &Value) -> String {
             crate::any_values::constructor(fields, |v| value(plan, v))
         }
         Kind::Construct(fields) => crate::snapshots::ordinary(&v.ty, fields, |v| value(plan, v)),
+        Kind::Field(..) | Kind::Index(..)
+            if matches!(v.ty, Ty::Ref(_)) && hgl_semantics::tuple_values::endpoint(v) =>
+        {
+            reference_value(plan, v)
+        }
         Kind::Field(..) if hgl_semantics::tuple_values::endpoint(v) => {
             crate::snapshot_slots::endpoint_read(v)
         }
@@ -53,18 +58,7 @@ fn value(plan: &Plan, v: &Value) -> String {
         ),
         Kind::Literal(l) => literal(l),
         Kind::IterationInput(_) => crate::snapshot_slots::endpoint_read(v),
-        Kind::Input(i, _) => {
-            if matches!(v.ty, Ty::Enum(_) | Ty::Any) {
-                format!(
-                    "_ctx.store().atomic_get::<{}>(self.input{i})?",
-                    global_type(&v.ty)
-                )
-            } else if matches!(v.ty, Ty::Ref(_)) {
-                format!("_ctx.store().bindings().input_reference(self.input{i})")
-            } else {
-                format!("_ctx.get(self.input{i})")
-            }
-        }
+        Kind::Input(i, _) => input_value(v, *i),
         Kind::Cache(i) => retained(&format!("self.cache{i}"), &v.ty),
         Kind::GlobalGet(i) => format!("_ctx.global_state().get(self.global{i})?"),
         Kind::GlobalSet(i, v) => prepared::set(plan, *i, v),
@@ -86,6 +80,22 @@ fn value(plan: &Plan, v: &Value) -> String {
         }
     }
 }
+fn input_value(v: &Value, id: usize) -> String {
+    if matches!(v.ty, Ty::Enum(_) | Ty::Any) {
+        format!(
+            "_ctx.store().atomic_get::<{}>(self.input{id})?",
+            global_type(&v.ty)
+        )
+    } else if matches!(v.ty, Ty::Ref(_)) {
+        format!("_ctx.store().bindings().input_reference(self.input{id})")
+    } else {
+        format!("_ctx.get(self.input{id})")
+    }
+}
+fn reference_value(plan: &Plan, v: &Value) -> String {
+    let input = crate::observed::input_with(v, &|index| value(plan, index));
+    format!("_ctx.store().bindings().input_reference({input})")
+}
 fn query_value(plan: &Plan, op: &str, args: &[Value]) -> String {
     if op == "\0reference" {
         let input = crate::observed::input(&args[0]);
@@ -99,7 +109,9 @@ fn query_value(plan: &Plan, op: &str, args: &[Value]) -> String {
     } else if op.starts_with("set_") {
         set_query(plan, op, args)
     } else {
-        query(op, args)
+        query_with(op, args, |v| {
+            crate::observed::input_with(v, &|index| value(plan, index))
+        })
     }
 }
 fn unary(plan: &Plan, op: &str, operand: &Value) -> String {
@@ -356,6 +368,9 @@ fn reference_output_query(op: &str) -> String {
 
 /// Emit the checked query form.
 pub fn query(op: &str, args: &[Value]) -> String {
+    query_with(op, args, crate::observed::input)
+}
+fn query_with(op: &str, args: &[Value], endpoint: impl Fn(&Value) -> String) -> String {
     let values = args
         .iter()
         .map(|v| {
@@ -375,7 +390,7 @@ pub fn query(op: &str, args: &[Value]) -> String {
                     _ => unreachable!("checked output query"),
                 };
             }
-            let input = crate::observed::input(v);
+            let input = endpoint(v);
             if let Some(code) = crate::windows::query(&v.ty, op, &input) {
                 return code;
             }
