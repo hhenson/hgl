@@ -94,12 +94,16 @@ fn input_value(v: &Value, id: usize) -> String {
 }
 fn reference_value(plan: &Plan, v: &Value) -> String {
     let input = crate::observed::input_with(v, &|index| value(plan, index));
+    let input = if matches!(v.ty, Ty::Ref(_)) {
+        input
+    } else {
+        format!("({input}).id()")
+    };
     format!("_ctx.store().bindings().input_reference({input})")
 }
 fn query_value(plan: &Plan, op: &str, args: &[Value]) -> String {
     if op == "\0reference" {
-        let input = crate::observed::input(&args[0]);
-        format!("_ctx.store().bindings().input_reference(({input}).id())")
+        reference_value(plan, &args[0])
     } else if op.starts_with("\0family-eq:") {
         crate::owner_comparisons::comparison(plan, op, args)
     } else if op.starts_with("collection_") {

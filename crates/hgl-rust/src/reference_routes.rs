@@ -118,6 +118,9 @@ pub(crate) fn reserve(plan: &Plan) -> String {
         }
     }
     let mut code = String::new();
+    if views.is_empty() {
+        return code;
+    }
     if !plan.conditionals.is_empty() {
         for ((source, path), _) in subscriptions {
             let count = views
@@ -148,6 +151,11 @@ pub(crate) fn reserve(plan: &Plan) -> String {
         }
         return code;
     }
+    let nodes = plan.nodes.iter().enumerate().map(|(index,node)| {
+        format!("graph.nodes.iter().position(|node|node.implementation=={:?}).expect(\"checked reference route node\")",format!("{}#{index}",node.name))
+    }).collect::<Vec<_>>().join(",");
+    writeln!(code, "let reference_nodes=[{nodes}];")
+        .unwrap_or_else(|_| unreachable!("String formatting"));
     for ((source, path), subscribers) in subscriptions {
         let output = endpoint(source, &path);
         writeln!(
@@ -159,7 +167,7 @@ pub(crate) fn reserve(plan: &Plan) -> String {
     for (consumer, input, input_path, (source, path)) in views {
         let output = endpoint(source, &path);
         let input = input_path.iter().fold(
-            format!("built.inputs[{consumer}][{input}]"),
+            format!("built.inputs[reference_nodes[{consumer}]][{input}]"),
             |input, index| format!("store.bindings().fixed_input({input},{index})"),
         );
         writeln!(code,"{{let target={output};store.prepare_reference_input({input},target).map_err(|e|format!(\"{{e:?}}\"))?;}}")
@@ -170,7 +178,7 @@ pub(crate) fn reserve(plan: &Plan) -> String {
 
 fn endpoint(source: usize, path: &[usize]) -> String {
     path.iter().fold(
-        format!("built.outputs[{source}].expect(\"checked reference target\")"),
+        format!("built.outputs[reference_nodes[{source}]].expect(\"checked reference target\")"),
         |output, index| format!("store.bindings().fixed_output({output},{index})"),
     )
 }

@@ -1719,7 +1719,11 @@ impl Checker {
                 index,
             ),
         );
-        let result = Ty::Ref(Box::new(child.ty.clone()));
+        let result = if matches!(child.ty, Ty::Ref(_)) {
+            child.ty.clone()
+        } else {
+            Ty::Ref(Box::new(child.ty.clone()))
+        };
         let projected = Value::new(
             result.clone(),
             Kind::Query("\0reference".into(), vec![child]),

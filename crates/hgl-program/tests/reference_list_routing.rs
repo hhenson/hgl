@@ -28,6 +28,17 @@ fn selected_references_keep_nominal_and_constant_list_graph_projections_live()
     Ok(())
 }
 #[test]
+fn graph_reference_children_project_the_inner_live_designation()
+-> Result<(), Box<dyn std::error::Error>> {
+    run(
+        &["reference_ref_child_projection.hgl"],
+        "reference-ref-child-projection",
+        3,
+        3,
+    )?;
+    Ok(())
+}
+#[test]
 fn runtime_reference_indices_report_bounds_errors_before_selecting_children()
 -> Result<(), Box<dyn std::error::Error>> {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
