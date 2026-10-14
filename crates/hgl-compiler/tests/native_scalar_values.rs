@@ -683,12 +683,6 @@ export fn main() {consume(make(source()))}
         ),
     ] {
         let mut input = sources(&body)?;
-        for (_, text) in &mut input {
-            *text = text.replace(
-                "fn token(text: str) -> Token",
-                "fn token(text: str) -> Token",
-            );
-        }
         let (_, descriptor) = input
             .iter_mut()
             .find(|(name, _)| name.ends_with(".hgl-native"))
@@ -753,12 +747,6 @@ consume(first:saved,second:current,text:token_text(saved),numbers:[7])
         ("ordinary_failure", body.replace("let unused=token(\"\")", "let values:list<i64> =[]\nlet broken=values[0]\nlet alias=broken\nlet unused=token(\"\")")),
     ] {
         let mut input = sources(&body)?;
-        for (_, text) in &mut input {
-            *text = text.replace(
-                "fn token(text: str) -> Token",
-                "fn token(text: str) -> Token",
-            );
-        }
         let (_, descriptor) = input
             .iter_mut()
             .find(|(name, _)| name.ends_with(".hgl-native"))
@@ -915,12 +903,6 @@ consume(first:retained,second:current)}}
                 body
             };
             let mut input = sources(&body)?;
-            for (_, text) in &mut input {
-                *text = text.replace(
-                    "fn token(text: str) -> Token",
-                    "fn token(text: str) -> Token",
-                );
-            }
             let (_, descriptor) = input
                 .iter_mut()
                 .find(|(name, _)| name.ends_with(".hgl-native"))
