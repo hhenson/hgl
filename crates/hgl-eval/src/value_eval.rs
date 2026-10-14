@@ -144,6 +144,9 @@ impl Execution<'_, '_> {
                 }
                 return operators::unary(op, &operand);
             }
+            Kind::Query(op, args) if op.starts_with("\0lookup_") => {
+                return self.lookup(op, args, &value.ty);
+            }
             Kind::IsPresent(operand) => Kind::Literal(Literal::Bool(!matches!(
                 self.value(operand)?.kind,
                 Kind::Void
@@ -175,6 +178,32 @@ impl Execution<'_, '_> {
             }
         };
         Ok(Value::new(value.ty.clone(), kind))
+    }
+    fn lookup(&mut self, op: &str, args: &[Value], ty: &Ty) -> Result<Value, EvalError> {
+        let parent = self.value(&args[0])?;
+        let key = self.value(&args[1])?;
+        let default = args.get(2).map(|value| self.value(value)).transpose()?;
+        let Kind::List(items) = parent.kind else {
+            return Err(unsupported("dictionary lookup requires an ordinary map"));
+        };
+        for item in items {
+            let Kind::Construct(fields) = item.kind else {
+                unreachable!("checked dictionary entry")
+            };
+            if crate::collection_values::equal(&fields[0].1, &key)? {
+                return Ok(fields[1].1.clone());
+            }
+        }
+        if let Some(default) = default {
+            return Ok(default);
+        }
+        if op == "\0lookup_at" {
+            return Err(EvalError::Coded(
+                "value.missing_key",
+                "dictionary key is absent".into(),
+            ));
+        }
+        Ok(Value::new(ty.clone(), Kind::Void))
     }
     fn collection(&mut self, ty: &Ty, items: &[Value]) -> Result<Kind, EvalError> {
         length(items.len())?;

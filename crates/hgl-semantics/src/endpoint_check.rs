@@ -98,12 +98,17 @@ pub fn clock_property(
     }
 }
 /// Check require payload within the admitted endpoint profile.
-pub fn require_payload(value: &Value) -> Result<(), String> {
+pub fn require_payload(value: &Value) -> Result<(), hgl_source::Issue> {
     if matches!(value.kind, Kind::Input(_, true)) {
         return Err("signal has no ordinary scalar value".into());
     }
     if matches!(value.ty, Ty::Nullable(_)) {
-        return Err("nullable replay result requires presence proof before payload use".into());
+        return Err(hgl_source::Issue::coded(
+            "type",
+            "nullable.required_presence",
+            0..0,
+            "nullable replay or lookup result requires presence proof before payload use",
+        ));
     }
     if (crate::tuple_values::endpoint(value) || matches!(value.kind, Kind::Output))
         && matches!(

@@ -418,3 +418,5 @@ ordinary list child types and written-order checking remain unchanged. Mixed
 ordinary/temporal entries and wrong widths/types fail at admission.
 Rust emission and concrete suite planning call reference_target_error before
 unsupported ordinary REF-list producers enter payload generation.
+
+Ordinary and atomic map bracket/at/get reads follow the nullable dictionary lookup contract. Null-default get permits only inferred immutable locals and binding-specific presence refinement; returns, assignments, helper arguments and unchecked payload use retain nullable.required_presence. Exact explicit fallbacks carry lookup.default_type on mismatch and are evaluated eagerly. Non-atomic graph map connection selection remains separate.

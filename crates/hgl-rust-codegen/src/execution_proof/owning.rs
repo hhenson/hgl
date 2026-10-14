@@ -59,6 +59,12 @@ fn value(input: &Value, looping: bool) -> bool {
                     .is_some_and(|v| matches!(v.kind, Kind::Literal(hgl_source::Literal::Int(_))))
                 && args.iter().all(|arg| value(arg, looping))
         }
+        Kind::Query(op, args) if op.starts_with("\0lookup_") => {
+            let child = if let Ty::Nullable(child) = &input.ty { child.as_ref() } else { &input.ty };
+            !owning_argument(child)
+                && args.get(1).is_some_and(|key| !owning_argument(&key.ty) || key.ty == Ty::Str || matches!(key.ty,Ty::Native(_)) && matches!(key.kind,Kind::Input(_,false) | Kind::Configuration(_)))
+                && args.iter().all(|arg| value(arg, looping))
+        }
         Kind::List(args) | Kind::Query(_, args) => args.iter().all(|arg| value(arg, looping)),
         Kind::Construct(fields) => fields.iter().all(|(_, child)| value(child, looping)),
         Kind::Delta(parts) => {

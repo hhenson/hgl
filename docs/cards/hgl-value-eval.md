@@ -89,3 +89,5 @@ admission, declaration lookup and provider discovery stay above this boundary.
 authority. Standalone wiring uses it for deferred recipe identities; generated cold
 execution uses it for independently owned evaluated results. It never discovers or
 executes a provider and does not bypass source checking.
+
+Ordinary dictionary lookup executes checked lookup Query IR, evaluating map, key and fallback once in written order. Missing safe reads return contextual absence; strict reads return EvalError::Coded(value.missing_key, message). Existing complete key equality and provider failures remain authoritative.

@@ -102,7 +102,9 @@ fn reference_value(plan: &Plan, v: &Value) -> String {
     format!("_ctx.store().bindings().input_reference({input})")
 }
 fn query_value(plan: &Plan, op: &str, args: &[Value]) -> String {
-    if op == "\0reference" {
+    if op.starts_with("\0lookup_") {
+        map_lookup(plan, op, args)
+    } else if op == "\0reference" {
         reference_value(plan, &args[0])
     } else if op.starts_with("\0family-eq:") {
         crate::owner_comparisons::comparison(plan, op, args)
@@ -779,4 +781,83 @@ fn native_call(plan: &Plan, binding: &hgl_semantics::ir::Native, args: &[Value])
         }
     }
     call
+}
+
+fn map_lookup(plan: &Plan, op: &str, args: &[Value]) -> String {
+    let Ty::Map(key, child) = &args[0].ty else {
+        unreachable!("checked dictionary lookup")
+    };
+    let key_value = if **key == Ty::Str || matches!(key.as_ref(), Ty::Native(_)) {
+        native_argument(plan, &args[1])
+    } else {
+        value(plan, &args[1])
+    };
+    let default = args
+        .get(2)
+        .map(|v| format!("let fallback={};", value(plan, v)))
+        .unwrap_or_default();
+    let hash = if let Ty::Native(scalar) = key.as_ref() {
+        format!(
+            "<{} as hgl_store::native_values::NativeType>::hash(key.data())?",
+            crate::native_values::marker(scalar)
+        )
+    } else {
+        crate::collections::key_hash(key, "key")
+    };
+    let mut code = String::from("{");
+    let found = if let Some((arena, slot)) = crate::source_slots::source(plan, &args[0]) {
+        let columns = if arena == "configuration_columns" {
+            "&self.configuration_columns".into()
+        } else {
+            format!("_ctx.store().{arena}()")
+        };
+        crate::append(
+            &mut code,
+            format_args!(
+                "let parent={slot};let key={key_value};{default}let columns={columns};let hash={hash};let position=columns.map_index(parent.fields()).find(hash,|position|{{let entry=hgl_store::ValueSlot::<{}>::bind(&mut columns.list(parent.fields())[position].as_slice());Ok({})}})?;let found=position.map(|position|{{let entry=hgl_store::ValueSlot::<{}>::bind(&mut columns.list(parent.fields())[position].as_slice());entry.fields().1.read(columns)}}).transpose()?;",
+                global_type(&Ty::Tuple(vec![*key.clone(), *child.clone()])),
+                if matches!(key.as_ref(), Ty::Native(_)) {
+                    "columns.native(entry.fields().0).equal(key)?".into()
+                } else {
+                    crate::collections::slot_key_equal(key, "entry.fields().0", "key", "columns")
+                },
+                global_type(&Ty::Tuple(vec![*key.clone(), *child.clone()]))
+            ),
+        );
+        "found".into()
+    } else {
+        let parent = if matches!(
+            args[0].kind,
+            Kind::Local(_) | Kind::MutableLocal(_) | Kind::GeneratorLocal(_)
+        ) {
+            place(plan, &args[0])
+        } else {
+            value(plan, &args[0])
+        };
+        crate::append(
+            &mut code,
+            format_args!(
+                "let parent=&({parent});let key={key_value};{default}let hash={hash};let position=parent.index().find(hash,|position|{{let entry=&parent[position];Ok({})}})?;let found=position.map(|position|{{let entry=&parent[position];Ok::<_,Box<hgl_types::NodeError>>({})}}).transpose()?;",
+                if matches!(key.as_ref(), Ty::Native(_)) {
+                    "entry.0.view().equal(key)?".into()
+                } else {
+                    crate::collections::equal(key, "&entry.0", "&key", global_type)
+                },
+                retained("entry.1", child)
+            ),
+        );
+        String::from("found")
+    };
+    let result = if args.len() == 3 {
+        format!("match {found} {{Some(value)=>value,None=>fallback}}")
+    } else if op == "\0lookup_at" {
+        format!(
+            "{found}.ok_or_else(||hgl_types::NodeError::coded(\"dictionary key is absent\",\"value.missing_key\"))?"
+        )
+    } else {
+        found
+    };
+    code.push_str(&result);
+    code.push('}');
+    code
 }

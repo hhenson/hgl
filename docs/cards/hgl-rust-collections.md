@@ -36,4 +36,6 @@ while preserving the existing Any ownership boundary.
 This module now lives in hgl-rust-codegen below executable program assembly;
 its hgl-rust facade path and module ceiling remain unchanged.
 
+Point-in-time dictionary lookup hashes exact compiled keys and probes reusable owner/descriptor indexes. slot_key_equal borrows scalar, Native and composite key descendants only for collision equality. Written fallback operands execute once before lookup selection. Missing strict reads originate value.missing_key; safe reads preserve present zero/false/empty values independently of absence. Owning result extraction retains its ordinary ownership boundary.
+
 Complete ordinary map owners retain cached hash metadata. Compiled key_hash uses existing exact primitive, Native, Any and composite key capabilities. Prepared map markers provision and copy an independent index with their original descriptor layout; ordinary ownership boundaries retain entries and index together.

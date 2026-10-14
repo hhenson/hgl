@@ -155,7 +155,7 @@ fn value_name(
 }
 fn intrinsic(name: &str, receiver: Option<&str>, owner: &str, item: &str) -> bool {
     receiver.is_some()
-        || "schedule schedule_at key_set keys values added removed insert update remove invalidate clear pop scheduled items delta_value elements len push upsert discard contains valid modified all_valid last_modified passivate activate"
+        || "schedule schedule_at key_set keys values added removed insert update remove invalidate clear pop scheduled items delta_value elements len push get at upsert discard contains valid modified all_valid last_modified passivate activate"
             .split_ascii_whitespace().any(|intrinsic| intrinsic == name)
         || (owner == "hgraph.native" && matches!(item, "bound" | "len"))
 }

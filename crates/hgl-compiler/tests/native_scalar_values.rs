@@ -1410,3 +1410,22 @@ consume(keys:[],number:deferred)}
     input.push((root()?.join("crates/hgl-compiler/tests/fixtures/carrier-seed.hgl-native").to_string_lossy().into_owned(),"native_descriptor 1 target \"hgl-rust-1\"\nmodule carrier_seed\nprovider \"hgl.test.builtin_results\" fingerprint \"builtin-results-v1\" image \"native_builtin_results.rs\"\nvalue seed(value:i64)->i64 symbol \"fixed\" ownership owned phases {cold} effects {}\n".into()));
     Ok(hgl_program::compile(&input, "main")?)
 }
+
+#[test]
+fn native_dictionary_lookups_use_borrowed_key_hashes_and_preserve_unknown_absence()
+-> Result<(), Box<dyn std::error::Error>> {
+    run(r#"
+    fn lookup(book:atomic<map<Token,i64>>,key:Token)->i64 {when {
+        let value=get(book,key)
+        if value==null {return 9}
+        return value
+    }}
+    test native_lookup {
+        let book=map<Token,i64>(items:[token("a"):7,token("b"):0])
+        assert eval(lookup,book:[book,book,book,book],key:[token("b"),token("absent"),token("a"),token("b")])==[0,9,7,0]
+        let value=get(book,token("absent"))
+        assert value==null
+        assert get(book,token("b"),default:8)==0
+    }
+    "#)
+}

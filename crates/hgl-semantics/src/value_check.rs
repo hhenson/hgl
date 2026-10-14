@@ -154,6 +154,9 @@ pub fn aggregate_checked<E: From<&'static str> + From<hgl_source::Issue>>(
             .as_ref()
             .ok_or("ordinary aggregate literals cannot contain absent elements")?;
         let value = crate::tuple_values::retain(check(expr, child)?, true);
+        if matches!(value.ty, Ty::Nullable(_)) {
+            return Err(hgl_source::Issue::coded("type","nullable.required_presence",expr.span(),if tuple {"ordinary tuple element requires nullable presence proof"} else {"ordinary nonempty list literals require constant elements and nullable presence proof"}).into());
+        }
         if !ordinary(&value.ty)
             || matches!(value.kind, Kind::Wire(_) | Kind::Input(_, true))
             || (!tuple && !constant_context && !value.closed())

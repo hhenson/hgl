@@ -119,6 +119,10 @@ pub fn value(v: &Value) -> String {
         ),
         Kind::Local(i) => format!("Local({i})"),
         Kind::MutableLocal(i) => format!("MutableLocal({i})"),
+        Kind::Query(op, args) => format!(
+            "Query({op:?}.into(),{})",
+            rows(args, "hgl_semantics::ir::Value", value)
+        ),
         Kind::Void => "Void".into(),
         Kind::WiringFailure(s) => format!("WiringFailure({s:?}.into())"),
         Kind::Prepared(_)
@@ -132,7 +136,6 @@ pub fn value(v: &Value) -> String {
         | Kind::IterationInput(_)
         | Kind::Input(..)
         | Kind::Cache(_)
-        | Kind::Query(..)
         | Kind::Output
         | Kind::Capability
         | Kind::Opaque(_) => unreachable!("checked ordinary harness expression"),

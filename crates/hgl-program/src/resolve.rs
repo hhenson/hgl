@@ -1220,6 +1220,19 @@ impl Checker {
                 message.into()
             }
         })?;
+        if matches!(value.ty, Ty::Nullable(_))
+            && let Some(expected) = expected
+        {
+            return Err(Issue::coded(
+                "type",
+                "nullable.required_presence",
+                expr.span(),
+                format!(
+                    "nullable presence proof is required for {} at this value, return type or assignment type boundary",
+                    expected.source_name()
+                ),
+            ));
+        }
         if self.requirements.delta
             && expected
                 .is_some_and(|ty| value.ty != *ty && !(ty == &Ty::F64 && value.ty == Ty::I64))
@@ -1335,6 +1348,9 @@ impl Checker {
                 let value =
                     self.local_initializer(module, annotation.as_deref(), expr, env, true)?;
                 let mutable = matches!(statement, Stmt::Var(..));
+                if mutable && matches!(value.ty, Ty::Nullable(_)) {
+                    require_payload(&value)?;
+                }
                 let id = *next_local;
                 *next_local += 1;
                 self.static_values.bind(id, &value, mutable);
@@ -1650,6 +1666,9 @@ impl Checker {
             return Ok(clock_property(receiver, name, env, runtime)?);
         }
         let parent = self.expression(module, receiver, env, runtime)?;
+        if matches!(parent.ty, Ty::Nullable(_)) {
+            require_payload(&parent)?;
+        }
         if !runtime && matches!(parent.kind, Kind::Wire(_)) {
             let ty = if let Ty::Ref(child) = &parent.ty {
                 child.as_ref()
@@ -1679,6 +1698,14 @@ impl Checker {
     ) -> Result<Value, Issue> {
         let parent = self.expression(module, receiver, env, runtime)?;
         let index = self.expression(module, index, env, runtime)?;
+        if matches!(parent.ty, Ty::Nullable(_)) {
+            require_payload(&parent)?;
+        }
+        if matches!(&parent.ty, Ty::Map(..))
+            || matches!(&parent.ty, Ty::Atomic(child) if matches!(child.as_ref(), Ty::Map(..)))
+        {
+            return hgl_semantics::tuple_values::lookup(parent, index, None, true);
+        }
         if !runtime && matches!(parent.kind, Kind::Wire(_)) {
             let Kind::Literal(Literal::Int(index)) = index.kind else {
                 return Err("graph projection requires a constant integer position".into());
@@ -1815,6 +1842,53 @@ impl Checker {
         }
         self.value_expression(module, name, args, env, runtime)
     }
+    fn lookup_call(
+        &mut self,
+        module: &str,
+        name: &str,
+        args: &[(Option<String>, Expr)],
+        env: &Env,
+        runtime: bool,
+    ) -> Result<Option<Value>, Issue> {
+        if !matches!(name, "get" | "at") || args.len() < 2 {
+            return Ok(None);
+        }
+        let parent = self.expression(module, &args[0].1, env, runtime)?;
+        if matches!(parent.ty, Ty::Nullable(_)) {
+            require_payload(&parent)?;
+        }
+        if !matches!(&parent.ty, Ty::Map(..))
+            && !matches!(&parent.ty, Ty::Atomic(child) if matches!(child.as_ref(), Ty::Map(..)))
+        {
+            return Ok(None);
+        }
+        if args[0].0.is_some()
+            || args[1].0.is_some()
+            || args.len() > 3
+            || (name == "at" && args.len() != 2)
+            || args
+                .get(2)
+                .is_some_and(|(label, _)| label.as_deref() != Some("default"))
+        {
+            return Err("dictionary lookup requires map, key and an optional named default".into());
+        }
+        let key = self.expression(module, &args[1].1, env, runtime)?;
+        let payload = if let Ty::Atomic(payload) = &parent.ty {
+            payload.as_ref()
+        } else {
+            &parent.ty
+        };
+        let Ty::Map(_, child) = payload else {
+            unreachable!("checked dictionary receiver")
+        };
+        let default = match args.get(2) {
+            Some((_, expr)) if !matches!(expr.syntax(), Expr::Null) => {
+                Some(self.expected_expression(module, expr, env, runtime, Some(child))?)
+            }
+            _ => None,
+        };
+        hgl_semantics::tuple_values::lookup(parent, key, default, name == "at").map(Some)
+    }
     fn value_expression(
         &mut self,
         module: &str,
@@ -1823,6 +1897,9 @@ impl Checker {
         env: &Env,
         runtime: bool,
     ) -> Result<Value, Issue> {
+        if let Some(value) = self.lookup_call(module, name, args, env, runtime)? {
+            return Ok(value);
+        }
         if matches!(name, "bytes" | "any") {
             return hgl_semantics::value_operations::constructor(name, args, |expr, hint| {
                 self.expected_expression(module, expr, env, runtime, hint)

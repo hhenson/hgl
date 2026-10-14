@@ -312,6 +312,44 @@ pub fn iteration_start(
     )
 }
 
+/// Compare a prepared dictionary key with a retained operand without extracting its owner.
+pub(crate) fn slot_key_equal(ty: &Ty, slot: &str, key: &str, columns: &str) -> String {
+    if let Ty::Native(_) = ty {
+        return format!("{columns}.native({slot}).equal(({key}).view())?");
+    }
+    if *ty == Ty::Any {
+        return format!("{columns}.any(({slot}).fields()).equal(&({key}))?");
+    }
+    if let Some((fields, optional)) = matches!(ty, Ty::Tuple(_) | Ty::Struct(..))
+        .then(|| hgl_source::ordinary_shape::fields(ty))
+        .flatten()
+    {
+        let checks = fields.iter().enumerate().map(|(index, ty)| {
+            let field = format!("({slot}).fields().{index}");
+            let key = format!("({key}).{index}");
+            if optional.contains(&index) {
+                format!("match ({columns}.list(({field}).fields()).first(),({key}).as_ref()) {{(Some(layout),Some(key))=>{{let slot=hgl_store::ValueSlot::<{}>::bind(&mut layout.as_slice());{}}},(None,None)=>true,_=>false}}",crate::layouts::global_type(ty),slot_key_equal(ty,"slot","*key",columns))
+            } else { slot_key_equal(ty,&field,&key,columns) }
+        }).collect::<Vec<_>>();
+        return if checks.is_empty() {
+            "true".into()
+        } else {
+            checks.join(" && ")
+        };
+    }
+    let scalar = if matches!(ty, Ty::Enum(_)) {
+        "i64".into()
+    } else {
+        crate::layouts::owned_type(ty)
+    };
+    let left = format!("{columns}.scalar::<{scalar}>(({slot}).fields())");
+    if *ty == Ty::Str {
+        format!("({left}).as_str()==({key})")
+    } else {
+        format!("({left})==&({key})")
+    }
+}
+
 /// Hash an exact ordinary key through its statically selected capabilities.
 pub fn key_hash(ty: &Ty, value: &str) -> String {
     if let Ty::Native(scalar) = ty {
