@@ -358,6 +358,8 @@ impl<'a> Cursor<'a> {
                 let index = self.expr()?;
                 self.need("]")?;
                 value = Expr::Index(Box::new(value), Box::new(index));
+            } else if self.take("?") {
+                value = Expr::Unary("?".into(), Box::new(value));
             } else if self.take(".") {
                 value = Expr::Property(Box::new(value), self.name()?);
                 if self.at("(") {
@@ -630,9 +632,11 @@ impl<'a> Cursor<'a> {
                     Stmt::DeclareVar(name, annotation.unwrap_or_else(|| unreachable!()))
                 } else if mutable {
                     self.need("=")?;
+                    self.lines();
                     Stmt::Var(name, annotation, self.expr()?)
                 } else {
                     self.need("=")?;
+                    self.lines();
                     Stmt::Let(name, annotation, self.expr()?)
                 }
             } else if self.take("return") {

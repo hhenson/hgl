@@ -58,12 +58,19 @@ pub fn binary(op: &str, a: &Value, b: &Value) -> Result<Value, EvalError> {
 }
 /// Compare retained ordinary/harness data, propagating nested box capability failures.
 pub fn equal_data(a: &Value, b: &Value) -> Result<bool, EvalError> {
+    if a.ty == Ty::Error {
+        return equal_error(a, b);
+    }
+
     let (a, b) = (
         crate::family_values::concrete(a),
         crate::family_values::concrete(b),
     );
     if a.ty.source_name() != b.ty.source_name() {
         return Ok(false);
+    }
+    if matches!(a.ty, Ty::Result(..)) && !capable(&a.ty, 0) {
+        return Err(capability());
     }
     if a.ty == Ty::Any {
         let value = binary("==", a, b)?;
@@ -81,6 +88,9 @@ pub fn equal_data(a: &Value, b: &Value) -> Result<bool, EvalError> {
         }
         (Kind::Literal(a), Kind::Literal(b)) => Ok(a == b),
         (Kind::Void, Kind::Void) => Ok(true),
+        (Kind::Captured(left_length, left), Kind::Captured(right_length, right)) => {
+            captured_equal((*left_length, left), (*right_length, right))
+        }
         (Kind::List(left), Kind::List(right)) => {
             sequence_equal(left, right, matches!(a.ty, Ty::Set(_) | Ty::Map(..)))
         }
@@ -130,6 +140,21 @@ pub fn equal_data(a: &Value, b: &Value) -> Result<bool, EvalError> {
         _ => Ok(false),
     }
 }
+fn captured_equal(
+    (left_length, left): (usize, &[(usize, Value)]),
+    (right_length, right): (usize, &[(usize, Value)]),
+) -> Result<bool, EvalError> {
+    if left_length != right_length || left.len() != right.len() {
+        return Ok(false);
+    }
+    for ((left_index, left), (right_index, right)) in left.iter().zip(right) {
+        if left_index != right_index || !equal_data(left, right)? {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
 fn sequence_equal(left: &[Value], right: &[Value], unordered: bool) -> Result<bool, EvalError> {
     if left.len() != right.len() {
         return Ok(false);
@@ -242,4 +267,23 @@ pub fn validate_key(value: &Value) -> Result<(), EvalError> {
         }
     }
     Ok(())
+}
+
+fn equal_error(a: &Value, b: &Value) -> Result<bool, EvalError> {
+    let (Kind::Construct(a), Kind::Construct(b)) = (&a.kind, &b.kind) else {
+        return Err(crate::value_operations::unsupported(
+            "error equality requires diagnostic data",
+        ));
+    };
+    for index in [0, 1] {
+        match (
+            a.iter().find(|(id, _)| *id == index),
+            b.iter().find(|(id, _)| *id == index),
+        ) {
+            (Some((_, a)), Some((_, b))) if equal_data(a, b)? => {}
+            (None, None) => {}
+            _ => return Ok(false),
+        }
+    }
+    Ok(true)
 }

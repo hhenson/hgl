@@ -25,18 +25,9 @@ impl<T: GlobalValue> GlobalValue for Optional<T> {
         value.as_ref().map(T::retain).transpose()
     }
     fn prepare(value: &Self::Value, capacity: &mut Capacity, layouts: &mut Layouts) -> NodeResult {
-        capacity.list();
-        let positions = value
-            .as_ref()
-            .map(|_| vec![0; T::WIDTH])
-            .into_iter()
-            .collect();
-        layouts.push(positions)?;
-        if let Some(value) = value {
-            T::prepare(value, capacity, layouts)?;
-        }
-        Ok(())
+        Self::prepare_ref(value.as_ref(), capacity, layouts)
     }
+
     fn install(columns: &mut ValueColumns, value: Self::Value, layouts: &mut Layouts) -> usize {
         let mut positions = layouts.take();
         if let Some(value) = value {
@@ -67,5 +58,21 @@ impl<T: GlobalValue> GlobalValue for Optional<T> {
             T::release(columns, T::slots(&mut positions.as_slice()));
         }
         columns.release_list(slot);
+    }
+}
+
+impl<T: GlobalValue> Optional<T> {
+    pub(crate) fn prepare_ref(
+        value: Option<&T::Value>,
+        capacity: &mut Capacity,
+        layouts: &mut Layouts,
+    ) -> NodeResult {
+        capacity.list();
+        let positions = value.map(|_| vec![0; T::WIDTH]).into_iter().collect();
+        layouts.push(positions)?;
+        if let Some(value) = value {
+            T::prepare(value, capacity, layouts)?;
+        }
+        Ok(())
     }
 }

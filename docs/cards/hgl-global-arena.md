@@ -48,3 +48,5 @@ prevalidated capacity-preserving scalar copies; equal positions are a no-op.
 Dynamic list_mut remains for the legacy protocol and rejects prepared descriptors.
 
 Prepared ownership includes the statically selected Bytes column and its reusable free slots. Capacity counts and descriptor indices include this column independently of list descriptor storage.
+
+Dictionary descriptors expose map_index, prepare_map_index, replace_map_index, copy_map_index and copy_map_index_within. These operations carry typed ordinary map index metadata with existing descendant slot lifetimes; they inspect no key types or source names.

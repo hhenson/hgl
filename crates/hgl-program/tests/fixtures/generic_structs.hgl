@@ -8,8 +8,8 @@ second:B }
 struct Same<T> { first:T
 second:T }
 struct Numeric<T> requires T in {i64,f64} { value:T }
-native const fn mark(value:i64)->i64 throws
-native const fn mark(value:i64)->i64 throws {}
+native const fn mark(value:i64)->i64
+native const fn mark(value:i64)->i64 { rust_abi_node_result }
 const fn contextual()->Phantom<str> { return Phantom(amount:3) }
 const fn parameter(value:Phantom<i64>)->i64 { return value.amount }
 const fn record<T>(value:T)->TimedValue<T> {

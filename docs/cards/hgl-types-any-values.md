@@ -2,7 +2,7 @@
 
 The any_values vocabulary in hgl-types owns compiled box descriptors and independently retained encoded ordinary data. No runtime or third-party dependency is introduced. Module budget: 420 lines; 30 lines of the original allocation are transferred to Store with recursive execution.
 
-Public surface: AnyPlan {identity, operation, capabilities, execution, capture, validate, copy}, AnyField {plan, optional}, AnyOperation, AnyValue, AnyRef, AnyView, AnyExecution, ColdCapture, ColdValidate, Frames, AnyBuffer and AnyWidth. AnyValue exposes from_encoded, plan, data, reserve, capacity, copy_prepared, encode_prepared, retain, capture, equal, compare and key_hash. AnyPlan exposes equal, compare and hash. AnyBuffer writes and frames typed bytes, executes provider copies and writes descriptor headers; AnyWidth measures the same encoding before publication. Frames iterates compiler-produced length-framed children.
+Public surface: AnyPlan {identity, operation, capabilities, execution, capture, validate, copy}, AnyField {plan, optional}, AnyOperation, AnyValue, AnyRef, AnyView, AnyExecution, ColdCapture, ColdValidate, Frames, AnyBuffer and AnyWidth. AnyValue exposes from_encoded, plan, data, reserve, capacity, copy_prepared, encode_prepared, retain, capture, equal, compare, key_hash and borrowed. borrowed returns an exact AnyRef over the current owner without allocation or descriptor discovery. AnyPlan exposes equal, compare and hash. AnyBuffer writes and frames typed bytes, executes provider copies and writes descriptor headers; AnyWidth measures the same encoding before publication. Frames iterates compiler-produced length-framed children.
 
 Descriptors hold compiled operations and exact type identity, with no name lookup or payload type validation during successful evaluation. They cover arbitrary admitted ordinary layouts, recursively including family members and boxes. Encoded bytes and descriptors are an internal compiler/runtime contract, not a user serialization API. Whole family boxing selects a concrete member; nested family fields retain their tags.
 
@@ -42,3 +42,9 @@ typed framing before trusted decoding. Descriptors without that mapping are
 rejected at cold construction. `AnyView::checked_boxed() -> NodeResult<AnyRef>`
 checks the descriptor index and empty-box payload before returning a borrow.
 These checks do not run on the prepared publication path.
+
+`AnyOperation::Result(&AnyPlan,&AnyPlan)` describes one tag and the selected
+ordinary payload. `AnyOperation::Error(&AnyPlan)` carries the message/code text
+plan; equality ignores the separately retained provenance frame. Both supply
+only their source-declared equality capability; hash/order remain unavailable.
+The compiled copy codec retains complete bytes and descriptor ownership.

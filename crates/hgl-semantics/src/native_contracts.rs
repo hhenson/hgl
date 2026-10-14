@@ -78,7 +78,7 @@ fn identity_kind(library: &Library, name: &str) -> Option<IdentityKind> {
             if matches!(
                 (base, children.as_slice()),
                 ("tuple", _)
-                    | ("map", [_, _])
+                    | ("result" | "map", [_, _])
                     | ("set" | "ref" | "nullable", [_])
                     | ("atomic" | "delta", [IdentityKind::Composite])
             ) {
@@ -195,6 +195,25 @@ pub fn scalar<'a>(library: &'a Library, declaration: &Decl) -> Result<&'a Scalar
     Ok(scalar)
 }
 fn canonical(library: &Library, module: &str, name: &str) -> Result<String, Issue> {
+    if name == "error" {
+        return Ok(name.into());
+    }
+    if let Some(("result", args)) = hgl_source::application(name)
+        && args.len() == 2
+    {
+        let payload = |name: &str| -> Result<String, Issue> {
+            let ty = crate::value_types::concrete(library, module, name, &BTreeMap::new())?;
+            if !crate::value_check::ordinary(&ty) {
+                return Err("native Result payload requires an ordinary type".into());
+            }
+            Ok(ty.source_name())
+        };
+        return Ok(format!(
+            "result<{},{}>",
+            payload(args[0])?,
+            payload(args[1])?
+        ));
+    }
     if let Some(declaration) = crate::struct_names::native_declaration(library, module, name)? {
         return Ok(scalar(library, declaration)?.identity.clone());
     }
@@ -232,7 +251,6 @@ pub fn function<'a>(
     };
     if !signature.generics.is_empty()
         || signature.parameters.len() != selected.parameters.len()
-        || signature.throws != selected.throws
         || canonical(library, &declaration.module, &signature.result)?
             != canonical(library, &declaration.module, &selected.result)?
     {
@@ -262,12 +280,16 @@ pub fn bind(
 ) -> Result<Value, String> {
     let (module, name) = (declaration.module.as_str(), declaration.name.as_str());
     let args = values.iter().map(|v| v.ty.clone()).collect::<Vec<_>>();
-    let (provider, method) =
+    let (provider, method, operational_result) =
         if let Some(contract) = function(library, declaration, signature).map_err(String::from)? {
             if !contract.phases.contains(phase) {
                 return Err(format!("native helper is unavailable in {phase}"));
             }
-            if runtime && result.owning_scalar() && contract.bound.is_none() {
+            if runtime
+                && result.owning_scalar()
+                && !matches!(result, Ty::Result(..) | Ty::Error)
+                && contract.bound.is_none()
+            {
                 return Err("native owning evaluation result requires a pure target bound".into());
             }
             let descriptor = &library.native_contracts[module];
@@ -302,12 +324,13 @@ pub fn bind(
                         .collect(),
                 }),
                 contract.symbol.clone(),
+                contract.throws,
             )
         } else {
             if !runtime {
                 return Err("native value calls in composition are not yet supported".into());
             }
-            legacy(library, declaration, signature)?;
+            let operational_result = legacy(library, declaration, signature)?;
             (
                 None,
                 format!(
@@ -315,6 +338,7 @@ pub fn bind(
                     name,
                     args.iter().map(Ty::name).collect::<Vec<_>>().join("_")
                 ),
+                operational_result,
             )
         };
     let full_name = format!("{module}::{name}");
@@ -323,7 +347,7 @@ pub fn bind(
             name: full_name,
             method,
             provider,
-            throws: signature.throws,
+            throws: operational_result,
             args,
             result: result.clone(),
         },
@@ -334,7 +358,7 @@ pub fn bind(
     Ok(invocation)
 }
 
-fn legacy(library: &Library, declaration: &Decl, signature: &Signature) -> Result<(), String> {
+fn legacy(library: &Library, declaration: &Decl, signature: &Signature) -> Result<bool, String> {
     let (module, name) = (&declaration.module, &declaration.name);
     let selected = library
         .declarations
@@ -358,16 +382,17 @@ fn legacy(library: &Library, declaration: &Decl, signature: &Signature) -> Resul
             "{module}::{name}: expected one selected native implementation"
         ));
     }
-    if !selected[0]
+    let body = selected[0]
         .body
         .iter()
         .filter(|token| !matches!(token.text.as_str(), "\n" | ""))
         .map(|token| token.text.as_str())
-        .eq(["{", "}"])
-    {
-        return Err("unsupported native implementation".into());
+        .collect::<Vec<_>>();
+    match body.as_slice() {
+        ["{", "}"] => Ok(false),
+        ["{", "rust_abi_node_result", "}"] => Ok(true),
+        _ => Err("unsupported native implementation".into()),
     }
-    Ok(())
 }
 
 /// Intern one checked signature while preserving legacy target name uniqueness.

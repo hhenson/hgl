@@ -63,12 +63,21 @@ pub fn binary(op: &str, a: &Value, b: &Value) -> Result<Value, EvalError> {
     if a.ty == hgl_value_model::Ty::Any {
         return crate::any_values::binary(op, a, b);
     }
+    if matches!(&a.ty,hgl_value_model::Ty::List(child,_) if matches!(child.as_ref(),hgl_value_model::Ty::Nullable(_)))
+        && matches!(op, "==" | "!=")
+    {
+        return Ok(value(Literal::Bool(
+            crate::any_values::equal_data(a, b)? == (op == "=="),
+        )));
+    }
     if matches!(
         a.ty,
         hgl_value_model::Ty::Set(_)
             | hgl_value_model::Ty::Map(..)
             | hgl_value_model::Ty::Family(_)
             | hgl_value_model::Ty::Tuple(_)
+            | hgl_value_model::Ty::Result(..)
+            | hgl_value_model::Ty::Error
     ) && matches!(op, "==" | "!=")
     {
         return Ok(value(Literal::Bool(

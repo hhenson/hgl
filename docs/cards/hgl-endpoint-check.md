@@ -32,3 +32,5 @@ inject_capability binds declared capabilities to the lexical environment. argume
 
 Set insert/remove are strict output operations, distinct from tolerant
 upsert/discard. They retain scalar key checks and evaluation ownership.
+
+require_payload returns a typed Issue. Unrefined nullable replay and dictionary lookup payload use carries nullable.required_presence; the existing binding-specific presence facts remain authoritative.

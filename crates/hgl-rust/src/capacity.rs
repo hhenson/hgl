@@ -19,6 +19,14 @@ fn collect(ty: &Ty, types: &mut BTreeMap<String, Ty>) {
     if types.insert(global_type(ty), ty.clone()).is_some() {
         return;
     }
+    if let Ty::Result(ok, err) = ty {
+        collect(&Ty::Bool, types);
+        collect(ok, types);
+        collect(err, types);
+    }
+    if *ty == Ty::Error {
+        collect(&Ty::Str, types);
+    }
     if let Some(child) = crate::collections::element(ty) {
         collect(&child, types);
     }
@@ -97,6 +105,22 @@ impl Capacity {
     /// Include one already materialized configuration, recursively and without recipes.
     pub fn include(&self, ty: &Ty, value: &str) -> String {
         let index = self.index(ty);
+        if let Ty::Result(ok, err) = ty {
+            return format!(
+                "<{} as hgl_store::PreparedValue>::include(&mut capacity.limit{index},{value});match {value} {{Ok(value)=>{{{}}},Err(value)=>{{{}}}}}",
+                global_type(ty),
+                self.include(ok, "value"),
+                self.include(err, "value")
+            );
+        }
+        if *ty == Ty::Error {
+            return format!(
+                "<{} as hgl_store::PreparedValue>::include(&mut capacity.limit{index},{value});{}if let Some(value)=({value}).code.as_ref() {{{}}}",
+                global_type(ty),
+                self.include(&Ty::Str, &format!("&({value}).message")),
+                self.include(&Ty::Str, "value")
+            );
+        }
         if let Some(child) = crate::collections::element(ty) {
             return format!(
                 "capacity.limit{index}=capacity.limit{index}.max(({value}).len());for value in ({value}).iter() {{{}}}",
@@ -221,7 +245,15 @@ impl Capacity {
         {
             return bounds;
         }
-        if matches!(ty, Ty::Recursive(_)) {
+        if let Ty::Result(ok, err) = ty {
+            return format!(
+                "{{let mut bounds=capacity.limit{}.clone();bounds.field1=Some({});bounds.field2=Some({});bounds}}",
+                self.index(ty),
+                self.bounds(ok),
+                self.bounds(err)
+            );
+        }
+        if matches!(ty, Ty::Recursive(_) | Ty::Error) {
             return format!("capacity.limit{}.clone()", self.index(ty));
         }
         if let Ty::Delta(origin) = ty {
@@ -301,7 +333,7 @@ impl Capacity {
             .values()
             .enumerate()
             .map(|(i, ty)| {
-                if matches!(ty, Ty::Recursive(_)) {
+                if matches!(ty, Ty::Recursive(_) | Ty::Result(..) | Ty::Error) {
                     format!(
                         "limit{i}:<{} as hgl_store::PreparedValue>::Bounds,",
                         global_type(ty)

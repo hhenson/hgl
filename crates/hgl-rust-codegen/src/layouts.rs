@@ -10,6 +10,9 @@ pub use globals::{global_markers, global_schema, global_type, global_types, harn
 pub use crate::scalars::{rust_type, scalar_type};
 /// Rust owned representation of a concrete ordinary type.
 pub fn owned_type(ty: &Ty) -> String {
+    if matches!(ty,Ty::Struct(name,..) if name.source_name()=="\0error.context") {
+        return "hgl_types::ErrorContext".into();
+    }
     if let Some(storage) = ordinary_storage(ty) {
         return owned_type(&storage);
     }
@@ -17,6 +20,13 @@ pub fn owned_type(ty: &Ty) -> String {
         return format!("Owned{}", global_type(ty));
     }
 
+    if let Ty::Map(key, child) = ty {
+        return format!(
+            "hgl_store::map_values::MapValue<({}, {})>",
+            owned_type(key),
+            owned_type(child)
+        );
+    }
     if let Some(element) = crate::collections::element(ty) {
         return format!("Vec<{}>", owned_type(&element));
     }
@@ -48,6 +58,9 @@ fn tuple_storage(children: &[Ty]) -> Ty {
 
 /// Complete ordinary payload stored behind a prepared whole-value endpoint.
 pub fn whole_payload(ty: &Ty) -> Option<&Ty> {
+    if matches!(ty, Ty::Result(..) | Ty::Error) {
+        return Some(ty);
+    }
     if let Ty::Atomic(payload) = ty {
         Some(payload)
     } else if matches!(ty, Ty::Any | Ty::Enum(_) | Ty::Native(_)) {

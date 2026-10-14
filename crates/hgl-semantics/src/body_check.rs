@@ -153,7 +153,10 @@ pub fn value_scope(
         signature,
         signature.parameters.iter().zip(positions).map(|(p, id)| {
             let value = &args[*id];
-            if p.constant && !preparation {
+            if p.constant
+                && !preparation
+                && !matches!(value.ty, hgl_source::Ty::Result(..) | hgl_source::Ty::Error)
+            {
                 value.clone()
             } else {
                 crate::ir::Value::new(value.ty.clone(), crate::ir::Kind::Local(*id))

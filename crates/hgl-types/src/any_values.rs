@@ -81,6 +81,10 @@ pub enum AnyOperation {
     Fields(&'static [AnyField]),
     /// Complete list or unordered set/map entries.
     Sequence(&'static AnyPlan, bool),
+    /// A single tagged outcome delegates equality to its selected ordinary payload.
+    Result(&'static AnyPlan, &'static AnyPlan),
+    /// A diagnostic retains provenance but compares only its message and nullable code.
+    Error(&'static AnyPlan),
     /// A closed abstract family retains its concrete member.
     Family(&'static [&'static AnyPlan]),
     /// A nested box selects an already compiled descriptor.
@@ -206,7 +210,8 @@ impl AnyValue {
     pub fn key_hash(&self) -> NodeResult<u64> {
         self.borrowed().key_hash()
     }
-    fn borrowed(&self) -> AnyRef<'_> {
+    /// Borrow the exact retained descriptor and contents without copying ownership.
+    pub fn borrowed(&self) -> AnyRef<'_> {
         AnyRef {
             plan: self.plan,
             data: self.data(),

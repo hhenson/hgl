@@ -418,3 +418,42 @@ ordinary list child types and written-order checking remain unchanged. Mixed
 ordinary/temporal entries and wrong widths/types fail at admission.
 Rust emission and concrete suite planning call reference_target_error before
 unsupported ordinary REF-list producers enter payload generation.
+
+Ordinary and atomic map bracket/at/get reads follow the nullable dictionary lookup contract. Null-default get permits only inferred immutable locals and binding-specific presence refinement; returns, assignments, helper arguments and unchecked payload use retain nullable.required_presence. Exact explicit fallbacks carry lookup.default_type on mismatch and are evaluated eagerly. Non-atomic graph map connection selection remains separate.
+
+## Result and capture checking
+
+`result<T,E>` constructors `ok`/`err` require an expected complete type. Tag guards
+refine immutable ordinary parameters and locals; `.value`/`.error` require the
+matching fact. These facts do not prove temporal validity. Ordinary helper `?`
+returns Err data with exactly the declared E; a node `when` propagates only
+canonical Error into execution failure. Wiring, generators and lifecycle hooks
+reject node propagation with the specified phase code. Error construction has
+message, nullable code and nullable read-only origin context.
+
+Capture evaluates written arguments once before reserving its child ownership
+range and reuses complete ordinary selection, including permitted helper, native
+and operator lifting. The checked selected output type is retained independently
+of internal graph REF projections. Wiring-only scalar calls reject `capture.phase`.
+
+Opaque image-less Rust fixture implementation bodies may contain the private
+`rust_abi_node_result` marker. It selects an operational NodeResult return at the
+Rust provider boundary during cold implementation selection. It is not a source
+keyword or declaration clause and does not alter callers' language type. Source
+`throws` rejects. Image-backed operational flags stay private descriptor metadata.
+A language `result<T,error>` return remains typed data, including when transported
+inside private operational NodeResult.
+
+The current Rust capture target excludes a source-declared normal `ref<T>`
+connection before bundle formation and shared test layout emission, with an
+explicit target diagnostic. A declared logical T whose checked graph producer
+is a physical REF<T> remains supported through finite original-endpoint routes.
+
+Bound eval captures compare contextually with sparse expected sequences during
+ordinary test preparation. The capture supplies the exact payload type; sparse
+literals add no nullable annotation or general sparse ordinary list constructor.
+Equality includes the complete horizon, present indices and delegated payload
+comparison. Capture aliases and reversed literal comparisons preserve this rule;
+wrong payload types reject. Captured literals evaluate their written present
+operands once when the assertion runs. The private resolve/captured checker is
+restricted to this test phase and equality/inequality.

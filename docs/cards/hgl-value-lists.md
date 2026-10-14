@@ -20,3 +20,5 @@ Inactive positions remain owned and reusable but invisible to ordinary list read
 Only the typed value layer interprets these positions or copies payloads.
 Acceptance: shrink/empty/reinsert without capacity loss, no phantom elements,
 stable independent captures and reclamation of every retained descendant.
+
+Each descriptor may retain a dictionary Index. map_index/map_index_mut, replace_index and copy_index support cold provisioning and typed whole-value copy without owning key extraction or provider calls. Other list operations keep their existing entry order and active-length behavior.

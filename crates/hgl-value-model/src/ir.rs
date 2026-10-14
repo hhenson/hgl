@@ -238,6 +238,28 @@ pub struct Conditional {
     /// True and false branch templates, in source order.
     pub branches: [ConditionalBranch; 2],
 }
+/// A dynamic member owns an independent outputless child template.
+#[derive(Debug, Clone)]
+pub struct Keyed {
+    /// Synthetic owner in the enclosing graph.
+    pub owner: usize,
+    /// Construction indices belonging to the reusable child template.
+    pub nodes: Vec<usize>,
+    /// Passive member endpoint placeholder, excluded from the child description.
+    pub member: usize,
+}
+/// A capturing owner retains one complete selected temporal call.
+#[derive(Debug, Clone)]
+pub struct Capture {
+    /// Actual owner construction/rank index, distinct from endpoint cache positions.
+    pub owner: usize,
+    /// Real nodes owned by this reusable child graph.
+    pub nodes: Vec<usize>,
+    /// Original normal producer, if the selected call has an output.
+    pub output: Option<usize>,
+    /// Unchanged normal connection type, or Void for an outputless target.
+    pub value: Ty,
+}
 /// A closed graph with all source checks and eval wiring complete.
 #[derive(Debug, Default, Clone)]
 pub struct Plan {
@@ -251,6 +273,10 @@ pub struct Plan {
     pub nodes: Vec<Node>,
     /// Checked temporal branch ownership, separate from ordinary node behavior.
     pub conditionals: Vec<Conditional>,
+    /// Independent outputless dynamic member child templates.
+    pub keyed: Vec<Keyed>,
+    /// Evaluation failure boundaries preserve the original normal producer.
+    pub captures: Vec<Capture>,
     /// Selected native signatures, addressed by index.
     pub natives: Vec<Native>,
     /// Inert executable mappings reached through native scalar types independently of helpers.

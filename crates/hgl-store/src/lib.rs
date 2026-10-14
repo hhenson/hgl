@@ -46,11 +46,14 @@ pub mod global_value;
 pub mod keys;
 pub mod list;
 pub mod list_storage;
+pub mod map_values;
 pub mod member_table;
 pub mod native_values;
 pub mod observation;
 pub mod optional;
+pub mod outcomes;
 mod owned_columns;
+mod owned_views;
 pub mod prepared_globals;
 mod prepared_rolling;
 pub mod prepared_store;
@@ -405,6 +408,11 @@ impl Store {
     ) {
         self.bindings.remove(dict.id, key, now, wake);
     }
+    /// Record the currently executing owner hook for synchronous descendant notifications.
+    /// The graph restores the previous value before leaving the hook.
+    pub fn replace_active_hook(&mut self, node: Option<NodeId>) -> Option<NodeId> {
+        self.bindings.replace_active_hook(node)
+    }
     /// Current graph scope.
     pub fn scope(&self) -> ScopeId {
         self.bindings.scope()
@@ -428,6 +436,15 @@ impl Store {
     /// Immediately discard failed cold construction without running hooks.
     pub fn discard_scope(&mut self, scope: ScopeId) {
         self.bindings.discard_scope(scope);
+    }
+    /// Retire constructing descendants after a graph stops, without running user hooks.
+    pub fn retire_unstarted_children<W: Wake>(
+        &mut self,
+        scope: ScopeId,
+        now: EngineTime,
+        wake: &mut W,
+    ) {
+        self.bindings.retire_unstarted_children(scope, now, wake);
     }
     /// Retire a stopped child's storage.
     pub fn release_scope<W: Wake>(&mut self, scope: ScopeId, now: EngineTime, wake: &mut W) {

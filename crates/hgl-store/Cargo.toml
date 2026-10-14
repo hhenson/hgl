@@ -11,6 +11,7 @@ line-budget = 6860
 
 # Budgets of the modules that were crates of their own (docs/decisions/0004).
 [package.metadata.hgl.modules]
+outcomes = { budget = 500, uses = ["optional"] }
 native_keys = { budget = 100, uses = ["keys", "native_values"] }
 native_results = { budget = 80, uses = ["bindings", "columns", "native_values", "prepared_store", "shapes"] }
 owned_columns = { budget = 80, uses = [] }
@@ -22,12 +23,13 @@ bindings = { budget = 1100, uses = ["binding_build", "endpoints"] }
 columns = { budget = 350, uses = ["scalar_copy"] }
 endpoints = { budget = 650, uses = ["member_table"] }
 global = { budget = 200, uses = ["columns", "global_value", "list", "optional", "prepared_value", "recursive_value"] }
-global_arena = { budget = 220, uses = ["columns", "value_lists", "owned_columns"] }
+global_arena = { budget = 220, uses = ["columns", "value_lists", "owned_columns", "map_values"] }
 global_value = { budget = 200, uses = ["columns", "global_arena"] }
 keys = { budget = 500, uses = ["native_keys", "global_value", "any_values"] }
 list = { budget = 260, uses = ["global_value", "list_storage"] }
 list_storage = { budget = 300, uses = ["global_value", "prepared_value"] }
 member_table = { budget = 220, uses = [] }
+owned_views = { budget = 100, uses = ["bindings"] }
 observation = { budget = 100, uses = ["atomic", "bindings", "columns", "keys", "rolling"] }
 optional = { budget = 160, uses = ["global_value", "list_storage", "prepared_value"] }
 prepared_globals = { budget = 80, uses = ["global", "shapes", "columns", "prepared_store"] }
@@ -39,7 +41,8 @@ rolling = { budget = 350, uses = ["bindings", "global_value", "prepared_value", 
 scalar_copy = { budget = 180, uses = [] }
 shapes = { budget = 350, uses = ["bindings", "global_value", "keys"] }
 store_build = { budget = 100, uses = ["atomic", "bindings", "columns", "rolling"] }
-value_lists = { budget = 120, uses = [] }
+value_lists = { budget = 120, uses = ["map_values"] }
+map_values = { budget = 180, uses = [] }
 
 [dependencies]
 hgl-types = { path = "../hgl-types" }

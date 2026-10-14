@@ -109,7 +109,7 @@ impl std::fmt::Display for Failure {
 impl Failure {
     /// Cleanup-only errors and errors followed by failed cleanup cannot match.
     pub fn matches(&self, code: &str) -> bool {
-        matches!(self, Self::Execution(error) if error.code == Some(code)
+        matches!(self, Self::Execution(error) if error.execution_code() == Some(code)
             && error.phase != hgl_types::node_error::Phase::Stop && error.cleanup.is_empty())
     }
 }

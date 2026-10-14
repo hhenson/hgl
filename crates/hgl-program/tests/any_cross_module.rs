@@ -56,7 +56,7 @@ fn native_returned_boxes_use_the_producers_cold_capture() -> Result<(), Box<dyn 
 {
     let producer = emit("module producer\nfn main()->any {when {return any((1,1.0))}}")?;
     let integer = hgl_rust::any_values::construct(&hgl_source::Ty::I64, "value");
-    let source = "module hgraph.std part foreign_boxes\nstruct Holder {value:any}\nnative const fn foreign_box(value:i64)->any throws\nnative const fn foreign_box(value:i64)->any throws {}\nfn target(value:i64)->any {when {return any(Holder(value:foreign_box(value)))}}\ntest imported_box {assert eval(target,[1,2])==[any(Holder(value:any(1))),any(Holder(value:any(2)))]}";
+    let source = "module hgraph.std part foreign_boxes\nstruct Holder {value:any}\nnative const fn foreign_box(value:i64)->any\nnative const fn foreign_box(value:i64)->any { rust_abi_node_result }\nfn target(value:i64)->any {when {return any(Holder(value:foreign_box(value)))}}\ntest imported_box {assert eval(target,[1,2])==[any(Holder(value:any(1))),any(Holder(value:any(2)))]}";
     let sources = vec![
         ("consumer.hgl".into(), source.into()),
         (
@@ -468,7 +468,7 @@ fn cold_foreign_any_source_profiles_remain_explicit() -> Result<(), Box<dyn std:
     for descriptor in [false, true] {
         let mut sources = dependencies.clone();
         sources.insert(0,("consumer.hgl".into(),"module consumer\nuse hgraph.std::{foreign}\nexport fn main(){let value=foreign(\"value\")}".into()));
-        sources.push(("foreign.hgl".into(),"module hgraph.std part foreign\nnative const fn foreign(value:str)->any throws\nnative const fn foreign(value:str)->any throws {}".into()));
+        sources.push(("foreign.hgl".into(),"module hgraph.std part foreign\nnative const fn foreign(value:str)->any\nnative const fn foreign(value:str)->any { rust_abi_node_result }".into()));
         let expected = if descriptor {
             sources.iter_mut().find(|(name,_)|name.ends_with(".hgl-native")).ok_or("descriptor")?.1.push_str("\nvalue foreign(value:str)->any throws symbol \"foreign_str\" ownership owned phases {cold} effects {allocation}\n");
             "native descriptor requires an exact canonical scalar value type: any"

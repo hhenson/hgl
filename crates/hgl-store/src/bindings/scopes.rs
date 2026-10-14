@@ -21,6 +21,53 @@ impl Bindings {
         }
         owner == parent.owner
     }
+    fn constructing_view(&self, scope: ScopeId) -> bool {
+        self.scopes.entries[scope.index].phase == Phase::Constructing
+            || scope.index == 0 && !self.root_admitted
+    }
+    pub(crate) fn owns_view(&self, input: InputId, output: OutputId) -> bool {
+        let view = self.input(input);
+        let endpoint = self.output(output);
+        let (mut scope, mut owner) = (endpoint.scope, endpoint.owner);
+        while scope != view.scope {
+            let Some((next, node)) = self.scopes.entries[scope.index].parent else {
+                return false;
+            };
+            scope = next;
+            owner = node;
+        }
+        owner == view.owner
+    }
+    pub(crate) fn prepare_owned_view(
+        &mut self,
+        input: InputId,
+        output: OutputId,
+    ) -> Result<(), super::BindError> {
+        let view = self.input(input);
+        let endpoint = self.output(output);
+        if view.active || !self.constructing_view(view.scope) || !self.owns_view(input, output) {
+            return Err(super::BindError::BackwardReference);
+        }
+        let shape = &endpoint.kind;
+        if &view.kind != shape
+            && !matches!(shape,super::Kind::Reference(child) if child.as_ref()==&view.kind)
+        {
+            return Err(super::BindError::ShapeMismatch);
+        }
+        self.mark_owned_view(input)?;
+        Ok(())
+    }
+    pub(crate) fn mark_owned_view(&mut self, input: InputId) -> Result<(), super::BindError> {
+        let view = self.input(input);
+        if view.active || !self.constructing_view(view.scope) {
+            return Err(super::BindError::BackwardReference);
+        }
+        for position in 0..self.input(input).fixed.len() {
+            self.mark_owned_view(self.fixed_input(input, position))?;
+        }
+        self.endpoints.inputs[input.0 as usize].owned_view = Some(self.input(input).owner);
+        Ok(())
+    }
     /// Retained output, input and scope slots, then live subscriptions.
     /// Diagnostic only; computing subscriptions visits the output table.
     pub fn storage_counts(&self) -> [usize; 4] {
@@ -36,6 +83,12 @@ impl Bindings {
     pub fn enter_scope(&mut self, scope: ScopeId) -> ScopeId {
         assert!(self.scopes.alive(scope), "expired graph scope");
         std::mem::replace(&mut self.scopes.current, scope)
+    }
+    pub(crate) fn replace_active_hook(&mut self, node: Option<NodeId>) -> Option<NodeId> {
+        std::mem::replace(
+            &mut self.scopes.entries[self.scopes.current.index].active_hook,
+            node,
+        )
     }
     /// The current graph's scope.
     pub fn scope(&self) -> ScopeId {
@@ -80,6 +133,9 @@ impl Bindings {
     }
     /// Reserve all mailbox storage before the graph can be notified.
     pub fn reserve_scope(&mut self, scope: ScopeId, nodes: usize) {
+        if scope.index == 0 {
+            self.root_admitted = true;
+        }
         self.scopes.entries[scope.index].phase = Phase::Running;
         self.prepare_scope(scope, nodes);
     }
@@ -139,8 +195,13 @@ impl Bindings {
         }
     }
     /// Disconnect a stopped child's ports; outputs expire at the next cycle.
-    pub fn release_scope<W: Wake>(&mut self, scope: ScopeId, now: EngineTime, wake: &mut W) {
-        if !self.scopes.alive(scope) || scope.index == 0 {
+    pub(crate) fn retire_unstarted_children<W: Wake>(
+        &mut self,
+        scope: ScopeId,
+        now: EngineTime,
+        wake: &mut W,
+    ) {
+        if !self.scopes.alive(scope) {
             return;
         }
         // Construction has no lifecycle hooks. Retire unused nested templates
@@ -155,6 +216,13 @@ impl Bindings {
             let Some(child) = child else { break };
             self.release_scope(child, now, wake);
         }
+    }
+    /// Retire an owned scope after its runtime hooks and all live children have stopped.
+    pub fn release_scope<W: Wake>(&mut self, scope: ScopeId, now: EngineTime, wake: &mut W) {
+        if !self.scopes.alive(scope) || scope.index == 0 {
+            return;
+        }
+        self.retire_unstarted_children(scope, now, wake);
         self.scopes.entries[scope.index].phase = Phase::Releasing;
         while let Some(i) = self.scopes.entries[scope.index].inputs.pop() {
             if self.input(i).alive && self.input(i).scope == scope {

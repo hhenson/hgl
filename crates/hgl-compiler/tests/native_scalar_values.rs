@@ -6,6 +6,77 @@ fn root() -> Result<PathBuf, std::io::Error> {
         .join("../..")
         .canonicalize()
 }
+
+#[test]
+fn native_result_local_guards_preserve_predicates_and_evaluate_once()
+-> Result<(), Box<dyn std::error::Error>> {
+    let directory = std::env::temp_dir().join(format!(
+        "hgl-result-guards-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)?
+            .as_nanos()
+    ));
+    fs::create_dir_all(&directory)?;
+    let image = directory.join("provider.rs");
+    fs::write(
+        &image,
+        r#"
+pub const PROVIDER:&str="hgl.result_guards";
+pub const FINGERPRINT:&str="result-guards-v1";
+pub fn outcome(value:i64)->Result<i64,i64> {
+    crate::CALLS.fetch_add(1,std::sync::atomic::Ordering::Relaxed);
+    if value>=0 {Ok(value+10)} else {Err(value-10)}
+}
+"#,
+    )?;
+    let source = r"module result_guards
+native const fn outcome(value:i64)->result<i64,i64>
+native const fn outcome(value:i64)->result<i64,i64> {}
+fn positive(value:i64)->i64 {when {let result=outcome(value)
+if is_ok(result) {return result.value}return result.error}}
+fn negative(value:i64)->i64 {when {let result=outcome(value)
+if is_err(result) {return result.error}return result.value}}
+fn negated(value:i64)->i64 {when {let result=outcome(value)
+if !is_ok(result) {return result.error}return result.value}}
+fn negated_error(value:i64)->i64 {when {let result=outcome(value)
+if !is_err(result) {return result.value}return result.error}}
+test guards {
+assert eval(positive,value:[1,_,-2,0])==[11,_,-12,10]
+assert eval(negative,value:[1,_,-2,0])==[11,_,-12,10]
+assert eval(negated,value:[1,_,-2,0])==[11,_,-12,10]
+assert eval(negated_error,value:[1,_,-2,0])==[11,_,-12,10]
+}
+";
+    let descriptor = format!(
+        "native_descriptor 1 target \"hgl-rust-1\"\nmodule result_guards\nprovider \"hgl.result_guards\" fingerprint \"result-guards-v1\" image {:?}\nvalue outcome(value:i64)->result<i64,i64> symbol \"outcome\" ownership owned phases {{setup,cold,evaluation}} effects {{}}\n",
+        image.to_string_lossy()
+    );
+    let mut input = hgl_program::library_files::sources(
+        &[
+            root()?.join("external/hgraph_std/hgl/hgraph/replay_record.hgl"),
+            root()?.join("external/hgraph_std/hgl/hgraph/impl/replay_record.hgl"),
+        ],
+        &[],
+    )?;
+    input.insert(0, ("result-guards.hgl".into(), source.into()));
+    input.push(("result-guards.hgl-native".into(), descriptor));
+    let suite = hgl_program::compile_module_suite(&input)?;
+    assert_eq!(suite.tests.len(), 1);
+    assert_eq!(suite.plans.len(), 4);
+    let generated = hgl_program::emit_tests(&suite).replace("fn main() {", "fn authored_main() {");
+    execute(&format!(
+        r"{generated}
+static CALLS:std::sync::atomic::AtomicUsize=std::sync::atomic::AtomicUsize::new(0);
+fn main() {{
+assert_eq!(test0::test().unwrap(),4);
+assert_eq!(CALLS.load(std::sync::atomic::Ordering::Relaxed),12);
+}}
+"
+    ))?;
+    fs::remove_dir_all(directory)?;
+    Ok(())
+}
 fn sources(body: &str) -> Result<Vec<(String, String)>, String> {
     let root = root().map_err(|e| e.to_string())?;
     let mut sources = hgl_program::library_files::sources(
@@ -683,12 +754,6 @@ export fn main() {consume(make(source()))}
         ),
     ] {
         let mut input = sources(&body)?;
-        for (_, text) in &mut input {
-            *text = text.replace(
-                "fn token(text: str) -> Token",
-                "fn token(text: str) -> Token throws",
-            );
-        }
         let (_, descriptor) = input
             .iter_mut()
             .find(|(name, _)| name.ends_with(".hgl-native"))
@@ -753,12 +818,6 @@ consume(first:saved,second:current,text:token_text(saved),numbers:[7])
         ("ordinary_failure", body.replace("let unused=token(\"\")", "let values:list<i64> =[]\nlet broken=values[0]\nlet alias=broken\nlet unused=token(\"\")")),
     ] {
         let mut input = sources(&body)?;
-        for (_, text) in &mut input {
-            *text = text.replace(
-                "fn token(text: str) -> Token",
-                "fn token(text: str) -> Token throws",
-            );
-        }
         let (_, descriptor) = input
             .iter_mut()
             .find(|(name, _)| name.ends_with(".hgl-native"))
@@ -915,12 +974,6 @@ consume(first:retained,second:current)}}
                 body
             };
             let mut input = sources(&body)?;
-            for (_, text) in &mut input {
-                *text = text.replace(
-                    "fn token(text: str) -> Token",
-                    "fn token(text: str) -> Token throws",
-                );
-            }
             let (_, descriptor) = input
                 .iter_mut()
                 .find(|(name, _)| name.ends_with(".hgl-native"))
@@ -1409,4 +1462,187 @@ consume(keys:[],number:deferred)}
     ));
     input.push((root()?.join("crates/hgl-compiler/tests/fixtures/carrier-seed.hgl-native").to_string_lossy().into_owned(),"native_descriptor 1 target \"hgl-rust-1\"\nmodule carrier_seed\nprovider \"hgl.test.builtin_results\" fingerprint \"builtin-results-v1\" image \"native_builtin_results.rs\"\nvalue seed(value:i64)->i64 symbol \"fixed\" ownership owned phases {cold} effects {}\n".into()));
     Ok(hgl_program::compile(&input, "main")?)
+}
+
+#[test]
+fn native_dictionary_lookups_use_borrowed_key_hashes_and_preserve_unknown_absence()
+-> Result<(), Box<dyn std::error::Error>> {
+    run(r#"
+    fn lookup(book:atomic<map<Token,i64>>,key:Token)->i64 {when {
+        let value=get(book,key)
+        if value==null {return 9}
+        return value
+    }}
+    test native_lookup {
+        let book=map<Token,i64>(items:[token("a"):7,token("b"):0])
+        assert eval(lookup,book:[book,book,book,book],key:[token("b"),token("absent"),token("a"),token("b")])==[0,9,7,0]
+        let value=get(book,token("absent"))
+        assert value==null
+        assert get(book,token("b"),default:8)==0
+    }
+    "#)
+}
+
+#[test]
+fn collection_constructors_hash_each_key_once_before_its_value()
+-> Result<(), Box<dyn std::error::Error>> {
+    let image = key_order_image()?;
+    for (key_type, key, second, error, events) in [
+        (
+            "Token",
+            "token(KEY)",
+            "b",
+            None,
+            vec!["hash:a", "value:10", "hash:b", "equal:a:b", "value:20"],
+        ),
+        (
+            "Token",
+            "token(KEY)",
+            "bad",
+            Some("provider hash failed"),
+            vec!["hash:a", "value:10", "hash:bad"],
+        ),
+        (
+            "Token",
+            "token(KEY)",
+            "a",
+            Some("duplicate ordinary collection"),
+            vec!["hash:a", "value:10", "hash:a", "equal:a:a"],
+        ),
+        (
+            "Token",
+            "token(KEY)",
+            "unequal",
+            Some("provider equality failed"),
+            vec!["hash:a", "value:10", "hash:unequal", "equal:a:unequal"],
+        ),
+        (
+            "any",
+            "any(token(KEY))",
+            "b",
+            None,
+            vec!["hash:a", "value:10", "hash:b", "equal:a:b", "value:20"],
+        ),
+        (
+            "any",
+            "any(token(KEY))",
+            "bad",
+            Some("provider hash failed"),
+            vec!["hash:a", "value:10", "hash:bad"],
+        ),
+        (
+            "tuple<Token,i64>",
+            "(token(KEY),1)",
+            "b",
+            None,
+            vec!["hash:a", "value:10", "hash:b", "equal:a:b", "value:20"],
+        ),
+        (
+            "tuple<Token,i64>",
+            "(token(KEY),1)",
+            "bad",
+            Some("provider hash failed"),
+            vec!["hash:a", "value:10", "hash:bad"],
+        ),
+    ] {
+        let first = key.replace("KEY", "FIRST");
+        let second_key = key.replace("KEY", "SECOND");
+        let map = format!("map<{key_type},i64>(items:[{first}:mark(10),{second_key}:mark(20)])");
+        run_key_order_case(&image, &map, second, error, &events)?;
+        let set = format!("set<{key_type}>(items:[{first},{second_key}])");
+        let events: Vec<_> = events
+            .into_iter()
+            .filter(|event| !event.starts_with("value:"))
+            .collect();
+        run_key_order_case(&image, &set, second, error, &events)?;
+    }
+    Ok(())
+}
+
+fn key_order_image() -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let directory = std::env::temp_dir().join(format!(
+        "hgl-key-order-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)?
+            .as_nanos()
+    ));
+    fs::create_dir_all(&directory)?;
+    let image = directory.join("provider.rs");
+    let provider = fs::read_to_string(root()?.join("native/stdlib/atomic_values.rs"))?;
+    let start = provider
+        .find("    fn hash(data: &[u8])")
+        .ok_or("hash callback")?;
+    let end = start
+        + provider[start..]
+            .find("    fn compare(")
+            .ok_or("compare callback")?;
+    let mut provider = provider[..start].to_owned()
+        + r#"    fn hash(data: &[u8])->NodeResult<u64>{
+        crate::event(format!("hash:{}",text(data)));
+        if text(data)=="bad" {return Err(NodeError::coded("provider hash failed","provider.hash"));}
+        Ok(0)
+    }
+"# + &provider[end..];
+    provider = provider.replacen(
+        "Ok(text(lhs) == text(rhs))",
+        "crate::event(format!(\"equal:{}:{}\",text(lhs),text(rhs)));if text(rhs)==\"unequal\" {return Err(NodeError::coded(\"provider equality failed\",\"provider.equal\"));}Ok(text(lhs)==text(rhs))",
+        1,
+    );
+    provider.push_str(
+        "pub fn mark_i64(value:i64)->i64 {crate::event(format!(\"value:{value}\"));value}\n",
+    );
+    fs::write(&image, provider)?;
+    Ok(image)
+}
+
+fn run_key_order_case(
+    image: &std::path::Path,
+    expression: &str,
+    second: &str,
+    error: Option<&str>,
+    events: &[&str],
+) -> Result<(), Box<dyn std::error::Error>> {
+    let ordinary = expression
+        .replace("FIRST", "\"a\"")
+        .replace("SECOND", &format!("{second:?}"));
+    let graph = expression
+        .replace("FIRST", "first")
+        .replace("SECOND", "second");
+    let body = format!(
+        "native const fn mark(value:i64)->i64\nnative const fn mark(value:i64)->i64 {{}}\nfn build(first:str,second:str) {{when {{let built={graph}}}}}\ntest ordinary {{let built={ordinary}\nassert true}}\ntest generated {{eval(build,first:[\"a\"],second:[{second:?}])}}"
+    );
+    let mut input = sources(&body)?;
+    for (name, text) in &mut input {
+        if name.ends_with(".hgl-native") {
+            *text = text.replace(
+                "\"atomic_values.rs\"",
+                &format!("{:?}", image.to_string_lossy()),
+            );
+        }
+    }
+    input.push(("mark.hgl-native".into(),format!("native_descriptor 1 target \"hgl-rust-1\"\nmodule native_cases\nprovider \"hgl.native_atomic_fixture\" fingerprint \"native-atomic-values-v1\" image {:?}\nvalue mark(value:i64)->i64 symbol \"mark_i64\" ownership owned phases {{setup,cold,evaluation}} effects {{}}\n",image.to_string_lossy())));
+    let suite = hgl_program::compile_module_suite(&input)?;
+    assert_eq!(suite.tests.len(), 2);
+    assert_eq!(suite.plans.len(), 1);
+    let generated = hgl_program::emit_tests(&suite).replace("fn main() {", "fn authored_main() {");
+    let expected_error =
+        error.map_or_else(|| "None".into(), |message| format!("Some({message:?})"));
+    execute(&format!(
+        r#"{generated}
+struct Provider;
+static EVENTS:std::sync::Mutex<Vec<String>>=std::sync::Mutex::new(Vec::new());
+fn event(value:String) {{EVENTS.lock().unwrap().push(value);}}
+fn main() {{
+ for (index,test) in [test0::test as fn()->Result<usize,String>,test1::test].into_iter().enumerate() {{
+  EVENTS.lock().unwrap().clear();
+  let result=test();
+  let error:Option<&str>={expected_error};
+  if let Some(message)=error {{assert!(result.unwrap_err().contains(message));}}
+  else {{assert_eq!(result.unwrap(),1);}}
+  assert_eq!(EVENTS.lock().unwrap().as_slice(),{events:?},"ordinary/generated constructor {{index}}");
+ }}
+}}
+"#
+    ))
 }

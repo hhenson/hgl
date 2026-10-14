@@ -86,9 +86,9 @@ fn occurrences(
     };
     if matches!(
         base,
-        "list" | "tuple" | "map" | "set" | "atomic" | "rolling"
+        "list" | "tuple" | "map" | "set" | "result" | "atomic" | "rolling"
     ) {
-        let requirement = if matches!(base, "atomic" | "rolling") {
+        let requirement = if matches!(base, "atomic" | "rolling" | "result") {
             1
         } else {
             requirement

@@ -237,14 +237,14 @@ fn finite_source_proof_never_executes_native_payloads_or_lifecycle_hooks()
     run_with_runtime(
         r"
 module hgraph.std part direct_once
-native const fn mark(value:i64)->i64 throws
-native const fn mark(value:i64)->i64 throws {}
-native const fn configuration(value:i64)->i64 throws
-native const fn configuration(value:i64)->i64 throws {}
-native const fn begin(value:i64) throws
-native const fn begin(value:i64) throws {}
-native const fn end(value:i64) throws
-native const fn end(value:i64) throws {}
+native const fn mark(value:i64)->i64
+native const fn mark(value:i64)->i64 { rust_abi_node_result }
+native const fn configuration(value:i64)->i64
+native const fn configuration(value:i64)->i64 { rust_abi_node_result }
+native const fn begin(value:i64)
+native const fn begin(value:i64) { rust_abi_node_result }
+native const fn end(value:i64)
+native const fn end(value:i64) { rust_abi_node_result }
 fn context(value:i64) {start {begin(0)}
 stop {end(0)}
 when {}}

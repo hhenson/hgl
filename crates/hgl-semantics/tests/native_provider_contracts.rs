@@ -61,8 +61,8 @@ fn missing_and_incompatible_contracts_fail_before_execution() {
             format!("{SCALAR}{}", HELPER.replace("->Token", "->str")),
         ),
         (
-            interface(),
-            format!("{SCALAR}{}", HELPER.replace("->Token", "->Token throws")),
+            "export native type Token\nnative const fn token(text:str)->Token throws",
+            format!("{SCALAR}{HELPER}"),
         ),
         (interface(), SCALAR.replace("copy,text", "text")),
         ("native type Token", SCALAR.replace("copy,text", "copy")),
@@ -81,6 +81,58 @@ fn missing_and_incompatible_contracts_fail_before_execution() {
         )])
         .is_err()
     );
+}
+
+#[test]
+fn private_operational_abi_preserves_the_ordinary_source_return() -> Result<(), String> {
+    use hgl_semantics::ir::{Kind, Value};
+    use hgl_source::{Literal, Ty};
+    for operational in [false, true] {
+        let helper = if operational {
+            HELPER.replace("->Token", "->Token throws")
+        } else {
+            HELPER.to_owned()
+        };
+        let mut input = sources(interface(), &format!("{SCALAR}{helper}"));
+        input[1].1 = input[1].1.replace(
+            "fingerprint \"contract-v1\"",
+            "fingerprint \"contract-v1\" image \"unloaded.rs\"",
+        );
+        let library = library::load(&input)?;
+        let declaration = library
+            .declarations
+            .iter()
+            .find(|declaration| declaration.name == "token")
+            .ok_or("native declaration missing")?;
+        let signature = declaration.signature()?;
+        assert_eq!(signature.result, "Token");
+        let result = hgl_semantics::value_types::concrete(
+            &library,
+            "provider",
+            "Token",
+            &std::collections::BTreeMap::new(),
+        )
+        .map_err(String::from)?;
+        let argument = Value::new(Ty::Str, Kind::Literal(Literal::Str("value".into())));
+        let mut natives = Vec::new();
+        let value = native_contracts::bind(
+            &library,
+            declaration,
+            &signature,
+            (vec![argument], result.clone()),
+            (false, "cold"),
+            &mut natives,
+        )?;
+        assert_eq!(value.ty, result);
+        let Kind::Native(binding, _) = value.kind else {
+            unreachable!("checked native binding")
+        };
+        assert_eq!(binding.result, result);
+        assert_eq!(binding.throws, operational);
+        assert_eq!(binding.method, "token_str");
+        assert_eq!(natives.len(), 1);
+    }
+    Ok(())
 }
 
 #[test]

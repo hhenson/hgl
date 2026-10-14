@@ -79,3 +79,5 @@ Any payload collection includes all reachable admitted ordinary types, not only 
 
 This module now lives in hgl-rust-codegen below executable program assembly;
 its hgl-rust facade path and module ceiling remain unchanged.
+
+Ordinary Map owned_type uses MapValue of the exact key/value pair. Its runtime marker preserves the existing descriptor/descendant layout and canonical Map schema; index metadata is independent of payload validity and entry order.

@@ -112,3 +112,64 @@ pub fn ordinary_result(ty: &Ty) -> bool {
 pub fn nested_snapshot(values: &[Value]) -> bool {
     values.iter().any(|v| v.snapshot)
 }
+
+/// Point-in-time ordinary dictionary reads preserve exact key and payload identity.
+pub fn lookup(
+    mut parent: Value,
+    key: Value,
+    default: Option<Value>,
+    strict: bool,
+) -> Result<Value, hgl_source::Issue> {
+    if matches!(parent.kind, Kind::Input(_, true)) {
+        return Err("signal has no ordinary scalar value".into());
+    }
+    let atomic = matches!(parent.ty, Ty::Atomic(_));
+    if let Ty::Atomic(payload) = &parent.ty {
+        let payload = *payload.clone();
+        parent = Value::new(
+            payload,
+            Kind::Unary("atomic_value".into(), Box::new(parent)),
+        );
+    }
+    let Ty::Map(key_ty, child) = &parent.ty else {
+        return Err("dictionary lookup requires an ordinary or atomic map".into());
+    };
+    if !atomic && (endpoint(&parent) || matches!(parent.kind, Kind::Wire(_) | Kind::Output)) {
+        return Err("dictionary value lookup excludes borrowed temporal children".into());
+    }
+    crate::endpoint_check::require_payload(&key)?;
+    if key.ty != **key_ty {
+        return Err("dictionary lookup key type mismatch".into());
+    }
+    let child = *child.clone();
+    let mut args = vec![parent, key];
+    if let Some(default) = default {
+        crate::endpoint_check::require_payload(&default)?;
+        if default.ty != child {
+            return Err(hgl_source::Issue::coded(
+                "type",
+                "lookup.default_type",
+                0..0,
+                "dictionary default requires the exact value type",
+            ));
+        }
+        args.push(default);
+    }
+    let result = if strict || args.len() == 3 {
+        child
+    } else {
+        Ty::Nullable(Box::new(child))
+    };
+    Ok(Value::new(
+        result,
+        Kind::Query(
+            if strict {
+                "\0lookup_at"
+            } else {
+                "\0lookup_get"
+            }
+            .into(),
+            args,
+        ),
+    ))
+}

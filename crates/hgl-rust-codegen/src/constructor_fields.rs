@@ -3,6 +3,39 @@ use crate::layouts::global_type;
 use hgl_semantics::ir::{Kind, Value};
 use hgl_source::Ty;
 pub(crate) fn schema(ty: &Ty) -> Ty {
+    if let Ty::Result(ok, err) = ty {
+        return Ty::Struct(
+            "\0result.storage".into(),
+            vec![
+                ("tag".into(), Ty::Bool),
+                ("value".into(), *ok.clone()),
+                ("error".into(), *err.clone()),
+            ],
+            vec![1, 2],
+        );
+    }
+    if *ty == Ty::Error {
+        return Ty::Struct(
+            "\0error.storage".into(),
+            vec![
+                ("message".into(), Ty::Str),
+                ("code".into(), Ty::Str),
+                (
+                    "context".into(),
+                    Ty::Struct(
+                        "\0error.context".into(),
+                        vec![
+                            ("node".into(), Ty::Str),
+                            ("phase".into(), Ty::Str),
+                            ("evaluation_time".into(), Ty::DateTime),
+                        ],
+                        vec![],
+                    ),
+                ),
+            ],
+            vec![1, 2],
+        );
+    }
     crate::layouts::ordinary_storage(ty).unwrap_or_else(|| ty.clone())
 }
 fn child_slot(marker: &str, parent: &str) -> String {

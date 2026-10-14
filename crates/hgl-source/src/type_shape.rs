@@ -38,6 +38,12 @@ impl TypeSpelling for Ty {
                         .collect::<Option<_>>()?,
                 ));
             }
+            if base == "result" && arguments.len() == 2 {
+                return Some(Self::Result(
+                    Box::new(Self::parse(arguments[0])?),
+                    Box::new(Self::parse(arguments[1])?),
+                ));
+            }
             if base == "map" && arguments.len() == 2 {
                 return Some(Self::Map(
                     Box::new(Self::parse(arguments[0])?),
@@ -55,6 +61,7 @@ impl TypeSpelling for Ty {
             "str" => Some(Self::Str),
             "bytes" => Some(Self::Bytes),
             "any" => Some(Self::Any),
+            "error" => Some(Self::Error),
             "duration" => Some(Self::Duration),
             "date" => Some(Self::Date),
             "time" => Some(Self::Time),

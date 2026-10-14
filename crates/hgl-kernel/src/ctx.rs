@@ -43,6 +43,7 @@ pub struct Ctx<'a> {
     pub(crate) now: EngineTime,
     pub(crate) phase: Phase,
     pub(crate) scheduled_now: bool,
+    pub(crate) recoverable_evaluation: bool,
 }
 
 impl Ctx<'_> {
@@ -292,7 +293,18 @@ impl Ctx<'_> {
     }
     /// Evaluate a child at the parent's current time.
     pub fn evaluate_child(&mut self, graph: &mut Graph) -> NodeResult {
-        let result = graph.evaluate(self.store, self.now);
+        let result = if self.recoverable_evaluation {
+            graph.evaluate_resumable(self.store, self.now)
+        } else {
+            graph.evaluate(self.store, self.now)
+        };
+        if graph.stop_requested() {
+            self.request_stop();
+        }
+        result
+    }
+    pub(crate) fn evaluate_child_resumable(&mut self, graph: &mut Graph) -> NodeResult {
+        let result = graph.evaluate_resumable(self.store, self.now);
         if graph.stop_requested() {
             self.request_stop();
         }

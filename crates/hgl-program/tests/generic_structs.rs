@@ -300,7 +300,7 @@ fn generic_struct_values_configurations_and_globals_execute_in_both_profiles()
         ),
     ] {
         let types = format!(
-            "{TYPES}\nnative const fn mark(value:i64)->i64 throws\nnative const fn mark(value:i64)->i64 throws {{}}"
+            "{TYPES}\nnative const fn mark(value:i64)->i64\nnative const fn mark(value:i64)->i64 {{ rust_abi_node_result }}"
         );
         let code = format!(
             "module generic_structs\n{types}\nfn exercise() {{inject global_state,alarm\nstart {{schedule(alarm,0us)}}\nwhen {{let item=Same({fields})}}}}\nexport fn main() {{exercise()}}"

@@ -12,8 +12,8 @@ fn source(body: &str) -> Vec<(String, String)> {
             "captures.hgl".into(),
             format!(
                 r"module captures
-native const fn started(value:i64) throws
-native const fn started(value:i64) throws {{}}
+native const fn started(value:i64)
+native const fn started(value:i64) {{ rust_abi_node_result }}
 fn identity(value:i64)->i64 {{start {{started(1)}}
 when {{return delta_value(value)}}}}
 fn boolean(value:bool)->bool {{when {{return delta_value(value)}}}}

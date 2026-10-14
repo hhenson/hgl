@@ -43,6 +43,7 @@ pub struct Bindings {
     scopes: Scopes,
     now: EngineTime,
     fresh_run: bool,
+    root_admitted: bool,
 }
 fn index(n: usize) -> u32 {
     u32::try_from(n).unwrap_or_else(|_| unreachable!("endpoint capacity exceeded"))
@@ -74,7 +75,9 @@ impl Bindings {
         self.check(input, output)?;
         let i = self.input(input);
         let o = self.output(output);
-        if !self.scopes.forward(o.scope, o.owner, i.scope, i.owner) {
+        if !(self.scopes.forward(o.scope, o.owner, i.scope, i.owner)
+            || i.owned_view == Some(i.owner) && self.owns_view(input, output))
+        {
             return Err(BindError::BackwardReference);
         }
         Ok(())
@@ -312,7 +315,9 @@ impl Bindings {
         }
         let i = self.input(input);
         let o = self.output(reference);
-        if !self.scopes.forward(o.scope, o.owner, i.scope, i.owner) {
+        if !(self.scopes.forward(o.scope, o.owner, i.scope, i.owner)
+            || i.owned_view == Some(i.owner) && self.owns_view(input, reference))
+        {
             return Err(BindError::BackwardReference);
         }
         let r = self.reference_value(reference);

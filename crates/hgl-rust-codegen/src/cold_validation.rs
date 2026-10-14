@@ -3,6 +3,9 @@ use crate::any_values::name;
 use hgl_source::Ty;
 
 pub(crate) fn codec(ty: &Ty) -> String {
+    if let Some(codec) = crate::any_outcomes::validate(ty) {
+        return codec;
+    }
     if let Ty::Native(scalar) = ty {
         let marker = crate::native_values::marker(scalar);
         return format!(
@@ -41,7 +44,7 @@ pub(crate) fn codec(ty: &Ty) -> String {
             name(&child)
         );
     }
-    if let Some((fields, optional)) = hgl_semantics::any_values::fields(ty) {
+    if let Some((fields, optional)) = crate::any_values::fields(ty) {
         let mut code = "let mut rest=data;".to_string();
         for (i, ty) in fields.iter().enumerate() {
             let n = name(ty);

@@ -269,5 +269,5 @@ fn owning_payload(value: &Value) -> Result<(), String> {
     if matches!(value.ty, Ty::Set(_)) && matches!(value.kind, Kind::Input(..) | Kind::Output) {
         return Err("structural endpoint payload requires delta_value observation".into());
     }
-    require_payload(value)
+    Ok(require_payload(value)?)
 }

@@ -115,7 +115,7 @@ fn failure_images(dir: &Path) -> Result<String, Box<dyn std::error::Error>> {
         ),
     ] {
         let source = format!(
-            "module failure{index}\nnative const fn count_start(value:i64) throws\nnative const fn count_start(value:i64) throws {{}}\nfn target(value:{shape})->{shape} {{start {{count_start(1)}}\nwhen {{return delta_value(value)}}}}\ntest fails {{eval(target,value:{slots})}}"
+            "module failure{index}\nnative const fn count_start(value:i64)\nnative const fn count_start(value:i64) {{ rust_abi_node_result }}\nfn target(value:{shape})->{shape} {{start {{count_start(1)}}\nwhen {{return delta_value(value)}}}}\ntest fails {{eval(target,value:{slots})}}"
         );
         let suite = compile_tests(&with_std(source))?;
         let mut code = emit_tests(&suite);

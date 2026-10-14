@@ -180,6 +180,8 @@ pub const SOURCE_CODES: &[(&str, &str)] = &[
     ("type", "yield.time_type"),
     ("type", "test.raises_code"),
     ("type", "value.constant_capability"),
+    ("type", "nullable.required_presence"),
+    ("type", "lookup.default_type"),
     ("phase", "test.statement_phase"),
     ("shape", "delta.unsupported_shape"),
     ("type", "delta.type_mismatch"),
@@ -195,6 +197,7 @@ pub const SOURCE_CODES: &[(&str, &str)] = &[
 pub const EXECUTION_CODES: &[&str] = &[
     "value.unset_read",
     "value.byte_range",
+    "value.missing_key",
     "value.capability",
     "yield.negative_duration",
     "yield.non_increasing_time",

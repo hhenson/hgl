@@ -28,11 +28,11 @@ fn value(input: &Value, looping: bool) -> bool {
         Kind::Captured(..) => false,
         Kind::Unary(op, _) if op == "bytes" => false,
         Kind::Native(binding, args) => {
-            (!owning(&input.ty) || binding.name == "hgraph.native::as_str" || crate::native_results::supported(input))
+            (!owning(&input.ty) || matches!(input.ty,Ty::Result(..)|Ty::Error) || binding.name == "hgraph.native::as_str" || crate::native_results::supported(input))
                 && args.iter().all(|arg| value(arg, looping))
         }
         Kind::ValueCall(args, body) => {
-            !owning(&input.ty)
+            (!owning(&input.ty)||matches!(input.ty,Ty::Result(..)|Ty::Error))
                 && args.iter().all(|arg| value(arg, looping))
                 && statements(body, looping, &input.ty)
         }
@@ -57,6 +57,12 @@ fn value(input: &Value, looping: bool) -> bool {
                 && args
                     .get(1)
                     .is_some_and(|v| matches!(v.kind, Kind::Literal(hgl_source::Literal::Int(_))))
+                && args.iter().all(|arg| value(arg, looping))
+        }
+        Kind::Query(op, args) if op.starts_with("\0lookup_") => {
+            let child = if let Ty::Nullable(child) = &input.ty { child.as_ref() } else { &input.ty };
+            !owning_argument(child)
+                && args.get(1).is_some_and(|key| !owning_argument(&key.ty) || key.ty == Ty::Str || matches!(key.ty,Ty::Native(_) | Ty::Any) && matches!(key.kind,Kind::Input(_,false) | Kind::Configuration(_)))
                 && args.iter().all(|arg| value(arg, looping))
         }
         Kind::List(args) | Kind::Query(_, args) => args.iter().all(|arg| value(arg, looping)),
@@ -129,7 +135,17 @@ fn statements(body: &[Statement], looping: bool, result: &Ty) -> bool {
     })
 }
 pub(super) fn finite(plan: &Plan) -> bool {
-    plan.nodes.iter().all(|node| {
+    let unknown = hgl_semantics::constructor_owners::unbounded_failure_data(plan);
+    plan.nodes.iter().enumerate().all(|(id, node)| {
+        if unknown.contains(&id)
+            && (hgl_semantics::constructor_owners::failure_data_type(&node.result)
+                || node
+                    .inputs
+                    .iter()
+                    .any(|(_, _, ty)| hgl_semantics::constructor_owners::failure_data_type(ty)))
+        {
+            return true;
+        }
         node.handlers
             .iter()
             .all(|(guard, _)| guard.as_ref().is_none_or(|guard| value(guard, false)))

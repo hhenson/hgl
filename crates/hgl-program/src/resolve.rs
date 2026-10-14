@@ -15,7 +15,11 @@ use hgl_semantics::value_check::{binding, ordinary, writable};
 use hgl_semantics::value_eval::atomic_argument;
 use hgl_source::execution_phase::ExecutionPhase as Phase;
 use std::collections::{BTreeMap, BTreeSet};
+mod capture;
+mod captured;
 mod conditional;
+mod keyed;
+mod outcomes;
 
 #[derive(Default)]
 struct Checker {
@@ -27,6 +31,7 @@ struct Checker {
     harness_values: Env,
     static_values: hgl_semantics::value_access::StaticValues,
     result_hint: Option<Ty>,
+    propagation_result: Option<Ty>,
     selected_value: Option<bool>,
     requirements: Requirements,
     phase: Phase,
@@ -146,6 +151,16 @@ impl Checker {
         args: &[(Option<String>, Value)],
         runtime: bool,
     ) -> Result<Value, Issue> {
+        self.call_selected(module, name, args, runtime)
+            .map(|(value, _)| value)
+    }
+    fn call_selected(
+        &mut self,
+        module: &str,
+        name: &str,
+        args: &[(Option<String>, Value)],
+        runtime: bool,
+    ) -> Result<(Value, Ty), Issue> {
         let args = self.call_values(args, runtime)?;
         let (module, name) = hgl_semantics::value_types::identity(&self.library, module, name);
         let (mut id, mut signature, values, mut types, result) =
@@ -168,39 +183,75 @@ impl Checker {
             decl = self.library.declarations[id].clone();
             self.document(id);
         }
+        if decl.role == Role::Native
+            && !runtime
+            && values
+                .iter()
+                .any(|value| matches!(value.kind, Kind::Wire(_)))
+        {
+            return self
+                .lift_native(&decl, &signature, values, result.clone())
+                .map(|value| (value, result));
+        }
         if decl.role == Role::Native {
-            return Ok(hgl_semantics::value_bind::native(
-                &self.library,
-                &decl,
-                &signature,
-                (values, result),
-                (runtime, self.native_phase(runtime)),
-                &mut self.plan.natives,
-            )?);
+            return Ok((
+                hgl_semantics::value_bind::native(
+                    &self.library,
+                    &decl,
+                    &signature,
+                    (values, result.clone()),
+                    (runtime, self.native_phase(runtime)),
+                    &mut self.plan.natives,
+                )?,
+                result,
+            ));
         }
         let runtime_body = runtime_body(&signature)?;
         if signature.value_function && values.iter().all(|v| !matches!(v.kind, Kind::Wire(_))) {
             return self
-                .direct_call(id, &signature, (values, types, result), runtime, &args)
+                .direct_call(
+                    id,
+                    &signature,
+                    (values, types, result.clone()),
+                    runtime,
+                    &args,
+                )
+                .map(|value| (value, result))
                 .map_err(|e| e.in_source(&decl.source));
         }
         if runtime {
             return Err("temporal calls in runtime handlers are not supported".into());
         }
+        self.temporal_call(
+            (id, &module, &name),
+            &signature,
+            (values, types, result.clone()),
+            runtime_body,
+        )
+        .map(|value| (value, result))
+    }
+    fn temporal_call(
+        &mut self,
+        (id, module, name): (usize, &str, &str),
+        signature: &Signature,
+        (values, types, result): (Vec<Value>, BTreeMap<String, Ty>, Ty),
+        runtime_body: bool,
+    ) -> Result<Value, Issue> {
+        let decl = self.library.declarations[id].clone();
         if !self.active.insert(id) {
             return Err(format!("recursive graph construction: {name}").into());
         }
         let previous_scope = self.test_scope.clone();
-        self.test_scope = decl.test_only.then(|| module.clone());
+        self.test_scope = decl.test_only.then(|| module.to_owned());
         let prior_family = std::mem::replace(&mut self.library.test_scope, self.test_scope.clone());
-        let mut env = hgl_semantics::body_check::parameter_scope(&signature, values);
+        let mut env = hgl_semantics::body_check::parameter_scope(signature, values);
         let previous_types = std::mem::replace(&mut self.types, types);
         let mut cursor = Cursor::new(&signature.body);
         let value = if runtime_body {
             self.runtime_node = !signature.value_function;
             let context = std::mem::replace(&mut self.value_context, ValueContext::Outside);
             let node = self
-                .node(&decl, &signature, &mut cursor, &mut env, &result)
+                .node(&decl, signature, &mut cursor, &mut env, &result)
                 .map_err(|e| e.in_source(&decl.source))?;
             self.value_context = context;
             let index = self.plan.nodes.len();
@@ -215,7 +266,7 @@ impl Checker {
             let previous = std::mem::replace(&mut self.preparing_graph, true);
             let previous_context = self.wiring_context();
             let value = self
-                .graph(&module, &mut cursor, &mut env, (&result, &signature))
+                .graph(module, &mut cursor, &mut env, (&result, signature))
                 .map_err(|e| e.in_source(&decl.source))?;
             self.preparing_graph = previous;
             self.value_context = previous_context;
@@ -400,6 +451,8 @@ impl Checker {
                 );
             }
         }
+        let previous_propagation = self.propagation_result.replace(result.clone());
+        let previous_facts = std::mem::take(&mut self.facts);
         let previous_delta = self.requirements.result;
         self.requirements.result = hgl_source::delta_argument(&signature.result).is_some();
         let body = self
@@ -413,6 +466,8 @@ impl Checker {
                 }
             })?;
         self.requirements.result = previous_delta;
+        self.propagation_result = previous_propagation;
+        self.facts = previous_facts;
         self.types = previous_types;
         self.value_context = previous_context;
         self.library.test_scope = previous_family_scope;
@@ -475,7 +530,11 @@ impl Checker {
             match binder(
                 &signature,
                 args,
-                runtime || decl.role == Role::Native,
+                runtime
+                    || (decl.role == Role::Native
+                        && !args
+                            .iter()
+                            .any(|(_, value)| matches!(value.kind, Kind::Wire(_)))),
                 self.result_hint.as_ref(),
                 &declared,
             ) {
@@ -735,7 +794,10 @@ impl Checker {
                     return Err("while requires a runtime body, not composition".into());
                 }
                 Stmt::TimedYield(..) => return Err("yield requires a generator source".into()),
-                Stmt::Exit | Stmt::For(..) | Stmt::ForItems(..) => {
+                Stmt::For(..) | Stmt::ForItems(..) => {
+                    self.graph_keyed(module, statement, env)?;
+                }
+                Stmt::Exit => {
                     return Err("runtime statement in graph".into());
                 }
             }
@@ -855,10 +917,24 @@ impl Checker {
             } else {
                 c.block()?
             };
-            node.handlers.push((
-                None,
-                self.statements(&decl.module, &body, env, result, &mut 0)?,
-            ));
+            if matches!(result, Ty::Result(..) | Ty::Error)
+                || env
+                    .values()
+                    .any(|value| matches!(value.ty, Ty::Result(..) | Ty::Error))
+                || signature.body.iter().any(|token| token.text == "?")
+            {
+                node.handlers.push((
+                    None,
+                    vec![Statement::Return(
+                        self.lifted_outcome_body(decl, signature, &body, env, result)?,
+                    )],
+                ));
+            } else {
+                node.handlers.push((
+                    None,
+                    self.statements(&decl.module, &body, env, result, &mut 0)?,
+                ));
+            }
             return Ok(node);
         }
         c.need("{")?;
@@ -1220,6 +1296,19 @@ impl Checker {
                 message.into()
             }
         })?;
+        if matches!(value.ty, Ty::Nullable(_))
+            && let Some(expected) = expected
+        {
+            return Err(Issue::coded(
+                "type",
+                "nullable.required_presence",
+                expr.span(),
+                format!(
+                    "nullable presence proof is required for {} at this value, return type or assignment type boundary",
+                    expected.source_name()
+                ),
+            ));
+        }
         if self.requirements.delta
             && expected
                 .is_some_and(|ty| value.ty != *ty && !(ty == &Ty::F64 && value.ty == Ty::I64))
@@ -1241,6 +1330,9 @@ impl Checker {
         runtime: bool,
         expected: Option<&Ty>,
     ) -> Result<Value, Issue> {
+        if let Some(value) = self.outcome_expression(module, expr, env, (runtime, expected))? {
+            return Ok(value);
+        }
         if let Expr::Applied(name, args) | Expr::Call(name, args) = expr.syntax()
             && (matches!(expr.syntax(), Expr::Applied(..))
                 || self.struct_declaration(module, name)?.is_some())
@@ -1335,6 +1427,9 @@ impl Checker {
                 let value =
                     self.local_initializer(module, annotation.as_deref(), expr, env, true)?;
                 let mutable = matches!(statement, Stmt::Var(..));
+                if mutable && matches!(value.ty, Ty::Nullable(_)) {
+                    require_payload(&value)?;
+                }
                 let id = *next_local;
                 *next_local += 1;
                 self.static_values.bind(id, &value, mutable);
@@ -1622,6 +1717,7 @@ impl Checker {
             }
             Expr::Unary(op, expr) => {
                 let value = self.expression(module, expr, env, runtime)?;
+                if op=="?" {return self.propagation(value);}
                 require_payload(&value)?;
                 if (op == "!" && value.ty != Ty::Bool)
                     || (op == "-" && !matches!(value.ty, Ty::I64 | Ty::F64 | Ty::Duration))
@@ -1650,6 +1746,21 @@ impl Checker {
             return Ok(clock_property(receiver, name, env, runtime)?);
         }
         let parent = self.expression(module, receiver, env, runtime)?;
+        if matches!(parent.ty, Ty::Nullable(_)) {
+            require_payload(&parent)?;
+        }
+        if matches!(&parent.ty,Ty::Struct(identity,fields,_) if identity.source_name().starts_with("\0capture.bundle.") && !fields.iter().any(|(field,_)|field==name))
+        {
+            return Err(Issue::coded(
+                "type",
+                "capture.output_field",
+                receiver.span(),
+                "outputless capture exposes only error",
+            ));
+        }
+        if let Some(value) = self.outcome_property(&parent, name)? {
+            return Ok(value);
+        }
         if !runtime && matches!(parent.kind, Kind::Wire(_)) {
             let ty = if let Ty::Ref(child) = &parent.ty {
                 child.as_ref()
@@ -1679,6 +1790,14 @@ impl Checker {
     ) -> Result<Value, Issue> {
         let parent = self.expression(module, receiver, env, runtime)?;
         let index = self.expression(module, index, env, runtime)?;
+        if matches!(parent.ty, Ty::Nullable(_)) {
+            require_payload(&parent)?;
+        }
+        if matches!(&parent.ty, Ty::Map(..))
+            || matches!(&parent.ty, Ty::Atomic(child) if matches!(child.as_ref(), Ty::Map(..)))
+        {
+            return hgl_semantics::tuple_values::lookup(parent, index, None, true);
+        }
         if !runtime && matches!(parent.kind, Kind::Wire(_)) {
             let Kind::Literal(Literal::Int(index)) = index.kind else {
                 return Err("graph projection requires a constant integer position".into());
@@ -1758,6 +1877,15 @@ impl Checker {
         env: &Env,
         runtime: bool,
     ) -> Result<Value, Issue> {
+        if name == "capture"
+            && hgl_semantics::name_check::capture_intrinsic(
+                &self.library,
+                module,
+                self.test_scope.as_deref(),
+            )
+        {
+            return self.capture_call(module, args, env, runtime);
+        }
         hgl_semantics::enums::check_call(&self.library, module, name, args)?;
         if let Some((label, expression)) = args.first()
             && let Expr::Name(receiver) = expression.syntax()
@@ -1815,6 +1943,53 @@ impl Checker {
         }
         self.value_expression(module, name, args, env, runtime)
     }
+    fn lookup_call(
+        &mut self,
+        module: &str,
+        name: &str,
+        args: &[(Option<String>, Expr)],
+        env: &Env,
+        runtime: bool,
+    ) -> Result<Option<Value>, Issue> {
+        if !matches!(name, "get" | "at") || args.len() < 2 {
+            return Ok(None);
+        }
+        let parent = self.expression(module, &args[0].1, env, runtime)?;
+        if matches!(parent.ty, Ty::Nullable(_)) {
+            require_payload(&parent)?;
+        }
+        if !matches!(&parent.ty, Ty::Map(..))
+            && !matches!(&parent.ty, Ty::Atomic(child) if matches!(child.as_ref(), Ty::Map(..)))
+        {
+            return Ok(None);
+        }
+        if args[0].0.is_some()
+            || args[1].0.is_some()
+            || args.len() > 3
+            || (name == "at" && args.len() != 2)
+            || args
+                .get(2)
+                .is_some_and(|(label, _)| label.as_deref() != Some("default"))
+        {
+            return Err("dictionary lookup requires map, key and an optional named default".into());
+        }
+        let key = self.expression(module, &args[1].1, env, runtime)?;
+        let payload = if let Ty::Atomic(payload) = &parent.ty {
+            payload.as_ref()
+        } else {
+            &parent.ty
+        };
+        let Ty::Map(_, child) = payload else {
+            unreachable!("checked dictionary receiver")
+        };
+        let default = match args.get(2) {
+            Some((_, expr)) if !matches!(expr.syntax(), Expr::Null) => {
+                Some(self.expected_expression(module, expr, env, runtime, Some(child))?)
+            }
+            _ => None,
+        };
+        hgl_semantics::tuple_values::lookup(parent, key, default, name == "at").map(Some)
+    }
     fn value_expression(
         &mut self,
         module: &str,
@@ -1823,6 +1998,17 @@ impl Checker {
         env: &Env,
         runtime: bool,
     ) -> Result<Value, Issue> {
+        if matches!(name, "is_ok" | "is_err") {
+            return self.outcome_predicate(module, name, args, env, runtime);
+        }
+        if matches!(name, "ok" | "err" | "error") {
+            return self
+                .outcome_constructor(module, name, args, env, (runtime, None))?
+                .ok_or_else(|| "missing outcome constructor".into());
+        }
+        if let Some(value) = self.lookup_call(module, name, args, env, runtime)? {
+            return Ok(value);
+        }
         if matches!(name, "bytes" | "any") {
             return hgl_semantics::value_operations::constructor(name, args, |expr, hint| {
                 self.expected_expression(module, expr, env, runtime, hint)
@@ -2079,6 +2265,9 @@ impl Checker {
         env: &Env,
         runtime: bool,
     ) -> Result<Value, Issue> {
+        if let Some(value) = self.captured_comparison(module, op, operands, env, runtime)? {
+            return Ok(value);
+        }
         if matches!(operands.0.syntax(), Expr::Null) || matches!(operands.1.syntax(), Expr::Null) {
             if !matches!(op, "==" | "!=") {
                 return Err("null only supports nullable presence comparisons".into());

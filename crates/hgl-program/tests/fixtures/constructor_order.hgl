@@ -8,8 +8,8 @@ struct Nested {
     first: Pair
     second: Pair
 }
-native const fn mark(value: i64) -> i64 throws
-native const fn mark(value: i64) -> i64 throws {}
+native const fn mark(value: i64) -> i64
+native const fn mark(value: i64) -> i64 { rust_abi_node_result }
 fn source() -> i64 {
     inject alarm
     start { schedule(alarm, 0us) }

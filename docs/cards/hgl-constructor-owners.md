@@ -34,3 +34,32 @@ local initializer provenance. It stages atomic results and complete layouts
 with a proved prepared ordinary publisher. Other Tuple constructors retain their
 existing snapshot transport, rather than hiding it behind an owning canonical
 read. The predicate changes only private preparation, never source admission.
+
+`failure_data_type(&Ty) -> bool` identifies owning diagnostic/outcome trees.
+`unbounded_failure_data(&Plan) -> BTreeSet<usize>` traces capture owners and native
+Result/Error calls through checked input edges. Runtime-supplied outcomes have no
+proved cold payload bound; their constructors and downstream outcome owners use
+ordinary owning transport. Exact bounded literal/replay outcomes retain prepared
+storage. This cold distinction changes no source admission or execution phase.
+
+A downstream Any box can retain unbounded outcome/error data. Such boxes and
+containers remain in the same ordinary owning profile, rather than using a cold
+width inferred from a locally constructed diagnostic without origin context.
+Classification visits both map keys and values, set elements, rolling arrivals
+and structural delta descendants. A diagnostic string boxed as an Any key or
+member retains this profile through subsequent container copies and outputs.
+
+Variable-width scalar leaves use the existing `Ty::owning_scalar` classification,
+so projected message, nullable code and context text keep ordinary owning
+transport throughout marked diagnostic flow. Bytes, Native and zone-owning leaves
+follow the same conservative storage rule; container classification still recurses
+through its existing children. No diagnostic source is inferred from a type alone.
+Unmarked finite String replay/pass-through remains prepared, with measured zero
+startup, successful-tick and cleanup allocations.
+
+Failure-flow tracing conservatively marks descendants of either capture port.
+The captured normal String control therefore also uses ordinary ownership: its
+three successful ticks measured 26 allocations, startup one and cleanup zero,
+with no captured failure. This is not an allocation-free normal String capture
+claim. Runtime-native diagnostic message/code/context projection controls measure
+their captured-path allocations separately and retain earlier recorded values.

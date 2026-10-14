@@ -78,3 +78,12 @@ operand owners; generic emission does not borrow an uninstalled reserved slot.
 Standalone controls execute two fresh successful graphs and a coded provider
 failure, covering aliases, replacement, nested helper calls, empty values and all
 six comparisons with exact callback counts.
+
+Dictionary value reads prove prepared execution only for fixed native payloads and fixed key operands, borrowed text keys or borrowed Native input/configuration keys. Owning payload extraction and owning Native helper/composite key operands retain the generic adapter; successful owning retention is not claimed allocation-free. This changes no lookup source admission.
+
+Nodes already selected for generic diagnostic transport by unbounded failure flow
+and an owning diagnostic carrier do not require finite owning-storage bounds.
+Their dynamic list/map/set constructors keep ordinary ownership within a graph
+whose child scopes are prepared. Replay arrivals, mutation widths and child
+scheduler/cache activation checks still apply. Captured-failure allocation counts
+remain separate from the finite ordinary publication controls.

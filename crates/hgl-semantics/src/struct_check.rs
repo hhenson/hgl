@@ -365,7 +365,7 @@ fn schema_names(
     if Ty::parse(name).is_some()
         || matches!(
             base,
-            "list" | "map" | "tuple" | "set" | "ref" | "atomic" | "rolling"
+            "list" | "map" | "tuple" | "result" | "set" | "ref" | "atomic" | "rolling"
         )
     {
         return Ok(());

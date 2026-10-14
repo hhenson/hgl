@@ -36,3 +36,5 @@ existing identities.
 The execution catalogue includes value.byte_range for constructor octets outside 0 through 255. Constant-required failure remains source rejection; executed constructors retain their phase and execution identifier.
 
 The source catalogue admits type/value.constant_capability for known required-constant Any operations or keys missing a capability. The execution catalogue admits value.capability. These catalogues remain disjoint.
+
+The frozen dictionary lookup contract adds source codes nullable.required_presence and lookup.default_type, and execution code value.missing_key. Execution errors carry their originating code; no message classification is introduced.

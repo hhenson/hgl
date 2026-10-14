@@ -126,6 +126,7 @@ pub fn statement(cursor: &mut hgl_source::Cursor<'_>) -> Result<hgl_source::Stmt
             None
         };
         cursor.need("=")?;
+        cursor.lines();
         let value = cursor.expr()?;
         return Ok(if mutable {
             Stmt::Var(name, annotation, value)

@@ -5,10 +5,46 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
 pub(crate) fn target_error(plan: &Plan) -> Option<String> {
+    for capture in &plan.captures {
+        if matches!(capture.value, Ty::Ref(_)) {
+            return Some(
+                "Rust capture target cannot prepare a source-declared REF normal connection".into(),
+            );
+        }
+        if let Err(error) = capture_targets(plan, capture.owner) {
+            return Some(error);
+        }
+    }
     plan.nodes.iter().find(|node| matches!(&node.result, Ty::List(child, _) if matches!(child.as_ref(), Ty::Ref(_))))
         .map(|node| format!("Rust target cannot publish ordinary REF-list output in {}", node.name))
 }
 
+fn capture_routes(
+    plan: &Plan,
+    owner: &crate::ir::Capture,
+    path: &[usize],
+    input_path: Vec<usize>,
+    expected: &Ty,
+    result: &mut BTreeSet<(usize, Vec<usize>, Vec<usize>)>,
+) -> Result<(), String> {
+    if let Some((&index, rest)) = path.split_first() {
+        if let Some(output) = owner.output.filter(|_| index == 0) {
+            targets(plan, output, rest.to_vec(), input_path, expected, result)?;
+        } else {
+            result.insert((plan.nodes.len() + owner.owner, rest.to_vec(), input_path));
+        }
+    } else {
+        let fields = if owner.output.is_some() { 2 } else { 1 };
+        for index in 0..fields {
+            let mut child_path = input_path.clone();
+            child_path.push(index);
+            let child = child(expected, index)
+                .ok_or("Rust target cannot prepare capture connection shape")?;
+            targets(plan, owner.owner, vec![index], child_path, child, result)?;
+        }
+    }
+    Ok(())
+}
 fn targets(
     plan: &Plan,
     source: usize,
@@ -34,6 +70,9 @@ fn targets(
             )?;
         }
         return Ok(());
+    }
+    if let Some(owner) = plan.captures.iter().find(|capture| capture.owner == source) {
+        return capture_routes(plan, owner, &path, input_path, expected, result);
     }
     if crate::graph_assemblies::shape(node).is_some() {
         if let Some((&index, rest)) = path.split_first() {
@@ -83,6 +122,23 @@ fn targets(
     Ok(())
 }
 
+pub(crate) fn capture_targets(plan: &Plan, id: usize) -> Result<Vec<(usize, Vec<usize>)>, String> {
+    let capture = plan
+        .captures
+        .iter()
+        .find(|capture| capture.owner == id)
+        .ok_or("missing checked capture owner")?;
+    let Some(source) = capture.output else {
+        return Ok(vec![]);
+    };
+    let mut possible = BTreeSet::new();
+    targets(plan, source, vec![], vec![], &capture.value, &mut possible)?;
+    Ok(possible
+        .into_iter()
+        .map(|(source, path, _)| (source, path))
+        .collect())
+}
+
 fn child(ty: &Ty, index: usize) -> Option<&Ty> {
     if let Ty::List(child, Some(size)) = ty {
         (index < *size).then_some(child.as_ref())
@@ -121,7 +177,7 @@ pub(crate) fn reserve(plan: &Plan) -> String {
     if views.is_empty() {
         return code;
     }
-    if !plan.conditionals.is_empty() {
+    if crate::conditionals::has_children(plan) {
         for ((source, path), _) in subscriptions {
             let count = views
                 .iter()

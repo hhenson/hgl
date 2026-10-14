@@ -69,6 +69,11 @@ pub fn expression(
     expr: &Expr,
     scope: &Scope,
 ) -> Result<(), Issue> {
+    if capture_intrinsic(library, module, test_scope)
+        && let Some(call) = capture_call(expr)
+    {
+        return expression(library, module, test_scope, &call, scope);
+    }
     if let Expr::Call(name, args) | Expr::Applied(name, args) = expr.syntax() {
         crate::tuple_phase::call(library, module, test_scope, name, args, scope)?;
         let base = hgl_source::application(name).map_or(name.as_str(), |(base, _)| base);
@@ -106,7 +111,7 @@ pub fn expression(
             && Ty::parse(base).is_none()
             && !matches!(
                 base,
-                "atomic" | "ref" | "list" | "set" | "map" | "tuple" | "delta"
+                "atomic" | "ref" | "list" | "set" | "map" | "tuple" | "result" | "delta"
             )
             && crate::struct_names::declaration(library, module, base)?.is_none()
             && !library
@@ -133,6 +138,29 @@ pub fn expression(
     }
     Ok(())
 }
+fn capture_call(expr: &Expr) -> Option<Expr> {
+    let Expr::Call(name, args) = expr.syntax() else {
+        return None;
+    };
+    if name != "capture" {
+        return None;
+    }
+    let (None, callee) = args.first()? else {
+        return None;
+    };
+    let Expr::Name(callee) = callee.syntax() else {
+        return None;
+    };
+    Some(Expr::Call(callee.clone(), args[1..].to_vec()))
+}
+/// Builtin capture dispatch respects an ordinary callable in the selected source scope.
+pub fn capture_intrinsic(library: &Library, module: &str, test_scope: Option<&str>) -> bool {
+    let (owner, item) = crate::struct_names::identity(library, module, "capture");
+    !library
+        .declarations
+        .iter()
+        .any(|declaration| visible(library, declaration, &owner, &item, test_scope))
+}
 fn value_name(
     library: &Library,
     module: &str,
@@ -155,7 +183,7 @@ fn value_name(
 }
 fn intrinsic(name: &str, receiver: Option<&str>, owner: &str, item: &str) -> bool {
     receiver.is_some()
-        || "schedule schedule_at key_set keys values added removed insert update remove invalidate clear pop scheduled items delta_value elements len push upsert discard contains valid modified all_valid last_modified passivate activate"
+        || "ok err error is_ok is_err capture schedule schedule_at key_set keys values added removed insert update remove invalidate clear pop scheduled items delta_value elements len push get at upsert discard contains valid modified all_valid last_modified passivate activate"
             .split_ascii_whitespace().any(|intrinsic| intrinsic == name)
         || (owner == "hgraph.native" && matches!(item, "bound" | "len"))
 }
@@ -216,7 +244,16 @@ pub fn type_name(
     let builtin = Ty::parse(base).is_some()
         || matches!(
             base,
-            "signal" | "atomic" | "ref" | "list" | "set" | "map" | "tuple" | "rolling" | "delta"
+            "signal"
+                | "atomic"
+                | "ref"
+                | "list"
+                | "set"
+                | "map"
+                | "tuple"
+                | "result"
+                | "rolling"
+                | "delta"
         );
     if !scope.parameters.contains(base)
         && !builtin

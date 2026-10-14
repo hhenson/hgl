@@ -14,6 +14,12 @@ pub fn binary_type(op: &str, a: &Ty, b: &Ty) -> Result<Ty, String> {
     if *a != *b {
         return Err("binary operand type mismatch".into());
     }
+    if matches!(a, Ty::Result(..))
+        && matches!(op, "==" | "!=")
+        && !hgl_source::ordinary_shape::capable(a, 0)
+    {
+        return Err("result equality requires equality of both payload types".into());
+    }
     if let Ty::Native(native) = a {
         let capability = match op {
             "==" | "!=" => "equality",

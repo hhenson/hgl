@@ -1,8 +1,8 @@
 module generator_effects
 # The native probe appends each marker to a trace. It can fail one marker
 # so the tests can distinguish operand failure from target-time failure.
-native const fn mark(value:i64)->i64 throws
-native const fn mark(value:i64)->i64 throws {}
+native const fn mark(value:i64)->i64
+native const fn mark(value:i64)->i64 { rust_abi_node_result }
 const fn time(value:duration)->duration { let ignored=mark(1)
 return value }
 const fn payload(value:i64)->i64 { let ignored=mark(2)

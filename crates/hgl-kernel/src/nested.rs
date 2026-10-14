@@ -81,6 +81,18 @@ impl<T> PreparedChild<T> {
         }
         result
     }
+    /// Refresh a live boundary without restarting its child or duplicating unchanged bindings.
+    pub fn refresh_bound(
+        &mut self,
+        ctx: &mut Ctx<'_>,
+        bind: impl FnOnce(&mut Store, &T) -> NodeResult,
+    ) -> NodeResult {
+        self.check_owner(ctx)?;
+        if self.graph.lifecycle() != crate::Lifecycle::Started {
+            return Err(NodeError::new("prepared child is not started"));
+        }
+        bind(ctx.store, &self.boundary)
+    }
     /// Drive this started child at its owner's current time.
     pub fn evaluate(&mut self, ctx: &mut Ctx<'_>) -> NodeResult {
         self.check_owner(ctx)?;
@@ -88,6 +100,32 @@ impl<T> PreparedChild<T> {
             return Err(NodeError::new("prepared child is not started"));
         }
         ctx.evaluate_child(&mut self.graph)
+    }
+    /// Consume one evaluation failure as canonical data; lifecycle failures still escape.
+    pub fn evaluate_captured(
+        &mut self,
+        ctx: &mut Ctx<'_>,
+    ) -> NodeResult<Option<hgl_types::ErrorValue>> {
+        self.check_owner(ctx)?;
+        if self.graph.lifecycle() != crate::Lifecycle::Started {
+            return Err(NodeError::new("prepared child is not started"));
+        }
+        match ctx.evaluate_child_resumable(&mut self.graph) {
+            Ok(()) => Ok(None),
+            Err(error) if error.phase == crate::Phase::Eval => Ok(Some(error.error_value())),
+            Err(error) => Err(error),
+        }
+    }
+    /// Discard this active child's abandoned work without stopping or retiring its lifetime.
+    /// # Panics
+    /// The supplied context must belong to the exact owner that prepared this child.
+    pub fn discard_captured_pass(&mut self, ctx: &mut Ctx<'_>) {
+        assert_eq!(
+            ctx.store.bindings().child_owner(self.graph.scope()),
+            Some((ctx.store.scope(), ctx.node)),
+            "prepared child belongs to current owner"
+        );
+        self.graph.discard_captured_pass(ctx.store, ctx.now);
     }
     /// Its next deadline, independent of the owner's selector input.
     pub fn next_scheduled_time(&self) -> EngineTime {
@@ -162,10 +200,22 @@ impl<T> PreparedSwitch<T> {
             notified |= scope == child.scope();
         }
         if fresh || notified || child.next_scheduled_time() <= ctx.evaluation_time() {
-            child.evaluate(ctx)?;
+            let result = child.evaluate(ctx);
+            ctx.schedule_children(child.next_scheduled_time());
+            result?;
         }
         ctx.schedule_children(child.next_scheduled_time());
         Ok(Some(child.boundary()))
+    }
+    /// Abandon only the failed pass of the selected live branch and retain its future wakes.
+    pub fn discard_captured_pass(&mut self, ctx: &mut Ctx<'_>) {
+        if let Some((branch, slot)) = self.selected {
+            let child = &mut self.children[branch][slot];
+            child.discard_captured_pass(ctx);
+            ctx.schedule_children(child.next_scheduled_time());
+        } else {
+            ctx.schedule_children(EngineTime::FOREVER);
+        }
     }
     /// Stop the active instance and discard all unused prepared descendants.
     pub fn stop(&mut self, ctx: &mut Ctx<'_>) -> NodeResult {
@@ -261,11 +311,27 @@ impl Children {
             let child = self.slots[slot]
                 .as_mut()
                 .unwrap_or_else(|| unreachable!("scheduled child"));
-            ctx.evaluate_child(&mut child.graph)?;
+            let result = ctx.evaluate_child(&mut child.graph);
             self.deadlines.set(slot, child.graph.next_scheduled_time());
+            if result.is_err() {
+                self.rearm(ctx);
+            }
+            result?;
         }
         self.rearm(ctx);
         Ok(())
+    }
+    /// Discard due-only nested work after an enclosing capture consumes a failure.
+    pub fn discard_captured_pass(&mut self, ctx: &mut Ctx<'_>) {
+        while ctx.take_child().is_some() {}
+        let now = ctx.evaluation_time();
+        for slot in 0..self.slots.len() {
+            if let Some(child) = &mut self.slots[slot] {
+                child.graph.discard_captured_pass(ctx.store, now);
+                self.deadlines.set(slot, child.graph.next_scheduled_time());
+            }
+        }
+        self.rearm(ctx);
     }
     /// Stop every successfully started child in reverse creation order.
     pub fn stop(&mut self, ctx: &mut Ctx<'_>) -> NodeResult {

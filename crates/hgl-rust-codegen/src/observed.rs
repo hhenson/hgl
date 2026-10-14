@@ -71,8 +71,10 @@ pub fn capture(ty: &Ty, input: &str, slot: &str) -> String {
 /// Match a checked return source to scalar or rolling prepared transport.
 pub fn forwarded(value: &Value, result: Option<&Ty>) -> Option<String> {
     let source = if matches!(value.kind, Kind::Input(_, false))
-        && matches!(value.ty, Ty::Bytes | Ty::Native(_))
-    {
+        && matches!(
+            value.ty,
+            Ty::Bytes | Ty::Native(_) | Ty::Result(..) | Ty::Error
+        ) {
         value
     } else if let Kind::Query(op, args) = &value.kind {
         if op != "delta_value" {

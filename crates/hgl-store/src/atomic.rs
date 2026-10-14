@@ -163,6 +163,7 @@ impl Arena {
 }
 fn width(ty: &OrdinaryType) -> usize {
     match ty {
+        OrdinaryType::Result(..) | OrdinaryType::Error => 3,
         OrdinaryType::Native(_)
         | OrdinaryType::Any
         | OrdinaryType::Enum(_)

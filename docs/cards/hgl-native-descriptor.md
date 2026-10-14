@@ -24,3 +24,14 @@ Rust ABI metadata; neither HGL bindings nor canonical identities imply a target
 name. Parsing remains independent of whether the target image exists.
 
 An ordinary helper may declare target-only `bound "RustIdentifier"` metadata after its symbol. The pure callback accepts source argument width bounds and returns a checked result width bound. It must be deterministic, overflow-safe and free of observable helper/constructor execution. The provider result is still preflighted against reserved capacity before publication; an unsound bound fails without overwriting the previous value. This is Rust ABI metadata and adds no HGL spelling.
+
+Canonical signature validation accepts ordinary `result<T,E>` and canonical
+`error`, recursively checking both payloads against the source declaration.
+These are data returns. The descriptor's existing operational ABI flag is
+independent, permitting private NodeResult<Result<T,E>> transport. Native outcome
+payloads without a declared cold bound use ordinary owning storage and may
+allocate; bounded source Result controls remain separately prepared.
+
+Semantic native_contracts may use value_types and value_check to resolve exact
+ordinary Result payload identity before comparing the inert signature. This
+resolution invokes no provider and does not infer capabilities from its code.

@@ -6,11 +6,37 @@ fn fields(t: &Ty) -> (Vec<Ty>, Vec<usize>) {
 }
 /// Decode a constructed checked value into its exact native owning representation.
 pub fn decode(t: &Ty, expression: &str) -> String {
+    if context(t) {
+        return context_decode(expression);
+    }
     if *t == Ty::Any {
         return format!("{{let value=&({expression});decode_any(value)?}}");
     }
+    if let Ty::Result(ok, err) = t {
+        return format!(
+            "{{let v=&({expression});let hgl_semantics::ir::Kind::Construct(fields)=&v.kind else {{return Err(\"prepared result required\".into())}};if fields.iter().any(|(id,_)|*id==1) {{Ok({})}}else{{Err({})}}}}",
+            decode(
+                ok,
+                "&fields.iter().find(|(id,_)|*id==1).ok_or(\"missing success payload\")?.1"
+            ),
+            decode(
+                err,
+                "&fields.iter().find(|(id,_)|*id==2).ok_or(\"missing error payload\")?.1"
+            )
+        );
+    }
+    if *t == Ty::Error {
+        return error_decode(expression);
+    }
     if let Some(storage) = collection_storage(t) {
-        return decode(&storage, expression);
+        let decoded = decode(&storage, expression);
+        if let Ty::Map(key, _) = t {
+            return format!(
+                "hgl_store::map_values::MapValue::new({decoded},|entry|Ok({})).map_err(|e|e.message)?",
+                crate::collections::key_hash(key, "entry.0")
+            );
+        }
+        return decoded;
     }
     if let Ty::Family(family) = t {
         return crate::families::decode(family, expression, decode);
@@ -40,14 +66,28 @@ pub fn decode(t: &Ty, expression: &str) -> String {
                 "let hgl_semantics::ir::Kind::Construct(items)=&v.kind else {{return Err(\"prepared aggregate required\".into())}}; ({values})"
             )
         }
-        Ty::Rolling(..) | Ty::Family(_) | Ty::Recursive(_) | Ty::Atomic(_) | Ty::Map(..) | Ty::I64 | Ty::F64 | Ty::Bool | Ty::Str | Ty::Bytes | Ty::Any | Ty::Duration | Ty::Date | Ty::Time | Ty::DateTime | Ty::CivilDateTime | Ty::TimeZone | Ty::ZonedTime | Ty::ZonedDateTime | Ty::Ref(_) | Ty::Set(_) | Ty::Nullable(_) | Ty::Void => scalar_decode(t),
+        Ty::Result(..) | Ty::Error | Ty::Rolling(..) | Ty::Family(_) | Ty::Recursive(_) | Ty::Atomic(_) | Ty::Map(..) | Ty::I64 | Ty::F64 | Ty::Bool | Ty::Str | Ty::Bytes | Ty::Any | Ty::Duration | Ty::Date | Ty::Time | Ty::DateTime | Ty::CivilDateTime | Ty::TimeZone | Ty::ZonedTime | Ty::ZonedDateTime | Ty::Ref(_) | Ty::Set(_) | Ty::Nullable(_) | Ty::Void => scalar_decode(t),
     };
     format!("{{let v=&({expression}); {body}}}")
 }
 /// Encode an independently owned native capture as its exact checked value.
 pub fn encode(t: &Ty, expression: &str) -> String {
+    if context(t) {
+        return context_encode(expression);
+    }
     if *t == Ty::Any {
         return format!("encode_any({expression})?");
+    }
+    if let Ty::Result(ok, err) = t {
+        return format!(
+            "{{let v={expression};let fields=match v {{Ok(value)=>vec![(0,hgl_semantics::ir::Value::new(hgl_source::Ty::Bool,hgl_semantics::ir::Kind::Literal(hgl_source::Literal::Bool(true)))),(1,{})],Err(value)=>vec![(0,hgl_semantics::ir::Value::new(hgl_source::Ty::Bool,hgl_semantics::ir::Kind::Literal(hgl_source::Literal::Bool(false)))),(2,{})]}};hgl_semantics::ir::Value::new({},hgl_semantics::ir::Kind::Construct(fields))}}",
+            encode(ok, "value"),
+            encode(err, "value"),
+            ty(t)
+        );
+    }
+    if *t == Ty::Error {
+        return error_encode(expression);
     }
     if let Some(storage) = collection_storage(t) {
         return format!(
@@ -102,7 +142,7 @@ fn delta_decode(origin: &Ty, expression: &str) -> String {
             format!("parts.iter().filter_map(|p|if let hgl_semantics::ir::DeltaEntry::Keyed(k,_)=p {{Some(k)}} else {{None}}).map(|k|Ok({})).collect::<Result<Vec<_>,String>>()?,parts.iter().filter_map(|p|if let hgl_semantics::ir::DeltaEntry::Keyed(_,v)=p {{Some(v)}} else {{None}}).map(|v|Ok({})).collect::<Result<Vec<_>,String>>()?,parts.iter().filter_map(|p|if let hgl_semantics::ir::DeltaEntry::Remove(k)=p {{Some(k)}} else {{None}}).map(|k|Ok({})).collect::<Result<Vec<_>,String>>()?,",decode(key,"k"),decode(&child,"v"),decode(key,"k"))
         }
         Ty::Tuple(_) | Ty::Struct(..)=>fields(origin).0.iter().enumerate().map(|(i,t)|format!("parts.iter().filter_map(|p|if let hgl_semantics::ir::DeltaEntry::Child(id,v)=p {{if *id=={i} {{Some(v)}} else {{None}}}} else {{None}}).map(|v|Ok({})).collect::<Result<Vec<_>,String>>()?,",decode(&t.clone().delta().unwrap_or_else(|_|unreachable!("checked child")),"v"))).collect::<Vec<_>>().concat(),
-        Ty::Atomic(_) | Ty::Rolling(..) | Ty::Delta(_) | Ty::I64 | Ty::F64 | Ty::Bool | Ty::Str | Ty::Bytes | Ty::Any | Ty::Duration | Ty::Date | Ty::Time | Ty::DateTime | Ty::CivilDateTime | Ty::TimeZone | Ty::Enum(_) | Ty::Native(_) | Ty::ZonedTime | Ty::ZonedDateTime | Ty::Ref(_) | Ty::Nullable(_) | Ty::Recursive(_) | Ty::Family(_) | Ty::Void => unreachable!("checked structural delta"),
+        Ty::Result(..) | Ty::Error | Ty::Atomic(_) | Ty::Rolling(..) | Ty::Delta(_) | Ty::I64 | Ty::F64 | Ty::Bool | Ty::Str | Ty::Bytes | Ty::Any | Ty::Duration | Ty::Date | Ty::Time | Ty::DateTime | Ty::CivilDateTime | Ty::TimeZone | Ty::Enum(_) | Ty::Native(_) | Ty::ZonedTime | Ty::ZonedDateTime | Ty::Ref(_) | Ty::Nullable(_) | Ty::Recursive(_) | Ty::Family(_) | Ty::Void => unreachable!("checked structural delta"),
     };
     format!(
         "{{let hgl_semantics::ir::Kind::Delta(parts)=&({expression}).kind else {{return Err(\"prepared delta required\".into())}}; ({storage})}}"
@@ -227,4 +267,65 @@ fn collection_storage(ty: &Ty) -> Option<Ty> {
         ),
         None,
     ))
+}
+
+fn error_decode(expression: &str) -> String {
+    format!(
+        "{{let v=&({expression});let hgl_semantics::ir::Kind::Construct(fields)=&v.kind else {{return Err(\"prepared error required\".into())}};hgl_types::ErrorValue{{message:{},code:fields.iter().find(|(id,_)|*id==1).map(|(_,v)|Ok::<_,String>({})).transpose()?,context:fields.iter().find(|(id,_)|*id==2).map(|(_,v)|Ok::<_,String>({})).transpose()?}}}}",
+        decode(
+            &Ty::Str,
+            "&fields.iter().find(|(id,_)|*id==0).ok_or(\"missing error message\")?.1"
+        ),
+        decode(&Ty::Str, "v"),
+        context_decode("v")
+    )
+}
+fn error_encode(expression: &str) -> String {
+    format!(
+        "{{let v={expression};let mut fields=vec![(0,{})];if let Some(code)=&v.code {{fields.push((1,{}));}}if let Some(context)=&v.context {{fields.push((2,{}));}}hgl_semantics::ir::Value::new(hgl_source::Ty::Error,hgl_semantics::ir::Kind::Construct(fields))}}",
+        encode(&Ty::Str, "&v.message"),
+        encode(&Ty::Str, "code"),
+        context_encode("context")
+    )
+}
+
+fn context(ty: &Ty) -> bool {
+    matches!(ty,Ty::Struct(name,..) if name.source_name()=="\0error.context")
+}
+fn context_type() -> Ty {
+    Ty::Struct(
+        "\0error.context".into(),
+        vec![
+            ("node".into(), Ty::Str),
+            ("phase".into(), Ty::Str),
+            ("evaluation_time".into(), Ty::DateTime),
+        ],
+        vec![],
+    )
+}
+fn context_decode(expression: &str) -> String {
+    format!(
+        "{{let v=&({expression});let hgl_semantics::ir::Kind::Construct(fields)=&v.kind else {{return Err(\"prepared diagnostic context required\".into())}};hgl_types::ErrorContext{{node:{},phase:{},evaluation_time:{}}}}}",
+        decode(
+            &Ty::Str,
+            "&fields.iter().find(|(id,_)|*id==0).ok_or(\"missing context node\")?.1"
+        ),
+        decode(
+            &Ty::Str,
+            "&fields.iter().find(|(id,_)|*id==1).ok_or(\"missing context phase\")?.1"
+        ),
+        decode(
+            &Ty::DateTime,
+            "&fields.iter().find(|(id,_)|*id==2).ok_or(\"missing context time\")?.1"
+        )
+    )
+}
+fn context_encode(expression: &str) -> String {
+    format!(
+        "{{let context={expression};hgl_semantics::ir::Value::new({},hgl_semantics::ir::Kind::Construct(vec![(0,{}),(1,{}),(2,{})]))}}",
+        ty(&context_type()),
+        encode(&Ty::Str, "&context.node"),
+        encode(&Ty::Str, "&context.phase"),
+        encode(&Ty::DateTime, "&context.evaluation_time")
+    )
 }

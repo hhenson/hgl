@@ -8,12 +8,12 @@ struct GeneratorChain { value:i64
     items:list<i64>
     next:atomic<GeneratorChain> = null
 }
-native const fn owner_begin(value:i64) throws
-native const fn owner_begin(value:i64) throws {}
-native const fn owner_mark(value:i64)->i64 throws
-native const fn owner_mark(value:i64)->i64 throws {}
-native const fn owner_finish(value:i64) throws
-native const fn owner_finish(value:i64) throws {}
+native const fn owner_begin(value:i64)
+native const fn owner_begin(value:i64) { rust_abi_node_result }
+native const fn owner_mark(value:i64)->i64
+native const fn owner_mark(value:i64)->i64 { rust_abi_node_result }
+native const fn owner_finish(value:i64)
+native const fn owner_finish(value:i64) { rust_abi_node_result }
 
 fn owner_generator_tick(value:i64) {when {}}
 fn ordered_owner_generator()->any {

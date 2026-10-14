@@ -4,6 +4,8 @@ use std::fmt;
 /// Failure during ordinary evaluation, separated from an unsupported operation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EvalError {
+    /// Internal ordinary helper early-return control, consumed by its invocation.
+    Propagation,
     /// An admitted operation failed when evaluated.
     Operation(String),
     /// An operation with a stable execution identifier.
@@ -19,6 +21,7 @@ impl fmt::Display for EvalError {
             Self::Operation(message) | Self::Coded(_, message) | Self::Unsupported(message) => {
                 f.write_str(message)
             }
+            Self::Propagation => f.write_str("ordinary result propagation"),
             Self::ContextRequired => {
                 f.write_str("temporal literal requires a construction context")
             }

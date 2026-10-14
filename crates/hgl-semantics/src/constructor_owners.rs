@@ -17,6 +17,79 @@ fn references(value: &mut Value, owners: &BTreeMap<usize, usize>) -> bool {
     }
     !matches!(value.kind, Kind::Captured(..))
 }
+/// Owning diagnostics can acquire failure text and origin metadata after startup.
+pub fn failure_data_type(ty: &Ty) -> bool {
+    match ty {
+        Ty::Any | Ty::Error | Ty::Result(..) => true,
+        Ty::Ref(child)
+        | Ty::Atomic(child)
+        | Ty::Nullable(child)
+        | Ty::List(child, _)
+        | Ty::Set(child)
+        | Ty::Rolling(child, _)
+        | Ty::Delta(child) => failure_data_type(child),
+        Ty::Map(key, child) => failure_data_type(key) || failure_data_type(child),
+        Ty::Struct(_, fields, _) => fields.iter().any(|(_, ty)| failure_data_type(ty)),
+        Ty::Tuple(children) => children.iter().any(failure_data_type),
+        Ty::Family(family) => family.members().iter().any(|(_, ty)| failure_data_type(ty)),
+        Ty::Recursive(batch) => batch.definitions().iter().any(|definition| {
+            definition
+                .fields()
+                .iter()
+                .any(|(_, ty)| failure_data_type(ty))
+        }),
+        Ty::Enum(_)
+        | Ty::Native(_)
+        | Ty::I64
+        | Ty::F64
+        | Ty::Bool
+        | Ty::Str
+        | Ty::Bytes
+        | Ty::Duration
+        | Ty::Date
+        | Ty::Time
+        | Ty::DateTime
+        | Ty::CivilDateTime
+        | Ty::TimeZone
+        | Ty::ZonedTime
+        | Ty::ZonedDateTime
+        | Ty::Void => ty.owning_scalar(),
+    }
+}
+/// Nodes downstream of captured diagnostics lack a cold bound on failure text and provenance.
+/// This selects ordinary owning transport without changing checked source admission.
+pub fn unbounded_failure_data(plan: &Plan) -> std::collections::BTreeSet<usize> {
+    let mut unknown = plan
+        .captures
+        .iter()
+        .map(|capture| capture.owner)
+        .collect::<std::collections::BTreeSet<_>>();
+    for (id, node) in plan.nodes.iter().enumerate() {
+        crate::ir_visit::hooks(node, &mut |value| {
+            if matches!(value.kind, Kind::Native(..))
+                && matches!(value.ty, Ty::Result(..) | Ty::Error)
+            {
+                unknown.insert(id);
+            }
+            true
+        });
+    }
+    loop {
+        let before = unknown.len();
+        for (id, node) in plan.nodes.iter().enumerate() {
+            if node
+                .inputs
+                .iter()
+                .any(|(_, source, _)| unknown.contains(source))
+            {
+                unknown.insert(id);
+            }
+        }
+        if unknown.len() == before {
+            return unknown;
+        }
+    }
+}
 /// Retain existing admitted native constructor locals without evaluating any operand early.
 pub fn prepare(
     plan: &Plan,
@@ -24,6 +97,7 @@ pub fn prepare(
     convert: impl Fn(&Value) -> Option<Value>,
     tuple_staging: impl Fn(&Value, &Ty, &BTreeMap<usize, Value>) -> bool,
 ) -> Plan {
+    let unknown = unbounded_failure_data(plan);
     let mut plan = plan.clone();
     for (node_id, node) in plan.nodes.iter_mut().enumerate() {
         let growing = crate::constructor_growth::locals(node);
@@ -45,8 +119,10 @@ pub fn prepare(
                     crate::value_constant::retain_closed(value, &mut node.configuration, &owning);
                 }
                 if let Statement::Let(id, value) | Statement::Var(id, value) = s
-                    && matches!(value.ty, Ty::Struct(..) | Ty::Recursive(_) | Ty::Family(_))
-                    && (matches!(value.kind, Kind::Construct(_))
+                    && canonical_type(&value.ty)
+                    && !(unknown.contains(&node_id) && failure_data_type(&value.ty))
+                    && (outcome(&value.ty)
+                        || matches!(value.kind, Kind::Construct(_))
                         || matches!(&value.kind, Kind::Unary(op, _) if op=="family")
                         || matches!(value.kind,Kind::Local(id)|Kind::MutableLocal(id) if origins.contains_key(&id)))
                     && !growing.contains(id)
@@ -80,8 +156,11 @@ pub fn prepare(
                     return false;
                 }
                 if matches!(v.kind, Kind::Construct(_))
-                    && (matches!(v.ty, Ty::Struct(..) | Ty::Recursive(_))
-                        || (matches!(v.ty, Ty::Tuple(_)) && tuple_staging(v, &result, &locals)))
+                    && !(unknown.contains(&node_id) && failure_data_type(&v.ty))
+                    && (matches!(
+                        v.ty,
+                        Ty::Struct(..) | Ty::Recursive(_) | Ty::Result(..) | Ty::Error
+                    ) || (matches!(v.ty, Ty::Tuple(_)) && tuple_staging(v, &result, &locals)))
                     && owning(&v.ty)
                 {
                     let key = format!("\0constructor:{node_id}:expression:{}", node.globals.len());
@@ -119,4 +198,15 @@ fn origin(
         crate::value_constant::retain_closed(value, configuration, owning);
     }
     value.clone()
+}
+
+fn outcome(ty: &Ty) -> bool {
+    matches!(ty, Ty::Result(..) | Ty::Error)
+}
+
+fn canonical_type(ty: &Ty) -> bool {
+    matches!(
+        ty,
+        Ty::Struct(..) | Ty::Recursive(_) | Ty::Family(_) | Ty::Result(..) | Ty::Error
+    )
 }

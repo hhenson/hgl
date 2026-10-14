@@ -3,6 +3,36 @@ use crate::values::{atomic_place, borrowed_place};
 use hgl_semantics::ir::{Kind, Plan, Value};
 /// Select immutable typed ordinary storage without retaining an intermediate owner.
 pub(crate) fn source(plan: &Plan, value: &Value) -> Option<(&'static str, String)> {
+    if let Kind::Query(op, args) = &value.kind
+        && matches!(
+            op.as_str(),
+            "\0result_value" | "\0result_error" | "\0error_message"
+        )
+    {
+        let (arena, parent) = source(plan, &args[0])?;
+        let field = if op == "\0result_value" {
+            1
+        } else if op == "\0result_error" {
+            2
+        } else {
+            0
+        };
+        if op == "\0error_message" {
+            return Some((arena, format!("({parent}).fields().0")));
+        }
+        let columns = if arena == "configuration_columns" {
+            "&self.configuration_columns".into()
+        } else {
+            format!("_ctx.store().{arena}()")
+        };
+        return Some((
+            arena,
+            format!(
+                "{{let parent={parent};let columns={columns};hgl_store::ValueSlot::<{}>::bind(&mut columns.list(parent.fields().{field}.fields()).first().expect(\"checked variant payload\").as_slice())}}",
+                crate::layouts::global_type(&value.ty)
+            ),
+        ));
+    }
     if let Some(source) = crate::constructor_owners::source(plan, value) {
         return Some(("global_values", source));
     }
@@ -53,6 +83,16 @@ pub(crate) fn source(plan: &Plan, value: &Value) -> Option<(&'static str, String
 
 /// Read a typed configuration or atomic projection without retaining its parent.
 pub(crate) fn read(plan: &Plan, v: &Value, emit: impl Fn(&Value) -> String) -> Option<String> {
+    if matches!(&v.kind,Kind::Query(op,_) if matches!(op.as_str(),"\0result_value"|"\0result_error"|"\0error_message"))
+        && let Some((arena, slot)) = source(plan, v)
+    {
+        let columns = if arena == "configuration_columns" {
+            "&self.configuration_columns".into()
+        } else {
+            format!("_ctx.store().{arena}()")
+        };
+        return Some(format!("({slot}).read({columns})?"));
+    }
     if let Some(slot) = crate::constructor_owners::source(plan, v) {
         return Some(format!(
             "{{let source={slot};source.read(_ctx.store().global_values())?}}"

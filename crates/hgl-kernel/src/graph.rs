@@ -60,6 +60,7 @@ pub struct Graph {
     slots: Vec<NodeSlot>,
     schedule: Schedule,
     lifecycle: Lifecycle,
+    recoverable_evaluation: bool,
     /// The time of the cycle in progress or the last one completed. Once
     /// started and before any cycle it is a step before the start time, as
     /// hgraph's executor keeps it: the first cycle may be at the start time,
@@ -96,6 +97,7 @@ impl Graph {
             schedule: Schedule::new(slots.len()),
             slots,
             lifecycle: Lifecycle::Instantiated,
+            recoverable_evaluation: false,
             last_cycle: EngineTime::NEVER,
             stop_requested: false,
             started: 0,
@@ -182,6 +184,52 @@ impl Graph {
         store.enter_scope(previous);
         result
     }
+    pub(crate) fn evaluate_resumable(&mut self, store: &mut Store, now: EngineTime) -> NodeResult {
+        let previous = std::mem::replace(&mut self.recoverable_evaluation, true);
+        let outcome = self.evaluate(store, now);
+        self.recoverable_evaluation = previous;
+        outcome
+    }
+    pub(crate) fn discard_captured_pass(&mut self, store: &mut Store, now: EngineTime) {
+        if !matches!(self.lifecycle, Lifecycle::Started | Lifecycle::Evaluating) {
+            return;
+        }
+        let previous = store.enter_scope(self.scope);
+        self.schedule.begin_pass(now);
+        self.discard_scoped(store, now);
+        store.enter_scope(previous);
+    }
+    fn discard_scoped(&mut self, store: &mut Store, now: EngineTime) {
+        while let Some(node) = store.take_wake(self.scope) {
+            self.schedule.wake(node);
+        }
+        self.schedule.abandon_pass(now);
+        for (index, slot) in self
+            .slots
+            .iter_mut()
+            .enumerate()
+            .take(self.started as usize)
+        {
+            let mut ctx = Ctx {
+                store,
+                schedule: &mut self.schedule,
+                stop_requested: &mut self.stop_requested,
+                node_type: &slot.node_type,
+                node: NodeId(
+                    u32::try_from(index).unwrap_or_else(|_| unreachable!("checked node rank")),
+                ),
+                now,
+                phase: Phase::Eval,
+                scheduled_now: false,
+                recoverable_evaluation: true,
+            };
+            slot.node.discard_captured_pass(&mut ctx);
+            self.schedule.rearm(NodeId(
+                u32::try_from(index).unwrap_or_else(|_| unreachable!("checked node rank")),
+            ));
+        }
+        self.lifecycle = Lifecycle::Started;
+    }
     fn evaluate_scoped(&mut self, store: &mut Store, now: EngineTime) -> NodeResult {
         debug_assert!(
             self.lifecycle == Lifecycle::Started,
@@ -205,7 +253,8 @@ impl Graph {
             };
             debug_assert!(
                 passed < Some(node),
-                "GRF-13: a node was woken after the scan had passed it"
+                "GRF-13: node {node:?} was woken after {passed:?} in {}",
+                self.label
             );
             passed = Some(node);
             let scheduled_now = self.schedule.take_due_request(node, now);
@@ -216,7 +265,11 @@ impl Graph {
             };
             self.schedule.rearm(node);
             if evaluated.is_err() {
-                self.schedule.abandon_pass(now);
+                if self.recoverable_evaluation {
+                    self.discard_scoped(store, now);
+                } else {
+                    self.schedule.abandon_pass(now);
+                }
                 return evaluated;
             }
         }
@@ -253,6 +306,7 @@ impl Graph {
                 first_failure = stopped;
             }
         }
+        store.retire_unstarted_children(self.scope, now, &mut self.schedule);
         self.schedule.clear();
         self.lifecycle = Lifecycle::Stopped;
         first_failure
@@ -287,6 +341,7 @@ impl Graph {
         now: EngineTime,
         scheduled_now: bool,
     ) -> NodeResult {
+        let previous_hook = store.replace_active_hook(Some(node));
         let slot = &mut self.slots[node.0 as usize];
         let mut ctx = Ctx {
             store,
@@ -297,12 +352,14 @@ impl Graph {
             now,
             phase,
             scheduled_now,
+            recoverable_evaluation: self.recoverable_evaluation,
         };
         let outcome = match phase {
             Phase::Start => slot.node.start(&mut ctx),
             Phase::Eval => slot.node.eval(&mut ctx),
             Phase::Stop => slot.node.stop(&mut ctx),
         };
+        ctx.store.replace_active_hook(previous_hook);
         outcome.map_err(|mut error| {
             if error.label.is_empty() {
                 error.node = node;
@@ -311,6 +368,20 @@ impl Graph {
             } else {
                 error.label = format!("{}/{}", slot.label, error.label);
             }
+            let mut diagnostic = error.error_value();
+            if diagnostic.context.is_none() {
+                diagnostic.context = Some(hgl_types::ErrorContext {
+                    node: format!("{}:{:?}:{}:{}", self.label, self.scope, node.0, slot.label),
+                    phase: match error.phase {
+                        Phase::Start => "start",
+                        Phase::Eval => "evaluate",
+                        Phase::Stop => "stop",
+                    }
+                    .into(),
+                    evaluation_time: now,
+                });
+            }
+            error.diagnostic = Some(diagnostic);
             error
         })
     }

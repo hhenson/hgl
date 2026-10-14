@@ -27,7 +27,10 @@ pub fn shape_marker(ty: &Ty) -> String {
         format!("hgl_store::shapes::Reference<{}>", shape_marker(child))
     } else if matches!(ty, Ty::Rolling(..)) {
         crate::windows::marker(ty)
-    } else if matches!(ty, Ty::Enum(_) | Ty::Native(_) | Ty::Any) {
+    } else if matches!(
+        ty,
+        Ty::Enum(_) | Ty::Native(_) | Ty::Any | Ty::Result(..) | Ty::Error
+    ) {
         format!("hgl_store::shapes::Atomic<{}>", global_type(ty))
     } else if let Ty::Atomic(payload) = ty {
         format!("hgl_store::shapes::Atomic<{}>", global_type(payload))
@@ -58,6 +61,8 @@ pub fn publish(ty: &Ty, payload: &str) -> String {
     if matches!(
         ty,
         Ty::Any
+            | Ty::Result(..)
+            | Ty::Error
             | Ty::Enum(_)
             | Ty::Native(_)
             | Ty::Recursive(_)
@@ -237,7 +242,9 @@ fn origin(ty: &Ty, types: &mut BTreeSet<Ty>) {
         origin(child, types);
         return;
     }
-    if !structural(ty) || !ty.publication() {
+    let connection =
+        matches!(ty,Ty::Struct(name,..) if name.source_name().starts_with("\0capture.bundle."));
+    if !structural(ty) || (!ty.publication() && !connection) {
         return;
     }
     types.insert(ty.clone());

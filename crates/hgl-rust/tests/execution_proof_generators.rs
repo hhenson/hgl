@@ -65,3 +65,34 @@ fn proved_schedule_requires_an_installed_preparation_phase() {
     assert_eq!(hgl_rust::execution_proof::direct_arrivals(&plan), Some(2));
     assert!(!hgl_rust::execution_proof::prepared(&plan));
 }
+
+#[test]
+fn generic_diagnostic_transport_does_not_prove_unknown_arrivals_or_mutation_width() {
+    let mut node = source(vec![]);
+    node.result = Ty::Any;
+    let mut plan = Plan {
+        nodes: vec![node],
+        captures: vec![hgl_semantics::ir::Capture {
+            owner: 0,
+            nodes: vec![],
+            output: None,
+            value: Ty::Void,
+        }],
+        ..Plan::default()
+    };
+    assert!(hgl_rust::execution_proof::prepared(&plan));
+    plan.nodes[0].generator = Some(vec![Statement::While(scalar(1), vec![publication()])]);
+    assert!(!hgl_rust::execution_proof::prepared(&plan));
+    plan.nodes[0].generator = None;
+    plan.nodes[0].handlers = vec![(
+        None,
+        vec![Statement::While(
+            scalar(1),
+            vec![Statement::Call(Value::new(
+                Ty::Void,
+                Kind::Query("set_upsert".into(), vec![scalar(1)]),
+            ))],
+        )],
+    )];
+    assert!(!hgl_rust::execution_proof::prepared(&plan));
+}

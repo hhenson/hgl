@@ -73,6 +73,8 @@ size and enforces the "may use" list from the crate's
 | [hgl-node-error](hgl-node-error.md) | module `node_error` | `hgl-types` |
 | [hgl-nominal-batch](hgl-nominal-batch.md) | module `nominal_batch` | `hgl-value-model` |
 | [hgl-observation](hgl-observation.md) | module `observation` | `hgl-store` |
+| [hgl-rust-outcomes](hgl-rust-outcomes.md) | module `outcomes` | `hgl-rust-codegen` |
+| [hgl-store-outcomes](hgl-store-outcomes.md) | module `outcomes` | `hgl-store` |
 | [hgl-optional](hgl-optional.md) | module `optional` | `hgl-store` |
 | [hgl-plan](hgl-plan.md) | module `plan` | `hgl-describe` |
 | [hgl-prepared-store](hgl-prepared-store.md) | module `prepared_store` | `hgl-store` |

@@ -2,8 +2,10 @@
 /// Prepared expression emission used by program capacity planning.
 pub mod any_expression;
 mod any_expression_leaves;
+mod any_outcomes;
 pub mod any_prepared;
 pub mod any_values;
+pub mod capture_graphs;
 pub mod checked_data;
 /// Checked cold byte carriers for ordinary configuration owners.
 pub mod cold_transport;
@@ -22,9 +24,11 @@ pub mod finite_domains;
 mod identifiers;
 pub mod key_origins;
 pub mod keyed;
+pub mod keyed_graphs;
 pub mod layouts;
 pub mod mutation_bounds;
 pub mod observed;
+pub mod outcomes;
 mod owner_comparisons;
 mod prepared_global_writes;
 pub mod prepared_hooks;

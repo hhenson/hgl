@@ -29,7 +29,7 @@ fn collect(
                 collect(child, scalars, seen, ordinary);
             }
         }
-        Ty::Map(key, child) => {
+        Ty::Result(key, child) | Ty::Map(key, child) => {
             collect(key, scalars, seen, ordinary);
             collect(child, scalars, seen, ordinary);
         }
@@ -54,7 +54,8 @@ fn collect(
                 }
             }
         }
-        Ty::Recursive(_)
+        Ty::Error
+        | Ty::Recursive(_)
         | Ty::Enum(_)
         | Ty::I64
         | Ty::F64

@@ -439,7 +439,15 @@ impl Decl {
         } else {
             "void".into()
         };
-        let throws = c.take("throws");
+        if c.at("throws") {
+            return Err(Issue::coded(
+                "syntax",
+                "syntax.expected_token",
+                c.span(),
+                "source throws clauses are not admitted; recoverable native functions return result<T,error>",
+            ));
+        }
+        let throws = false;
         c.lines();
         let mut type_domain = None;
         let requires = c.take("requires");

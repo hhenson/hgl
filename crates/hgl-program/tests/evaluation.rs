@@ -698,18 +698,18 @@ fn failure_images(dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
         module(dir, name, &emit_tests(&compile_tests(&input)?))?;
     }
     let throwing = source(
-        "native const fn raise_error(message: str) throws\nnative const fn raise_error(message: str) throws {}\nfn fail(ts: i64) -> i64 { when { raise_error(\"deliberate node failure\")\nreturn ts } }\ntest fails { eval(fail, [1]) }",
+        "native const fn raise_error(message: str)\nnative const fn raise_error(message: str) { rust_abi_node_result }\nfn fail(ts: i64) -> i64 { when { raise_error(\"deliberate node failure\")\nreturn ts } }\ntest fails { eval(fail, [1]) }",
     );
     module(dir, "throwing", &emit_tests(&compile_tests(&throwing)?))?;
     let missing = source(
-        "native const fn raise_error(message:str) throws\nnative const fn raise_error(message:str) throws {}\nfn sink(x:i64) { inject capture\nstart { raise_error(\"start must not run\") }\nwhen {} }\ntest fails { eval(sink,[1]) }",
+        "native const fn raise_error(message:str)\nnative const fn raise_error(message:str) { rust_abi_node_result }\nfn sink(x:i64) { inject capture\nstart { raise_error(\"start must not run\") }\nwhen {} }\ntest fails { eval(sink,[1]) }",
     );
     let Err(error) = compile_tests(&missing) else {
         return Err("removed capture injectable must fail before start".into());
     };
     assert!(error.contains("unsupported injectable capture"), "{error}");
     let start = source(
-        "native const fn raise_error(message:str) throws\nnative const fn raise_error(message:str) throws {}\nfn sink(x:i64) { start { if true { raise_error(\"deliberate start failure\") } }\nwhen {} }\ntest fails { eval(sink,[]) }",
+        "native const fn raise_error(message:str)\nnative const fn raise_error(message:str) { rust_abi_node_result }\nfn sink(x:i64) { start { if true { raise_error(\"deliberate start failure\") } }\nwhen {} }\ntest fails { eval(sink,[]) }",
     );
     module(dir, "start_failure", &emit_tests(&compile_tests(&start)?))?;
     Ok(())

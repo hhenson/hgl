@@ -150,6 +150,26 @@ impl Columns {
             left[to].copy_from(&right[0]);
         }
     }
+    /// Borrow a dictionary's reusable exact hash index.
+    pub fn map_index(&self, slot: usize) -> &crate::map_values::Index {
+        self.lists.map_index(slot)
+    }
+    /// Provision dictionary metadata before any publication.
+    pub fn prepare_map_index(&mut self, slot: usize, capacity: usize) -> NodeResult {
+        self.lists.map_index_mut(slot).prepare(capacity)
+    }
+    /// Replace metadata with the same independently retained owner.
+    pub fn replace_map_index(&mut self, slot: usize, index: crate::map_values::Index) {
+        self.lists.replace_index(slot, index);
+    }
+    /// Copy preflighted dictionary metadata without provider execution.
+    pub fn copy_map_index(&mut self, slot: usize, index: &crate::map_values::Index) {
+        self.lists.map_index_mut(slot).copy(index);
+    }
+    /// Copy metadata between two prepared owners in this arena.
+    pub fn copy_map_index_within(&mut self, from: usize, to: usize) {
+        self.lists.copy_index(from, to);
+    }
     /// Allocated positions, including reusable ones, for bounded-storage validation.
     pub fn slot_counts(&self) -> (usize, usize) {
         (

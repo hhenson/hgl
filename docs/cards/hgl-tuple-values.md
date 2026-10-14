@@ -34,3 +34,5 @@ List<Ref<T>,N> inputs, retaining Index IR and opaque child type. endpoint follow
 those Index paths. Unbounded REF-list selection is an explicit Rust target
 admission gap; ordinary temporal dynamic List reads retain their existing
 constant-index restriction. No node traversal below a REF is introduced.
+
+`lookup(parent,key,default,strict)` checks ordinary and atomic map value reads under LOOKUP-1–4. Strict reads retain value.missing_key; safe reads return a contextual Nullable local unless supplied an exact ordinary fallback. Borrowed temporal-map child lookup remains excluded. It retains exact typed keys and never converts structural graph selection into a value read.
