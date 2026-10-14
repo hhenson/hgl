@@ -140,6 +140,13 @@ pub fn construct(
 }
 /// Recursive native equality with unordered complete set and map children.
 pub fn equal(ty: &Ty, a: &str, b: &str, marker: fn(&Ty) -> String) -> String {
+    if let Ty::Result(ok, err) = ty {
+        return format!(
+            "match (({a}).as_ref(),({b}).as_ref()) {{(Ok(left),Ok(right))=>{},(Err(left),Err(right))=>{},_=>false}}",
+            equal(ok, "left", "right", marker),
+            equal(err, "left", "right", marker)
+        );
+    }
     if *ty == Ty::Any {
         return format!("({a}).equal({b})?");
     }
@@ -191,7 +198,9 @@ pub fn retained(source: &str, ty: &Ty, global_type: fn(&Ty) -> String) -> String
             retained("*value", child, global_type)
         );
     }
-    if hgl_semantics::value_access::aggregate(ty) || matches!(ty, Ty::Native(_)) {
+    if hgl_semantics::value_access::aggregate(ty)
+        || matches!(ty, Ty::Native(_) | Ty::Result(..) | Ty::Error)
+    {
         return format!(
             "<{} as hgl_store::GlobalValue>::retain(&({source}))?",
             global_type(ty)

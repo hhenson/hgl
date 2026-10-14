@@ -686,7 +686,7 @@ export fn main() {consume(make(source()))}
         for (_, text) in &mut input {
             *text = text.replace(
                 "fn token(text: str) -> Token",
-                "fn token(text: str) -> Token throws",
+                "fn token(text: str) -> Token",
             );
         }
         let (_, descriptor) = input
@@ -756,7 +756,7 @@ consume(first:saved,second:current,text:token_text(saved),numbers:[7])
         for (_, text) in &mut input {
             *text = text.replace(
                 "fn token(text: str) -> Token",
-                "fn token(text: str) -> Token throws",
+                "fn token(text: str) -> Token",
             );
         }
         let (_, descriptor) = input
@@ -918,7 +918,7 @@ consume(first:retained,second:current)}}
             for (_, text) in &mut input {
                 *text = text.replace(
                     "fn token(text: str) -> Token",
-                    "fn token(text: str) -> Token throws",
+                    "fn token(text: str) -> Token",
                 );
             }
             let (_, descriptor) = input

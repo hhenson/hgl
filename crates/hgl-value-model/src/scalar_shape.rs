@@ -18,7 +18,9 @@ impl Ty {
             Self::TimeZone => ScalarType::TimeZone,
             Self::ZonedTime => ScalarType::ZonedTime,
             Self::ZonedDateTime => ScalarType::ZonedDateTime,
-            Self::Rolling(..)
+            Self::Result(..)
+            | Self::Error
+            | Self::Rolling(..)
             | Self::Family(_)
             | Self::Recursive(_)
             | Self::Enum(_)
@@ -38,9 +40,13 @@ impl Ty {
     }
     /// Whether an ordinary scalar owns variable-sized payload storage.
     pub fn owning_scalar(&self) -> bool {
+        if let Self::Result(ok, err) = self {
+            return ok.owning_scalar() || err.owning_scalar();
+        }
         matches!(
             self,
-            Self::Str
+            Self::Error
+                | Self::Str
                 | Self::Bytes
                 | Self::Any
                 | Self::Native(_)

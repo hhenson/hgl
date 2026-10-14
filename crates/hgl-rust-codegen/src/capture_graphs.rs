@@ -57,14 +57,15 @@ impl hgl_kernel::Node for Node{id} {{
   let now=ctx.evaluation_time();let child=self.child.as_mut().expect("prepared capture child");
   if !self.started {{child.start_bound(ctx,|store,boundary|boundary.refresh(store,&self.captures,now,true))?;self.started=true;}}
   else {{child.refresh_bound(ctx,|store,boundary|boundary.refresh(store,&self.captures,now,false))?;}}
-  if let Some(error)=child.evaluate_captured(ctx)? {{ctx.set_atomic(self.error.expect("prepared capture error"),error)?;}}
+  let outcome=child.evaluate_captured(ctx);ctx.schedule_children(child.next_scheduled_time());
+  if let Some(error)=outcome? {{ctx.set_atomic(self.error.expect("prepared capture error"),error)?;}}
   let normal=self.normal.map_or(hgl_store::Reference::default(),|input|ctx.store().bindings().input_reference(input));
   let reference=*self.choices.get(&normal).ok_or_else(||hgl_kernel::NodeError::new("capture normal target was not prepared"))?;
   if ctx.store().bindings().reference_value(self.output)!=reference {{ctx.set_reference(self.output,reference)?;}}
   Ok(())
  }}
- fn stop(&mut self,ctx:&mut hgl_kernel::Ctx<'_>)->hgl_kernel::NodeResult {{if self.started {{self.child.as_mut().expect("prepared capture child").stop(ctx)}} else {{Ok(())}}}}
- fn discard_captured_pass(&mut self,ctx:&mut hgl_kernel::Ctx<'_>) {{if self.started {{self.child.as_mut().expect("prepared capture child").discard_captured_pass(ctx)}}}}
+ fn stop(&mut self,ctx:&mut hgl_kernel::Ctx<'_>)->hgl_kernel::NodeResult {{if let Some(child)=&mut self.child {{child.stop(ctx)}} else {{Ok(())}}}}
+ fn discard_captured_pass(&mut self,ctx:&mut hgl_kernel::Ctx<'_>) {{if self.started {{let child=self.child.as_mut().expect("prepared capture child");child.discard_captured_pass(ctx);ctx.schedule_children(child.next_scheduled_time());}}}}
 }}
 impl hgl_describe::Buildable for Node{id} {{
  fn node_type()->hgl_types::NodeType {{hgl_types::NodeType {{name:"hgl.capture#{id}",inputs:vec![{inputs}("bundle",{bundle})],output:Some(hgl_types::TsType::Reference(Box::new({bundle}))),active_inputs:Some(vec![{active}]),valid_inputs:Some(vec![]),schedule_on_start:true,uses_scheduler:true,child_graphs:1,..hgl_types::NodeType::default()}}}}

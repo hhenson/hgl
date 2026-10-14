@@ -69,6 +69,8 @@ pub fn binary(op: &str, a: &Value, b: &Value) -> Result<Value, EvalError> {
             | hgl_value_model::Ty::Map(..)
             | hgl_value_model::Ty::Family(_)
             | hgl_value_model::Ty::Tuple(_)
+            | hgl_value_model::Ty::Result(..)
+            | hgl_value_model::Ty::Error
     ) && matches!(op, "==" | "!=")
     {
         return Ok(value(Literal::Bool(

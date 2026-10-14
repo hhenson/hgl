@@ -11,6 +11,7 @@ line-budget = 1150
 
 # Budgets of the modules that were crates of their own (docs/decisions/0004).
 [package.metadata.hgl.modules]
+prepared_keyed = { budget = 200, uses = ["deadlines", "nested"] }
 deadlines = { budget = 100, uses = [] }
 nested = { budget = 350, uses = ["deadlines"] }
 

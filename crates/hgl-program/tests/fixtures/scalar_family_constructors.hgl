@@ -5,8 +5,8 @@ struct Second:Choice {}
 abstract struct Flag {value:bool}
 struct Yes:Flag {}
 struct No:Flag {}
-native const fn once(value:i64)->i64 throws
-native const fn once(value:i64)->i64 throws {}
+native const fn once(value:i64)->i64
+native const fn once(value:i64)->i64 { rust_abi_node_result }
 
 fn fixed(tick:i64)->i64 {
     when {

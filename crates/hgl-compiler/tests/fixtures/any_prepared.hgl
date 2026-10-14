@@ -199,12 +199,12 @@ test {
     }
 }
 
-native const fn helper_begin(value:i64) throws
-native const fn helper_begin(value:i64) throws {}
-native const fn helper_mark(value:i64)->i64 throws
-native const fn helper_mark(value:i64)->i64 throws {}
-native const fn helper_finish(value:i64) throws
-native const fn helper_finish(value:i64) throws {}
+native const fn helper_begin(value:i64)
+native const fn helper_begin(value:i64) { rust_abi_node_result }
+native const fn helper_mark(value:i64)->i64
+native const fn helper_mark(value:i64)->i64 { rust_abi_node_result }
+native const fn helper_finish(value:i64)
+native const fn helper_finish(value:i64) { rust_abi_node_result }
 
 const fn helper_box_equal(value:i64, expected:i64)->bool {
     let boxed=any(value)

@@ -74,6 +74,8 @@ pub fn ty(t: &Ty) -> String {
         format!("Set(Box::new({}))", ty(t))
     } else if let Ty::Delta(t) = t {
         format!("Delta(Box::new({}))", ty(t))
+    } else if let Ty::Result(k, v) = t {
+        format!("Result(Box::new({}),Box::new({}))", ty(k), ty(v))
     } else if let Ty::Map(k, v) = t {
         format!("Map(Box::new({}),Box::new({}))", ty(k), ty(v))
     } else if let Ty::List(t, n) = t {

@@ -6,8 +6,8 @@ struct First:Choice {}
 struct Second:Choice {extra:i64}
 struct Envelope {choice:Choice
 choices:list<Choice>}
-native const fn visit(value:i64)->i64 throws
-native const fn visit(value:i64)->i64 throws {}
+native const fn visit(value:i64)->i64
+native const fn visit(value:i64)->i64 { rust_abi_node_result }
 
 fn nested(tick:i64,const choice:Choice,const choices:list<Choice>)->i64 {
     when {

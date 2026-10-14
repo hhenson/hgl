@@ -148,7 +148,7 @@ fn exported_name(
     if Ty::parse(name).is_some()
         || matches!(
             base,
-            "list" | "map" | "tuple" | "set" | "ref" | "rolling" | "atomic"
+            "list" | "map" | "tuple" | "result" | "set" | "ref" | "rolling" | "atomic"
         )
     {
         return Ok(());

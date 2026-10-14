@@ -32,6 +32,9 @@ fn value(plan: &Plan, v: &Value) -> String {
         Kind::Push(parent, item) => push(plan, parent, item),
         Kind::ValueCall(args, body) => direct_call(plan, &v.ty, args, body),
         Kind::Configuration(id) => retained(&format!("self.configuration{id}"), &v.ty),
+        Kind::Construct(_) if matches!(v.ty, Ty::Result(..) | Ty::Error) => {
+            crate::outcomes::construct(v, |v| value(plan, v))
+        }
         Kind::Construct(fields) if v.ty == Ty::Any => {
             crate::any_values::constructor(fields, |v| value(plan, v))
         }
@@ -102,7 +105,14 @@ fn reference_value(plan: &Plan, v: &Value) -> String {
     format!("_ctx.store().bindings().input_reference({input})")
 }
 fn query_value(plan: &Plan, op: &str, args: &[Value]) -> String {
-    if op.starts_with("\0lookup_") {
+    if op.starts_with("\0result_")
+        || op.starts_with("\0error_")
+        || op.starts_with("\0context_")
+        || op.starts_with("\0propagate_")
+        || matches!(op, "is_ok" | "is_err")
+    {
+        crate::outcomes::query(plan, op, args, |v| value(plan, v))
+    } else if op.starts_with("\0lookup_") {
         map_lookup(plan, op, args)
     } else if op == "\0reference" {
         reference_value(plan, &args[0])
@@ -187,7 +197,7 @@ fn binary(plan: &Plan, result: &Ty, op: &str, a: &Value, b: &Value) -> String {
     }
     if matches!(
         a.ty,
-        Ty::Set(_) | Ty::Map(..) | Ty::Family(_) | Ty::Tuple(_)
+        Ty::Set(_) | Ty::Map(..) | Ty::Family(_) | Ty::Tuple(_) | Ty::Result(..)
     ) && matches!(op, "==" | "!=")
     {
         return format!(
@@ -243,7 +253,7 @@ pub fn statements(plan: &Plan, body: &[Statement], out: &mut Vec<String>, result
             Statement::Let(i,v) | Statement::Var(i,v) if v.snapshot && matches!(v.ty,Ty::Any|Ty::Native(_)) => crate::any_prepared::local(plan,*i,v,|v|value(plan,v)),
             Statement::Let(i,v) if v.snapshot => crate::snapshot_slots::local(*i,v, |v| value(plan,v)),
             Statement::Let(i,v) => {
-                let slot = if matches!(v.ty, Ty::Native(_)) && !crate::execution_proof::prepared(plan) {
+                let slot = if matches!(v.ty,Ty::Result(..)|Ty::Error) || matches!(v.ty, Ty::Native(_)) && !crate::execution_proof::prepared(plan) {
                     None
                 } else {
                     atomic_place(plan,v).or_else(||observation(v))

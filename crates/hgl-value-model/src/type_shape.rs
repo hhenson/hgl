@@ -58,6 +58,11 @@ impl fmt::Display for Nominal {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 /// Types admitted by the executable source compiler.
 pub enum Ty {
+    /// One complete ordinary success/error outcome; intrinsically atomic temporally.
+    Result(Box<Self>, Box<Self>),
+    /// Canonical ordinary diagnostic; intrinsically atomic temporally.
+    Error,
+
     /// Inherently temporal arrival window with exact resolved bounds.
     Rolling(Box<Self>, Window),
     /// Closed declared concrete membership of an abstract atomic family.
@@ -134,6 +139,8 @@ impl Ty {
     /// Canonical scalar spelling; constructed types retain their child separately.
     pub fn name(&self) -> &'static str {
         match self {
+            Self::Result(..) => "result",
+            Self::Error => "error",
             Self::Rolling(..) => "rolling",
             Self::Enum(_) => "enum",
             Self::Native(_) => "native",
@@ -166,6 +173,8 @@ impl Ty {
     /// Canonical checked HGL source form, including complete nominal arguments.
     pub fn source_name(&self) -> String {
         match self {
+            Self::Result(ok, err) => format!("result<{},{}>", ok.source_name(), err.source_name()),
+            Self::Error => "error".into(),
             Self::Rolling(child, window) => {
                 format!("rolling<{},{}>", child.source_name(), window.source_name())
             }
@@ -208,6 +217,9 @@ impl Ty {
 impl Ty {
     /// Whether this exact type belongs to the finite publication profile.
     pub fn publication(&self) -> bool {
+        if let Self::Result(ok, err) = self {
+            return ok.atomic_payload() && err.atomic_payload();
+        }
         if let Self::Atomic(payload) | Self::Rolling(payload, _) = self {
             return payload.atomic_payload();
         }
@@ -241,7 +253,10 @@ impl Ty {
     }
     /// Whether an ordinary value belongs to the finite complete-payload profile.
     pub fn atomic_payload(&self) -> bool {
-        matches!(self, Self::Recursive(_) | Self::Family(_))
+        if let Self::Result(ok, err) = self {
+            return ok.atomic_payload() && err.atomic_payload();
+        }
+        matches!(self, Self::Error | Self::Recursive(_) | Self::Family(_))
             || self.components(Self::atomic_payload)
     }
     /// Exact finite complete keys exclude recursive, family and collection components.
@@ -251,8 +266,10 @@ impl Ty {
                 .iter()
                 .all(|cap| scalar.capabilities.contains(*cap));
         }
-        !matches!(self, Self::Set(_) | Self::Map(..) | Self::List(..))
-            && self.components(Self::collection_key)
+        !matches!(
+            self,
+            Self::Result(..) | Self::Error | Self::Set(_) | Self::Map(..) | Self::List(..)
+        ) && self.components(Self::collection_key)
     }
     fn components(&self, check: fn(&Self) -> bool) -> bool {
         if let Self::Set(key) = self {
@@ -274,7 +291,10 @@ impl Ty {
     }
     /// Whether this is an ordinary scalar leaf, including nominal enums and boxes.
     pub fn scalar(&self) -> bool {
-        matches!(self, Self::Enum(_) | Self::Native(_) | Self::Any) || self.scalar_kind().is_some()
+        matches!(
+            self,
+            Self::Result(..) | Self::Error | Self::Enum(_) | Self::Native(_) | Self::Any
+        ) || self.scalar_kind().is_some()
     }
 }
 

@@ -228,3 +228,27 @@ retain local pending work without forwarding notifications to an inactive owner.
 descendants immediately. Inputs, outputs and assembly claims are released;
 reusable slots receive new generations. It does not advance engine time or
 reclaim other stopped scopes. Running scopes must use normal release instead.
+
+## Internal passive owner views
+
+`Store::prepare_owned_view(InputId, OutputId) -> Result<(), BindError>` is
+construction-only. The view must be inactive in a constructing scope; the direct
+T or Ref<T> carrier must have exact shape and belong to the same owner or an
+owned descendant scope. Prepared descendant projections carry this authorization
+through ordinary follow retargeting. It changes no public consumer forward/cycle
+checks. Active, unrelated, mismatched and started preparation rejects.
+`Store::assemble_owned_view(InputId) -> Result<Reference, BindError>` interns the
+current passive fixed designations cold. This is a snapshot; compiled code must
+prepare possible assemblies separately for retargeting, with no hot interning.
+Normal typed endpoints and generations remain the source of value/validity.
+
+`Store::replace_active_hook(Option<NodeId>) -> Option<NodeId>` brackets a live
+Graph hook. Upward cross-scope notification stops at that exact already executing
+ancestor owner; inner consumers still receive their pending work. Direct local
+and unrelated earlier-node notifications retain the ordinary rank checks.
+`Store::retire_unstarted_children(ScopeId, EngineTime, &mut Wake)` retires only
+constructing descendants after graph cleanup, without firing user hooks. Running
+children remain the owning node's lifecycle responsibility.
+
+The private owned_views facade implements these cold Store operations, may use
+bindings, and has an informational 100-line target.

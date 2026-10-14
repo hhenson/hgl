@@ -9,8 +9,8 @@ publish.workspace = true
 line-budget = 1700
 
 [package.metadata.hgl.modules]
-conditionals = { budget = 240, uses = ["finite_domains", "cold_wiring", "graph_assemblies"] }
-reference_routes = { budget = 120, uses = ["graph_assemblies", "reference_designations"] }
+conditionals = { budget = 240, uses = ["reference_routes", "finite_domains", "cold_wiring", "graph_assemblies"] }
+reference_routes = { budget = 120, uses = ["conditionals", "graph_assemblies", "reference_designations"] }
 reference_designations = { budget = 150, uses = [] }
 graph_assemblies = { budget = 100, uses = [] }
 native_images = { budget = 100, uses = [] }

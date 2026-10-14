@@ -23,6 +23,7 @@ pub struct Scope {
     pub generation: u64,
     /// Scope mailbox storage.
     pub phase: Phase,
+    pub(crate) active_hook: Option<NodeId>,
     /// Scope mailbox storage.
     pub parent: Option<(ScopeId, NodeId)>,
     /// All directly owned scopes, including children not yet started.
@@ -109,6 +110,9 @@ impl Scopes {
     pub fn wake<W: Wake>(&mut self, mut scope: ScopeId, mut node: NodeId, wake: &mut W) {
         loop {
             if !self.alive(scope) {
+                return;
+            }
+            if scope != self.current && self.entries[scope.index].active_hook == Some(node) {
                 return;
             }
             if scope == self.current && self.entries[scope.index].phase == Phase::Running {

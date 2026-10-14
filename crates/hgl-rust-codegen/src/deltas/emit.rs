@@ -41,6 +41,9 @@ pub(super) fn marker(ty: &Ty) -> String {
             );
         }
     }
+    if !ty.publication() {
+        return code;
+    }
     let name = operations(ty);
     let value = owned_type(&delta_type(ty));
     append(
@@ -196,6 +199,6 @@ fn application(ty: &Ty) -> String {
         Ty::Map(key,child)=>crate::keyed::application(key,Some((&allocation(child),&apply(child,"child","value")))),
         Ty::List(child,Some(n))=>format!("for (key,value) in delta.0.into_iter().zip(delta.1) {{let n=usize::try_from(key).ok().filter(|&n|n<{n}).ok_or_else(||hgl_types::NodeError::new(\"sparse list index out of bounds\"))?; let child=output.index(_ctx.store().bindings(),n); {} }}",apply(child,"child","value")),
         Ty::Struct(..)|Ty::Tuple(_)=>children(ty).iter().enumerate().map(|(i,child)|format!("for value in delta.{i} {{let child=output.field::<{i}>(_ctx.store().bindings()); {}}}",apply(child,"child","value"))).collect::<Vec<_>>().concat(),
-        Ty::Atomic(_) | Ty::Rolling(..) | Ty::Delta(_) | Ty::I64 | Ty::F64 | Ty::Bool | Ty::Str | Ty::Bytes | Ty::Any | Ty::CivilDateTime | Ty::TimeZone | Ty::Enum(_) | Ty::Native(_) | Ty::ZonedTime | Ty::ZonedDateTime | Ty::Duration | Ty::Date | Ty::Time | Ty::DateTime | Ty::Ref(_) | Ty::Nullable(_) | Ty::Void | Ty::Recursive(_) | Ty::Family(_)=>unreachable!("structural origin"),
+        Ty::Result(..) | Ty::Error | Ty::Atomic(_) | Ty::Rolling(..) | Ty::Delta(_) | Ty::I64 | Ty::F64 | Ty::Bool | Ty::Str | Ty::Bytes | Ty::Any | Ty::CivilDateTime | Ty::TimeZone | Ty::Enum(_) | Ty::Native(_) | Ty::ZonedTime | Ty::ZonedDateTime | Ty::Duration | Ty::Date | Ty::Time | Ty::DateTime | Ty::Ref(_) | Ty::Nullable(_) | Ty::Void | Ty::Recursive(_) | Ty::Family(_)=>unreachable!("structural origin"),
     }
 }

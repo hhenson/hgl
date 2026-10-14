@@ -237,6 +237,7 @@ pub fn validate(plan: &Plan) -> Result<(), String> {
             if let Kind::Native(binding, _) = &value.kind
                 && binding.provider.is_some()
                 && value.ty.owning_scalar()
+                && !matches!(value.ty, Ty::Result(..) | Ty::Error)
                 && !value.snapshot
                 && !supported(value)
             {

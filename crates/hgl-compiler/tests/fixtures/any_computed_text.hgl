@@ -21,12 +21,12 @@ test nested_concat_keeps_each_box_descriptor_and_text_frame {
         any(TextBox(text:"z!z",boxed:any(TextLeaf(text:"zzz",mark:7))))]
 }
 
-native const fn text_mark(value:i64)->i64 throws
-native const fn text_mark(value:i64)->i64 throws {}
-native const fn text_fail(value:i64)->i64 throws
-native const fn text_fail(value:i64)->i64 throws {}
-native const fn text_finish(value:i64) throws
-native const fn text_finish(value:i64) throws {}
+native const fn text_mark(value:i64)->i64
+native const fn text_mark(value:i64)->i64 { rust_abi_node_result }
+native const fn text_fail(value:i64)->i64
+native const fn text_fail(value:i64)->i64 { rust_abi_node_result }
+native const fn text_finish(value:i64)
+native const fn text_finish(value:i64) { rust_abi_node_result }
 struct OrderedText { first:str
     second:i64
     boxed:any }

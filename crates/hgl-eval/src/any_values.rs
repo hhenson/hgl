@@ -58,6 +58,10 @@ pub fn binary(op: &str, a: &Value, b: &Value) -> Result<Value, EvalError> {
 }
 /// Compare retained ordinary/harness data, propagating nested box capability failures.
 pub fn equal_data(a: &Value, b: &Value) -> Result<bool, EvalError> {
+    if a.ty == Ty::Error {
+        return equal_error(a, b);
+    }
+
     let (a, b) = (
         crate::family_values::concrete(a),
         crate::family_values::concrete(b),
@@ -242,4 +246,23 @@ pub fn validate_key(value: &Value) -> Result<(), EvalError> {
         }
     }
     Ok(())
+}
+
+fn equal_error(a: &Value, b: &Value) -> Result<bool, EvalError> {
+    let (Kind::Construct(a), Kind::Construct(b)) = (&a.kind, &b.kind) else {
+        return Err(crate::value_operations::unsupported(
+            "error equality requires diagnostic data",
+        ));
+    };
+    for index in [0, 1] {
+        match (
+            a.iter().find(|(id, _)| *id == index),
+            b.iter().find(|(id, _)| *id == index),
+        ) {
+            (Some((_, a)), Some((_, b))) if equal_data(a, b)? => {}
+            (None, None) => {}
+            _ => return Ok(false),
+        }
+    }
+    Ok(true)
 }

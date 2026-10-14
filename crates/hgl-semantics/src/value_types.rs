@@ -69,7 +69,7 @@ pub fn substitute(
         ));
     }
     let (base, arguments) = application(written).unwrap_or((name, Vec::new()));
-    if matches!(base, "map" | "tuple" | "set") {
+    if matches!(base, "map" | "tuple" | "set" | "result") {
         let children = arguments
             .into_iter()
             .map(|arg| {
@@ -78,12 +78,7 @@ pub fn substitute(
                 })
             })
             .collect::<Result<Vec<_>, _>>()?;
-        return match (base, children.as_slice()) {
-            ("map", [key, child]) => Ok(Ty::Map(Box::new(key.clone()), Box::new(child.clone()))),
-            ("set", [member]) => Ok(Ty::Set(Box::new(member.clone()))),
-            ("tuple", _) => Ok(Ty::Tuple(children)),
-            _ => Err(format!("invalid structural type arguments {name}").into()),
-        };
+        return structural(base, children, name);
     }
     if (base == "atomic" && arguments.len() == 1) || base == "rolling" {
         let payload = substitute(library, module, arguments[0], bindings, active)
@@ -304,6 +299,7 @@ impl Unification<'_> {
             return self.pattern(arguments[0], payload);
         }
         let children = match (base, actual) {
+            ("result", Ty::Result(ok, err)) => Some(vec![ok.as_ref(), err.as_ref()]),
             ("map", Ty::Map(key, child)) => Some(vec![key.as_ref(), child.as_ref()]),
             ("tuple", Ty::Tuple(children)) => Some(children.iter().collect()),
             ("set", Ty::Set(member)) => Some(vec![member.as_ref()]),
@@ -393,4 +389,14 @@ pub fn source_argument(library: &Library, ty: &Ty) -> Result<Ty, String> {
         owner.test_scope = decl.test_only.then(|| decl.module.clone());
         specialize(&owner, decl, args, &mut BTreeSet::new())
     })
+}
+
+fn structural(base: &str, children: Vec<Ty>, name: &str) -> Result<Ty, hgl_source::Issue> {
+    match (base, children.as_slice()) {
+        ("result", [ok, err]) => Ok(Ty::Result(Box::new(ok.clone()), Box::new(err.clone()))),
+        ("map", [key, child]) => Ok(Ty::Map(Box::new(key.clone()), Box::new(child.clone()))),
+        ("set", [member]) => Ok(Ty::Set(Box::new(member.clone()))),
+        ("tuple", _) => Ok(Ty::Tuple(children)),
+        _ => Err(format!("invalid structural type arguments {name}").into()),
+    }
 }

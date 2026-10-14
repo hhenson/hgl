@@ -260,7 +260,7 @@ fn timed_yield(plan: &Plan, time: &Value, payload: &Value, next: usize, result: 
     )
 }
 fn slot_publication(ty: &Ty, slot: &str, result: &Ty, global: &str) -> String {
-    if matches!(ty, Ty::Any | Ty::Native(_)) {
+    if matches!(ty, Ty::Any | Ty::Native(_) | Ty::Result(..) | Ty::Error) {
         let marker = global_type(ty);
         let (owned, configured) = if matches!(result, Ty::Rolling(..)) {
             (
@@ -286,6 +286,8 @@ fn slot_publication(ty: &Ty, slot: &str, result: &Ty, global: &str) -> String {
     } else if matches!(
         ty,
         Ty::Any
+            | Ty::Result(..)
+            | Ty::Error
             | Ty::Recursive(_)
             | Ty::Family(_)
             | Ty::Enum(_)

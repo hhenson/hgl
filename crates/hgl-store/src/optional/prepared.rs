@@ -82,3 +82,31 @@ fn prepared<T: PreparedValue>(columns: &ValueColumns, slot: usize) -> ValueSlot<
 fn list<T: PreparedValue>(slot: ValueSlot<Optional<T>>) -> ValueSlot<List<T>> {
     ValueSlot::from_fields(slot.fields())
 }
+
+impl<T: PreparedValue> Optional<T> {
+    pub(crate) fn include_ref(bounds: &mut Option<T::Bounds>, value: Option<&T::Value>) {
+        if let Some(value) = value {
+            T::include(bounds.get_or_insert_with(Default::default), value);
+        }
+    }
+    pub(crate) fn check_ref(
+        columns: &ValueColumns,
+        to: ValueSlot<Self>,
+        value: Option<&T::Value>,
+    ) -> NodeResult {
+        if let Some(value) = value {
+            T::check_native(columns, child(columns, to.fields())?, value)?;
+        }
+        Ok(())
+    }
+    pub(crate) fn copy_ref(
+        columns: &mut ValueColumns,
+        to: ValueSlot<Self>,
+        value: Option<&T::Value>,
+    ) {
+        if let Some(value) = value {
+            T::copy_native(columns, prepared(columns, to.fields()), value);
+        }
+        columns.set_list_len(to.fields(), usize::from(value.is_some()));
+    }
+}

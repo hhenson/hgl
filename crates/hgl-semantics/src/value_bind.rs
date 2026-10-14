@@ -173,6 +173,12 @@ pub fn resolve_type(name: &str, types: &BTreeMap<String, Ty>) -> Option<Ty> {
                     .collect::<Option<_>>()?,
             ));
         }
+        if base == "result" && args.len() == 2 {
+            return Some(Ty::Result(
+                Box::new(resolve_type(args[0], types)?),
+                Box::new(resolve_type(args[1], types)?),
+            ));
+        }
         if base == "map" && args.len() == 2 {
             return Some(Ty::Map(
                 Box::new(resolve_type(args[0], types)?),

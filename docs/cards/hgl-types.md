@@ -206,3 +206,25 @@ NodeId, Phase, NodeError and NodeResult are reexported from hgl-node-error. The 
 ScalarType::Bytes and ScalarValue::Bytes(Vec<u8>) describe exact independently owned octets. bytes(&[i64])->NodeResult<Vec<u8>> validates the complete range before retention and preserves value.byte_range. No source byte literal or encoding is added.
 
 OrdinaryType::Any denotes a complete owning box leaf. Compiled Any vocabulary and fallible comparison contracts are specified in hgl-types-any-values; it is not a ScalarType builtin variant.
+
+## Canonical diagnostic data
+
+`ErrorValue { message: String, code: Option<String>, context: Option<ErrorContext> }`
+is ordinary immutable source data. `ErrorContext { node: String, phase: String,
+evaluation_time: EngineTime }` preserves the original run-local instance and
+logical time. Canonical phases are `start`, `evaluate`, `stop`. Equality compares
+message and code only. Cloning owning diagnostic data can allocate.
+
+`OrdinaryType::Result(Box<OrdinaryType>, Box<OrdinaryType>)` and `Error` describe
+intrinsically atomic ordinary payloads. Temporal validity is separate from their
+Result tag.
+
+`NodeError::diagnostic: Option<ErrorValue>`, `from_error(ErrorValue) -> NodeError`,
+`execution_code() -> Option<&str>` and `error_value() -> ErrorValue` bridge explicit
+propagation and canonical failure data. The active operational `phase` remains
+independent of retained context. Start/stop failures preserve their escaping
+operation; propagation of retained data in a later evaluation is a new evaluation
+failure. `finish` preserves primary and cleanup failures.
+
+The error_value module owns these diagnostic records, uses no sibling module,
+and has an informational 100-line target.

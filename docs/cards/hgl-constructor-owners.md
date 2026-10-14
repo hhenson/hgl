@@ -34,3 +34,10 @@ local initializer provenance. It stages atomic results and complete layouts
 with a proved prepared ordinary publisher. Other Tuple constructors retain their
 existing snapshot transport, rather than hiding it behind an owning canonical
 read. The predicate changes only private preparation, never source admission.
+
+`failure_data_type(&Ty) -> bool` identifies owning diagnostic/outcome trees.
+`unbounded_failure_data(&Plan) -> BTreeSet<usize>` traces capture owners and native
+Result/Error calls through checked input edges. Runtime-supplied outcomes have no
+proved cold payload bound; their constructors and downstream outcome owners use
+ordinary owning transport. Exact bounded literal/replay outcomes retain prepared
+storage. This cold distinction changes no source admission or execution phase.

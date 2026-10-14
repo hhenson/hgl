@@ -41,6 +41,25 @@ pub fn facts(
         };
     }
     let mut result = incoming.clone();
+    if let Kind::Query(op, args) = &value.kind
+        && matches!(op.as_str(), "is_ok" | "is_err")
+        && let [
+            Value {
+                kind: Kind::Local(id),
+                ..
+            },
+        ] = args.as_slice()
+    {
+        result.insert((
+            if (op == "is_ok") == truth {
+                "ok"
+            } else {
+                "err"
+            }
+            .into(),
+            *id,
+        ));
+    }
     if let Kind::IsPresent(value) = &value.kind
         && let Kind::Local(id) = value.kind
     {
@@ -66,9 +85,10 @@ pub fn merge_facts(
     b: &BTreeSet<(String, usize)>,
 ) -> BTreeSet<(String, usize)> {
     let reachable = |facts: &BTreeSet<(String, usize)>| {
-        !facts
-            .iter()
-            .any(|(kind, id)| kind == "present" && facts.contains(&("absent".into(), *id)))
+        !facts.iter().any(|(kind, id)| {
+            kind == "present" && facts.contains(&("absent".into(), *id))
+                || kind == "ok" && facts.contains(&("err".into(), *id))
+        })
     };
     if !reachable(a) {
         return b.clone();

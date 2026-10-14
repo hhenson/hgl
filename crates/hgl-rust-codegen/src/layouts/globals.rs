@@ -5,6 +5,19 @@ use std::collections::BTreeMap;
 
 /// Rust marker identifying an exact prepared entry type.
 pub fn global_type(ty: &Ty) -> String {
+    if let Ty::Result(ok, err) = ty {
+        return format!(
+            "hgl_store::outcomes::ResultValue<{},{}>",
+            global_type(ok),
+            global_type(err)
+        );
+    }
+    if *ty == Ty::Error {
+        return "hgl_store::outcomes::Error".into();
+    }
+    if matches!(ty,Ty::Struct(name,..) if name.source_name()=="\0error.context") {
+        return "hgl_store::outcomes::Context".into();
+    }
     if let Ty::Native(scalar) = ty {
         return format!(
             "hgl_store::native_values::Native<{},NativeDomain{}>",
@@ -104,6 +117,7 @@ pub fn global_markers(plan: &Plan) -> String {
                     | Ty::Map(..)
             )
         })
+        .filter(|ty| !matches!(ty,Ty::Struct(name,..) if name.source_name()=="\0error.context"))
         .filter(|ty| emitted.insert(global_type(ty)))
         .enumerate()
         .map(|(domain, ty)| {
@@ -165,6 +179,10 @@ fn collect(ty: &Ty, types: &mut BTreeMap<String, Ty>) {
             }
         }
         return;
+    }
+    if let Ty::Result(ok, err) = ty {
+        collect(ok, types);
+        collect(err, types);
     }
     if let Ty::Enum(identity) = ty {
         types.insert(identity.origin.clone(), ty.clone());

@@ -11,7 +11,7 @@ line-budget = 2000
 
 [package.metadata.hgl.modules]
 key_context = { budget = 80, uses = ["composite_keys", "ir", "value_eval"] }
-any_values = { budget = 420, uses = ["ir", "value_eval", "family_values", "scalar_keys"] }
+any_values = { budget = 420, uses = ["value_operations", "ir", "value_eval", "family_values", "scalar_keys"] }
 ir_visit = { budget = 320, uses = ["ir", "harness_ir"] }
 collection_values = { budget = 200, uses = ["composite_keys", "family_values", "ir", "any_values", "value_eval", "key_context"] }
 composite_keys = { budget = 150, uses = ["ir", "scalar_keys", "any_values", "family_values", "value_eval"] }

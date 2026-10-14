@@ -22,8 +22,8 @@ fn alias_reinsert(value:i64)->map<str,i64> {when {let key="stable"
 let alias=key
 if value>0 {return delta<map<str,i64>>(upsert:[alias:value+1])} else {return delta<map<str,i64>>(remove:[alias])}}}
 test alias_reinsert {assert eval(alias_reinsert,value:[1,0,2]) == [delta<map<str,i64>>(upsert:["stable":2]),delta<map<str,i64>>(remove:["stable"]),delta<map<str,i64>>(upsert:["stable":3])]}
-native const fn configuration_marker(value:i64)->i64 throws
-native const fn configuration_marker(value:i64)->i64 throws {}
+native const fn configuration_marker(value:i64)->i64
+native const fn configuration_marker(value:i64)->i64 { rust_abi_node_result }
 struct ConfigRow {time:datetime
 value:i64}
 const fn configuration_rows()->list<ConfigRow> {let value=configuration_marker(7)
@@ -41,12 +41,12 @@ fn legacy_bools(value:bool)->set<bool> {inject out
 when {upsert(out,value)}}
 test legacy_members {assert eval(legacy_members,value:[1,2,-1,1]) == [delta<set<i64>>(added:[1]),delta<set<i64>>(added:[2]),delta<set<i64>>(removed:[1]),delta<set<i64>>(added:[1])]}
 test legacy_bools {assert eval(legacy_bools,value:[true,false,true]) == [delta<set<bool>>(added:[true]),delta<set<bool>>(added:[false]),_]}
-native const fn opaque(value:i64)->i64 throws
-native const fn opaque(value:i64)->i64 throws {}
-native const fn key_start(value:i64) throws
-native const fn key_start(value:i64) throws {}
-native const fn key_stop(value:i64) throws
-native const fn key_stop(value:i64) throws {}
+native const fn opaque(value:i64)->i64
+native const fn opaque(value:i64)->i64 { rust_abi_node_result }
+native const fn key_start(value:i64)
+native const fn key_start(value:i64) { rust_abi_node_result }
+native const fn key_stop(value:i64)
+native const fn key_stop(value:i64) { rust_abi_node_result }
 fn opaque_members(value:i64,other:i64)->set<i64> {inject out
 start {key_start(0)}
 stop {key_stop(0)}
@@ -397,10 +397,10 @@ fn retained_byte_field_aliases_publish_without_allocating() -> Result<(), Box<dy
 fn retained_byte_selectors_run_once_and_own_their_values() -> Result<(), Box<dyn std::error::Error>>
 {
     let source = r"module retained_byte_selectors
-native const fn byte_selector(value:i64)->i64 throws
-native const fn byte_selector(value:i64)->i64 throws {}
-native const fn byte_selection_count(value:i64) throws
-native const fn byte_selection_count(value:i64) throws {}
+native const fn byte_selector(value:i64)->i64
+native const fn byte_selector(value:i64)->i64 { rust_abi_node_result }
+native const fn byte_selection_count(value:i64)
+native const fn byte_selection_count(value:i64) { rust_abi_node_result }
 fn copy(value:list<bytes,2>,index:i64)->rolling<bytes,2> {
 when {let whole=value
 let child=whole[byte_selector(index)]
@@ -780,12 +780,12 @@ when {var i=0
 while i<value {upsert(out,i)
 i+=1}}}
 test input_limit {assert eval(input_limit,value:[5]) == [delta<set<i64>>(added:[0,1,2,3,4])]}
-native const fn limit(value:i64)->i64 throws
-native const fn limit(value:i64)->i64 throws {}
-native const fn begin(value:i64) throws
-native const fn begin(value:i64) throws {}
-native const fn end(value:i64) throws
-native const fn end(value:i64) throws {}
+native const fn limit(value:i64)->i64
+native const fn limit(value:i64)->i64 { rust_abi_node_result }
+native const fn begin(value:i64)
+native const fn begin(value:i64) { rust_abi_node_result }
+native const fn end(value:i64)
+native const fn end(value:i64) { rust_abi_node_result }
 fn native_limit(value:i64)->set<i64> {inject out
 start {begin(0)}
 stop {end(0)}

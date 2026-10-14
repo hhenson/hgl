@@ -151,7 +151,14 @@ fn bounds(value: &Value, fallback: &impl Fn(&Ty) -> String) -> String {
             })
             .collect::<Vec<_>>()
             .join(",");
-        return format!("PreparedBounds{} {{{args}}}", global_type(&value.ty));
+        let marker = if matches!(value.ty, Ty::Result(..)) {
+            "hgl_store::outcomes::ResultBounds".into()
+        } else if value.ty == Ty::Error {
+            "hgl_store::outcomes::ErrorBounds".into()
+        } else {
+            format!("PreparedBounds{}", global_type(&value.ty))
+        };
+        return format!("{marker} {{{args}}}");
     }
     fallback(&value.ty)
 }

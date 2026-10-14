@@ -5,14 +5,14 @@ struct AliasSnapshot { before:any
 struct AliasOrder { left:i64
  box:any
  right:i64 }
-native const fn alias_mark(value:i64)->i64 throws
-native const fn alias_mark(value:i64)->i64 throws {}
-native const fn alias_fail(value:i64)->i64 throws
-native const fn alias_fail(value:i64)->i64 throws {}
-native const fn alias_finish(value:i64) throws
-native const fn alias_finish(value:i64) throws {}
-native const fn alias_verify(value:any) throws
-native const fn alias_verify(value:any) throws {}
+native const fn alias_mark(value:i64)->i64
+native const fn alias_mark(value:i64)->i64 { rust_abi_node_result }
+native const fn alias_fail(value:i64)->i64
+native const fn alias_fail(value:i64)->i64 { rust_abi_node_result }
+native const fn alias_finish(value:i64)
+native const fn alias_finish(value:i64) { rust_abi_node_result }
+native const fn alias_verify(value:any)
+native const fn alias_verify(value:any) { rust_abi_node_result }
 fn self_composed(value:i64)->any {
  inject global_state
  when {

@@ -202,6 +202,11 @@ impl TsType {
 /// An exact ordinary entry type, including nominal identity and required fields.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum OrdinaryType {
+    /// One complete ordinary success/error outcome.
+    Result(Box<Self>, Box<Self>),
+    /// Canonical diagnostic data, with optional retained provenance.
+    Error,
+
     /// Canonical provider-defined opaque scalar identity.
     Native(&'static str),
     /// One owning typed box, independent of its contained shape.
@@ -355,3 +360,6 @@ pub fn bytes(octets: &[i64]) -> NodeResult<Vec<u8>> {
     }
     Ok(bytes)
 }
+
+pub mod error_value;
+pub use error_value::{ErrorContext, ErrorValue};

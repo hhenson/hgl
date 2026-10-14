@@ -38,3 +38,8 @@ or alternate test schema is introduced.
 
 Built-in scalar and type-constructor spellings retain ordinary type-resolution
 precedence; hidden test nominals cannot intercept production annotations.
+
+`capture_intrinsic(&Library,module,test_scope) -> bool` preserves visible
+ordinary callable shadowing. Builtin capture name admission checks its complete
+selected callable as an ordinary call with the remaining written arguments,
+including qualified imports, without evaluating or bypassing selection.

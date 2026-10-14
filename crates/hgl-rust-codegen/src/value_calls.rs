@@ -28,6 +28,7 @@ fn visit(value: &Value, id: Option<usize>, used: &mut bool) -> bool {
     {
         *used |= args.iter().enumerate().any(|(i, value)| {
             crate::execution_proof::owning_argument(&value.ty)
+                && !matches!(value.ty, Ty::Result(..) | Ty::Error)
                 && (!(value.ty == Ty::Str && matches!(value.kind, Kind::Literal(Literal::Str(_))))
                     || statements(body, Some(i)))
         });

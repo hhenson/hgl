@@ -12,8 +12,8 @@ fn source(body: &str) -> Vec<(String, String)> {
             "preparation.hgl".into(),
             format!(
                 r#"module preparation
-native const fn start_marker(value:i64)->i64 throws
-native const fn start_marker(value:i64)->i64 throws {{}}
+native const fn start_marker(value:i64)->i64
+native const fn start_marker(value:i64)->i64 {{ rust_abi_node_result }}
 fn target(value:timezone,const ignored:timezone)->timezone {{
     start {{ start_marker(1) }}
     when {{return delta_value(value)}}

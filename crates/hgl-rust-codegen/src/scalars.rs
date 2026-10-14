@@ -9,6 +9,14 @@ pub fn rust_type(ty: &Ty) -> String {
         );
     }
     match ty {
+        Ty::Result(ok, err) => {
+            return format!(
+                "Result<{},{}>",
+                crate::layouts::owned_type(ok),
+                crate::layouts::owned_type(err)
+            );
+        }
+        Ty::Error => "hgl_types::ErrorValue",
         Ty::Enum(_) | Ty::I64 => "i64",
         Ty::Duration => "hgl_types::EngineDelta",
         Ty::Date => "hgl_types::Date",

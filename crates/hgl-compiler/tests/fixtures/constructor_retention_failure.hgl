@@ -6,12 +6,12 @@ struct PreflightReplacement { first:i64
     second:str
     later:i64
 }
-native const fn preflight_later(value:i64)->i64 throws
-native const fn preflight_later(value:i64)->i64 throws {}
-native const fn preflight_first(value:i64)->i64 throws
-native const fn preflight_first(value:i64)->i64 throws {}
-native const fn preflight_finish(value:bool) throws
-native const fn preflight_finish(value:bool) throws {}
+native const fn preflight_later(value:i64)->i64
+native const fn preflight_later(value:i64)->i64 { rust_abi_node_result }
+native const fn preflight_first(value:i64)->i64
+native const fn preflight_first(value:i64)->i64 { rust_abi_node_result }
+native const fn preflight_finish(value:bool)
+native const fn preflight_finish(value:bool) { rust_abi_node_result }
 test {
     fn first_failure(value:i64)->any {
         when {

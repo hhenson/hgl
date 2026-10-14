@@ -67,6 +67,7 @@ impl Evaluator {
         Execution {
             locals: &mut self.locals,
             materialize,
+            propagated: None,
         }
         .value(value)
     }
@@ -91,6 +92,7 @@ impl Evaluator {
         Execution {
             locals: &mut self.locals,
             materialize,
+            propagated: None,
         }
         .statement(statement)
     }
@@ -98,6 +100,7 @@ impl Evaluator {
 struct Execution<'a, 'b> {
     locals: &'a mut Vec<(usize, Value, bool)>,
     materialize: &'a mut Materialize<'b>,
+    propagated: Option<Value>,
 }
 impl Execution<'_, '_> {
     fn value(&mut self, value: &Value) -> Result<Value, EvalError> {
@@ -144,6 +147,9 @@ impl Execution<'_, '_> {
                 }
                 return operators::unary(op, &operand);
             }
+            Kind::Query(op, args) if outcome_operation(op) => {
+                return self.outcome_query(op, args, &value.ty);
+            }
             Kind::Query(op, args) if op.starts_with("\0lookup_") => {
                 return self.lookup(op, args, &value.ty);
             }
@@ -178,6 +184,55 @@ impl Execution<'_, '_> {
             }
         };
         Ok(Value::new(value.ty.clone(), kind))
+    }
+    fn outcome_query(&mut self, op: &str, args: &[Value], ty: &Ty) -> Result<Value, EvalError> {
+        let value = self.value(&args[0])?;
+        if matches!(op, "is_ok" | "is_err") {
+            let success = matches!(
+                field_value(&value, 0)?.kind,
+                Kind::Literal(Literal::Bool(true))
+            );
+            return Ok(Value::new(
+                Ty::Bool,
+                Kind::Literal(Literal::Bool(success == (op == "is_ok"))),
+            ));
+        }
+        if op.starts_with("\0propagate_") {
+            let success = matches!(
+                field_value(&value, 0)?.kind,
+                Kind::Literal(Literal::Bool(true))
+            );
+            if success {
+                return field_value(&value, 1).cloned();
+            }
+            let error = field_value(&value, 2)?.clone();
+            if op == "\0propagate_helper" {
+                self.propagated = Some(Value::new(
+                    args[1].ty.clone(),
+                    Kind::Construct(vec![
+                        (0, Value::new(Ty::Bool, Kind::Literal(Literal::Bool(false)))),
+                        (2, error),
+                    ]),
+                ));
+                return Err(EvalError::Propagation);
+            }
+            return Err(unsupported(
+                "node failure propagation requires graph execution",
+            ));
+        }
+        let index = match op {
+            "\0error_message" | "\0context_node" => 0,
+            "\0result_value" | "\0error_code" | "\0context_phase" => 1,
+            "\0result_error" | "\0error_context" | "\0context_time" => 2,
+            _ => return Err(unsupported("unknown outcome property")),
+        };
+        let Kind::Construct(fields) = &value.kind else {
+            return Err(unsupported("outcome property requires constructed data"));
+        };
+        Ok(fields.iter().find(|(id, _)| *id == index).map_or_else(
+            || Value::new(ty.clone(), Kind::Void),
+            |(_, child)| child.clone(),
+        ))
     }
     fn lookup(&mut self, op: &str, args: &[Value], ty: &Ty) -> Result<Value, EvalError> {
         let parent = self.value(&args[0])?;
@@ -262,8 +317,13 @@ impl Execution<'_, '_> {
         let mut invocation = Execution {
             locals: &mut locals,
             materialize: self.materialize,
+            propagated: None,
         };
-        match invocation.block(body)? {
+        let returned = match invocation.block(body) {
+            Err(EvalError::Propagation) => invocation.propagated.take(),
+            result => result?,
+        };
+        match returned {
             Some(value) if value.ty == *ty => Ok(value),
             None if *ty == Ty::Void => Ok(Value::new(Ty::Void, Kind::Void)),
             Some(_) | None => Err(unsupported("ordinary call has no correctly typed result")),
@@ -491,4 +551,12 @@ pub fn atomic_argument(value: Value, expected: Option<&Ty>) -> Value {
         return Value::new(ty, kind);
     }
     value
+}
+
+fn outcome_operation(op: &str) -> bool {
+    op.starts_with("\0result_")
+        || op.starts_with("\0error_")
+        || op.starts_with("\0context_")
+        || op.starts_with("\0propagate_")
+        || matches!(op, "is_ok" | "is_err")
 }

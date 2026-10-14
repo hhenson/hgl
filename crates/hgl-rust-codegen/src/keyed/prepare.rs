@@ -25,6 +25,7 @@ pub fn preparation(plan: &Plan) -> String {
     for ty in crate::layouts::global_types(plan).values() {
         if matches!(ty, hgl_source::Ty::Native(_) | hgl_source::Ty::Struct(..))
             && ty.collection_key()
+            && !matches!(ty,hgl_source::Ty::Struct(name,..) if name.source_name()=="\0error.context")
         {
             let ty = if let hgl_source::Ty::Struct(name, fields, _) = ty
                 && name.source_name().starts_with("\0tuple<")

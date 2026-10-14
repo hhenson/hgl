@@ -170,8 +170,8 @@ fn hook_constructor_checks_duplicate_before_value_and_retains_written_order()
     ] {
         let source = format!(
             r"module hot_collections
-native const fn mark(value:i64)->i64 throws
-native const fn mark(value:i64)->i64 throws {{}}
+native const fn mark(value:i64)->i64
+native const fn mark(value:i64)->i64 {{ rust_abi_node_result }}
 fn build(tick:i64)->atomic<map<i64,i64>> {{when {{return map<i64,i64>(items:[mark(tick):mark(10),mark({second}):mark(20)])}}}}
 test order {{assert eval(build,[1])==[map<i64,i64>(items:[2:20,1:10])]}}
 "
@@ -266,10 +266,10 @@ test presence {
     )?;
     let source = r"module nan_key
 struct Key {part:f64=null}
-native const fn mark(value:f64)->f64 throws
-native const fn mark(value:f64)->f64 throws {}
-native const fn value(item:i64)->i64 throws
-native const fn value(item:i64)->i64 throws {}
+native const fn mark(value:f64)->f64
+native const fn mark(value:f64)->f64 { rust_abi_node_result }
+native const fn value(item:i64)->i64
+native const fn value(item:i64)->i64 { rust_abi_node_result }
 fn observe(tick:i64) {when {let result=map<Key,i64>(items:[Key(part:mark(0.0)):value(tick)])}}
 test reject {eval(observe,[1])}
 ";

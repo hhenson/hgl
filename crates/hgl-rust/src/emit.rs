@@ -8,9 +8,26 @@ use crate::values::{
 };
 use hgl_source::Ty;
 
-fn node(plan: &Plan, n: &Node, index: usize, out: &mut Vec<String>) {
+fn child_node(plan: &Plan, index: usize, out: &mut Vec<String>) -> bool {
+    if hgl_rust_codegen::keyed_graphs::member(plan, index) {
+        return true;
+    }
+    if plan.keyed.iter().any(|c| c.owner == index) {
+        out.push(hgl_rust_codegen::keyed_graphs::node(plan, index, shape));
+        return true;
+    }
+    if plan.captures.iter().any(|c| c.owner == index) {
+        out.push(hgl_rust_codegen::capture_graphs::node(plan, index, shape));
+        return true;
+    }
     if plan.conditionals.iter().any(|c| c.owner == index) {
         out.push(crate::conditionals::node(plan, index, shape));
+        return true;
+    }
+    false
+}
+fn node(plan: &Plan, n: &Node, index: usize, out: &mut Vec<String>) {
+    if child_node(plan, index, out) {
         return;
     }
     if let Some(assembly) = crate::graph_assemblies::shape(n) {
@@ -207,6 +224,8 @@ fn build_entry(plan: &Plan, node: &Node, index: usize, out: &mut Vec<String>) {
 }
 fn schedule_on_start(plan: &Plan, node: &Node, index: usize) -> bool {
     !plan.conditionals.iter().any(|owner| owner.owner == index)
+        && !plan.keyed.iter().any(|owner| owner.owner == index)
+        && !plan.captures.iter().any(|owner| owner.owner == index)
         && (crate::graph_assemblies::shape(node).is_some()
             || node
                 .inputs
@@ -316,6 +335,23 @@ fn shared_layouts_inner(
         + &crate::deltas::markers(&types)
         + &crate::any_values::layouts(&types)
 }
+fn emit_nodes(plan: &Plan, out: &mut Vec<String>) {
+    let unknown = hgl_semantics::constructor_owners::unbounded_failure_data(plan);
+    for (i, n) in plan.nodes.iter().enumerate() {
+        if unknown.contains(&i)
+            && (hgl_semantics::constructor_owners::failure_data_type(&n.result)
+                || n.inputs
+                    .iter()
+                    .any(|(_, _, ty)| hgl_semantics::constructor_owners::failure_data_type(ty)))
+        {
+            let mut ordinary = plan.clone();
+            ordinary.ordinary_instantiation = true;
+            node(&ordinary, n, i, out);
+        } else {
+            node(plan, n, i, out);
+        }
+    }
+}
 fn emit_inner(plan: &Plan, layouts: bool) -> String {
     if let Some(error) = crate::reference_routes::target_error(plan) {
         return format!("compile_error!({error:?});\n");
@@ -351,17 +387,18 @@ fn emit_inner(plan: &Plan, layouts: bool) -> String {
         register_prepared(plan, &mut out);
         out.push(crate::cold_wiring::recipes(plan));
     }
-    for (i, n) in plan.nodes.iter().enumerate() {
-        node(plan, n, i, &mut out);
-    }
+    emit_nodes(plan, &mut out);
     out.push("/// Register the selected HGL implementations.\npub fn register(registry: &mut hgl_describe::Registry) -> Result<(),hgl_describe::BuildError> {\nvalidate_native_images().map_err(|what|hgl_describe::BuildError::InvalidNodeType{node:\"hgl.program\",what})?;\n" .to_owned());
     for i in 0..plan.nodes.len() {
+        if hgl_rust_codegen::keyed_graphs::member(plan, i) {
+            continue;
+        }
         out.push(format!("registry.register::<Node{i}>()?;\n"));
     }
     out.push("Ok(())\n}\n".into());
     out.push("/// Construct the checked entry graph without executing it.\npub fn main(registry: &hgl_describe::Registry) -> Result<hgl_describe::GraphDescription,hgl_describe::BuildError> {\nvalidate_native_images().map_err(|what|hgl_describe::BuildError::InvalidNodeType {node:\"hgl.program\",what})?;let mut builder = hgl_describe::Builder::new(\"hgl.program\",registry);\n" .to_owned());
     out.push(crate::cold_wiring::execute(plan));
-    if !plan.conditionals.is_empty() {
+    if crate::conditionals::has_children(plan) {
         out.push(format!("Ok({})\n}}\n", crate::conditionals::main(plan)));
         return out.concat();
     }
@@ -588,6 +625,9 @@ fn register_prepared(plan: &Plan, out: &mut Vec<String>) {
     }
     out.push("})}fn register_prepared(registry:&mut hgl_describe::Registry,configurations:&Configurations)->Result<(),String>{".into());
     for (i, node) in plan.nodes.iter().enumerate() {
+        if hgl_rust_codegen::keyed_graphs::member(plan, i) {
+            continue;
+        }
         if node.configuration.is_empty() {
             out.push(format!(
                 "registry.register::<Node{i}>().map_err(|e|format!(\"{{e:?}}\"))?;"
@@ -654,7 +694,7 @@ fn capacities(plan: &Plan) -> String {
             "cycles=cycles.checked_add({arrivals}usize).ok_or(\"finite arrival count overflow\")?;"
         ),
     );
-    if !plan.conditionals.is_empty() {
+    if crate::conditionals::has_children(plan) {
         let starts = plan
             .nodes
             .iter()
@@ -686,6 +726,15 @@ fn capacities(plan: &Plan) -> String {
     code += &capacity.constants(plan, |value| condition_code(plan, value));
     code += &capacity.scalar_sets(plan);
     code += &capacity.native_limits(plan);
+    code += &prepare_globals(plan, &capacity);
+    code += "capacity.arrivals=cycles;Ok(capacity)}\n";
+    code += &prepared_outputs(plan, &capacity);
+    code += &crate::conditionals::preparation(plan);
+    code
+}
+
+fn prepare_globals(plan: &Plan, capacity: &crate::capacity::Capacity) -> String {
+    let mut code = String::new();
     let mut appends = 0usize;
     for node in &plan.nodes {
         hgl_semantics::ir_visit::hooks(node, &mut |v| {
@@ -693,8 +742,12 @@ fn capacities(plan: &Plan) -> String {
             true
         });
     }
-    for node in &plan.nodes {
+    let unknown = hgl_semantics::constructor_owners::unbounded_failure_data(plan);
+    for (id, node) in plan.nodes.iter().enumerate() {
         for (key, ty) in &node.globals {
+            if unknown.contains(&id) && hgl_semantics::constructor_owners::failure_data_type(ty) {
+                continue;
+            }
             append(
                 &mut code,
                 format_args!(
@@ -713,9 +766,6 @@ fn capacities(plan: &Plan) -> String {
             );
         }
     }
-    code += "capacity.arrivals=cycles;Ok(capacity)}\n";
-    code += &prepared_outputs(plan, &capacity);
-    code += &crate::conditionals::preparation(plan);
     code
 }
 
@@ -723,8 +773,11 @@ fn prepared_outputs(plan: &Plan, capacity: &crate::capacity::Capacity) -> String
     let mut code = String::from(
         "fn prepare_outputs(capacity:&FiniteCapacity,store:&mut hgl_store::Store,graph:&hgl_describe::GraphDescription,built:&hgl_describe::BuiltGraph)->hgl_types::NodeResult {let empty=FiniteTopology::default();",
     );
+    let unknown = hgl_semantics::constructor_owners::unbounded_failure_data(plan);
     for (i, node) in plan.nodes.iter().enumerate() {
-        if node.result.publication() {
+        if node.result.publication()
+            && !(unknown.contains(&i) && matches!(node.result, Ty::Result(..) | Ty::Error))
+        {
             code += "if let Some(local)=graph.nodes.iter().position(|node|node.implementation==";
             append(
                 &mut code,

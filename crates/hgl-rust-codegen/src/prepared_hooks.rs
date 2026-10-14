@@ -12,7 +12,7 @@ pub(crate) fn publication(plan: &Plan, value: &Value, result: Option<&Ty>) -> Op
         && op.starts_with("\0constructor:")
         && let Some(("global_values", source)) = crate::source_slots::source(plan, value)
     {
-        if matches!(result, Some(Ty::Atomic(_))) {
+        if matches!(result, Some(Ty::Atomic(_) | Ty::Result(..) | Ty::Error)) {
             return Some(format!(
                 "let publication={source};_ctx.prepared().atomic_from_global(publication,self._output)?;"
             ));
@@ -62,7 +62,7 @@ pub(crate) fn publication(plan: &Plan, value: &Value, result: Option<&Ty>) -> Op
             &format!("self.configuration_slot{id}"),
         ));
     }
-    if matches!(result, Some(Ty::Atomic(_)))
+    if matches!(result, Some(Ty::Atomic(_) | Ty::Result(..) | Ty::Error))
         && !value.snapshot
         && !crate::execution_proof::owning_argument(&value.ty)
     {

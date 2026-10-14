@@ -178,6 +178,7 @@ pub struct Input {
     pub scope_position: usize,
     /// Binding-owned storage bookkeeping.
     pub active: bool,
+    pub(crate) owned_view: Option<NodeId>,
     /// Binding-owned storage bookkeeping.
     pub alive: bool,
     /// Binding-owned storage bookkeeping.
@@ -383,6 +384,7 @@ impl Endpoints {
             scope,
             scope_position: 0,
             active,
+            owned_view: None,
             alive: true,
             sampled_at: EngineTime::NEVER,
             reference_source: None,

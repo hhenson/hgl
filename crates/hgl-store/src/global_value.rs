@@ -150,6 +150,28 @@ pub fn allocate(
     slots: &mut Vec<usize>,
 ) -> hgl_types::NodeResult {
     match ty {
+        OrdinaryType::Result(ok, err) => {
+            slots.push(leaf::<bool>(columns)?);
+            allocate(&OrdinaryType::OptionalField(ok.clone()), columns, slots)?;
+            allocate(&OrdinaryType::OptionalField(err.clone()), columns, slots)?;
+        }
+        OrdinaryType::Error => {
+            slots.push(leaf::<String>(columns)?);
+            allocate(
+                &OrdinaryType::OptionalField(Box::new(OrdinaryType::Scalar(ScalarType::Text))),
+                columns,
+                slots,
+            )?;
+            allocate(
+                &OrdinaryType::OptionalField(Box::new(OrdinaryType::Tuple(vec![
+                    OrdinaryType::Scalar(ScalarType::Text),
+                    OrdinaryType::Scalar(ScalarType::Text),
+                    OrdinaryType::Scalar(ScalarType::DateTime),
+                ]))),
+                columns,
+                slots,
+            )?;
+        }
         OrdinaryType::Native(_) => {
             let mut capacity = Capacity::default();
             capacity.native();

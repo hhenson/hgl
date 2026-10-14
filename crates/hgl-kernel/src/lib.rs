@@ -17,6 +17,7 @@ pub mod deadlines;
 mod engine;
 mod graph;
 pub mod nested;
+pub mod prepared_keyed;
 mod schedule;
 
 use std::any::Any;
@@ -60,6 +61,10 @@ pub trait Node: Any {
     /// Called when the node is scheduled for this cycle and the inputs it
     /// requires are valid, so it asks neither (NOD-2).
     fn eval(&mut self, ctx: &mut Ctx<'_>) -> NodeResult;
+
+    /// Drop abandoned current-cycle child work after a captured failure, preserving future requests.
+    /// This internal ownership hook performs no user evaluation and defaults to no work.
+    fn discard_captured_pass(&mut self, _ctx: &mut Ctx<'_>) {}
 
     /// Called once, in reverse rank order, for every node that started.
     fn stop(&mut self, _ctx: &mut Ctx<'_>) -> NodeResult {

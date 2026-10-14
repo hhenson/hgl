@@ -351,3 +351,35 @@ Cold finite child construction and later activation use PreparedChild in
 [hgl-nested](hgl-nested.md). Graph's private scope preparation retains the child
 construction phase and reserves its mailbox before hooks; activation preserves
 normal once-only Graph lifecycle and next-cycle retirement semantics.
+
+## Captured evaluation domains
+
+`Node::discard_captured_pass(&mut Ctx)` defaults to no work. It is an infallible
+internal recovery hook for composite owners after an escaping evaluation failure.
+The private `Graph::discard_captured_pass(&mut Store, EngineTime)` abandons work due only in
+the failed pass, invokes started owners' hooks, and rearms their updated child
+requests. It preserves future work and writes already published. Scanning is
+confined to the failure path.
+
+`PreparedChild::evaluate_captured(&mut Ctx) -> NodeResult<Option<ErrorValue>>`
+evaluates the same live child with recoverable evaluation enabled transitively.
+Only active evaluation failures become canonical data. Child construction, start
+and stop failures escape. `PreparedChild::discard_captured_pass(&mut Ctx)` restores
+a nested active graph after its enclosing capture consumes the failure, with
+coding assertions for the exact live owner. Ordinary uncaught evaluation retains
+its original lifecycle/cleanup contract. Captured failures may allocate when
+retaining or formatting diagnostics; successful published Result/Error data is
+measured separately.
+
+`PreparedChild::refresh_bound(&mut Ctx, impl FnOnce(&mut Store,&T)->NodeResult)`
+requires its exact live owner and Started lifecycle, retains the parent scope
+for boundary notifications into the child, and does not restart/reconstruct it. The boundary
+callback must preserve unchanged peer/generation silence.
+
+`PreparedSwitch::discard_captured_pass(&mut Ctx)` restores its selected live
+branch and rearms the next child deadline. Switch evaluate updates that deadline
+even on failure. `Children::discard_captured_pass(&mut Ctx)` applies the same
+failed-domain rule across live dynamic children, discarding due-only notifications
+and preserving later deadlines. Children evaluate restores a removed heap entry
+on both successful and failing returns. Generated conditional owners invoke the
+switch hook; ordinary uncaught errors still escape.

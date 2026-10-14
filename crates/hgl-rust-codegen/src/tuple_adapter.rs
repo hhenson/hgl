@@ -36,7 +36,14 @@ pub fn standalone(plan: Plan) -> Result<Plan, hgl_source::Issue> {
 }
 /// Use the existing whole-adapter proof before admitting private observation slots.
 pub fn prepared(plan: Plan) -> Result<Plan, hgl_source::Issue> {
-    if !crate::value_calls::prepared(&plan) {
+    let mut outcomes = false;
+    for node in &plan.nodes {
+        hgl_semantics::ir_visit::hooks(node, &mut |value| {
+            outcomes |= matches!(value.ty, hgl_source::Ty::Result(..) | hgl_source::Ty::Error);
+            true
+        });
+    }
+    if !crate::value_calls::prepared(&plan) && !outcomes {
         return Err(hgl_source::Issue::typed(
             0..0,
             "owning helper arguments require prepared storage",
