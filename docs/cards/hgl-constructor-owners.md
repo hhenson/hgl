@@ -48,3 +48,18 @@ width inferred from a locally constructed diagnostic without origin context.
 Classification visits both map keys and values, set elements, rolling arrivals
 and structural delta descendants. A diagnostic string boxed as an Any key or
 member retains this profile through subsequent container copies and outputs.
+
+Variable-width scalar leaves use the existing `Ty::owning_scalar` classification,
+so projected message, nullable code and context text keep ordinary owning
+transport throughout marked diagnostic flow. Bytes, Native and zone-owning leaves
+follow the same conservative storage rule; container classification still recurses
+through its existing children. No diagnostic source is inferred from a type alone.
+Unmarked finite String replay/pass-through remains prepared, with measured zero
+startup, successful-tick and cleanup allocations.
+
+Failure-flow tracing conservatively marks descendants of either capture port.
+The captured normal String control therefore also uses ordinary ownership: its
+three successful ticks measured 26 allocations, startup one and cleanup zero,
+with no captured failure. This is not an allocation-free normal String capture
+claim. Runtime-native diagnostic message/code/context projection controls measure
+their captured-path allocations separately and retain earlier recorded values.

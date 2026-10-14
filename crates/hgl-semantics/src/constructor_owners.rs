@@ -53,7 +53,7 @@ pub fn failure_data_type(ty: &Ty) -> bool {
         | Ty::TimeZone
         | Ty::ZonedTime
         | Ty::ZonedDateTime
-        | Ty::Void => false,
+        | Ty::Void => ty.owning_scalar(),
     }
 }
 /// Nodes downstream of captured diagnostics lack a cold bound on failure text and provenance.

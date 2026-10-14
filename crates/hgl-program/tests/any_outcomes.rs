@@ -80,9 +80,80 @@ assert eval(observed_set,value:[1,_,2,1])==[short_set,_,longer_set,short_set]
 }
 
 #[test]
+fn diagnostic_text_projections_survive_two_relays_and_retained_outputs()
+-> Result<(), Box<dyn std::error::Error>> {
+    let source = r#"module diagnostic_text
+native const fn failure(value:i64)->result<i64,error>
+native const fn failure(value:i64)->result<i64,error> {}
+native const fn error_data(value:i64)->error
+native const fn error_data(value:i64)->error {}
+fn required(value:i64)->i64 {when {return failure(value)?}}
+fn message(failure:error)->str {when {return failure.message}}
+fn code(failure:error)->str {when {let code=failure.code
+if code!=null {return code}return "absent"}}
+fn context_phase(failure:error)->str {when {let context=failure.context
+if context!=null {return context.phase}return "absent"}}
+fn context_node(failure:error)->str {when {let context=failure.context
+if context!=null {return context.node}return "absent"}}
+fn native_error(value:i64)->error {when {return error_data(value)}}
+fn verify_node(failure:error,name:str)->bool {when {let context=failure.context
+if context!=null {return name==context.node}return name=="absent"}}
+fn identity(value:str)->str {when {return value}}
+fn relay(value:str)->str {when {return value}}
+fn retained(value:str)->str {when {let copy=value
+return copy}}
+fn observed(value:i64)->str {let seen=capture(required,value)
+retained(relay(message(seen.error)))}
+fn observed_code(value:i64)->str {let seen=capture(required,value)
+retained(relay(code(seen.error)))}
+fn observed_phase(value:i64)->str {let seen=capture(required,value)
+retained(relay(context_phase(seen.error)))}
+fn absent_phase(value:i64)->str => retained(relay(context_phase(native_error(value))))
+fn observed_node(value:i64)->bool {let seen=capture(required,value)
+verify_node(seen.error,retained(relay(context_node(seen.error))))}
+fn observed_normal(value:str)->str {let seen=capture(identity,value)
+retained(relay(seen.value))}
+test retained_text {
+assert eval(observed,value:[1,_,2,1])==["x",_,"a much longer diagnostic message","x"]
+assert eval(observed_code,value:[1,_,2,0,1])==["a",_,"a much longer diagnostic code","absent","a"]
+assert eval(observed_phase,value:[1,_,2,1])==["evaluate",_,"evaluate","evaluate"]
+assert eval(absent_phase,value:[1,_,2,1])==["absent",_,"absent","absent"]
+assert eval(observed_node,value:[1,_,2,1])==[true,_,true,true]
+assert eval(observed_normal,value:["x",_,"a much longer ordinary string","x"])==["x",_,"a much longer ordinary string","x"]
+}
+"#;
+    execute(
+        source,
+        "captured-diagnostic-text",
+        GENERIC_RUNTIME,
+        "",
+        (1, 6),
+    )
+}
+
+#[test]
+fn finite_strings_outside_diagnostic_flow_keep_prepared_transport()
+-> Result<(), Box<dyn std::error::Error>> {
+    let source = r#"module finite_text
+fn relay(value:str)->str {when {return delta_value(value)}}
+fn retained(value:str)->str {when {return delta_value(value)}}
+fn observed(value:str)->str => retained(relay(value))
+test finite {assert eval(observed,value:["x",_,"a much longer ordinary string","x"])==["x",_,"a much longer ordinary string","x"]}
+"#;
+    execute(source, "finite-unmarked-text", STRICT_RUNTIME, "", (1, 1))
+}
+
+#[test]
 fn diagnostic_carrier_classification_covers_all_collection_descendants() {
     use hgl_source::type_shape::TypeSpelling as _;
     for (spelling, expected) in [
+        ("str", true),
+        ("bytes", true),
+        ("timezone", true),
+        ("zoned_time", true),
+        ("zoned_datetime", true),
+        ("map<str,i64>", true),
+        ("list<str>", true),
         ("map<any,i64>", true),
         ("map<i64,any>", true),
         ("set<any>", true),
@@ -101,6 +172,9 @@ fn diagnostic_carrier_classification_covers_all_collection_descendants() {
             "{spelling}"
         );
     }
+    assert!(hgl_semantics::constructor_owners::failure_data_type(
+        &hgl_source::Ty::Nullable(Box::new(hgl_source::Ty::Str))
+    ));
 }
 
 #[test]
@@ -110,6 +184,29 @@ fn exact_shared_boxed_outcome_cases_execute() -> Result<(), Box<dyn std::error::
         root.join("external/hgraph_std/hgl/hgraph/tests/result_errors.hgl"),
     )?;
     execute(&source, "shared-any-outcomes", "", "", (6, 58))
+}
+
+fn diagnostic_text_provider(
+    root: &std::path::Path,
+) -> Result<(String, String), Box<dyn std::error::Error>> {
+    let image = root.join("target/diagnostic-text-provider.rs");
+    generated_cache::write(
+        &image,
+        r#"
+pub const PROVIDER:&str="hgl.diagnostic_text";pub const FINGERPRINT:&str="diagnostic-text-v1";
+pub fn failure_i64(value:i64)->Result<i64,hgl_types::ErrorValue>{Err(error_data_i64(value))}
+pub fn error_data_i64(value:i64)->hgl_types::ErrorValue{hgl_types::ErrorValue{
+message:if value==2 {"a much longer diagnostic message"}else{"x"}.into(),
+code:if value==0 {None}else{Some(if value==2 {"a much longer diagnostic code"}else{"a"}.into())},context:None}}
+"#,
+    )?;
+    Ok((
+        "diagnostic-text.hgl-native".into(),
+        format!(
+            "native_descriptor 1 target \"hgl-rust-1\"\nmodule diagnostic_text\nprovider \"hgl.diagnostic_text\" fingerprint \"diagnostic-text-v1\" image {:?}\nvalue failure(value:i64)->result<i64,error> symbol \"failure_i64\" ownership owned phases {{setup,cold,evaluation}} effects {{allocation}}\nvalue error_data(value:i64)->error symbol \"error_data_i64\" ownership owned phases {{setup,cold,evaluation}} effects {{allocation}}\n",
+            image.to_string_lossy()
+        ),
+    ))
 }
 
 fn codec_controls() -> String {
@@ -242,11 +339,22 @@ fn execute(
         ],
     )?;
     sources.insert(0, ("any_outcomes.hgl".into(), source.into()));
+    if name == "captured-diagnostic-text" {
+        sources.push(diagnostic_text_provider(&root)?);
+    }
     hgl_program::compile_tests(&sources)?;
     let suite = hgl_program::compile_module_suite(&sources)?;
     assert_eq!(suite.tests.len(), tests);
     if name == "shared-any-outcomes" {
         assert_eq!(suite.plans.len(), 13);
+    } else if name == "captured-diagnostic-text" {
+        assert_eq!(suite.plans.len(), 6);
+    } else if name == "finite-unmarked-text" {
+        assert_eq!(suite.plans.len(), 1);
+        assert!(hgl_rust::execution_proof::prepared(&suite.plans[0]));
+        assert!(
+            hgl_semantics::constructor_owners::unbounded_failure_data(&suite.plans[0]).is_empty()
+        );
     }
     let code = decorate(hgl_program::emit_tests(&suite), runtime, controls);
     let project = regression_cache::open(&root, name)?;
@@ -289,12 +397,7 @@ fn execute(
         String::from_utf8_lossy(&output.stderr)
     );
     if runtime == GENERIC_RUNTIME {
-        let report = if name == "any-captured-map-key" {
-            "target/any-captured-map-key-allocation-report.txt"
-        } else {
-            "target/any-captured-allocation-report.txt"
-        };
-        std::fs::write(root.join(report), &output.stdout)?;
+        report_allocations(&root, name, &output.stdout)?;
     }
     let text = String::from_utf8_lossy(&output.stdout);
     assert!(
@@ -304,6 +407,17 @@ fn execute(
         "{text}"
     );
     Ok(())
+}
+
+fn report_allocations(root: &std::path::Path, name: &str, bytes: &[u8]) -> std::io::Result<()> {
+    let report = if name == "any-captured-map-key" {
+        "target/any-captured-map-key-allocation-report.txt"
+    } else if name == "captured-diagnostic-text" {
+        "target/captured-diagnostic-text-allocation-report.txt"
+    } else {
+        "target/any-captured-allocation-report.txt"
+    };
+    std::fs::write(root.join(report), bytes)
 }
 
 fn layout_name(ty: &hgl_source::Ty) -> String {
