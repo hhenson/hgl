@@ -448,3 +448,12 @@ The current Rust capture target excludes a source-declared normal `ref<T>`
 connection before bundle formation and shared test layout emission, with an
 explicit target diagnostic. A declared logical T whose checked graph producer
 is a physical REF<T> remains supported through finite original-endpoint routes.
+
+Bound eval captures compare contextually with sparse expected sequences during
+ordinary test preparation. The capture supplies the exact payload type; sparse
+literals add no nullable annotation or general sparse ordinary list constructor.
+Equality includes the complete horizon, present indices and delegated payload
+comparison. Capture aliases and reversed literal comparisons preserve this rule;
+wrong payload types reject. Captured literals evaluate their written present
+operands once when the assertion runs. The private resolve/captured checker is
+restricted to this test phase and equality/inequality.

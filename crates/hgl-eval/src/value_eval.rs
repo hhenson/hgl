@@ -109,16 +109,13 @@ impl Execution<'_, '_> {
             Kind::Native(binding, arguments) => return self.native(binding, arguments),
             Kind::Delta(parts) => self.delta(parts)?,
             Kind::WiringFailure(message) => return Err(EvalError::Operation(message.clone())),
-            Kind::Opaque(_) | Kind::Captured(..) | Kind::Literal(_) | Kind::Void => {
+            Kind::Opaque(_) | Kind::Literal(_) | Kind::Void => {
                 return Ok(value.clone());
             }
+            Kind::Captured(length, slots) => Kind::Captured(*length, self.evaluate_fields(slots)?),
+
             Kind::List(items) => self.collection(&value.ty, items)?,
-            Kind::Construct(fields) => Kind::Construct(
-                fields
-                    .iter()
-                    .map(|(id, item)| Ok((*id, self.value(item)?)))
-                    .collect::<Result<_, EvalError>>()?,
-            ),
+            Kind::Construct(fields) => Kind::Construct(self.evaluate_fields(fields)?),
             Kind::Local(id) | Kind::MutableLocal(id) => {
                 let value = self.binding(*id)?.1.clone();
                 if let Kind::WiringFailure(message) = &value.kind {
@@ -185,6 +182,16 @@ impl Execution<'_, '_> {
         };
         Ok(Value::new(value.ty.clone(), kind))
     }
+    fn evaluate_fields(
+        &mut self,
+        fields: &[(usize, Value)],
+    ) -> Result<Vec<(usize, Value)>, EvalError> {
+        fields
+            .iter()
+            .map(|(index, item)| Ok((*index, self.value(item)?)))
+            .collect()
+    }
+
     fn outcome_query(&mut self, op: &str, args: &[Value], ty: &Ty) -> Result<Value, EvalError> {
         let value = self.value(&args[0])?;
         if matches!(op, "is_ok" | "is_err") {

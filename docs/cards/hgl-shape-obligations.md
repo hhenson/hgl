@@ -34,3 +34,7 @@ A rolling structural field is an admitted temporal child; its payload parameter
 still requires an ordinary value type. Max/Min are bound expressions, excluded
 from generic type occurrences. This does not make a rolling endpoint or a struct
 containing one an ordinary atomic payload.
+
+Result field occurrences recurse through both ordinary payload parameters,
+including nested generic structs and list payloads. Their requirements remain
+ordinary independently of the surrounding temporal Result publication category.

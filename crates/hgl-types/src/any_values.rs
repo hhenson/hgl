@@ -81,6 +81,10 @@ pub enum AnyOperation {
     Fields(&'static [AnyField]),
     /// Complete list or unordered set/map entries.
     Sequence(&'static AnyPlan, bool),
+    /// A single tagged outcome delegates equality to its selected ordinary payload.
+    Result(&'static AnyPlan, &'static AnyPlan),
+    /// A diagnostic retains provenance but compares only its message and nullable code.
+    Error(&'static AnyPlan),
     /// A closed abstract family retains its concrete member.
     Family(&'static [&'static AnyPlan]),
     /// A nested box selects an already compiled descriptor.

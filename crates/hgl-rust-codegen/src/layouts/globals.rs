@@ -180,6 +180,16 @@ fn collect(ty: &Ty, types: &mut BTreeMap<String, Ty>) {
         }
         return;
     }
+    if *ty == Ty::Error {
+        let schema = crate::constructor_fields::schema(ty);
+        for (_, child) in schema
+            .structure()
+            .unwrap_or_else(|_| unreachable!("diagnostic schema"))
+            .1
+        {
+            collect(child, types);
+        }
+    }
     if let Ty::Result(ok, err) = ty {
         collect(ok, types);
         collect(err, types);

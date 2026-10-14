@@ -20,3 +20,8 @@ The paired owners remain in the reusable owning columns shared with Native stora
 Typed Native preflight and provider copying remain authoritative before a write.
 Prepared Any reads from ordinary global entries use their checked readonly slot,
 then retain through the same checked copy path used by other owning aliases.
+
+Compiled Result equality reads the tag and delegates only its selected payload.
+Compiled Error equality compares borrowed message and nullable-code frames while
+retained origin bytes remain untouched. Neither operation creates hash or order
+capabilities, and no owning decode is performed for equality.

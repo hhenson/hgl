@@ -91,3 +91,8 @@ execution uses it for independently owned evaluated results. It never discovers 
 executes a provider and does not bypass source checking.
 
 Ordinary dictionary lookup executes checked lookup Query IR, evaluating map, key and fallback once in written order. Missing safe reads return contextual absence; strict reads return EvalError::Coded(value.missing_key, message). Existing complete key equality and provider failures remain authoritative.
+
+Contextual test capture literals evaluate their present ordinary expressions
+once and preserve sparse indices and horizon. Captured equality compares complete
+horizon/presence before delegating exact payload equality, including Any capability
+failures. Actual observed captures retain their independently owned data.

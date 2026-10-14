@@ -5,8 +5,13 @@ use hgl_source::Ty;
 pub(crate) fn name(ty: &Ty) -> String {
     crate::layouts::identifier(&ty.source_name())
 }
-use hgl_semantics::any_values::fields;
+pub(crate) fn fields(ty: &Ty) -> Option<(Vec<Ty>, Vec<usize>)> {
+    crate::any_outcomes::fields(ty).or_else(|| hgl_semantics::any_values::fields(ty))
+}
 fn operation(ty: &Ty) -> String {
+    if let Some(operation) = crate::any_outcomes::operation(ty) {
+        return operation;
+    }
     if let Ty::Native(scalar) = ty {
         let marker = crate::native_values::marker(scalar);
         return format!(
@@ -115,6 +120,9 @@ fn scalar(ty: &Ty) -> Option<(&'static str, &'static str)> {
     )
 }
 fn codecs(ty: &Ty) -> (String, String) {
+    if let Some(codecs) = crate::any_outcomes::codecs(ty) {
+        return codecs;
+    }
     if let Ty::Native(scalar) = ty {
         let marker = crate::native_values::marker(scalar);
         return (
@@ -384,6 +392,9 @@ fn slot_child(ty: &Ty, positions: &str) -> String {
     }
 }
 fn slot_writer(ty: &Ty) -> String {
+    if let Some(slots) = crate::any_outcomes::slots(ty) {
+        return slots;
+    }
     if let Ty::Native(scalar) = ty {
         return crate::native_values::append(scalar, "columns.native(slot).data()");
     }
@@ -434,6 +445,9 @@ fn slot_writer(ty: &Ty) -> String {
     }).collect()
 }
 fn bound(ty: &Ty) -> String {
+    if let Some(bound) = crate::any_outcomes::bound(ty) {
+        return bound;
+    }
     if let Some(child) = crate::collections::element(ty) {
         return format!(
             "v.len.saturating_mul(8usize.saturating_add(any_bound_{}(&v.element)))",
@@ -576,6 +590,9 @@ fn members(family: &hgl_source::FamilyType, emit: impl Fn(usize, &Ty) -> String)
 }
 
 fn copy_codec(ty: &Ty) -> String {
+    if let Some(copy) = crate::any_outcomes::copy(ty) {
+        return copy;
+    }
     if let Ty::Native(scalar) = ty {
         let marker = crate::native_values::marker(scalar);
         return format!(

@@ -20,7 +20,7 @@ fn references(value: &mut Value, owners: &BTreeMap<usize, usize>) -> bool {
 /// Owning diagnostics can acquire failure text and origin metadata after startup.
 pub fn failure_data_type(ty: &Ty) -> bool {
     match ty {
-        Ty::Error | Ty::Result(..) => true,
+        Ty::Any | Ty::Error | Ty::Result(..) => true,
         Ty::Ref(child) | Ty::Atomic(child) | Ty::Nullable(child) | Ty::List(child, _) => {
             failure_data_type(child)
         }
@@ -43,7 +43,6 @@ pub fn failure_data_type(ty: &Ty) -> bool {
         | Ty::Bool
         | Ty::Str
         | Ty::Bytes
-        | Ty::Any
         | Ty::Duration
         | Ty::Date
         | Ty::Time

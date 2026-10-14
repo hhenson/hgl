@@ -41,6 +41,38 @@ fn equal(plan: &AnyPlan, a: AnyView<'_>, b: AnyView<'_>) -> NodeResult<bool> {
                 child.equal(left, right)
             })
         }
+        AnyOperation::Result(ok, err) => {
+            if a[0] != b[0] {
+                return Ok(false);
+            }
+            let child = if a[0] == 0 { ok } else { err };
+            child.equal(a.slice(9..a.len()), b.slice(9..b.len()))
+        }
+        AnyOperation::Error(text) => {
+            let (mut left, mut right) = (Frames(a), Frames(b));
+            if !text.equal(
+                left.next()
+                    .unwrap_or_else(|| unreachable!("validated diagnostic message")),
+                right
+                    .next()
+                    .unwrap_or_else(|| unreachable!("validated diagnostic message")),
+            )? {
+                return Ok(false);
+            }
+            let code = hgl_types::AnyField {
+                plan: text,
+                optional: true,
+            };
+            left.next()
+                .unwrap_or_else(|| unreachable!("validated diagnostic code"))
+                .field(&code)
+                .equal(
+                    &right
+                        .next()
+                        .unwrap_or_else(|| unreachable!("validated diagnostic code"))
+                        .field(&code),
+                )
+        }
         AnyOperation::Family(members) => {
             let (left, right) = (number(&a[..8]), number(&b[..8]));
             Ok(left == right
@@ -79,7 +111,10 @@ fn compare(plan: &AnyPlan, a: AnyView<'_>, b: AnyView<'_>) -> NodeResult<Option<
             members[index(left)].compare(a.slice(8..a.len()), b.slice(8..b.len()))
         }
         AnyOperation::Boxed => a.boxed().compare(&b.boxed()),
-        AnyOperation::Sequence(_, true) | AnyOperation::Data => capability(),
+        AnyOperation::Sequence(_, true)
+        | AnyOperation::Result(..)
+        | AnyOperation::Error(_)
+        | AnyOperation::Data => capability(),
     }
 }
 /// Hash complete contents; unordered containers combine member hashes independently.
@@ -127,7 +162,9 @@ fn hash(plan: &AnyPlan, data: AnyView<'_>) -> NodeResult<u64> {
                 .hash(&mut hash);
         }
         AnyOperation::Boxed => data.boxed().key_hash()?.hash(&mut hash),
-        AnyOperation::Data => return capability(),
+        AnyOperation::Data | AnyOperation::Result(..) | AnyOperation::Error(_) => {
+            return capability();
+        }
     }
     Ok(hash.finish())
 }

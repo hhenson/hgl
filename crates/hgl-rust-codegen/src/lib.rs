@@ -2,6 +2,7 @@
 /// Prepared expression emission used by program capacity planning.
 pub mod any_expression;
 mod any_expression_leaves;
+mod any_outcomes;
 pub mod any_prepared;
 pub mod any_values;
 pub mod capture_graphs;

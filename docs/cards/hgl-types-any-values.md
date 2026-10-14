@@ -42,3 +42,9 @@ typed framing before trusted decoding. Descriptors without that mapping are
 rejected at cold construction. `AnyView::checked_boxed() -> NodeResult<AnyRef>`
 checks the descriptor index and empty-box payload before returning a borrow.
 These checks do not run on the prepared publication path.
+
+`AnyOperation::Result(&AnyPlan,&AnyPlan)` describes one tag and the selected
+ordinary payload. `AnyOperation::Error(&AnyPlan)` carries the message/code text
+plan; equality ignores the separately retained provenance frame. Both supply
+only their source-declared equality capability; hash/order remain unavailable.
+The compiled copy codec retains complete bytes and descriptor ownership.

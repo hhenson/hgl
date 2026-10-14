@@ -776,7 +776,8 @@ fn prepared_outputs(plan: &Plan, capacity: &crate::capacity::Capacity) -> String
     let unknown = hgl_semantics::constructor_owners::unbounded_failure_data(plan);
     for (i, node) in plan.nodes.iter().enumerate() {
         if node.result.publication()
-            && !(unknown.contains(&i) && matches!(node.result, Ty::Result(..) | Ty::Error))
+            && !(unknown.contains(&i)
+                && hgl_semantics::constructor_owners::failure_data_type(&node.result))
         {
             code += "if let Some(local)=graph.nodes.iter().position(|node|node.implementation==";
             append(

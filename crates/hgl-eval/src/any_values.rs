@@ -85,6 +85,9 @@ pub fn equal_data(a: &Value, b: &Value) -> Result<bool, EvalError> {
         }
         (Kind::Literal(a), Kind::Literal(b)) => Ok(a == b),
         (Kind::Void, Kind::Void) => Ok(true),
+        (Kind::Captured(left_length, left), Kind::Captured(right_length, right)) => {
+            captured_equal((*left_length, left), (*right_length, right))
+        }
         (Kind::List(left), Kind::List(right)) => {
             sequence_equal(left, right, matches!(a.ty, Ty::Set(_) | Ty::Map(..)))
         }
@@ -134,6 +137,21 @@ pub fn equal_data(a: &Value, b: &Value) -> Result<bool, EvalError> {
         _ => Ok(false),
     }
 }
+fn captured_equal(
+    (left_length, left): (usize, &[(usize, Value)]),
+    (right_length, right): (usize, &[(usize, Value)]),
+) -> Result<bool, EvalError> {
+    if left_length != right_length || left.len() != right.len() {
+        return Ok(false);
+    }
+    for ((left_index, left), (right_index, right)) in left.iter().zip(right) {
+        if left_index != right_index || !equal_data(left, right)? {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
 fn sequence_equal(left: &[Value], right: &[Value], unordered: bool) -> Result<bool, EvalError> {
     if left.len() != right.len() {
         return Ok(false);

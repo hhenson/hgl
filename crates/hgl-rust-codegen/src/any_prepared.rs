@@ -89,7 +89,17 @@ pub fn prepare(original: &Plan) -> Plan {
                     || crate::structural_publication::ordinary_supported(&value.ty))
         },
     );
+    let unknown = hgl_semantics::constructor_owners::unbounded_failure_data(original);
     for (node_id, node) in plan.nodes.iter_mut().enumerate() {
+        if unknown.contains(&node_id)
+            && (hgl_semantics::constructor_owners::failure_data_type(&node.result)
+                || node
+                    .inputs
+                    .iter()
+                    .any(|(_, _, ty)| hgl_semantics::constructor_owners::failure_data_type(ty)))
+        {
+            continue;
+        }
         let mut globals = std::mem::take(&mut node.globals);
         let mut prepare_payload = |v: &mut Value| {
             if crate::owner_comparisons::prepare(original, v, &mut globals, node_id) {

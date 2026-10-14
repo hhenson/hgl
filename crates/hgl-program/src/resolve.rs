@@ -16,6 +16,7 @@ use hgl_semantics::value_eval::atomic_argument;
 use hgl_source::execution_phase::ExecutionPhase as Phase;
 use std::collections::{BTreeMap, BTreeSet};
 mod capture;
+mod captured;
 mod conditional;
 mod keyed;
 mod outcomes;
@@ -2264,6 +2265,9 @@ impl Checker {
         env: &Env,
         runtime: bool,
     ) -> Result<Value, Issue> {
+        if let Some(value) = self.captured_comparison(module, op, operands, env, runtime)? {
+            return Ok(value);
+        }
         if matches!(operands.0.syntax(), Expr::Null) || matches!(operands.1.syntax(), Expr::Null) {
             if !matches!(op, "==" | "!=") {
                 return Err("null only supports nullable presence comparisons".into());

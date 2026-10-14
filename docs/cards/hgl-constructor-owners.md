@@ -41,3 +41,7 @@ Result/Error calls through checked input edges. Runtime-supplied outcomes have n
 proved cold payload bound; their constructors and downstream outcome owners use
 ordinary owning transport. Exact bounded literal/replay outcomes retain prepared
 storage. This cold distinction changes no source admission or execution phase.
+
+A downstream Any box can retain unbounded outcome/error data. Such boxes and
+containers remain in the same ordinary owning profile, rather than using a cold
+width inferred from a locally constructed diagnostic without origin context.
