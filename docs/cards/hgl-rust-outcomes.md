@@ -13,3 +13,11 @@ only the tagged branch compared.
 May use source_slots. No third-party dependency, source semantic fallback,
 provider name lookup or per-value type dispatch. Generic owning expression paths
 may allocate; typed prepared controls state their narrower zero-allocation proof.
+
+The finite unseeded Result controls measure complete prepared publication and
+retention, including nested String payloads and selected primitive projections,
+with zero startup, successful-tick and cleanup allocations. Returning a String
+payload from a Result local still lowers through an owning `ValueSlot<String>::read`
+before scalar publication. A direct `let outcome=value; if is_ok(outcome) {return
+outcome.value}` probe measured one allocation on its first nonempty String
+publication tick; that projection is outside the complete prepared publication proof.

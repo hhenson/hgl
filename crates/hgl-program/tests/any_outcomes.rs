@@ -389,3 +389,49 @@ assert raises("value.capability") {{assert eval(failure,value:[expected_failure]
         (1, 2),
     )
 }
+
+#[test]
+fn unseeded_result_publications_prepare_both_payload_slots_from_cold_child_bounds()
+-> Result<(), Box<dyn std::error::Error>> {
+    let source = r#"module unseeded_result
+use hgraph.std::{TextOnly}
+fn make(value:i64)->result<i64,TextOnly> {when {return ok(value)}}
+fn reject(value:i64)->result<TextOnly,i64> {when {return err(value)}}
+fn success(value:result<i64,TextOnly>)->i64 {when {let outcome=value
+if is_ok(outcome) {return outcome.value}return 0}}
+fn failure(value:result<TextOnly,i64>)->i64 {when {let outcome=value
+if is_err(outcome) {return outcome.error}return 0}}
+fn made(value:i64)->i64 => success(make(value))
+fn rejected(value:i64)->i64 => failure(reject(value))
+fn make_text(value:str)->result<str,i64> {when {return ok(value)}}
+fn reject_text(value:str)->result<i64,str> {when {return err(value)}}
+fn alternating(value:i64)->result<i64,i64> {when {if value>0 {return ok(value)}return err(value)}}
+fn nested(value:str)->result<result<str,i64>,i64> {when {return ok(ok(value))}}
+test unseeded_slots {
+assert eval(made,value:[7,_,9])==[7,_,9]
+assert eval(rejected,value:[7,_,9])==[7,_,9]
+let first:result<str,i64> = ok("first")
+let longer:result<str,i64> = ok("longer replacement")
+let empty:result<str,i64> = ok("")
+assert eval(make_text,value:["first",_,"longer replacement",""])==[first,_,longer,empty]
+let first_error:result<i64,str> = err("first")
+let longer_error:result<i64,str> = err("longer replacement")
+let empty_error:result<i64,str> = err("")
+assert eval(reject_text,value:["first",_,"longer replacement",""])==[first_error,_,longer_error,empty_error]
+let success:result<i64,i64> = ok(7)
+let failure:result<i64,i64> = err(-1)
+assert eval(alternating,value:[7,-1,7,-1])==[success,failure,success,failure]
+let nested_first:result<result<str,i64>,i64> = ok(first)
+let nested_longer:result<result<str,i64>,i64> = ok(longer)
+let nested_empty:result<result<str,i64>,i64> = ok(empty)
+assert eval(nested,value:["first",_,"longer replacement",""])==[nested_first,_,nested_longer,nested_empty]
+}
+"#;
+    execute(
+        source,
+        "unseeded-result-capacity",
+        STRICT_RUNTIME,
+        "",
+        (1, 6),
+    )
+}

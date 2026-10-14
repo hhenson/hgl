@@ -13,6 +13,11 @@ Optional field limits inspect only present native payloads and reserve independe
 child capacity for every prepared destination. Logical presence remains unset
 until the complete value is copied and published.
 
+Result destinations reserve both payload slots from their typed child maxima,
+including when no complete Result was materialized during cold preparation.
+The selected tag and payload presence remain publication data; reserving the
+inactive branch never executes its constructor or provider.
+
 `constants` includes already checked compile-time constant payloads from source hooks without executing runtime expressions. Cold topology follows reachable per-parent keys from materialized sparse recipes, including removals and reinsertion. Nested output preparation uses these paths rather than multiplying run-wide domains. Exact delta field widths bound independently retained record payloads; disjoint two/three-level fixture scaling is checked against both temporal endpoint and ordinary record slot counts.
 
 

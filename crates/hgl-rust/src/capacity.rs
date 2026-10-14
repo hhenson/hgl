@@ -245,7 +245,15 @@ impl Capacity {
         {
             return bounds;
         }
-        if matches!(ty, Ty::Recursive(_) | Ty::Result(..) | Ty::Error) {
+        if let Ty::Result(ok, err) = ty {
+            return format!(
+                "{{let mut bounds=capacity.limit{}.clone();bounds.field1=Some({});bounds.field2=Some({});bounds}}",
+                self.index(ty),
+                self.bounds(ok),
+                self.bounds(err)
+            );
+        }
+        if matches!(ty, Ty::Recursive(_) | Ty::Error) {
             return format!("capacity.limit{}.clone()", self.index(ty));
         }
         if let Ty::Delta(origin) = ty {
