@@ -45,3 +45,6 @@ storage. This cold distinction changes no source admission or execution phase.
 A downstream Any box can retain unbounded outcome/error data. Such boxes and
 containers remain in the same ordinary owning profile, rather than using a cold
 width inferred from a locally constructed diagnostic without origin context.
+Classification visits both map keys and values, set elements, rolling arrivals
+and structural delta descendants. A diagnostic string boxed as an Any key or
+member retains this profile through subsequent container copies and outputs.

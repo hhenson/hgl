@@ -21,10 +21,14 @@ fn references(value: &mut Value, owners: &BTreeMap<usize, usize>) -> bool {
 pub fn failure_data_type(ty: &Ty) -> bool {
     match ty {
         Ty::Any | Ty::Error | Ty::Result(..) => true,
-        Ty::Ref(child) | Ty::Atomic(child) | Ty::Nullable(child) | Ty::List(child, _) => {
-            failure_data_type(child)
-        }
-        Ty::Map(_, child) => failure_data_type(child),
+        Ty::Ref(child)
+        | Ty::Atomic(child)
+        | Ty::Nullable(child)
+        | Ty::List(child, _)
+        | Ty::Set(child)
+        | Ty::Rolling(child, _)
+        | Ty::Delta(child) => failure_data_type(child),
+        Ty::Map(key, child) => failure_data_type(key) || failure_data_type(child),
         Ty::Struct(_, fields, _) => fields.iter().any(|(_, ty)| failure_data_type(ty)),
         Ty::Tuple(children) => children.iter().any(failure_data_type),
         Ty::Family(family) => family.members().iter().any(|(_, ty)| failure_data_type(ty)),
@@ -34,10 +38,8 @@ pub fn failure_data_type(ty: &Ty) -> bool {
                 .iter()
                 .any(|(_, ty)| failure_data_type(ty))
         }),
-        Ty::Rolling(..)
-        | Ty::Enum(_)
+        Ty::Enum(_)
         | Ty::Native(_)
-        | Ty::Delta(_)
         | Ty::I64
         | Ty::F64
         | Ty::Bool
@@ -51,7 +53,6 @@ pub fn failure_data_type(ty: &Ty) -> bool {
         | Ty::TimeZone
         | Ty::ZonedTime
         | Ty::ZonedDateTime
-        | Ty::Set(_)
         | Ty::Void => false,
     }
 }

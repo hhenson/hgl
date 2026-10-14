@@ -45,6 +45,65 @@ assert eval(observed,value:[-1,1,-2])==[expected,_,expected]
 "#;
 
 #[test]
+fn captured_diagnostic_any_keys_retain_longer_data_through_map_owners()
+-> Result<(), Box<dyn std::error::Error>> {
+    let source = r#"module diagnostic_keys
+fn required(value:i64)->i64 {when {
+if value==1 {let short:result<i64,error> = err(error(message:"x",code:"value.missing_key"))
+return short?}
+let longer:result<i64,error> = err(error(message:"a substantially longer diagnostic message retained as the map key",code:"value.missing_key"))
+return longer?}}
+fn boxed(failure:error)->atomic<map<any,i64>> {when {
+return map<any,i64>(items:[any(failure.message):7])}}
+fn relay(value:atomic<map<any,i64>>)->atomic<map<any,i64>> {when {return delta_value(value)}}
+fn retained(value:atomic<map<any,i64>>)->atomic<map<any,i64>> {when {
+let copy=delta_value(value)
+return copy}}
+fn boxed_set(failure:error)->atomic<set<any>> {when {return set<any>(items:[any(failure.message)])}}
+fn relay_set(value:atomic<set<any>>)->atomic<set<any>> {when {return delta_value(value)}}
+fn retained_set(value:atomic<set<any>>)->atomic<set<any>> {when {let copy=delta_value(value)
+return copy}}
+fn observed(value:i64)->atomic<map<any,i64>> {let seen=capture(required,value)
+retained(relay(boxed(seen.error)))}
+fn observed_set(value:i64)->atomic<set<any>> {let seen=capture(required,value)
+retained_set(relay_set(boxed_set(seen.error)))}
+test retained_keys {
+let short=map<any,i64>(items:[any("x"):7])
+let longer=map<any,i64>(items:[any("a substantially longer diagnostic message retained as the map key"):7])
+assert eval(observed,value:[1,_,2,1])==[short,_,longer,short]
+let short_set=set<any>(items:[any("x")])
+let longer_set=set<any>(items:[any("a substantially longer diagnostic message retained as the map key")])
+assert eval(observed_set,value:[1,_,2,1])==[short_set,_,longer_set,short_set]
+}
+"#;
+    execute(source, "any-captured-map-key", GENERIC_RUNTIME, "", (1, 2))
+}
+
+#[test]
+fn diagnostic_carrier_classification_covers_all_collection_descendants() {
+    use hgl_source::type_shape::TypeSpelling as _;
+    for (spelling, expected) in [
+        ("map<any,i64>", true),
+        ("map<i64,any>", true),
+        ("set<any>", true),
+        ("rolling<any,2,1>", true),
+        ("delta<map<any,i64>>", true),
+        ("delta<set<any>>", true),
+        ("map<i64,i64>", false),
+        ("set<i64>", false),
+        ("rolling<i64,2,1>", false),
+        ("delta<map<i64,i64>>", false),
+    ] {
+        let ty = hgl_source::Ty::parse(spelling).expect("admitted exact carrier type");
+        assert_eq!(
+            hgl_semantics::constructor_owners::failure_data_type(&ty),
+            expected,
+            "{spelling}"
+        );
+    }
+}
+
+#[test]
 fn exact_shared_boxed_outcome_cases_execute() -> Result<(), Box<dyn std::error::Error>> {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let source = std::fs::read_to_string(
@@ -230,10 +289,12 @@ fn execute(
         String::from_utf8_lossy(&output.stderr)
     );
     if runtime == GENERIC_RUNTIME {
-        std::fs::write(
-            root.join("target/any-captured-allocation-report.txt"),
-            &output.stdout,
-        )?;
+        let report = if name == "any-captured-map-key" {
+            "target/any-captured-map-key-allocation-report.txt"
+        } else {
+            "target/any-captured-allocation-report.txt"
+        };
+        std::fs::write(root.join(report), &output.stdout)?;
     }
     let text = String::from_utf8_lossy(&output.stdout);
     assert!(

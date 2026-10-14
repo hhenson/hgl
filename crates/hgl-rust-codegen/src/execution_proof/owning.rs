@@ -135,7 +135,17 @@ fn statements(body: &[Statement], looping: bool, result: &Ty) -> bool {
     })
 }
 pub(super) fn finite(plan: &Plan) -> bool {
-    plan.nodes.iter().all(|node| {
+    let unknown = hgl_semantics::constructor_owners::unbounded_failure_data(plan);
+    plan.nodes.iter().enumerate().all(|(id, node)| {
+        if unknown.contains(&id)
+            && (hgl_semantics::constructor_owners::failure_data_type(&node.result)
+                || node
+                    .inputs
+                    .iter()
+                    .any(|(_, _, ty)| hgl_semantics::constructor_owners::failure_data_type(ty)))
+        {
+            return true;
+        }
         node.handlers
             .iter()
             .all(|(guard, _)| guard.as_ref().is_none_or(|guard| value(guard, false)))
