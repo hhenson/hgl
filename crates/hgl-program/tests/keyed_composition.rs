@@ -28,8 +28,20 @@ const fn checked(value:i64)->result<i64,error> {
 }
 fn required(value:i64)->i64 {when {return checked(value)?}}
 fn consume_value(value:i64) {when {record(value)}}
+const fn expected_failure(failure:error,now:datetime,event:bool)->bool {
+    let origin=failure.context
+    let code=failure.code
+    if origin!=null {
+        if code!=null {
+            return code=="value.missing_key"&&failure.message=="negative price"&&origin.phase=="evaluate"&&origin.node!=""&&(!event||origin.evaluation_time==now)
+        }
+    }
+    return false
+}
 fn presence(failure:error,step:i64) {
+    inject clock
     when modified(step)&&valid(step) {
+        if valid(failure)&&!expected_failure(failure,clock.evaluation_time,modified(failure)) {record(-999)}
         if valid(failure) {record(step*100+1)} else {record(step*100)}
     }
 }
@@ -99,6 +111,79 @@ test whole_keyed_graph {
         "whole-keyed-composition",
         &["keyed::whole_keyed_graph"],
         "[1,101,201,8,9,10,11]",
+    )
+}
+
+#[test]
+fn capture_returning_ref_selects_prepared_bundle_without_copying_normal_values()
+-> Result<(), Box<dyn std::error::Error>> {
+    let source = SOURCE
+        .split("test keyed_capture_lifetimes")
+        .next()
+        .ok_or("fixture declarations")?
+        .to_string()
+        + r#"
+fn route(value:ref<i64>)->ref<i64> {when {return value}}
+fn selected(value:i64,other:i64,selector:bool)->i64 {
+    var choice:ref<i64>
+    if selector {choice=route(required(value)+0)} else {choice=route(other+0)}
+    choice
+}
+fn error_ticks(failure:error,step:i64) {
+    inject clock
+    when modified(step)&&valid(step) {
+        if valid(failure)&&!expected_failure(failure,clock.evaluation_time,modified(failure)) {record(-999)}
+        if valid(failure) {
+            if modified(failure) {record(step*100+51)} else {record(step*100+50)}
+        } else {record(step*100+40)}
+    }
+}
+fn observe_selection(book:map<str,i64>,other:i64,selector:bool,step:i64) {
+    for value in values(book) {
+        let seen=capture(selected,value,other,selector)
+        consume_value(seen.value)
+        error_ticks(seen.error,step)
+    }
+}
+test captured_ref_retargets {
+    eval(observe_selection,
+        book:[delta<map<str,i64>>(upsert:["A":-1]),delta<map<str,i64>>(upsert:["A":8]),delta<map<str,i64>>(upsert:["A":9])],
+        other:[10,20,30],selector:[true,false,true],step:[0,1,2])
+}
+"#;
+    run(
+        &source,
+        "captured-keyed-ref",
+        &["keyed::captured_ref_retargets"],
+        "[51,150,250,20,9]",
+    )
+}
+
+#[test]
+fn capture_forwarding_member_retains_actual_external_normal_endpoint()
+-> Result<(), Box<dyn std::error::Error>> {
+    let source = SOURCE
+        .split("test keyed_capture_lifetimes")
+        .next()
+        .ok_or("fixture declarations")?
+        .to_string()
+        + r#"
+fn identity(value:i64)->i64 => value
+fn observed_identity(book:map<str,i64>) {
+    for value in values(book) {
+        let seen=capture(identity,value)
+        consume_value(seen.value)
+    }
+}
+test captured_identity {
+    eval(observed_identity,book:[delta<map<str,i64>>(upsert:["A":7]),delta<map<str,i64>>(upsert:["A":8])])
+}
+"#;
+    run(
+        &source,
+        "captured-keyed-identity",
+        &["keyed::captured_identity"],
+        "[7,8]",
     )
 }
 
@@ -174,14 +259,14 @@ const RUNTIME: &str = r#"
 struct Provider;
 static RECORDS:std::sync::Mutex<Vec<i64>>=std::sync::Mutex::new(Vec::new());
 mod native {
- pub fn record_i64(value:i64)->i64 {super::RECORDS.lock().unwrap().push(value);0}
+ pub fn record_i64(value:i64)->i64 {assert_ne!(value,-999,"capture failed with incorrect code, message or evaluate provenance");super::RECORDS.lock().unwrap().push(value);0}
 }
 fn main() {
  generated_main();
  let mut records=RECORDS.lock().unwrap();
  records.sort_unstable();
  for expected in EXPECTED {
-  let at=records.iter().position(|&value|value==expected).expect("expected keyed observation");records.remove(at);
+  let at=records.iter().position(|&value|value==expected).unwrap_or_else(||panic!("missing observation {expected}, remaining records {records:?}"));records.remove(at);
  }
  // The unhandled-error control may run its successful sibling before failure.
  assert!(records.is_empty()||records.as_slice()==[7],"unexpected keyed observations: {records:?}");

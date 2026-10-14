@@ -46,16 +46,14 @@ pub fn child(
 /// Emit membership ownership using statically prepared exact input handles.
 pub fn node(plan: &Plan, id: usize, shape: impl Fn(&Ty) -> String) -> String {
     let node = &plan.nodes[id];
-    let inputs = node
-        .inputs
-        .iter()
-        .map(|(name, _, ty)| format!("({name:?},{}),", shape(ty)))
-        .collect::<String>();
-    let handles = node
-        .inputs
-        .iter()
-        .map(|(name, _, _)| format!("ports.shaped_input({name:?})?,"))
-        .collect::<String>();
+    let mut inputs = String::new();
+    let mut handles = String::new();
+    for (name, _, ty) in &node.inputs {
+        write!(inputs, "({name:?},{}),", shape(ty))
+            .unwrap_or_else(|_| unreachable!("String formatting"));
+        write!(handles, "ports.shaped_input({name:?})?,")
+            .unwrap_or_else(|_| unreachable!("String formatting"));
+    }
     format!(
         r#"
 #[derive(Debug)] struct Node{id} {{ captures:Vec<hgl_store::InputId>, changes:Vec<i64>, initial:bool, children:hgl_kernel::prepared_keyed::PreparedKeyed<KeyedBoundary> }}
@@ -110,11 +108,10 @@ impl KeyedBoundary {
    let mut source=owners[edge.source];
    if edge.member {source=store.bindings().input(source).members.prepared_child(key).ok_or_else(||hgl_kernel::NodeError::new("missing prepared keyed member"))?;}
    let input=store.bindings().input(source);let output=input.source;let reference=output.map_or(input.designation,|output|store.reference(output));
-   store.unbind(edge.target);
    match edge.binding {
     KeyedBinding::Sample=>store.sample(edge.target,reference,now,&mut KeyedQuiet),
     KeyedBinding::Follow=>store.follow(edge.target,output.ok_or_else(||hgl_kernel::NodeError::new("missing keyed REF carrier"))?,now,&mut KeyedQuiet),
-    KeyedBinding::Designation=>store.bind_designation(edge.target,output.ok_or_else(||hgl_kernel::NodeError::new("missing keyed designation source"))?),
+    KeyedBinding::Designation=>{store.unbind(edge.target);store.bind_designation(edge.target,output.ok_or_else(||hgl_kernel::NodeError::new("missing keyed designation source"))?)},
    }.map_err(|error|hgl_kernel::NodeError::new(format!("{error:?}")))?;
   Ok(())
  }

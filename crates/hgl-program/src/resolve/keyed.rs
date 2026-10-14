@@ -25,9 +25,8 @@ impl Checker {
         };
         let collection = self.expression(module, expression, env, false)?;
         let child = match (&collection.ty, key.is_some(), operation.as_str()) {
-            (Ty::Map(_, child), true, "items")
+            (Ty::Map(_, child) | Ty::List(child, None), true, "items")
             | (Ty::Map(_, child), false, "values")
-            | (Ty::List(child, None), true, "items")
             | (Ty::List(child, None), false, "elements") => child.as_ref().clone(),
             _ => return Err("unsupported graph-phase collection iterator".into()),
         };
