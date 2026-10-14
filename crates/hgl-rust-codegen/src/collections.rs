@@ -318,7 +318,7 @@ pub(crate) fn slot_key_equal(ty: &Ty, slot: &str, key: &str, columns: &str) -> S
         return format!("{columns}.native({slot}).equal(({key}).view())?");
     }
     if *ty == Ty::Any {
-        return format!("{columns}.any(({slot}).fields()).equal(&({key}))?");
+        return format!("{columns}.any(({slot}).fields()).borrowed().equal(&({key}).borrowed())?");
     }
     if let Some((fields, optional)) = matches!(ty, Ty::Tuple(_) | Ty::Struct(..))
         .then(|| hgl_source::ordinary_shape::fields(ty))

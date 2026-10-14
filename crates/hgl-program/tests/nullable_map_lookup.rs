@@ -7,6 +7,15 @@ mod regression_cache;
 
 #[test]
 fn specified_lookup_examples_execute() -> Result<(), Box<dyn std::error::Error>> {
+    execute(false)
+}
+
+#[test]
+fn extra_lookup_controls_execute() -> Result<(), Box<dyn std::error::Error>> {
+    execute(true)
+}
+
+fn execute(extra: bool) -> Result<(), Box<dyn std::error::Error>> {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .canonicalize()?;
@@ -17,8 +26,11 @@ fn specified_lookup_examples_execute() -> Result<(), Box<dyn std::error::Error>>
             root.join("native/stdlib"),
         ],
     )?;
-    sources.push(("extra.hgl".into(), EXTRA.into()));
+    if extra {
+        sources.insert(0, ("extra.hgl".into(), EXTRA.into()));
+    }
     let suite = hgl_program::compile_module_suite(&sources)?;
+    assert!(!suite.tests.is_empty());
     let mut code = hgl_program::emit_tests(&suite)
         .replace("hgl_kernel::run_simulation(", "crate::measured_simulation(");
     code.push_str("\nstruct Provider;\nmod native {pub use hgl_stdlib::std_native::*;}\n");
@@ -26,6 +38,9 @@ fn specified_lookup_examples_execute() -> Result<(), Box<dyn std::error::Error>>
     let project = regression_cache::open(&root, "nullable-map-lookup")?;
     generated_cache::write(project.path.join("src/main.rs"), code)?;
     let mut manifest = "[package]\nname=\"nullable-map-lookup\"\nversion=\"0.0.0\"\nedition=\"2024\"\n[workspace]\n[dependencies]\n".to_owned();
+    if extra {
+        manifest = manifest.replace("nullable-map-lookup", "extra-map-lookup");
+    }
     for name in [
         "hgl-types",
         "hgl-store",
@@ -40,7 +55,7 @@ fn specified_lookup_examples_execute() -> Result<(), Box<dyn std::error::Error>>
         writeln!(
             manifest,
             "{name}={{path={:?}}}",
-            root.join("crates").join(name)
+            root.join("crates").join(name).to_string_lossy()
         )?;
     }
     generated_cache::write(project.path.join("Cargo.toml"), manifest)?;
@@ -136,7 +151,7 @@ test zero_false_empty_and_eager_fallback {
     assert text(map<i64,str>(items:[]),0)=="fallback"
     assert nested(map<i64,map<str,i64>>(items:[0:map<str,i64>(items:["X":0])]))==0
     assert nested(map<i64,map<str,i64>>(items:[]))==9
-    assert collection(map<i64,list<i64>>(items:[]))==[]
+    assert len(collection(map<i64,list<i64>>(items:[])))==0
     assert raises("value.missing_key") {eager(map<str,i64>(items:["X":7]))}
 }
 "#;

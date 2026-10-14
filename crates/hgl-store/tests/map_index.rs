@@ -104,3 +104,21 @@ fn failed_hashing_preserves_its_origin_code() {
     .unwrap_err();
     assert_eq!(failure.code, Some("value.capability"));
 }
+
+#[test]
+fn reprovision_preserves_occupied_buckets_and_does_not_shrink() -> NodeResult {
+    let mut index = Index::from_hashes(vec![7, 7, 15])?;
+    for capacity in [4, 32, 0, 1] {
+        index.prepare(capacity)?;
+        for position in 0..3 {
+            let hash = if position == 2 { 15 } else { 7 };
+            assert_eq!(
+                index.find(hash, |found| Ok(found == position))?,
+                Some(position)
+            );
+        }
+        assert_eq!(index.find(7, |_| Ok(false))?, None);
+        assert_eq!(index.find(99, |_| unreachable!())?, None);
+    }
+    Ok(())
+}

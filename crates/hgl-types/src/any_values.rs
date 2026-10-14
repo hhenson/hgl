@@ -206,7 +206,8 @@ impl AnyValue {
     pub fn key_hash(&self) -> NodeResult<u64> {
         self.borrowed().key_hash()
     }
-    fn borrowed(&self) -> AnyRef<'_> {
+    /// Borrow the exact retained descriptor and contents without copying ownership.
+    pub fn borrowed(&self) -> AnyRef<'_> {
         AnyRef {
             plan: self.plan,
             data: self.data(),

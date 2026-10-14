@@ -787,11 +787,7 @@ fn map_lookup(plan: &Plan, op: &str, args: &[Value]) -> String {
     let Ty::Map(key, child) = &args[0].ty else {
         unreachable!("checked dictionary lookup")
     };
-    let key_value = if **key == Ty::Str || matches!(key.as_ref(), Ty::Native(_)) {
-        native_argument(plan, &args[1])
-    } else {
-        value(plan, &args[1])
-    };
+    let (any_borrow, key_value) = lookup_key(plan, &args[1]);
     let default = args
         .get(2)
         .map(|v| format!("let fallback={};", value(plan, v)))
@@ -816,7 +812,9 @@ fn map_lookup(plan: &Plan, op: &str, args: &[Value]) -> String {
             format_args!(
                 "let parent={slot};let key={key_value};{default}let columns={columns};let hash={hash};let position=columns.map_index(parent.fields()).find(hash,|position|{{let entry=hgl_store::ValueSlot::<{}>::bind(&mut columns.list(parent.fields())[position].as_slice());Ok({})}})?;let found=position.map(|position|{{let entry=hgl_store::ValueSlot::<{}>::bind(&mut columns.list(parent.fields())[position].as_slice());entry.fields().1.read(columns)}}).transpose()?;",
                 global_type(&Ty::Tuple(vec![*key.clone(), *child.clone()])),
-                if matches!(key.as_ref(), Ty::Native(_)) {
+                if any_borrow {
+                    "columns.any(entry.fields().0.fields()).borrowed().equal(&key)?".into()
+                } else if matches!(key.as_ref(), Ty::Native(_)) {
                     "columns.native(entry.fields().0).equal(key)?".into()
                 } else {
                     crate::collections::slot_key_equal(key, "entry.fields().0", "key", "columns")
@@ -838,7 +836,9 @@ fn map_lookup(plan: &Plan, op: &str, args: &[Value]) -> String {
             &mut code,
             format_args!(
                 "let parent=&({parent});let key={key_value};{default}let hash={hash};let position=parent.index().find(hash,|position|{{let entry=&parent[position];Ok({})}})?;let found=position.map(|position|{{let entry=&parent[position];Ok::<_,Box<hgl_types::NodeError>>({})}}).transpose()?;",
-                if matches!(key.as_ref(), Ty::Native(_)) {
+                if any_borrow {
+                    "entry.0.borrowed().equal(&key)?".into()
+                } else if matches!(key.as_ref(), Ty::Native(_)) {
                     "entry.0.view().equal(key)?".into()
                 } else {
                     crate::collections::equal(key, "&entry.0", "&key", global_type)
@@ -860,4 +860,26 @@ fn map_lookup(plan: &Plan, op: &str, args: &[Value]) -> String {
     code.push_str(&result);
     code.push('}');
     code
+}
+
+fn lookup_key(plan: &Plan, key: &Value) -> (bool, String) {
+    if key.ty == Ty::Any
+        && let Some((arena, slot)) = crate::source_slots::source(plan, key)
+    {
+        let columns = if arena == "configuration_columns" {
+            "self.configuration_columns".into()
+        } else {
+            format!("_ctx.store().{arena}()")
+        };
+        return (
+            true,
+            format!("{{let slot={slot};{columns}.any(slot.fields()).borrowed()}}"),
+        );
+    }
+    let operand = if key.ty == Ty::Str || matches!(key.ty, Ty::Native(_)) {
+        native_argument(plan, key)
+    } else {
+        value(plan, key)
+    };
+    (false, operand)
 }

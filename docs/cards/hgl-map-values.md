@@ -27,3 +27,5 @@ No provider hash/equality executes during infallible prepared copying.
 Acceptance covers hash collisions, unknown identities, replacement, independent
 retention, zero-allocation prepared copies/queries, and 256/512/1024-key equality
 call counts. These are algorithm and allocation checks, not runtime parity timings.
+
+Index::prepare preserves occupied entries when reprovisioning a live index, rebuilding only from retained hashes without invoking providers, and never shrinks below the existing bucket count.

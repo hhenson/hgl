@@ -18,8 +18,9 @@ pub struct Index {
     buckets: Vec<usize>,
 }
 impl Index {
-    /// Provision a complete finite dictionary before execution.
+    /// Provision a complete finite dictionary before execution, preserving existing entries.
     pub fn prepare(&mut self, capacity: usize) -> NodeResult {
+        let capacity = capacity.max(self.hashes.len());
         self.hashes
             .try_reserve(capacity.saturating_sub(self.hashes.len()))
             .map_err(|e| NodeError::new(e.to_string()))?;
@@ -31,7 +32,8 @@ impl Index {
         self.buckets
             .try_reserve(buckets.saturating_sub(self.buckets.len()))
             .map_err(|e| NodeError::new(e.to_string()))?;
-        self.buckets.resize(buckets, 0);
+        self.buckets.resize(buckets.max(self.buckets.len()), 0);
+        self.rebuild();
         Ok(())
     }
     /// Retain independent metadata at an ordinary owning boundary.
