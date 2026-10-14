@@ -15,6 +15,10 @@ ordered entry owner together with its index. Read-only slice and iteration acces
 preserve existing collection behavior. Source mutation cannot write entries
 without replacing their index. Complete retention, move and replacement carry
 matching metadata; source key/payload identity and ownership are unchanged.
+Source constructors use `from_parts` with hashes retained while each key is
+checked before its value. `new` remains available for already materialized entry
+owners, such as cold codec reconstruction; index assembly does not rehash source
+constructor keys after their value expressions.
 
 Ordinary map code generation uses MapValue for owning values and retains the
 existing one-descriptor List slot layout for typed descendants. GlobalValue

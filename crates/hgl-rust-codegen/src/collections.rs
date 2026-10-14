@@ -101,6 +101,9 @@ pub fn construct(
 ) -> String {
     let item = element(ty).unwrap_or_else(|| unreachable!("checked collection"));
     let mut code = format!("{{let mut items:Vec<{}>=Vec::new();", owned(&item));
+    if matches!(ty, Ty::Map(..)) {
+        code.push_str("let mut hashes=Vec::new();");
+    }
     for value in items {
         let (key, child) = if matches!(ty, Ty::Map(..)) {
             let Kind::Construct(fields) = &value.kind else {
@@ -112,6 +115,14 @@ pub fn construct(
         };
         append(&mut code, format_args!("let key={};", emit(key)));
         code.push_str(&key_checks(&key.ty, "key"));
+        append(
+            &mut code,
+            format_args!(
+                "{}{};",
+                if child.is_some() { "let hash=" } else { "" },
+                key_hash(&key.ty, "key")
+            ),
+        );
         let field = if child.is_some() { "&item.0" } else { "item" };
         append(
             &mut code,
@@ -123,17 +134,17 @@ pub fn construct(
         if let Some(child) = child {
             append(
                 &mut code,
-                format_args!("let value={};items.push((key,value));", emit(child)),
+                format_args!(
+                    "let value={};items.push((key,value));hashes.push(hash);",
+                    emit(child)
+                ),
             );
         } else {
             code.push_str("items.push(key);");
         }
     }
-    if let Ty::Map(key, _) = ty {
-        code + &format!(
-            "hgl_store::map_values::MapValue::new(items,|entry|Ok({}))?}}",
-            key_hash(key, "entry.0")
-        )
+    if matches!(ty, Ty::Map(..)) {
+        code + "hgl_store::map_values::MapValue::from_parts(items,hgl_store::map_values::Index::from_hashes(hashes)?) }"
     } else {
         code + "items}"
     }
@@ -214,9 +225,6 @@ pub fn retained(source: &str, ty: &Ty, global_type: fn(&Ty) -> String) -> String
 }
 
 fn key_checks(ty: &Ty, value: &str) -> String {
-    if *ty == Ty::Any {
-        return format!("({value}).key_hash()?;");
-    }
     if *ty == Ty::F64 {
         return format!(
             "if ({value}).is_nan() {{return Err(hgl_types::NodeError::new(\"NaN collection key\"));}}"
