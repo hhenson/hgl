@@ -332,3 +332,60 @@ assert alias==other
     );
     Ok(())
 }
+
+#[test]
+fn inactive_result_payloads_cannot_bypass_whole_result_equality_capability()
+-> Result<(), Box<dyn std::error::Error>> {
+    const DECLARATIONS: &str = r"module inactive_result
+use hgraph.std::{TextOnly}
+fn success(value:result<i64,TextOnly>)->result<i64,TextOnly> {when {return value}}
+fn failure(value:result<TextOnly,i64>)->result<TextOnly,i64> {when {return value}}
+";
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let library = hgl_program::library_files::sources(
+        &[],
+        &[
+            root.join("external/hgraph_std/hgl/hgraph"),
+            root.join("native/stdlib"),
+        ],
+    )?;
+    for (function, result, constructor) in [
+        ("success", "result<i64,TextOnly>", "ok"),
+        ("failure", "result<TextOnly,i64>", "err"),
+    ] {
+        for assertion in [
+            "assert captured==[expected]",
+            "assert [expected]==captured",
+            "assert captured!=[expected]",
+            "assert expected==expected",
+        ] {
+            let source = format!(
+                "{DECLARATIONS}test capability {{let expected:{result} = {constructor}(7)\nlet captured=eval({function},value:[expected])\n{assertion}}}"
+            );
+            let mut sources = library.clone();
+            sources.insert(0, ("inactive.hgl".into(), source));
+            let error = hgl_program::compile_tests(&sources)
+                .expect_err("inactive E still requires equality");
+            assert!(
+                error.contains("result equality requires equality of both payload types"),
+                "{error}"
+            );
+        }
+    }
+    let source = format!(
+        r#"{DECLARATIONS}test interpreter_capability {{
+let expected:result<i64,TextOnly> = ok(7)
+assert raises("value.capability") {{assert eval(success,value:[expected])==[expected]}}
+let expected_failure:result<TextOnly,i64> = err(7)
+assert raises("value.capability") {{assert eval(failure,value:[expected_failure])==[expected_failure]}}
+}}
+"#
+    );
+    execute(
+        &source,
+        "inactive-result-equality",
+        STRICT_RUNTIME,
+        "",
+        (1, 2),
+    )
+}

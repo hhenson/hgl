@@ -69,6 +69,9 @@ pub fn equal_data(a: &Value, b: &Value) -> Result<bool, EvalError> {
     if a.ty.source_name() != b.ty.source_name() {
         return Ok(false);
     }
+    if matches!(a.ty, Ty::Result(..)) && !capable(&a.ty, 0) {
+        return Err(capability());
+    }
     if a.ty == Ty::Any {
         let value = binary("==", a, b)?;
         let Kind::Literal(Literal::Bool(equal)) = value.kind else {

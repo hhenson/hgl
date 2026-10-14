@@ -37,6 +37,9 @@ impl Checker {
         } else {
             return Ok(None);
         };
+        if matches!(payload, Ty::Result(..)) {
+            hgl_semantics::value_operators::binary_type(op, payload, payload)?;
+        }
         let other = if let Expr::Sequence(cells) = other.syntax() {
             let mut slots = Vec::new();
             for (index, expr) in cells.iter().enumerate() {
