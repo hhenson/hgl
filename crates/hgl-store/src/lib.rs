@@ -46,6 +46,7 @@ pub mod global_value;
 pub mod keys;
 pub mod list;
 pub mod list_storage;
+pub mod map_values;
 pub mod member_table;
 pub mod native_values;
 pub mod observation;

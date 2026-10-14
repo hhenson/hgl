@@ -35,3 +35,5 @@ while preserving the existing Any ownership boundary.
 
 This module now lives in hgl-rust-codegen below executable program assembly;
 its hgl-rust facade path and module ceiling remain unchanged.
+
+Complete ordinary map owners retain cached hash metadata. Compiled key_hash uses existing exact primitive, Native, Any and composite key capabilities. Prepared map markers provision and copy an independent index with their original descriptor layout; ordinary ownership boundaries retain entries and index together.

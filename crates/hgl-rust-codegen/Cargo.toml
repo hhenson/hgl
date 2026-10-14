@@ -25,7 +25,7 @@ any_values = { budget = 600, uses = ["cold_validation", "native_values", "deltas
 any_prepared = { budget = 250, uses = ["structural_publication", "prepared_hooks", "native_results", "execution_proof", "source_slots", "layouts", "any_values", "values", "observed", "any_expression", "constructor_owners", "owner_comparisons", "native_image"] }
 prepared_hooks = { budget = 180, uses = ["structural_publication", "prepared_global_writes", "native_results", "windows", "source_slots", "any_values", "scalars", "layouts", "direct_deltas", "finite_domains", "observed", "snapshot_slots", "execution_proof", "any_prepared", "values", "any_expression", "constructor_fields"] }
 checked_data = { budget = 250, uses = ["enums", "type_data", "scalars"] }
-collections = { budget = 250, uses = ["families", "prepared_values", "layouts"] }
+collections = { budget = 250, uses = ["families", "prepared_values", "layouts", "native_values"] }
 composite_keys = { budget = 250, uses = [] }
 deltas = { budget = 700, uses = ["keyed", "layouts", "observed", "windows", "any_values", "any_expression"] }
 direct_deltas = { budget = 400, uses = ["layouts", "observed"] }

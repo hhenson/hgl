@@ -164,11 +164,20 @@ fn codecs(ty: &Ty) -> (String, String) {
     }
     if let Some(child) = crate::collections::element(ty) {
         let child = name(&child);
+        let read = format!(
+            "hgl_types::any_values::Frames(data).map(any_read_{child}).collect::<hgl_types::NodeResult<Vec<_>>>()?"
+        );
+        let read = if let Ty::Map(key, _) = ty {
+            format!(
+                "hgl_store::map_values::MapValue::new({read},|entry|Ok({}))?",
+                crate::collections::key_hash(key, "entry.0")
+            )
+        } else {
+            read
+        };
         return (
             format!("for v in v {{out.frame(|out|any_write_{child}(v,out));}}"),
-            format!(
-                "hgl_types::any_values::Frames(data).map(any_read_{child}).collect::<hgl_types::NodeResult<_>>()?"
-            ),
+            read,
         );
     }
     field_codecs(ty)

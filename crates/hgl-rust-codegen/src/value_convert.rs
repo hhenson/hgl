@@ -10,7 +10,14 @@ pub fn decode(t: &Ty, expression: &str) -> String {
         return format!("{{let value=&({expression});decode_any(value)?}}");
     }
     if let Some(storage) = collection_storage(t) {
-        return decode(&storage, expression);
+        let decoded = decode(&storage, expression);
+        if let Ty::Map(key, _) = t {
+            return format!(
+                "hgl_store::map_values::MapValue::new({decoded},|entry|Ok({})).map_err(|e|e.message)?",
+                crate::collections::key_hash(key, "entry.0")
+            );
+        }
+        return decoded;
     }
     if let Ty::Family(family) = t {
         return crate::families::decode(family, expression, decode);

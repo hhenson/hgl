@@ -17,6 +17,13 @@ pub fn owned_type(ty: &Ty) -> String {
         return format!("Owned{}", global_type(ty));
     }
 
+    if let Ty::Map(key, child) = ty {
+        return format!(
+            "hgl_store::map_values::MapValue<({}, {})>",
+            owned_type(key),
+            owned_type(child)
+        );
+    }
     if let Some(element) = crate::collections::element(ty) {
         return format!("Vec<{}>", owned_type(&element));
     }

@@ -6,6 +6,7 @@ pub type ListData = Vec<Vec<usize>>;
 struct Entry {
     items: ListData,
     active: Option<usize>,
+    index: crate::map_values::Index,
 }
 /// Stable descriptor indices; prepared vacant elements remain independently owned.
 #[derive(Debug, Default)]
@@ -34,6 +35,7 @@ impl Lists {
         let value = Entry {
             items,
             active: None,
+            index: crate::map_values::Index::default(),
         };
         if let Some(slot) = self.free.pop() {
             self.entries[slot] = value;
@@ -83,6 +85,32 @@ impl Lists {
             "prepared list capacity exceeded"
         );
         self.entries[slot].active = Some(length);
+    }
+    /// A dictionary index shares its descriptor's ownership and lifetime.
+    pub fn map_index(&self, slot: usize) -> &crate::map_values::Index {
+        &self.entries[slot].index
+    }
+    /// Mutable index metadata is touched only during typed publication.
+    pub fn map_index_mut(&mut self, slot: usize) -> &mut crate::map_values::Index {
+        &mut self.entries[slot].index
+    }
+    /// Move an independently retained index during dynamic ownership replacement.
+    pub fn replace_index(&mut self, slot: usize, index: crate::map_values::Index) {
+        self.entries[slot].index = index;
+    }
+    /// Copy between distinct retained descriptors without extracting keys.
+    pub fn copy_index(&mut self, from: usize, to: usize) {
+        if from == to {
+            return;
+        }
+        let (source, target) = if from < to {
+            let (left, right) = self.entries.split_at_mut(to);
+            (&left[from].index, &mut right[0].index)
+        } else {
+            let (left, right) = self.entries.split_at_mut(from);
+            (&right[0].index, &mut left[to].index)
+        };
+        target.copy(source);
     }
     /// Physical descriptor count, including reusable slots.
     pub fn len(&self) -> usize {

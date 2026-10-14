@@ -29,25 +29,68 @@ pub fn marker(ty: &Ty, global: fn(&Ty) -> String, schema: fn(&Ty) -> String) -> 
     } else {
         unreachable!("checked collection marker")
     };
+    let map = matches!(ty, Ty::Map(..));
+    let value_type = if map {
+        format!(
+            "hgl_store::map_values::MapValue<{}>",
+            crate::layouts::owned_type(&item)
+        )
+    } else {
+        format!("<{base} as hgl_store::GlobalValue>::Value")
+    };
+    let native = if map { "value.entries()" } else { "value" };
+    let retain = if map {
+        format!(
+            "Ok(hgl_store::map_values::MapValue::from_parts(<{base} as hgl_store::GlobalValue>::retain(value.entries())?,value.index().retained()?))"
+        )
+    } else {
+        format!("<{base} as hgl_store::GlobalValue>::retain(value)")
+    };
+    let read = if map {
+        format!(
+            "Ok(hgl_store::map_values::MapValue::from_parts(<{base} as hgl_store::GlobalValue>::read(columns,slot)?,columns.map_index(slot).retained()?))"
+        )
+    } else {
+        format!("<{base} as hgl_store::GlobalValue>::read(columns,slot)")
+    };
+    let install = if map {
+        format!(
+            "let(value,index)=value.into_parts();let slot=<{base} as hgl_store::GlobalValue>::install(columns,value,layouts);columns.replace_map_index(slot,index);slot"
+        )
+    } else {
+        format!("<{base} as hgl_store::GlobalValue>::install(columns,value,layouts)")
+    };
+    let commit = if map {
+        format!(
+            "let(value,index)=value.into_parts();<{base} as hgl_store::GlobalValue>::commit(columns,slot,value,layouts);columns.replace_map_index(slot,index);"
+        )
+    } else {
+        format!("<{base} as hgl_store::GlobalValue>::commit(columns,slot,value,layouts);")
+    };
+    let prepared = if map {
+        map_prepared(&name, &base)
+    } else {
+        crate::prepared_values::delegate(&name, &base)
+    };
     format!(
         r"
 #[derive(Debug)] struct {name};
 impl hgl_store::GlobalValue for {name} {{
- type Value=<{base} as hgl_store::GlobalValue>::Value;
+ type Value={value_type};
  type Slots=usize;
  const WIDTH:usize=1;
  fn schema()->hgl_types::OrdinaryType {{{schema}}}
  fn slots(layout:&mut &[usize])->usize {{<{base} as hgl_store::GlobalValue>::slots(layout)}}
- fn retain(value:&Self::Value)->hgl_types::NodeResult<Self::Value> {{<{base} as hgl_store::GlobalValue>::retain(value)}}
- fn prepare(value:&Self::Value,capacity:&mut hgl_store::Capacity,layouts:&mut hgl_store::Layouts)->hgl_types::NodeResult {{<{base} as hgl_store::GlobalValue>::prepare(value,capacity,layouts)}}
- fn install(columns:&mut hgl_store::ValueColumns,value:Self::Value,layouts:&mut hgl_store::Layouts)->usize {{<{base} as hgl_store::GlobalValue>::install(columns,value,layouts)}}
+ fn retain(value:&Self::Value)->hgl_types::NodeResult<Self::Value> {{{retain}}}
+ fn prepare(value:&Self::Value,capacity:&mut hgl_store::Capacity,layouts:&mut hgl_store::Layouts)->hgl_types::NodeResult {{<{base} as hgl_store::GlobalValue>::prepare({native},capacity,layouts)}}
+ fn install(columns:&mut hgl_store::ValueColumns,value:Self::Value,layouts:&mut hgl_store::Layouts)->usize {{{install}}}
  fn release(columns:&mut hgl_store::ValueColumns,slot:usize) {{<{base} as hgl_store::GlobalValue>::release(columns,slot);}}
  fn flatten(slot:usize,layout:&mut [usize]) {{<{base} as hgl_store::GlobalValue>::flatten(slot,layout);}}
- fn read(columns:&hgl_store::ValueColumns,slot:usize)->hgl_types::NodeResult<Self::Value> {{<{base} as hgl_store::GlobalValue>::read(columns,slot)}}
- fn commit(columns:&mut hgl_store::ValueColumns,slot:usize,value:Self::Value,layouts:&mut hgl_store::Layouts) {{<{base} as hgl_store::GlobalValue>::commit(columns,slot,value,layouts);}}
+ fn read(columns:&hgl_store::ValueColumns,slot:usize)->hgl_types::NodeResult<Self::Value> {{{read}}}
+ fn commit(columns:&mut hgl_store::ValueColumns,slot:usize,value:Self::Value,layouts:&mut hgl_store::Layouts) {{{commit}}}
 }}
 "
-    ) + &crate::prepared_values::delegate(&name, &base)
+    ) + &prepared
 }
 /// Emit complete construction, checking each retained key before its value runs.
 pub fn construct(
@@ -86,7 +129,14 @@ pub fn construct(
             code.push_str("items.push(key);");
         }
     }
-    code + "items}"
+    if let Ty::Map(key, _) = ty {
+        code + &format!(
+            "hgl_store::map_values::MapValue::new(items,|entry|Ok({}))?}}",
+            key_hash(key, "entry.0")
+        )
+    } else {
+        code + "items}"
+    }
 }
 /// Recursive native equality with unordered complete set and map children.
 pub fn equal(ty: &Ty, a: &str, b: &str, marker: fn(&Ty) -> String) -> String {
@@ -259,5 +309,62 @@ pub fn iteration_start(
     format!(
         "let mut index{key_id}=0;let mut previous{key_id}=None;while let Some(key{key_id})={next} {{index{key_id}+=1;previous{key_id}=Some(key{key_id});if let Some(local{child_id})={input}.member(_ctx.store().bindings(),key{key_id}) {{let local{key_id}=<{} as hgl_store::Key>::value(&_ctx.store().keys,key{key_id})?;",
         marker(key)
+    )
+}
+
+/// Hash an exact ordinary key through its statically selected capabilities.
+pub fn key_hash(ty: &Ty, value: &str) -> String {
+    if let Ty::Native(scalar) = ty {
+        return format!(
+            "<{} as hgl_store::native_values::NativeType>::hash(({value}).view().data())?",
+            crate::native_values::marker(scalar)
+        );
+    }
+    if *ty == Ty::Any {
+        return format!("({value}).key_hash()?");
+    }
+    if *ty == Ty::F64 {
+        return format!(
+            "hgl_store::map_values::hash(&if ({value})==0.0 {{0_u64}}else{{({value}).to_bits()}})"
+        );
+    }
+    if let Some((fields, optional)) = matches!(ty, Ty::Tuple(_) | Ty::Struct(..))
+        .then(|| hgl_source::ordinary_shape::fields(ty))
+        .flatten()
+    {
+        let parts = fields
+            .iter()
+            .enumerate()
+            .map(|(i, ty)| {
+                let field = format!("({value}).{i}");
+                if optional.contains(&i) {
+                    format!(
+                        "u64::from(({field}).is_some()),match &{field} {{Some(value)=>{},None=>0}}",
+                        key_hash(ty, "*value")
+                    )
+                } else {
+                    format!("1,{}", key_hash(ty, &field))
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+        return format!("hgl_store::map_values::combine(&[{parts}])");
+    }
+    format!("hgl_store::map_values::hash(&({value}))")
+}
+fn map_prepared(name: &str, base: &str) -> String {
+    format!(
+        r"
+impl hgl_store::PreparedValue for {name} {{
+ type Bounds=<{base} as hgl_store::PreparedValue>::Bounds;
+ fn include(bounds:&mut Self::Bounds,value:&Self::Value) {{<{base} as hgl_store::PreparedValue>::include(bounds,value.entries());}}
+ fn allocate(columns:&mut hgl_store::ValueColumns,bounds:&Self::Bounds)->hgl_types::NodeResult<hgl_store::ValueSlot<Self>> {{let slot=<{base} as hgl_store::PreparedValue>::allocate(columns,bounds)?;columns.prepare_map_index(slot.fields(),bounds.len)?;Ok(hgl_store::ValueSlot::from_fields(slot.fields()))}}
+ fn check_native(columns:&hgl_store::ValueColumns,destination:hgl_store::ValueSlot<Self>,value:&Self::Value)->hgl_types::NodeResult {{<{base} as hgl_store::PreparedValue>::check_native(columns,hgl_store::ValueSlot::from_fields(destination.fields()),value.entries())}}
+ fn check_slots(source:&hgl_store::ValueColumns,from:hgl_store::ValueSlot<Self>,destination:&hgl_store::ValueColumns,to:hgl_store::ValueSlot<Self>)->hgl_types::NodeResult {{<{base} as hgl_store::PreparedValue>::check_slots(source,hgl_store::ValueSlot::from_fields(from.fields()),destination,hgl_store::ValueSlot::from_fields(to.fields()))}}
+ fn copy_native(columns:&mut hgl_store::ValueColumns,destination:hgl_store::ValueSlot<Self>,value:&Self::Value) {{<{base} as hgl_store::PreparedValue>::copy_native(columns,hgl_store::ValueSlot::from_fields(destination.fields()),value.entries());columns.copy_map_index(destination.fields(),value.index());}}
+ fn copy_between(source:&hgl_store::ValueColumns,from:hgl_store::ValueSlot<Self>,destination:&mut hgl_store::ValueColumns,to:hgl_store::ValueSlot<Self>) {{<{base} as hgl_store::PreparedValue>::copy_between(source,hgl_store::ValueSlot::from_fields(from.fields()),destination,hgl_store::ValueSlot::from_fields(to.fields()));destination.copy_map_index(to.fields(),source.map_index(from.fields()));}}
+ fn copy_within(columns:&mut hgl_store::ValueColumns,from:hgl_store::ValueSlot<Self>,to:hgl_store::ValueSlot<Self>) {{<{base} as hgl_store::PreparedValue>::copy_within(columns,hgl_store::ValueSlot::from_fields(from.fields()),hgl_store::ValueSlot::from_fields(to.fields()));columns.copy_map_index_within(from.fields(),to.fields());}}
+}}
+"
     )
 }
