@@ -14,7 +14,11 @@ forwards an external member without adding executable child nodes. A capture eva
 writes only the private canonical Error endpoint. The error persists until the
 owning scope ends; a successful later pass does not clear it. Start and stop
 failures escape. Boundary refresh preserves live child state and skips unchanged
-source bindings. Nested discarded passes preserve future deadlines.
+source bindings. Child deadlines are rescheduled after evaluation and discarded
+passes, so autonomous generators continue without driving inputs. Recovery
+abandons the failed pass while preserving future requests already scheduled by
+its producers. Owner teardown retires its prepared child even if it never
+started; unused cold child scopes do not survive their owner.
 
 Possible normal endpoint designations are interned into complete bundle
 references before startup. A changing REF carrier selects an existing reference

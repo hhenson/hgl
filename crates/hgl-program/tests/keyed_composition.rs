@@ -187,11 +187,105 @@ test captured_identity {
     )
 }
 
+#[test]
+fn capture_no_input_generator_preserves_zero_and_future_yields()
+-> Result<(), Box<dyn std::error::Error>> {
+    let source = SOURCE
+        .split("test keyed_capture_lifetimes")
+        .next()
+        .ok_or("fixture declarations")?
+        .to_string()
+        + r"
+fn autonomous()->i64 {
+    yield 0us:7
+    yield 2us:8
+}
+fn observe_autonomous() {
+    let seen=capture(autonomous)
+    consume_value(seen.value)
+}
+test captured_autonomous {
+    eval(observe_autonomous)
+}
+";
+    run_graph(
+        &source,
+        "captured-autonomous-generator",
+        &["keyed::captured_autonomous"],
+        "[7,8]",
+        0,
+    )
+}
+
+#[test]
+fn capture_whole_generator_graph_preserves_future_yield_after_consumer_failure()
+-> Result<(), Box<dyn std::error::Error>> {
+    let source = SOURCE
+        .split("test keyed_capture_lifetimes")
+        .next()
+        .ok_or("fixture declarations")?
+        .to_string()
+        + r"
+fn autonomous_prices()->i64 {
+    yield 0us:7
+    yield 1us:-1
+    yield 1us:8
+}
+fn autonomous_pipeline()->i64 => required(autonomous_prices())
+fn observe_autonomous_failure(failure:error) {
+    inject clock
+    when modified(failure)&&valid(failure) {
+        if !expected_failure(failure,clock.evaluation_time,true) {record(-999)}
+        record(51)
+    }
+}
+fn observe_autonomous_value(value:i64,failure:error) {
+    inject clock
+    when modified(value)&&valid(value) {
+        record(value)
+        if valid(failure) {
+            if !expected_failure(failure,clock.evaluation_time,false)||modified(failure) {record(-999)}
+            let origin=failure.context
+            if origin!=null {
+                if origin.evaluation_time>=clock.evaluation_time {record(-999)}
+            } else {record(-999)}
+            record(250)
+        } else {record(40)}
+    }
+}
+fn observe_autonomous_pipeline() {
+    let seen=capture(autonomous_pipeline)
+    observe_autonomous_failure(seen.error)
+    observe_autonomous_value(seen.value,seen.error)
+}
+test captured_autonomous_pipeline {
+    eval(observe_autonomous_pipeline)
+}
+";
+    run_graph(
+        &source,
+        "captured-autonomous-pipeline",
+        &["keyed::captured_autonomous_pipeline"],
+        "[7,8,40,51,250]",
+        0,
+    )
+}
+
 fn run(
     source: &str,
     name: &str,
     tests: &[&str],
     expected: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    run_graph(source, name, tests, expected, 1)
+}
+
+fn run_graph(
+    source: &str,
+    name: &str,
+    tests: &[&str],
+    expected: &str,
+    keyed: usize,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
@@ -206,13 +300,32 @@ fn run(
         tests
     );
     assert_eq!(suite.plans.len(), tests.len());
-    assert!(suite.plans.iter().all(|plan| plan.keyed.len() == 1));
+    assert!(suite.plans.iter().all(|plan| plan.keyed.len() == keyed));
+    if keyed == 0 {
+        for plan in &suite.plans {
+            assert_eq!(
+                plan.input_length, 0,
+                "autonomous controls must have no driving sequence"
+            );
+            assert_eq!(
+                plan.nodes
+                    .iter()
+                    .filter(|node| node.generator.is_some())
+                    .count(),
+                1
+            );
+            assert_eq!(plan.captures.len(), 1);
+            assert!(plan.nodes[plan.captures[0].owner].inputs.is_empty());
+        }
+    }
     let project = regression_cache::open(&root, name)?;
     let directory = &project.path;
     let code = hgl_program::emit_tests(&suite).replace("fn main()", "fn generated_main()");
     generated_cache::write(
         directory.join("src/main.rs"),
-        code + &RUNTIME.replace("EXPECTED", expected),
+        code + &RUNTIME
+            .replace("EXPECTED", expected)
+            .replace("ALLOW_SIBLING", if keyed == 0 { "false" } else { "true" }),
     )?;
     let mut manifest = format!(
         "[package]\nname={name:?}\nversion=\"0.0.0\"\nedition=\"2024\"\n[workspace]\n[dependencies]\n"
@@ -269,7 +382,7 @@ fn main() {
   let at=records.iter().position(|&value|value==expected).unwrap_or_else(||panic!("missing observation {expected}, remaining records {records:?}"));records.remove(at);
  }
  // The unhandled-error control may run its successful sibling before failure.
- assert!(records.is_empty()||records.as_slice()==[7],"unexpected keyed observations: {records:?}");
+ assert!(records.is_empty()||(ALLOW_SIBLING&&records.as_slice()==[7]),"unexpected keyed observations: {records:?}");
 }
 "#;
 
