@@ -10,6 +10,10 @@ data; node propagation enters NodeError::from_error without replacing code or
 provenance. Equality is handled by the checked collection comparison emitter, with
 only the tagged branch compared.
 
+Ordinary Result predicates enclose the complete method call for condition emission.
+Authored native-local controls cover both tags, negated predicates and selected
+payload reads, with one provider invocation per non-silent evaluation.
+
 May use source_slots. No third-party dependency, source semantic fallback,
 provider name lookup or per-value type dispatch. Generic owning expression paths
 may allocate; typed prepared controls state their narrower zero-allocation proof.

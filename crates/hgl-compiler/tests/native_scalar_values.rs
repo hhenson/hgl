@@ -6,6 +6,77 @@ fn root() -> Result<PathBuf, std::io::Error> {
         .join("../..")
         .canonicalize()
 }
+
+#[test]
+fn native_result_local_guards_preserve_predicates_and_evaluate_once()
+-> Result<(), Box<dyn std::error::Error>> {
+    let directory = std::env::temp_dir().join(format!(
+        "hgl-result-guards-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)?
+            .as_nanos()
+    ));
+    fs::create_dir_all(&directory)?;
+    let image = directory.join("provider.rs");
+    fs::write(
+        &image,
+        r#"
+pub const PROVIDER:&str="hgl.result_guards";
+pub const FINGERPRINT:&str="result-guards-v1";
+pub fn outcome(value:i64)->Result<i64,i64> {
+    crate::CALLS.fetch_add(1,std::sync::atomic::Ordering::Relaxed);
+    if value>=0 {Ok(value+10)} else {Err(value-10)}
+}
+"#,
+    )?;
+    let source = r"module result_guards
+native const fn outcome(value:i64)->result<i64,i64>
+native const fn outcome(value:i64)->result<i64,i64> {}
+fn positive(value:i64)->i64 {when {let result=outcome(value)
+if is_ok(result) {return result.value}return result.error}}
+fn negative(value:i64)->i64 {when {let result=outcome(value)
+if is_err(result) {return result.error}return result.value}}
+fn negated(value:i64)->i64 {when {let result=outcome(value)
+if !is_ok(result) {return result.error}return result.value}}
+fn negated_error(value:i64)->i64 {when {let result=outcome(value)
+if !is_err(result) {return result.value}return result.error}}
+test guards {
+assert eval(positive,value:[1,_,-2,0])==[11,_,-12,10]
+assert eval(negative,value:[1,_,-2,0])==[11,_,-12,10]
+assert eval(negated,value:[1,_,-2,0])==[11,_,-12,10]
+assert eval(negated_error,value:[1,_,-2,0])==[11,_,-12,10]
+}
+";
+    let descriptor = format!(
+        "native_descriptor 1 target \"hgl-rust-1\"\nmodule result_guards\nprovider \"hgl.result_guards\" fingerprint \"result-guards-v1\" image {:?}\nvalue outcome(value:i64)->result<i64,i64> symbol \"outcome\" ownership owned phases {{setup,cold,evaluation}} effects {{}}\n",
+        image.to_string_lossy()
+    );
+    let mut input = hgl_program::library_files::sources(
+        &[
+            root()?.join("external/hgraph_std/hgl/hgraph/replay_record.hgl"),
+            root()?.join("external/hgraph_std/hgl/hgraph/impl/replay_record.hgl"),
+        ],
+        &[],
+    )?;
+    input.insert(0, ("result-guards.hgl".into(), source.into()));
+    input.push(("result-guards.hgl-native".into(), descriptor));
+    let suite = hgl_program::compile_module_suite(&input)?;
+    assert_eq!(suite.tests.len(), 1);
+    assert_eq!(suite.plans.len(), 4);
+    let generated = hgl_program::emit_tests(&suite).replace("fn main() {", "fn authored_main() {");
+    execute(&format!(
+        r"{generated}
+static CALLS:std::sync::atomic::AtomicUsize=std::sync::atomic::AtomicUsize::new(0);
+fn main() {{
+assert_eq!(test0::test().unwrap(),4);
+assert_eq!(CALLS.load(std::sync::atomic::Ordering::Relaxed),12);
+}}
+"
+    ))?;
+    fs::remove_dir_all(directory)?;
+    Ok(())
+}
 fn sources(body: &str) -> Result<Vec<(String, String)>, String> {
     let root = root().map_err(|e| e.to_string())?;
     let mut sources = hgl_program::library_files::sources(

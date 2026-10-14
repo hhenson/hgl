@@ -51,7 +51,7 @@ pub fn query(plan: &Plan, op: &str, args: &[Value], emit: impl Fn(&Value) -> Str
         } else {
             emit(&args[0])
         };
-        return format!("({operand}).{method}()");
+        return format!("(({operand}).{method}())");
     }
     let operand = emit(&args[0]);
     match op {
