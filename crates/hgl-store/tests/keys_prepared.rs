@@ -31,6 +31,27 @@ fn owning_keys_are_retained_cold_and_repeated_lookup_allocates_nothing() -> Node
     Ok(())
 }
 #[test]
+fn noninserting_lookup_keeps_absence_distinct_from_invalid_keys() -> NodeResult {
+    let mut keys = Keys::default();
+    let present = String::from("present");
+    let missing = String::from("missing");
+    String::prepare(&mut keys, &present)?;
+    keys.prepare_composite(2, &[1, 7])?;
+    let (result, allocations) = count_in(|| -> NodeResult {
+        assert_eq!(String::find(&keys, &present)?, Some(0));
+        assert_eq!(String::find(&keys, &missing)?, None);
+        assert_eq!(keys.find_composite(2, &[1, 8]), None);
+        assert_eq!(keys.find_composite(3, &[1, 7]), None);
+        assert_eq!(f64::find(&keys, &0.0)?, f64::find(&keys, &-0.0)?);
+        Ok(())
+    });
+    result?;
+    assert_eq!(allocations, 0);
+    assert_eq!(String::ids(&keys).len(), 1);
+    assert!(f64::find(&keys, &f64::NAN).is_err());
+    Ok(())
+}
+#[test]
 fn ieee_keys_share_zero_and_preserve_infinities() -> NodeResult {
     let mut keys = Keys::default();
     for value in [-0.0, 0.0, f64::INFINITY, f64::NEG_INFINITY] {

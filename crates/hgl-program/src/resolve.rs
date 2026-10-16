@@ -19,6 +19,7 @@ mod capture;
 mod captured;
 mod conditional;
 mod keyed;
+mod map_connections;
 mod outcomes;
 
 #[derive(Default)]
@@ -1792,6 +1793,13 @@ impl Checker {
         let index = self.expression(module, index, env, runtime)?;
         if matches!(parent.ty, Ty::Nullable(_)) {
             require_payload(&parent)?;
+        }
+        if !runtime
+            && matches!(parent.kind, Kind::Wire(_))
+            && (matches!(parent.ty, Ty::Map(..))
+                || matches!(&parent.ty, Ty::Ref(child) if matches!(child.as_ref(), Ty::Map(..))))
+        {
+            return self.map_connection(parent, index);
         }
         if matches!(&parent.ty, Ty::Map(..))
             || matches!(&parent.ty, Ty::Atomic(child) if matches!(child.as_ref(), Ty::Map(..)))

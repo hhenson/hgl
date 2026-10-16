@@ -26,3 +26,12 @@ instances. No scoped inventory or source name lookup remains on the tick path.
 Capture target discovery preserves a declared REF result's carrier as its normal
 endpoint. Ordinary followers still expand that carrier's possible targets for
 subscription and structural-view reservation.
+
+Map selector targets carry a prepared-member path step, expanded cold over the
+map's reserved member pool. Fixed descendant paths compose with that step;
+ordinary followers reserve subscriptions and typed child views for those slots.
+Declared-REF capture retains the stable selector carrier across generation
+changes. Capturing an ordinary declared result forwarded directly from a map
+selector currently reports `Rust capture target cannot prepare changing map
+member generations` during target admission, before emission; it does not guess
+a generation horizon or fail later while looking for an unprepared target.

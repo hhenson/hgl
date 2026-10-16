@@ -63,6 +63,9 @@ impl Key for crate::Any {
             .find(value, value.key_hash()?)?
             .ok_or_else(|| NodeError::new("any key was not prepared before start"))
     }
+    fn find(keys: &Keys, value: &AnyValue) -> NodeResult<Option<i64>> {
+        keys.anys.find(value, value.key_hash()?)
+    }
     fn value(keys: &Keys, id: i64) -> NodeResult<AnyValue> {
         keys.anys.get(id)?.retain()
     }

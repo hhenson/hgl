@@ -7,3 +7,8 @@ Native::key_view and key_view_id borrow exact prepared keys; Key::prepare retain
 Native key publication and recording copy a borrowed key view after typed destination preflight. Successful prepared paths allocate nothing. Hash collisions may require linear scans within one bucket; no worst-case bound beyond the provider Eq/Hash contract is claimed. Controls cover collision identity, retained aliases, coded provider failures, and n/2n/4n/8n callback counts.
 
 Initial module ceiling: native_keys 100 lines, within the unchanged Store aggregate.
+
+`Native::key_view_find(&Keys, NativeView) -> NodeResult<Option<i64>>` borrows a
+checked key for non-inserting selection. It preserves provider hash and collision
+equality failures; absence is represented only by None. Empty Store domains
+still invoke the provider hash. The compiled domain slot is prepared cold.

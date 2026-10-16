@@ -15,6 +15,102 @@ fn time(tick: i64) -> EngineTime {
     EngineTime::from_micros(tick)
 }
 #[test]
+fn held_member_reference_expires_without_revival_but_can_explicitly_retarget()
+-> Result<(), hgl_store::BindError> {
+    let mut store = Store::new();
+    let child_shape = Kind::Bundle(vec![("value".into(), Kind::Ts(ScalarType::I64))]);
+    let map_shape = Kind::Dictionary(Box::new(child_shape.clone()));
+    let map = store.add_shaped_output(NodeId(0), map_shape.clone());
+    store.prepare_collection(map, &[1], |store, owner| {
+        store.add_shaped_output(owner, child_shape.clone())
+    });
+    let book = store.add_shaped_input(NodeId(1), map_shape, true);
+    store.bind(book, map)?;
+    let carrier =
+        store.add_shaped_output(NodeId(1), Kind::Reference(Box::new(child_shape.clone())));
+    let saved = store.add_shaped_input(NodeId(2), child_shape, true);
+    let child = store.bindings().output(map).members.prepared[0].1;
+    store.reserve_reference_target(child, 2);
+    store.prepare_reference_input(saved, child)?;
+    let mut wake = Wakes::default();
+    store.follow(saved, carrier, EngineTime::NEVER, &mut wake)?;
+    store.prepare_collection_inputs();
+    let leaf = store.scalar_input::<i64>(store.bindings().fixed_input(saved, 0))?;
+    let (result, allocations) = count_in(|| -> Result<(), hgl_store::BindError> {
+        store.get_or_create_shaped(map, 1, time(1), &mut wake);
+        let output = store.scalar_output::<i64>(store.bindings().fixed_output(child, 0))?;
+        store.set(output, 7, time(1), NodeId(0), &mut wake);
+        let old = store.reference(child);
+        store.set_reference(carrier, old, time(1), &mut wake)?;
+        store.remove_shaped(map, 1, time(2), &mut wake);
+        assert_eq!(store.get(leaf), 7);
+        store.begin_cycle(time(3));
+        assert!(!store.valid(leaf));
+        assert!(store.bindings().resolve(old).is_none());
+        assert_eq!(
+            store.get_or_create_shaped(map, 1, time(3), &mut wake),
+            child
+        );
+        let output = store.scalar_output::<i64>(store.bindings().fixed_output(child, 0))?;
+        store.set(output, 7, time(3), NodeId(0), &mut wake);
+        assert!(!store.valid(leaf));
+        let current = store.reference(child);
+        assert_ne!(old, current);
+        store.set_reference(carrier, current, time(3), &mut wake)?;
+        assert_eq!(store.get(leaf), 7);
+        store.remove_shaped(map, 1, time(4), &mut wake);
+        store.get_or_create_shaped(map, 1, time(4), &mut wake);
+        assert_eq!(store.reference(child), current);
+        assert_eq!(store.get(leaf), 7);
+        Ok(())
+    });
+    result?;
+    assert_eq!(allocations, 0);
+    Ok(())
+}
+#[test]
+fn independently_held_fixed_child_expires_with_its_removed_member()
+-> Result<(), hgl_store::BindError> {
+    let mut store = Store::new();
+    let shape = Kind::Bundle(vec![("value".into(), Kind::Ts(ScalarType::I64))]);
+    let map = store.add_shaped_output(NodeId(0), Kind::Dictionary(Box::new(shape.clone())));
+    store.prepare_collection(map, &[1], |store, owner| {
+        store.add_shaped_output(owner, shape.clone())
+    });
+    let child = store.bindings().output(map).members.prepared[0].1;
+    let output = store.bindings().fixed_output(child, 0);
+    let holder = store.add_shaped_output(
+        NodeId(1),
+        Kind::Reference(Box::new(Kind::Ts(ScalarType::I64))),
+    );
+    let input = store.add_input::<i64>(NodeId(2), true);
+    store.reserve_reference_target(output, 1);
+    store.prepare_reference_input(input.id(), output)?;
+    let mut wake = Wakes::default();
+    store.follow(input.id(), holder, EngineTime::NEVER, &mut wake)?;
+    store.prepare_collection_inputs();
+    let (result, allocations) = count_in(|| -> Result<(), hgl_store::BindError> {
+        store.get_or_create_shaped(map, 1, time(1), &mut wake);
+        let output = store.scalar_output::<i64>(output)?;
+        store.set(output, 7, time(1), NodeId(0), &mut wake);
+        let held = store.reference(output.id());
+        store.set_reference(holder, held, time(1), &mut wake)?;
+        store.remove_shaped(map, 1, time(2), &mut wake);
+        assert_eq!(store.get(input), 7);
+        store.begin_cycle(time(3));
+        assert!(!store.valid(input));
+        store.get_or_create_shaped(map, 1, time(3), &mut wake);
+        let output = store.scalar_output::<i64>(output.id())?;
+        store.set(output, 9, time(3), NodeId(0), &mut wake);
+        assert!(!store.valid(input));
+        assert!(store.bindings().resolve(held).is_none());
+        Ok(())
+    });
+    result?;
+    assert_eq!(allocations, 0);
+    Ok(())
+}
+#[test]
 fn first_remove_reinsert_preserves_absence_generations_and_sparse_child_validity_without_allocating()
  {
     let mut store = Store::new();

@@ -79,7 +79,10 @@ membership or validity.
 
 `Endpoints::reset_prepared(OutputId)` clears descendant membership, timestamps,
 validity and held input observations after the removal cycle while retaining
-prepared storage and subscriptions. It advances endpoint generations; exhaustion
+prepared storage and permanent member-projection subscriptions. Independently
+held target followers detach at expiry, including fixed descendant fields; their
+REF carrier subscriptions remain available for a later explicit retarget. Reusing
+a slot cannot revive an expired designation. It advances generations; exhaustion
 fails explicitly and never wraps. Pooled future children remain absent.
 
 `Members::pool` enables bounded runtime keys, and `claim` assigns the same retained

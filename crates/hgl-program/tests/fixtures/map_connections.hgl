@@ -1,0 +1,56 @@
+module map_connections
+fn select(book:map<str,i64>,key:str)->ref<i64> => book[key]
+fn read(value:i64)->i64 {when {return delta_value(value)}}
+fn follow(book:map<str,i64>,key:str)->i64 => read(select(book,key))
+fn captured(book:map<str,i64>,key:str)->i64 {
+let seen=capture(select,book,key)
+read(seen.value)}
+fn producer(step:i64)->map<i64,i64> {
+inject out
+when {
+if step==0 {upsert(out,1,0)
+invalidate(out,1)}
+if step==1 {upsert(out,1,7)}
+if step==2 {invalidate(out,1)}
+if step==3 {upsert(out,1,9)}
+if step==4 {remove(out,1)
+upsert(out,1,9)}
+if step==5 {remove(out,1)}
+if step==7 {upsert(out,1,9)}
+}}
+fn first(value:ref<i64>)->ref<i64> {
+state saved:bool=false
+when valid(value) {if !saved {saved=true
+return value}}}
+fn inspect(reference:ref<i64>,value:i64,saved:i64,step:i64)->atomic<tuple<bool,bool,bool,bool,i64,bool,i64>> {
+when valid(step) && modified(step) {
+var current:i64 = -1
+var old:i64 = -1
+if valid(value) {current=value}
+if valid(saved) {old=saved}
+return (valid(reference),modified(reference),valid(value),modified(value),current,valid(saved),old)}}
+fn metadata(step:i64)->atomic<tuple<bool,bool,bool,bool,i64,bool,i64>> {
+let book=producer(step)
+let selected=book[1]
+inspect(selected,selected,first(selected),step)}
+struct Key {name:str
+id:i64}
+fn composite(book:map<Key,i64>)->i64 => read(book[Key(name:"x",id:1)])
+fn composite_live(book:map<Key,i64>,key:Key)->i64 => read(book[key])
+fn composite_value(book:map<i64,Key>)->i64 => read(book[1].id)
+test live {
+assert eval(follow,book:[_,delta<map<str,i64>>(upsert:["X":7]),delta<map<str,i64>>(remove:["X"]),_,delta<map<str,i64>>(upsert:["X":7])],key:["X"])==[_,7,_,_,7]
+assert eval(captured,book:[_,delta<map<str,i64>>(upsert:["X":7]),delta<map<str,i64>>(remove:["X"]),_,delta<map<str,i64>>(upsert:["X":7])],key:["X"])==[_,7,_,_,7]
+assert eval(metadata,step:[0,1,2,3,4,5,6,7])==[
+(true,true,false,false,-1,false,-1),
+(true,false,true,true,7,true,7),
+(true,false,false,false,-1,false,-1),
+(true,false,true,true,9,true,9),
+(true,false,true,true,9,true,9),
+(true,true,false,false,-1,true,9),
+(true,false,false,false,-1,false,-1),
+(true,true,true,true,9,false,-1)]
+assert eval(composite,book:[delta<map<Key,i64>>(upsert:[Key(name:"x",id:1):7]),delta<map<Key,i64>>(upsert:[Key(name:"other",id:1):9])])==[7,_]
+assert eval(composite_live,book:[delta<map<Key,i64>>(upsert:[Key(name:"x",id:1):7]),_,delta<map<Key,i64>>(upsert:[Key(name:"other",id:1):9]),_],key:[delta<Key>(name:"x",id:1),delta<Key>(name:"unknown",id:1),delta<Key>(name:"other",id:1),delta<Key>(name:"x",id:1)])==[7,_,9,7]
+assert eval(composite_value,book:[delta<map<i64,Key>>(upsert:[1:delta<Key>(name:"x",id:7)]),delta<map<i64,Key>>(upsert:[1:delta<Key>(id:9)]),delta<map<i64,Key>>(remove:[1]),_,delta<map<i64,Key>>(upsert:[1:delta<Key>(name:"x",id:7)])])==[7,9,_,_,7]
+}

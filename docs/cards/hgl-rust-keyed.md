@@ -67,3 +67,11 @@ This module now lives in hgl-rust-codegen below executable program assembly;
 its hgl-rust facade path and module ceiling remain unchanged.
 
 Cold key preparation decodes materialized Native values using their exact compiled marker. Hot key lookup borrows its typed NativeView and uses the existing provider hash/equality domain. Copying a recorded Native key borrows the prepared key domain and preflights its destination, avoiding an allocating Key::value intermediate.
+
+Live graph map selection uses non-inserting typed key lookup and active membership
+only. The intrinsic is scheduled initially for a fixed key so an unpublished map
+can publish a valid empty REF. Subsequent key, map membership and outer-REF changes
+recompute the designation; `set_reference` suppresses equal identity writes.
+Child payload ticks flow through the retained target independently. The authored
+map matrix covers shared Spec traces, strict prepared allocation, temporal
+composite keys, invalid member targets and removal/reinsertion generations.

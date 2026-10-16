@@ -40,3 +40,9 @@ and independent stores. Optional presence bits are explicit. Lookup compares
 all tokens after hashing and allocates nothing, including its first use.
 
 Vec<u8> is an exact cold key domain. Equality and hashing use unsigned octet contents; independently reconstructed equal keys share identity. Retained keys and with_value reads preserve ownership without hot allocation.
+
+`Key::find(&Keys, &Value) -> NodeResult<Option<i64>>` performs non-inserting
+lookup for live map connection selection. Inline exact identities return their
+ID directly; owning domains return None for an unknown key. Provider/hash/Eq
+failures remain errors, including on an empty domain. `Keys::find_composite`
+looks up complete prepared component tokens and never grows the domain.

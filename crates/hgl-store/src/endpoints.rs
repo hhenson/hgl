@@ -244,17 +244,47 @@ impl Endpoints {
 
     /// Reset a retained finite member after its removal observation cycle.
     pub fn reset_prepared(&mut self, id: OutputId) {
+        self.reset_member(id, id);
+    }
+    fn member_projection(&self, mut input: InputId, mut output: OutputId, root: OutputId) -> bool {
+        loop {
+            let (Some((parent_input, input_key)), Some((parent_output, output_key))) =
+                (self.input(input).parent, self.output(output).parent)
+            else {
+                return false;
+            };
+            if input_key != output_key || self.input(parent_input).source != Some(parent_output) {
+                return false;
+            }
+            if output == root {
+                return true;
+            }
+            input = parent_input;
+            output = parent_output;
+        }
+    }
+    fn reset_member(&mut self, id: OutputId, root: OutputId) {
         for n in 0..self.output(id).fixed.len() {
-            self.reset_prepared(self.output(id).fixed[n]);
+            self.reset_member(self.output(id).fixed[n], root);
         }
         while let Some((_, child)) = self.outputs[id.0 as usize].members.live.pop_first() {
-            self.reset_prepared(child);
+            self.reset_member(child, root);
         }
         while let Some((_, child)) = self.outputs[id.0 as usize].members.removed.pop_first() {
-            self.reset_prepared(child);
+            self.reset_member(child, root);
         }
-        for n in 0..self.output(id).watchers.len() {
-            self.reset_input(self.output(id).watchers[n]);
+        let mut position = 0;
+        while let Some(&input) = self.output(id).watchers.get(position) {
+            if self.member_projection(input, id, root) {
+                position += 1;
+            } else {
+                self.outputs[id.0 as usize].watchers.swap_remove(position);
+                if let Some(&moved) = self.output(id).watchers.get(position) {
+                    self.inputs[moved.0 as usize].source_position = position;
+                }
+                self.inputs[input.0 as usize].source = None;
+            }
+            self.reset_input(input);
         }
         let output = &mut self.outputs[id.0 as usize];
         output.generation = output
