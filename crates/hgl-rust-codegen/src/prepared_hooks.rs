@@ -8,6 +8,9 @@ pub(crate) fn publication(plan: &Plan, value: &Value, result: Option<&Ty>) -> Op
     if !crate::finite_domains::prepared(plan) || plan.recording.is_none() {
         return None;
     }
+    if let Some(code) = scalar_publication(plan, value, result) {
+        return Some(code);
+    }
     if let Kind::Query(op, _) = &value.kind
         && op.starts_with("\0constructor:")
         && let Some(("global_values", source)) = crate::source_slots::source(plan, value)
@@ -79,6 +82,19 @@ pub(crate) fn publication(plan: &Plan, value: &Value, result: Option<&Ty>) -> Op
     }
     crate::observed::forwarded(value, result)
 }
+fn scalar_publication(plan: &Plan, value: &Value, result: Option<&Ty>) -> Option<String> {
+    if result == Some(&value.ty)
+        && value.ty.scalar_kind().is_some()
+        && let Some(("global_values", source)) = crate::source_slots::source(plan, value)
+    {
+        return Some(format!(
+            "let publication={source};_ctx.prepared().scalar_from_global::<{}>(self._output.id(),self._output.generation(),publication.fields())?;",
+            global_type(&value.ty)
+        ));
+    }
+    None
+}
+
 fn capture(v: &Value, slot: &str) -> Option<String> {
     if let Kind::Input(id, false) = v.kind
         && v.ty.scalar_kind().is_some()

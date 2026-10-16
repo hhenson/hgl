@@ -49,12 +49,12 @@ scalars = { budget = 150, uses = ["native_values", "layouts"] }
 snapshot_slots = { budget = 350, uses = ["execution_proof", "native_owners", "snapshot_views", "structural_publication", "layouts", "observed", "snapshots", "any_prepared", "windows"] }
 snapshot_views = { budget = 160, uses = ["observed", "layouts", "snapshots"] }
 snapshots = { budget = 300, uses = ["layouts", "structural_publication"] }
-source_slots = { budget = 100, uses = ["constructor_owners", "layouts", "snapshot_slots", "values"] }
+source_slots = { budget = 100, uses = ["constructor_owners", "layouts", "snapshot_slots", "values", "collections"] }
 structs = { budget = 230, uses = ["collections", "prepared_values", "any_values", "layouts"] }
 type_data = { budget = 120, uses = ["native_values", "enums"] }
 value_convert = { budget = 320, uses = ["native_values", "checked_data", "collections", "families", "layouts", "any_values", "scalars"] }
 tuple_adapter = { budget = 60, uses = ["value_calls", "execution_proof"] }
-values = { budget = 800, uses = ["outcomes", "any_values", "any_prepared", "prepared_hooks", "source_slots", "scalars", "execution_proof", "keyed", "snapshot_views", "value_calls", "structural_publication", "snapshot_slots", "snapshots", "collections", "deltas", "direct_deltas", "finite_domains", "layouts", "observed", "windows", "constructor_owners", "owner_comparisons", "native_image", "native_values"] }
+values = { budget = 800, uses = ["composite_keys", "outcomes", "any_values", "any_prepared", "prepared_hooks", "source_slots", "scalars", "execution_proof", "keyed", "snapshot_views", "value_calls", "structural_publication", "snapshot_slots", "snapshots", "collections", "deltas", "direct_deltas", "finite_domains", "layouts", "observed", "windows", "constructor_owners", "owner_comparisons", "native_image", "native_values"] }
 windows = { budget = 100, uses = ["layouts"] }
 structural_publication = { budget = 220, uses = ["snapshot_views", "layouts", "snapshot_slots", "snapshots"] }
 value_calls = { budget = 100, uses = ["scalars", "execution_proof"] }

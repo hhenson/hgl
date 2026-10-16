@@ -58,7 +58,9 @@ fn text_parts(
 }
 /// Compose a pure observed text expression directly into prepared output capacity.
 pub fn text(value: &Value, result: Option<&Ty>) -> Option<String> {
-    if !matches!(&value.kind,Kind::Binary(op,_,_) if op=="+" && value.ty==Ty::Str) {
+    if !matches!(&value.kind,Kind::Binary(op,_,_) if op=="+" && value.ty==Ty::Str)
+        && !matches!(value.kind, Kind::Literal(hgl_source::Literal::Str(_)))
+    {
         return None;
     }
     let mut parts = Vec::new();

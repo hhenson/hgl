@@ -4,13 +4,12 @@ use hgl_source::Ty;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
+type Route = (usize, Vec<Option<usize>>, Vec<usize>);
+type Target = (usize, Vec<Option<usize>>);
+type View = (usize, usize, Vec<usize>, Target);
+
 pub(crate) fn target_error(plan: &Plan) -> Option<String> {
     for capture in &plan.captures {
-        if matches!(capture.value, Ty::Ref(_)) {
-            return Some(
-                "Rust capture target cannot prepare a source-declared REF normal connection".into(),
-            );
-        }
         if let Err(error) = capture_targets(plan, capture.owner) {
             return Some(error);
         }
@@ -22,12 +21,12 @@ pub(crate) fn target_error(plan: &Plan) -> Option<String> {
 fn capture_routes(
     plan: &Plan,
     owner: &crate::ir::Capture,
-    path: &[usize],
+    path: &[Option<usize>],
     input_path: Vec<usize>,
     expected: &Ty,
-    result: &mut BTreeSet<(usize, Vec<usize>, Vec<usize>)>,
+    result: &mut BTreeSet<Route>,
 ) -> Result<(), String> {
-    if let Some((&index, rest)) = path.split_first() {
+    if let Some((&Some(index), rest)) = path.split_first() {
         if let Some(output) = owner.output.filter(|_| index == 0) {
             targets(plan, output, rest.to_vec(), input_path, expected, result)?;
         } else {
@@ -40,7 +39,14 @@ fn capture_routes(
             child_path.push(index);
             let child = child(expected, index)
                 .ok_or("Rust target cannot prepare capture connection shape")?;
-            targets(plan, owner.owner, vec![index], child_path, child, result)?;
+            targets(
+                plan,
+                owner.owner,
+                vec![Some(index)],
+                child_path,
+                child,
+                result,
+            )?;
         }
     }
     Ok(())
@@ -48,10 +54,10 @@ fn capture_routes(
 fn targets(
     plan: &Plan,
     source: usize,
-    path: Vec<usize>,
+    path: Vec<Option<usize>>,
     input_path: Vec<usize>,
     expected: &Ty,
-    result: &mut BTreeSet<(usize, Vec<usize>, Vec<usize>)>,
+    result: &mut BTreeSet<Route>,
 ) -> Result<(), String> {
     let node = &plan.nodes[source];
     if path.is_empty() && matches!(expected, Ty::Ref(_)) && node.result == *expected {
@@ -75,7 +81,7 @@ fn targets(
         return capture_routes(plan, owner, &path, input_path, expected, result);
     }
     if crate::graph_assemblies::shape(node).is_some() {
-        if let Some((&index, rest)) = path.split_first() {
+        if let Some((&Some(index), rest)) = path.split_first() {
             targets(
                 plan,
                 node.inputs[index].1,
@@ -96,9 +102,16 @@ fn targets(
         return Ok(());
     }
     if !matches!(node.result, Ty::Ref(_)) || node.result == *expected {
-        let selected = path
-            .iter()
-            .try_fold(&node.result, |ty, index| child(ty, *index));
+        let selected = path.iter().try_fold(&node.result, |ty, index| match index {
+            Some(index) => child(ty, *index),
+            None => {
+                if let Ty::Map(_, child) = ty {
+                    Some(child.as_ref())
+                } else {
+                    None
+                }
+            }
+        });
         if selected.is_some_and(|ty| matches!(ty, Ty::Ref(_)) && ty != expected) {
             return Err(format!(
                 "Rust target cannot prepare REF child designation flow in {}",
@@ -108,7 +121,13 @@ fn targets(
         result.insert((source, path, input_path));
         return Ok(());
     }
-    for (input, mut child) in crate::reference_designations::inputs(node)? {
+    if node.name == "hgl.map_connection" {
+        let mut member = vec![None];
+        member.extend(path);
+        return targets(plan, node.inputs[0].1, member, input_path, expected, result);
+    }
+    for (input, child) in crate::reference_designations::inputs(node)? {
+        let mut child = child.into_iter().map(Some).collect::<Vec<_>>();
         child.extend_from_slice(&path);
         targets(
             plan,
@@ -133,10 +152,16 @@ pub(crate) fn capture_targets(plan: &Plan, id: usize) -> Result<Vec<(usize, Vec<
     };
     let mut possible = BTreeSet::new();
     targets(plan, source, vec![], vec![], &capture.value, &mut possible)?;
-    Ok(possible
+    possible
         .into_iter()
-        .map(|(source, path, _)| (source, path))
-        .collect())
+        .map(|(source, path, _)| {
+            let path = path
+                .into_iter()
+                .collect::<Option<Vec<_>>>()
+                .ok_or("Rust capture target cannot prepare changing map member generations")?;
+            Ok((source, path))
+        })
+        .collect()
 }
 
 fn child(ty: &Ty, index: usize) -> Option<&Ty> {
@@ -152,7 +177,7 @@ fn child(ty: &Ty, index: usize) -> Option<&Ty> {
 }
 
 pub(crate) fn reserve(plan: &Plan) -> String {
-    let mut subscriptions = BTreeMap::<(usize, Vec<usize>), usize>::new();
+    let mut subscriptions = BTreeMap::<Target, usize>::new();
     let mut views = Vec::new();
     for (consumer, node) in plan.nodes.iter().enumerate() {
         if crate::graph_assemblies::shape(node).is_some() {
@@ -178,34 +203,7 @@ pub(crate) fn reserve(plan: &Plan) -> String {
         return code;
     }
     if crate::conditionals::has_children(plan) {
-        for ((source, path), _) in subscriptions {
-            let count = views
-                .iter()
-                .filter(|(_, _, _, target)| target == &(source, path.clone()))
-                .map(|(consumer, _, _, _)| format!("conditional_endpoints[{consumer}].len()"))
-                .collect::<Vec<_>>()
-                .join("+");
-            let target = path
-                .iter()
-                .fold("output.expect(\"checked target\")".into(), |o, index| {
-                    format!("store.bindings().fixed_output({o},{index})")
-                });
-            writeln!(code,"for (_,output) in &conditional_endpoints[{source}] {{store.reserve_reference_target({target},{count});}}").unwrap_or_else(|_|unreachable!("String formatting"));
-        }
-        for (consumer, input, input_path, (source, path)) in views {
-            let target = path
-                .iter()
-                .fold("output.expect(\"checked target\")".into(), |o, index| {
-                    format!("store.bindings().fixed_output({o},{index})")
-                });
-            let input = input_path
-                .iter()
-                .fold(format!("inputs[{input}]"), |i, index| {
-                    format!("store.bindings().fixed_input({i},{index})")
-                });
-            writeln!(code,"for (inputs,_) in &conditional_endpoints[{consumer}] {{for (_,output) in &conditional_endpoints[{source}] {{if let Err(e)=store.prepare_reference_input({input},{target}) {{if !matches!(e,hgl_store::BindError::BackwardReference) {{return Err(format!(\"{{e:?}}\").into());}}}}}}}}").unwrap_or_else(|_|unreachable!("String formatting"));
-        }
-        return code;
+        return reserve_scoped(subscriptions, views);
     }
     let nodes = plan.nodes.iter().enumerate().map(|(index,node)| {
         format!("graph.nodes.iter().position(|node|node.implementation=={:?}).expect(\"checked reference route node\")",format!("{}#{index}",node.name))
@@ -213,30 +211,83 @@ pub(crate) fn reserve(plan: &Plan) -> String {
     writeln!(code, "let reference_nodes=[{nodes}];")
         .unwrap_or_else(|_| unreachable!("String formatting"));
     for ((source, path), subscribers) in subscriptions {
-        let output = endpoint(source, &path);
-        writeln!(
-            code,
-            "{{let output={output};store.reserve_reference_target(output,{subscribers});}}"
-        )
-        .unwrap_or_else(|_| unreachable!("String formatting"));
+        code += &visit(
+            &endpoint(source),
+            &path,
+            &format!("store.reserve_reference_target(target,{subscribers});"),
+        );
     }
     for (consumer, input, input_path, (source, path)) in views {
-        let output = endpoint(source, &path);
         let input = input_path.iter().fold(
             format!("built.inputs[reference_nodes[{consumer}]][{input}]"),
             |input, index| format!("store.bindings().fixed_input({input},{index})"),
         );
-        writeln!(code,"{{let target={output};store.prepare_reference_input({input},target).map_err(|e|format!(\"{{e:?}}\"))?;}}")
-            .unwrap_or_else(|_| unreachable!("String formatting"));
+        code += &visit(
+            &endpoint(source),
+            &path,
+            &format!(
+                "store.prepare_reference_input({input},target).map_err(|e|format!(\"{{e:?}}\"))?;"
+            ),
+        );
     }
     code
 }
 
-fn endpoint(source: usize, path: &[usize]) -> String {
-    path.iter().fold(
-        format!("built.outputs[reference_nodes[{source}]].expect(\"checked reference target\")"),
-        |output, index| format!("store.bindings().fixed_output({output},{index})"),
-    )
+fn reserve_scoped(subscriptions: BTreeMap<Target, usize>, views: Vec<View>) -> String {
+    let mut code = String::new();
+    for ((source, path), _) in subscriptions {
+        let count = views
+            .iter()
+            .filter(|(_, _, _, target)| target == &(source, path.clone()))
+            .map(|(consumer, _, _, _)| format!("conditional_endpoints[{consumer}].len()"))
+            .collect::<Vec<_>>()
+            .join("+");
+        let reserve = visit(
+            "output.expect(\"checked target\")",
+            &path,
+            &format!("store.reserve_reference_target(target,{count});"),
+        );
+        writeln!(
+            code,
+            "for (_,output) in &conditional_endpoints[{source}] {{{reserve}}}"
+        )
+        .unwrap_or_else(|_| unreachable!("String formatting"));
+    }
+    for (consumer, input, input_path, (source, path)) in views {
+        let input = input_path
+            .iter()
+            .fold(format!("inputs[{input}]"), |i, index| {
+                format!("store.bindings().fixed_input({i},{index})")
+            });
+        let prepare = visit(
+            "output.expect(\"checked target\")",
+            &path,
+            &format!(
+                "if let Err(e)=store.prepare_reference_input({input},target) {{if !matches!(e,hgl_store::BindError::BackwardReference) {{return Err(format!(\"{{e:?}}\").into());}}}}"
+            ),
+        );
+        writeln!(code,"for (inputs,_) in &conditional_endpoints[{consumer}] {{for (_,output) in &conditional_endpoints[{source}] {{{prepare}}}}}").unwrap_or_else(|_|unreachable!("String formatting"));
+    }
+    code
+}
+
+fn endpoint(source: usize) -> String {
+    format!("built.outputs[reference_nodes[{source}]].expect(\"checked reference target\")")
+}
+// None expands finite prepared map members; Some projects an exact fixed child.
+fn visit(root: &str, path: &[Option<usize>], body: &str) -> String {
+    let mut code = body.to_owned();
+    for step in path.iter().rev() {
+        code = match step {
+            Some(index) => {
+                format!("{{let target=store.bindings().fixed_output(target,{index});{code}}}")
+            }
+            None => format!(
+                "for (_,target) in store.bindings().output(target).members.prepared.clone() {{{code}}}"
+            ),
+        };
+    }
+    format!("{{let target={root};{code}}}")
 }
 
 #[cfg(test)]

@@ -19,6 +19,7 @@ mod capture;
 mod captured;
 mod conditional;
 mod keyed;
+mod map_connections;
 mod outcomes;
 
 #[derive(Default)]
@@ -1793,6 +1794,13 @@ impl Checker {
         if matches!(parent.ty, Ty::Nullable(_)) {
             require_payload(&parent)?;
         }
+        if !runtime
+            && matches!(parent.kind, Kind::Wire(_))
+            && (matches!(parent.ty, Ty::Map(..))
+                || matches!(&parent.ty, Ty::Ref(child) if matches!(child.as_ref(), Ty::Map(..))))
+        {
+            return self.map_connection(parent, index);
+        }
         if matches!(&parent.ty, Ty::Map(..))
             || matches!(&parent.ty, Ty::Atomic(child) if matches!(child.as_ref(), Ty::Map(..)))
         {
@@ -1843,11 +1851,18 @@ impl Checker {
         } else {
             Ty::Ref(Box::new(child.ty.clone()))
         };
+        // The passive capture bundle exists before its REF carrier's first publication.
+        let designation = if self.plan.captures.iter().any(|capture| {
+            capture.owner == source && index == 0 && matches!(capture.value, Ty::Ref(_))
+        }) {
+            child.clone()
+        } else {
+            Value::new(reference.clone(), Kind::Input(0, false))
+        };
         let projected = Value::new(
             result.clone(),
             Kind::Query("\0reference".into(), vec![child]),
         );
-        let designation = Value::new(reference.clone(), Kind::Input(0, false));
         let guard = Value::new(Ty::Bool, Kind::Query("valid".into(), vec![designation]));
         let wire = self.plan.nodes.len();
         self.plan.nodes.push(Node {

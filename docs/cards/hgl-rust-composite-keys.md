@@ -24,3 +24,10 @@ Hash collisions never establish equality. Unprepared keys fail explicitly.
 
 This module now lives in hgl-rust-codegen below executable program assembly;
 its hgl-rust facade path and module ceiling remain unchanged.
+
+`slot_find` shares the typed slot operation emitter with `slot_id`;
+`input_find` recursively reads statically typed structural key fields without
+constructing an owning value. Generated `key_slot_find` and `key_parts_find`
+resolve optional prepared membership. Every present component is checked even
+when another component is absent from its domain, preserving later provider
+failures. Readable temporal keys and retained configuration keys allocate nothing.

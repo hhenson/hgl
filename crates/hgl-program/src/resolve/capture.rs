@@ -51,12 +51,6 @@ impl Checker {
         };
         let nodes = (begin..self.plan.nodes.len()).collect::<Vec<_>>();
         let captures = self.capture_sources(&nodes, output);
-        if matches!(result, Ty::Ref(_)) {
-            return Err(Issue::typed(
-                0..0,
-                "Rust capture target cannot prepare a source-declared REF normal connection",
-            ));
-        }
         let fields = if output.is_some() {
             vec![
                 ("value".into(), result.clone()),

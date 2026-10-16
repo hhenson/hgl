@@ -12,6 +12,10 @@ pub trait Key: GlobalValue {
     fn prepare(keys: &mut Keys, value: &Self::Value) -> NodeResult;
     /// Find its already prepared membership token without allocating.
     fn id(keys: &Keys, value: &Self::Value) -> NodeResult<i64>;
+    /// Resolve a possibly absent key without insertion; provider failures remain errors.
+    fn find(keys: &Keys, value: &Self::Value) -> NodeResult<Option<i64>> {
+        Self::id(keys, value).map(Some)
+    }
     /// Retain the exact ordinary value during owning capture.
     fn value(keys: &Keys, id: i64) -> NodeResult<Self::Value>;
     /// Visit the retained exact value without allocating an owning copy.
@@ -166,6 +170,9 @@ impl Key for f64 {
     fn id(keys: &Keys, value: &Self::Value) -> NodeResult<i64> {
         keys.floats.require(float_id(*value)?)
     }
+    fn find(_: &Keys, value: &Self::Value) -> NodeResult<Option<i64>> {
+        Ok(Some(float_id(*value)?))
+    }
     fn value(keys: &Keys, id: i64) -> NodeResult<Self::Value> {
         keys.floats.require(id)?;
         Ok(f64::from_bits(u64::from_ne_bytes(id.to_ne_bytes())))
@@ -180,6 +187,9 @@ impl Key for Date {
     }
     fn id(keys: &Keys, value: &Self::Value) -> NodeResult<i64> {
         keys.dates.require(value.0)
+    }
+    fn find(_: &Keys, value: &Self::Value) -> NodeResult<Option<i64>> {
+        Ok(Some(value.0))
     }
     fn value(keys: &Keys, id: i64) -> NodeResult<Self::Value> {
         keys.dates.require(id)?;
@@ -196,6 +206,9 @@ impl Key for Time {
     fn id(keys: &Keys, value: &Self::Value) -> NodeResult<i64> {
         keys.times.require(value.0)
     }
+    fn find(_: &Keys, value: &Self::Value) -> NodeResult<Option<i64>> {
+        Ok(Some(value.0))
+    }
     fn value(keys: &Keys, id: i64) -> NodeResult<Self::Value> {
         keys.times.require(id)?;
         Ok(Time(id))
@@ -210,6 +223,9 @@ impl Key for EngineTime {
     }
     fn id(keys: &Keys, value: &Self::Value) -> NodeResult<i64> {
         keys.datetimes.require(value.micros())
+    }
+    fn find(_: &Keys, value: &Self::Value) -> NodeResult<Option<i64>> {
+        Ok(Some(value.micros()))
     }
     fn value(keys: &Keys, id: i64) -> NodeResult<Self::Value> {
         keys.datetimes.require(id)?;
@@ -226,6 +242,9 @@ impl Key for EngineDelta {
     fn id(keys: &Keys, value: &Self::Value) -> NodeResult<i64> {
         keys.durations.require(value.micros())
     }
+    fn find(_: &Keys, value: &Self::Value) -> NodeResult<Option<i64>> {
+        Ok(Some(value.micros()))
+    }
     fn value(keys: &Keys, id: i64) -> NodeResult<Self::Value> {
         keys.durations.require(id)?;
         Ok(EngineDelta::from_micros(id))
@@ -240,6 +259,9 @@ impl Key for CivilDateTime {
     }
     fn id(keys: &Keys, value: &Self::Value) -> NodeResult<i64> {
         keys.civils.require(value.micros())
+    }
+    fn find(_: &Keys, value: &Self::Value) -> NodeResult<Option<i64>> {
+        Ok(Some(value.micros()))
     }
     fn value(keys: &Keys, id: i64) -> NodeResult<Self::Value> {
         keys.civils.require(id)?;
@@ -258,6 +280,9 @@ impl Key for String {
     }
     fn id(keys: &Keys, value: &Self::Value) -> NodeResult<i64> {
         keys.strings.require(value)
+    }
+    fn find(keys: &Keys, value: &Self::Value) -> NodeResult<Option<i64>> {
+        Ok(keys.strings.find(value))
     }
     fn value(keys: &Keys, id: i64) -> NodeResult<Self::Value> {
         <Self as GlobalValue>::retain(keys.strings.get(id)?)
@@ -279,6 +304,9 @@ impl Key for Vec<u8> {
     fn id(keys: &Keys, value: &Self::Value) -> NodeResult<i64> {
         keys.bytes.require(value)
     }
+    fn find(keys: &Keys, value: &Self::Value) -> NodeResult<Option<i64>> {
+        Ok(keys.bytes.find(value))
+    }
     fn value(keys: &Keys, id: i64) -> NodeResult<Self::Value> {
         <Self as GlobalValue>::retain(keys.bytes.get(id)?)
     }
@@ -298,6 +326,9 @@ impl Key for ZoneId {
     }
     fn id(keys: &Keys, value: &Self::Value) -> NodeResult<i64> {
         keys.zones.require(value)
+    }
+    fn find(keys: &Keys, value: &Self::Value) -> NodeResult<Option<i64>> {
+        Ok(keys.zones.find(value))
     }
     fn value(keys: &Keys, id: i64) -> NodeResult<Self::Value> {
         <Self as GlobalValue>::retain(keys.zones.get(id)?)
@@ -320,6 +351,9 @@ impl Key for ZonedTime {
     fn id(keys: &Keys, value: &Self::Value) -> NodeResult<i64> {
         keys.zoned_times.require(value)
     }
+    fn find(keys: &Keys, value: &Self::Value) -> NodeResult<Option<i64>> {
+        Ok(keys.zoned_times.find(value))
+    }
     fn value(keys: &Keys, id: i64) -> NodeResult<Self::Value> {
         <Self as GlobalValue>::retain(keys.zoned_times.get(id)?)
     }
@@ -340,6 +374,9 @@ impl Key for ZonedDateTime {
     }
     fn id(keys: &Keys, value: &Self::Value) -> NodeResult<i64> {
         keys.zoned_datetimes.require(value)
+    }
+    fn find(keys: &Keys, value: &Self::Value) -> NodeResult<Option<i64>> {
+        Ok(keys.zoned_datetimes.find(value))
     }
     fn value(keys: &Keys, id: i64) -> NodeResult<Self::Value> {
         <Self as GlobalValue>::retain(keys.zoned_datetimes.get(id)?)

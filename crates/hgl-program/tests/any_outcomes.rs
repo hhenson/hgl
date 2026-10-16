@@ -6,6 +6,60 @@ mod generated_cache;
 mod regression_cache;
 
 #[test]
+fn observed_tuple_scalar_projections_preserve_payload_and_presence()
+-> Result<(), Box<dyn std::error::Error>> {
+    execute(
+        include_str!("../../../external/hgraph_std/hgl/hgraph/tests/tuple_observation_values.hgl"),
+        "observed-tuple-projections",
+        STRICT_RUNTIME,
+        "",
+        (3, 8),
+    )
+}
+
+#[test]
+fn observed_nested_scalar_projections_use_the_selected_snapshot_layout()
+-> Result<(), Box<dyn std::error::Error>> {
+    let source = r#"module observed_scalar_slots
+fn nested(value:tuple<tuple<i64,bool>,bool>)->i64 {when valid(value,value[0],value[0][0]) {
+let copy=value
+return copy[0][0]}}
+fn flag(value:tuple<i64,bool>)->bool {when valid(value,value[1]) {
+let copy=value
+return copy[1]}}
+fn text(value:tuple<str,bool>)->str {when valid(value,value[0]) {
+let copy=value
+return copy[0]}}
+fn indexed(value:tuple<list<i64,2>,bool>)->i64 {when valid(value,value[0],value[0][0]) {
+let copy=value
+return copy[0][0]}}
+test selected_payloads {
+assert eval(nested,value:[((7,_),_),(_,false),((9,false),_),_])==[7,7,9,_]
+assert eval(flag,value:[(_,false),(7,_),(_,true),_])==[false,false,true,_]
+assert eval(text,value:[("x",_),_,("a longer retained string",false),("",_)])==["x",_,"a longer retained string",""]
+let first=delta<tuple<list<i64,2>,bool>>(items:[0:delta<list<i64,2>>(items:[0:7,1:8]),1:false])
+let later=delta<tuple<list<i64,2>,bool>>(items:[0:delta<list<i64,2>>(items:[0:9,1:10])])
+assert eval(indexed,value:[first,_,later])==[7,_,9]
+}
+"#;
+    execute(source, "observed-scalar-slots", STRICT_RUNTIME, "", (1, 4))
+}
+
+#[test]
+fn observed_scalar_slots_keep_shared_unset_read_failures_and_controls()
+-> Result<(), Box<dyn std::error::Error>> {
+    execute(
+        include_str!(
+            "../../../external/hgraph_std/hgl/hgraph/tests/unset_required_read_values.hgl"
+        ),
+        "observed-scalar-presence",
+        STRICT_RUNTIME,
+        "",
+        (2, 11),
+    )
+}
+
+#[test]
 fn result_and_error_boxes_execute_through_ordinary_and_temporal_owners()
 -> Result<(), Box<dyn std::error::Error>> {
     execute(SOURCE, "any-outcomes", STRICT_RUNTIME, "", (1, 21))
@@ -87,6 +141,8 @@ native const fn failure(value:i64)->result<i64,error>
 native const fn failure(value:i64)->result<i64,error> {}
 native const fn error_data(value:i64)->error
 native const fn error_data(value:i64)->error {}
+native const fn normal(value:i64)->result<str,error>
+native const fn normal(value:i64)->result<str,error> {}
 fn required(value:i64)->i64 {when {return failure(value)?}}
 fn message(failure:error)->str {when {return failure.message}}
 fn code(failure:error)->str {when {let code=failure.code
@@ -128,6 +184,142 @@ assert eval(observed_normal,value:["x",_,"a much longer ordinary string","x"])==
         GENERIC_RUNTIME,
         "",
         (1, 6),
+    )
+}
+
+#[test]
+fn finite_result_strings_publish_selected_slots_without_allocating()
+-> Result<(), Box<dyn std::error::Error>> {
+    let source = r#"module finite_result_strings
+struct Holder {text:str}
+fn success(value:result<str,i64>)->str {when {let outcome=value
+if is_ok(outcome) {return outcome.value}return ""}}
+fn failure(value:result<i64,str>)->str {when {let outcome=value
+if is_err(outcome) {return outcome.error}return ""}}
+fn both(value:result<str,str>)->str {when {let outcome=value
+if is_ok(outcome) {return outcome.value}return outcome.error}}
+fn nested(value:result<Holder,error>)->str {when {let outcome=value
+if is_ok(outcome) {return outcome.value.text}return outcome.error.message}}
+fn deep(value:result<result<str,i64>,error>)->str {when {let outcome=value
+if is_ok(outcome) {let inner=outcome.value
+if is_ok(inner) {return inner.value}return "inactive"}return outcome.error.message}}
+fn metadata(value:error)->str {when {let cause=value
+if cause.context!=null {return "context"}
+if cause.code!=null {return cause.message}return "absent"}}
+test selected_strings {
+let short:result<str,i64> = ok("x")
+let longer:result<str,i64> = ok("a longer selected string")
+let empty:result<str,i64> = ok("")
+let inactive:result<str,i64> = err(7)
+assert eval(success,value:[short,_,longer,inactive,empty,longer,short])==["x",_,"a longer selected string","","","a longer selected string","x"]
+let short_error:result<i64,str> = err("x")
+let longer_error:result<i64,str> = err("a longer selected string")
+let empty_error:result<i64,str> = err("")
+let inactive_error:result<i64,str> = ok(7)
+assert eval(failure,value:[short_error,_,longer_error,inactive_error,empty_error,longer_error,short_error])==["x",_,"a longer selected string","","","a longer selected string","x"]
+let ok:result<str,str> = ok("x")
+let err:result<str,str> = err("a longer selected string")
+let blank:result<str,str> = err("")
+assert eval(both,value:[ok,_,err,err,blank,ok])==["x",_,"a longer selected string","a longer selected string","","x"]
+let nested_ok:result<Holder,error> = ok(Holder(text:"x"))
+let nested_err:result<Holder,error> = err(error(message:"a longer selected string"))
+let nested_empty:result<Holder,error> = ok(Holder(text:""))
+assert eval(nested,value:[nested_ok,_,nested_err,nested_empty,nested_err,nested_ok])==["x",_,"a longer selected string","","a longer selected string","x"]
+let deep_ok:result<result<str,i64>,error> = ok(short)
+let deep_long:result<result<str,i64>,error> = ok(longer)
+let deep_err:result<result<str,i64>,error> = ok(inactive)
+let deep_empty:result<result<str,i64>,error> = err(error(message:""))
+assert eval(deep,value:[deep_ok,_,deep_long,deep_err,deep_empty,deep_ok])==["x",_,"a longer selected string","inactive","","x"]
+let absent=error(message:"unselected",code:null)
+let present=error(message:"x",code:"")
+let long=error(message:"a longer selected string",code:"present")
+let empty_cause=error(message:"",code:"")
+assert eval(metadata,value:[present,_,long,absent,empty_cause,long,present])==["x",_,"a longer selected string","absent","","a longer selected string","x"]
+}
+"#;
+    execute(
+        source,
+        "finite-result-string-slots",
+        STRICT_RUNTIME,
+        "",
+        (1, 6),
+    )
+}
+
+#[test]
+fn finite_result_index_projections_evaluate_the_index_once()
+-> Result<(), Box<dyn std::error::Error>> {
+    let source = r#"module finite_result_index
+native const fn pick(value:i64)->i64
+native const fn pick(value:i64)->i64 {}
+fn selected(value:result<list<str>,i64>,offset:i64)->str {when {let outcome=value
+if is_ok(outcome) {return outcome.value[pick(offset)]}return "absent"}}
+test selected_index {
+let first:result<list<str>,i64> = ok(["x","tail"])
+let longer:result<list<str>,i64> = ok(["other","a longer selected string"])
+let empty:result<list<str>,i64> = ok(["",""])
+let inactive:result<list<str>,i64> = err(7)
+assert eval(selected,value:[first,_,longer,inactive,empty,first],offset:[0,_,1,99,0,1])==["x",_,"a longer selected string","absent","","tail"]
+}
+"#;
+    let controls = r"
+static PROJECTION_CALLS:std::sync::atomic::AtomicUsize=std::sync::atomic::AtomicUsize::new(0);
+fn main(){authored_main();assert_eq!(PROJECTION_CALLS.load(std::sync::atomic::Ordering::Relaxed),4);}
+";
+    execute(
+        source,
+        "finite-result-string-index",
+        STRICT_RUNTIME,
+        controls,
+        (1, 1),
+    )
+}
+
+#[test]
+fn capture_normal_string_ports_keep_their_finite_producer_bounds()
+-> Result<(), Box<dyn std::error::Error>> {
+    let source = r#"module finite_capture_normal
+fn text(value:str)->str {when {return delta_value(value)}}
+fn observed(value:str)->str {let seen=capture(text,value)
+text(text(seen.value))}
+test normal_strings {
+assert eval(observed,value:["x",_,"a longer normal string","","a longer normal string","x"])==["x",_,"a longer normal string","","a longer normal string","x"]
+}
+"#;
+    execute(source, "finite-capture-normal", STRICT_RUNTIME, "", (1, 1))
+}
+
+#[test]
+fn capture_normal_ports_keep_unbounded_native_and_diagnostic_lineage()
+-> Result<(), Box<dyn std::error::Error>> {
+    let source = r#"module diagnostic_text
+native const fn failure(value:i64)->result<i64,error>
+native const fn failure(value:i64)->result<i64,error> {}
+native const fn error_data(value:i64)->error
+native const fn error_data(value:i64)->error {}
+native const fn normal(value:i64)->result<str,error>
+native const fn normal(value:i64)->result<str,error> {}
+fn required(value:i64)->i64 {when {return failure(value)?}}
+fn message(value:error)->str {when {return value.message}}
+fn text(value:str)->str {when {return delta_value(value)}}
+fn from_diagnostics(value:i64)->str {let failure=capture(required,value)
+let normal=capture(message,failure.error)
+text(text(normal.value))}
+fn native_text(value:i64)->str {when {let outcome=normal(value)
+if is_ok(outcome) {return outcome.value}return "absent"}}
+fn from_native(value:i64)->str {let normal=capture(native_text,value)
+text(text(normal.value))}
+test unbounded_normals {
+assert eval(from_diagnostics,value:[1,_,2,1])==["x",_,"a much longer diagnostic message","x"]
+assert eval(from_native,value:[1,_,2,1])==["x",_,"a much longer diagnostic message","x"]
+}
+"#;
+    execute(
+        source,
+        "capture-normal-provenance",
+        GENERIC_RUNTIME,
+        "",
+        (1, 2),
     )
 }
 
@@ -195,6 +387,7 @@ fn diagnostic_text_provider(
         r#"
 pub const PROVIDER:&str="hgl.diagnostic_text";pub const FINGERPRINT:&str="diagnostic-text-v1";
 pub fn failure_i64(value:i64)->Result<i64,hgl_types::ErrorValue>{Err(error_data_i64(value))}
+pub fn normal_i64(value:i64)->Result<String,hgl_types::ErrorValue>{Ok(error_data_i64(value).message)}
 pub fn error_data_i64(value:i64)->hgl_types::ErrorValue{hgl_types::ErrorValue{
 message:if value==2 {"a much longer diagnostic message"}else{"x"}.into(),
 code:if value==0 {None}else{Some(if value==2 {"a much longer diagnostic code"}else{"a"}.into())},context:None}}
@@ -203,10 +396,46 @@ code:if value==0 {None}else{Some(if value==2 {"a much longer diagnostic code"}el
     Ok((
         "diagnostic-text.hgl-native".into(),
         format!(
-            "native_descriptor 1 target \"hgl-rust-1\"\nmodule diagnostic_text\nprovider \"hgl.diagnostic_text\" fingerprint \"diagnostic-text-v1\" image {:?}\nvalue failure(value:i64)->result<i64,error> symbol \"failure_i64\" ownership owned phases {{setup,cold,evaluation}} effects {{allocation}}\nvalue error_data(value:i64)->error symbol \"error_data_i64\" ownership owned phases {{setup,cold,evaluation}} effects {{allocation}}\n",
+            "native_descriptor 1 target \"hgl-rust-1\"\nmodule diagnostic_text\nprovider \"hgl.diagnostic_text\" fingerprint \"diagnostic-text-v1\" image {:?}\nvalue failure(value:i64)->result<i64,error> symbol \"failure_i64\" ownership owned phases {{setup,cold,evaluation}} effects {{allocation}}\nvalue error_data(value:i64)->error symbol \"error_data_i64\" ownership owned phases {{setup,cold,evaluation}} effects {{allocation}}\nvalue normal(value:i64)->result<str,error> symbol \"normal_i64\" ownership owned phases {{setup,cold,evaluation}} effects {{allocation}}\n",
             image.to_string_lossy()
         ),
     ))
+}
+
+fn projection_index_provider(
+    root: &std::path::Path,
+) -> Result<(String, String), Box<dyn std::error::Error>> {
+    let image = root.join("target/projection-index-provider.rs");
+    generated_cache::write(
+        &image,
+        r#"
+pub const PROVIDER:&str="hgl.projection_index";pub const FINGERPRINT:&str="projection-index-v1";
+pub fn pick_i64(value:i64)->i64{crate::PROJECTION_CALLS.fetch_add(1,std::sync::atomic::Ordering::Relaxed);value}
+"#,
+    )?;
+    Ok((
+        "projection-index.hgl-native".into(),
+        format!(
+            "native_descriptor 1 target \"hgl-rust-1\"\nmodule finite_result_index\nprovider \"hgl.projection_index\" fingerprint \"projection-index-v1\" image {:?}\nvalue pick(value:i64)->i64 symbol \"pick_i64\" ownership owned phases {{setup,cold,evaluation}} effects {{}}\n",
+            image.to_string_lossy()
+        ),
+    ))
+}
+
+fn add_test_provider(
+    sources: &mut Vec<(String, String)>,
+    root: &std::path::Path,
+    name: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if matches!(
+        name,
+        "captured-diagnostic-text" | "capture-normal-provenance"
+    ) {
+        sources.push(diagnostic_text_provider(root)?);
+    } else if name == "finite-result-string-index" {
+        sources.push(projection_index_provider(root)?);
+    }
+    Ok(())
 }
 
 fn codec_controls() -> String {
@@ -339,23 +568,11 @@ fn execute(
         ],
     )?;
     sources.insert(0, ("any_outcomes.hgl".into(), source.into()));
-    if name == "captured-diagnostic-text" {
-        sources.push(diagnostic_text_provider(&root)?);
-    }
+    add_test_provider(&mut sources, &root, name)?;
     hgl_program::compile_tests(&sources)?;
     let suite = hgl_program::compile_module_suite(&sources)?;
     assert_eq!(suite.tests.len(), tests);
-    if name == "shared-any-outcomes" {
-        assert_eq!(suite.plans.len(), 13);
-    } else if name == "captured-diagnostic-text" {
-        assert_eq!(suite.plans.len(), 6);
-    } else if name == "finite-unmarked-text" {
-        assert_eq!(suite.plans.len(), 1);
-        assert!(hgl_rust::execution_proof::prepared(&suite.plans[0]));
-        assert!(
-            hgl_semantics::constructor_owners::unbounded_failure_data(&suite.plans[0]).is_empty()
-        );
-    }
+    assert_plan_profile(name, &suite.plans);
     let code = decorate(hgl_program::emit_tests(&suite), runtime, controls);
     let project = regression_cache::open(&root, name)?;
     generated_cache::write(project.path.join("src/main.rs"), code)?;
@@ -409,11 +626,46 @@ fn execute(
     Ok(())
 }
 
+fn assert_plan_profile(name: &str, plans: &[hgl_semantics::ir::Plan]) {
+    if name == "shared-any-outcomes" {
+        assert_eq!(plans.len(), 13);
+    } else if name == "captured-diagnostic-text" {
+        assert_eq!(plans.len(), 6);
+    } else if name == "finite-unmarked-text" {
+        assert_eq!(plans.len(), 1);
+        assert!(hgl_rust::execution_proof::prepared(&plans[0]));
+        assert!(hgl_semantics::constructor_owners::unbounded_failure_data(&plans[0]).is_empty());
+    } else if name == "finite-capture-normal" {
+        assert_eq!(plans.len(), 1);
+        let plan = &plans[0];
+        let unknown = hgl_semantics::constructor_owners::unbounded_failure_data(plan);
+        assert_eq!(unknown.len(), 1);
+        assert!(unknown.contains(&plan.captures[0].owner));
+        assert!(
+            plan.output
+                .as_ref()
+                .is_some_and(|(output, _)| !unknown.contains(output))
+        );
+    } else if name == "capture-normal-provenance" {
+        assert_eq!(plans.len(), 2);
+        for plan in plans {
+            let unknown = hgl_semantics::constructor_owners::unbounded_failure_data(plan);
+            assert!(
+                plan.output
+                    .as_ref()
+                    .is_some_and(|(output, _)| unknown.contains(output))
+            );
+        }
+    }
+}
+
 fn report_allocations(root: &std::path::Path, name: &str, bytes: &[u8]) -> std::io::Result<()> {
     let report = if name == "any-captured-map-key" {
         "target/any-captured-map-key-allocation-report.txt"
     } else if name == "captured-diagnostic-text" {
         "target/captured-diagnostic-text-allocation-report.txt"
+    } else if name == "capture-normal-provenance" {
+        "target/capture-normal-provenance-allocation-report.txt"
     } else {
         "target/any-captured-allocation-report.txt"
     };

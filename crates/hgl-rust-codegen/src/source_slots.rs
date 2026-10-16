@@ -44,7 +44,7 @@ pub fn initialize(
 }
 
 mod direct;
-pub(crate) use direct::{read, source};
+pub(crate) use direct::{optional, read, source};
 
 /// Prepared source arena spelling shared by typed retaining writes.
 pub(crate) fn columns(arena: &str) -> &'static str {

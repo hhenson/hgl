@@ -227,6 +227,7 @@ fn schedule_on_start(plan: &Plan, node: &Node, index: usize) -> bool {
         && !plan.keyed.iter().any(|owner| owner.owner == index)
         && !plan.captures.iter().any(|owner| owner.owner == index)
         && (crate::graph_assemblies::shape(node).is_some()
+            || node.name == "hgl.map_connection"
             || node
                 .inputs
                 .iter()

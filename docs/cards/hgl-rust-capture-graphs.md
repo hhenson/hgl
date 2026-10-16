@@ -26,3 +26,12 @@ by identity during evaluation, without copying normal values, interning, or
 payload type dispatch. This finite prepared profile requires exact normal target
 provenance and bounded child preparation. Generic canonical Error payload costs
 are not claimed to satisfy a universal allocation bound.
+
+For a declared `ref<T>` normal result, the cold assembly and its selection key
+retain the physical REF endpoint, not its current target. Normal followers see
+bind, equal retarget, unbind and rebind directly; failures publish only Error and
+do not freeze the previous target. Six authored finite-route evals exercise
+unpublished versus target-invalid state, nested/external forwarding, composite
+projection and teardown with zero startup, tick and cleanup allocations. The
+shared reference_capture fixture checks independent Error history and writes
+before failure without claiming bounded generic Error allocation.

@@ -57,9 +57,15 @@ through its existing children. No diagnostic source is inferred from a type alon
 Unmarked finite String replay/pass-through remains prepared, with measured zero
 startup, successful-tick and cleanup allocations.
 
-Failure-flow tracing conservatively marks descendants of either capture port.
-The captured normal String control therefore also uses ordinary ownership: its
-three successful ticks measured 26 allocations, startup one and cleanup zero,
-with no captured failure. This is not an allocation-free normal String capture
-claim. Runtime-native diagnostic message/code/context projection controls measure
-their captured-path allocations separately and retain earlier recorded values.
+Canonical capture normal-port projections trace the actual normal producer's
+failure-data provenance. The error port remains unbounded; whole-bundle aliases
+and other projection forms retain conservative tracing. Native Result normals
+and normal values derived from diagnostics keep their ordinary owning transport.
+This is cold checked-IR analysis, with no runtime source-name or type lookup.
+
+Finite captured String pass-through with delta_value now measures zero startup,
+successful-tick and cleanup allocations. The separate raw owning-read control
+measures 12 allocations across three successful ticks, startup and cleanup zero;
+its explicit String copies are outside this pass-through proof. Runtime-native
+message/code/context and normal-output growth controls measure their allocations
+separately and retain earlier recorded values.

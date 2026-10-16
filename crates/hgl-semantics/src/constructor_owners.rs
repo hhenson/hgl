@@ -77,11 +77,15 @@ pub fn unbounded_failure_data(plan: &Plan) -> std::collections::BTreeSet<usize> 
     loop {
         let before = unknown.len();
         for (id, node) in plan.nodes.iter().enumerate() {
-            if node
-                .inputs
-                .iter()
-                .any(|(_, source, _)| unknown.contains(source))
-            {
+            let tainted = normal_capture_source(plan, node).map_or_else(
+                || {
+                    node.inputs
+                        .iter()
+                        .any(|(_, source, _)| unknown.contains(source))
+                },
+                |source| unknown.contains(&source),
+            );
+            if tainted {
                 unknown.insert(id);
             }
         }
@@ -89,6 +93,44 @@ pub fn unbounded_failure_data(plan: &Plan) -> std::collections::BTreeSet<usize> 
             return unknown;
         }
     }
+}
+
+fn normal_capture_source(plan: &Plan, node: &crate::ir::Node) -> Option<usize> {
+    if node.name != "hgl.projection" || node.inputs.len() != 2 {
+        return None;
+    }
+    let source = node.inputs[1].1;
+    if node.inputs[0].1 != source {
+        return None;
+    }
+    let capture = plan
+        .captures
+        .iter()
+        .find(|capture| capture.owner == source)?;
+    let [(_, body)] = node.handlers.as_slice() else {
+        return None;
+    };
+    let [
+        Statement::Return(Value {
+            kind: Kind::Query(op, args),
+            ..
+        }),
+    ] = body.as_slice()
+    else {
+        return None;
+    };
+    let [
+        Value {
+            kind: Kind::Field(parent, 0),
+            ..
+        },
+    ] = args.as_slice()
+    else {
+        return None;
+    };
+    (op == "\0reference" && matches!(parent.kind, Kind::Input(1, false)))
+        .then_some(capture.output)
+        .flatten()
 }
 /// Retain existing admitted native constructor locals without evaluating any operand early.
 pub fn prepare(

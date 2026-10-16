@@ -72,7 +72,7 @@ pub fn assignment_type(target: &Value, evaluation: bool) -> Result<Ty, String> {
         return Err("assignment requires writable var, state, cache or out".into());
     }
     if matches!(target.kind, Kind::Output) {
-        Ok(target.ty.clone().delta()?)
+        Ok(crate::structural_admission::expected(&target.ty, true)?)
     } else {
         Ok(target.ty.clone())
     }

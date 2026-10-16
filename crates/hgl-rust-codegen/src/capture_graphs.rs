@@ -33,6 +33,15 @@ pub fn child(
 /// Emit one reusable child and a passive typed bundle of original endpoints.
 pub fn node(plan: &Plan, id: usize, shape: impl Fn(&Ty) -> String) -> String {
     let node = &plan.nodes[id];
+    let declared_reference = plan
+        .captures
+        .iter()
+        .any(|capture| capture.owner == id && matches!(capture.value, Ty::Ref(_)));
+    let normal_reference = if declared_reference {
+        "ctx.store().bindings().input(input).source.map_or(hgl_store::Reference::default(),|source|ctx.store().bindings().reference(source))"
+    } else {
+        "ctx.store().bindings().input_reference(input)"
+    };
     let Ty::Ref(bundle) = &node.result else {
         unreachable!("checked capture result")
     };
@@ -59,7 +68,7 @@ impl hgl_kernel::Node for Node{id} {{
   else {{child.refresh_bound(ctx,|store,boundary|boundary.refresh(store,&self.captures,now,false))?;}}
   let outcome=child.evaluate_captured(ctx);ctx.schedule_children(child.next_scheduled_time());
   if let Some(error)=outcome? {{ctx.set_atomic(self.error.expect("prepared capture error"),error)?;}}
-  let normal=self.normal.map_or(hgl_store::Reference::default(),|input|ctx.store().bindings().input_reference(input));
+  let normal=self.normal.map_or(hgl_store::Reference::default(),|input|{normal_reference});
   let reference=*self.choices.get(&normal).ok_or_else(||hgl_kernel::NodeError::new("capture normal target was not prepared"))?;
   if ctx.store().bindings().reference_value(self.output)!=reference {{ctx.set_reference(self.output,reference)?;}}
   Ok(())
@@ -120,6 +129,11 @@ pub fn preparation(
     for capture in &plan.captures {
         let id = capture.owner;
         let n = plan.nodes.len();
+        let designation = if matches!(capture.value, Ty::Ref(_)) {
+            "value.map_or(hgl_store::Reference::default(),|(_,normal)|store.reference(normal))"
+        } else {
+            "value.map_or(hgl_store::Reference::default(),|(input,_)|store.bindings().input_reference(input))"
+        };
         let normal = capture.output.map_or_else(|| "let normal=None;".into(), |output| {
             if capture.nodes.contains(&output) { format!("let normal=Some(endpoints[{output}].last().and_then(|entry|entry.1).ok_or_else(||hgl_kernel::NodeError::new(\"missing prepared capture normal output\"))?);") }
             else { let input=plan.nodes[id].inputs.iter().position(|(_,source,_)|*source==output).unwrap_or_else(||unreachable!("checked normal capture")); format!("let normal=Some(store.bindings().input(captures[{input}]).source.ok_or_else(||hgl_kernel::NodeError::new(\"missing external capture normal output\"))?);") }
@@ -177,7 +191,7 @@ if let Some(local)=description.nodes.iter().position(|node|node.implementation==
   }} else {{store.prepare_owned_view(input,normal)}}.map_err(|error|format!("{{error:?}}"))?;
  }}
  let reference=store.assemble_owned_view(bundle).map_err(|error|format!("{{error:?}}"))?;
- let designation=value.map_or(hgl_store::Reference::default(),|(input,_)|store.bindings().input_reference(input));
+ let designation={designation};
  let mut choices=std::collections::HashMap::new();choices.insert(designation,reference);
  if value.is_some() {{for &normal in &child.boundary().targets {{
   let choice=store.items_reference(store.bindings().input(bundle).kind.clone(),vec![normal,store.reference(error_id)]).map_err(|error|format!("{{error:?}}"))?;

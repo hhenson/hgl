@@ -46,3 +46,14 @@ its hgl-rust facade path and module ceiling remain unchanged.
 
 May use constructor_owners to materialize a private typed staging source at its
 original expression position. Consumers copy only after complete retention.
+
+Fixed fields recurse through selected Result payload slots before ordinary reads.
+Canonical atomic, borrowed and configuration paths and presence-bearing snapshot
+views select their own representation before recursive ordinary field selection.
+An observed tuple child unwraps its optional descriptor and checks presence before
+scalar publication; the descriptor itself is never treated as the payload slot.
+Family fields use the existing checked collections projection; no owning parent
+is materialized to select a scalar descendant.
+Checked list indexes likewise resolve the parent and index once before source
+borrowing. Private optional projections expose only Error code/context presence;
+they do not turn nullable locals into borrowed aliases or bypass retention.

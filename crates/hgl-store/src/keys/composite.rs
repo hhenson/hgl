@@ -27,6 +27,12 @@ impl Keys {
             .and_then(|table| find(table, parts))
             .ok_or_else(|| NodeError::new("composite collection key was not prepared before start"))
     }
+    /// Lookup a complete identity without inserting or allocating.
+    pub fn find_composite(&self, domain: usize, parts: &[i64]) -> Option<i64> {
+        self.composites
+            .get(domain)
+            .and_then(|table| find(table, parts))
+    }
     /// Borrow all component identities of one exact prepared key.
     pub fn composite_parts(&self, domain: usize, id: i64) -> NodeResult<&[i64]> {
         self.composites

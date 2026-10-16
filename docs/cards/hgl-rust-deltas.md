@@ -45,6 +45,8 @@ observation, and direct pass-through emission to `hgl-rust-observed`. Existing
 ordinary owning delta construction and post-run comparison remain available.
 
 publish accepts complete ordinary Set/Map payloads through atomic whole-value transport, separately from Kind::Delta sparse mutation data.
+Declared REF publication uses the existing checked set_reference operation,
+including explicit own-output assignment before a later handler failure.
 Growing publication emission preserves sparse owning index/value/removal triples and order-independent equality. Runtime application validates append/tail rules before using typed child membership; fixed-list removal remains outside its profile.
 
 read delegates exact scoped-child payload transport to observed. collection_operation forwards checked scalar map/list effects to keyed with static child allocation/application callbacks; existing invalidation and mutation rules remain owned by Store.

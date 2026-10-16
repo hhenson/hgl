@@ -158,25 +158,57 @@ test calls {
 }
 ";
 #[test]
-fn source_declared_ref_capture_reports_the_target_limit_before_shared_emission()
--> Result<(), Box<dyn std::error::Error>> {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let mut sources = hgl_program::library_files::sources(
-        &[],
-        &[
-            root.join("external/hgraph_std/hgl/hgraph"),
-            root.join("native/stdlib"),
-        ],
+fn source_declared_ref_capture_preserves_live_connection() -> Result<(), Box<dyn std::error::Error>>
+{
+    execute(
+        include_str!("fixtures/capture_declared_ref.hgl"),
+        STRICT_RUNTIME,
+        "capture-declared-ref",
+    )
+}
+#[test]
+fn shared_reference_capture_traces_preserve_both_channels() -> Result<(), Box<dyn std::error::Error>>
+{
+    let source = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../external/hgraph_std/hgl/hgraph/tests/reference_capture.hgl"),
     )?;
-    sources.insert(0,("ref_capture.hgl".into(),"module ref_capture\nfn route(value:ref<i64>)->ref<i64>{when {return value}}\nfn observed(value:i64) {let seen=capture(route,value)}\ntest attempt {eval(observed,value:[1])}\n".into()));
-    let error =
-        hgl_program::compile_tests(&sources).expect_err("declared REF target proof is excluded");
-    assert!(
-        error
-            .contains("Rust capture target cannot prepare a source-declared REF normal connection"),
-        "{error}"
+    execute(&source, CAPTURE_RUNTIME, "capture-declared-ref-shared")
+}
+#[test]
+fn shared_map_key_connections_preserve_membership_and_lookup_boundaries()
+-> Result<(), Box<dyn std::error::Error>> {
+    let source = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../external/hgraph_std/hgl/hgraph/tests/map_key_connections.hgl"),
+    )?;
+    let runtime = RUNTIME.replace(
+        "successful+=count;",
+        "assert_eq!(count,0,\"map successful tick allocated\");successful+=count;",
     );
-    Ok(())
+    execute(&source, &runtime, "map-key-connections")
+}
+#[test]
+fn changing_member_capture_reports_its_target_boundary_before_emission() {
+    use hgl_source::TypeSpelling as _;
+    let source = "module boundary\nfn book()->map<i64,i64> {when true {}}\nfn selected(book:map<i64,i64>)->i64 => book[1]\nfn main()->i64 {let seen=capture(selected,book())\nseen.value}";
+    let program = hgl_program::compile(&[("boundary.hgl".into(), source.into())], "main").unwrap();
+    let code = hgl_program::emit_rust(&program);
+    assert!(code.starts_with("compile_error!("), "{code}");
+    assert!(
+        code.contains("Rust capture target cannot prepare changing map member generations"),
+        "{code}"
+    );
+    assert!(hgl_source::Ty::parse("map<i64,ref<i64>>").is_some());
+}
+#[test]
+fn finite_map_connections_keep_membership_identity_without_allocating()
+-> Result<(), Box<dyn std::error::Error>> {
+    execute(
+        include_str!("fixtures/map_connections.hgl"),
+        STRICT_RUNTIME,
+        "finite-map-connections",
+    )
 }
 #[test]
 fn specified_capture_rejections_keep_their_codes() -> Result<(), Box<dyn std::error::Error>> {
@@ -285,7 +317,11 @@ fn execute(source: &str, runtime: &str, name: &str) -> Result<(), Box<dyn std::e
     }
     sources.insert(0, ("any_lookup.hgl".into(), source.into()));
     let suite = hgl_program::compile_module_suite(&sources)?;
-    assert_eq!(suite.tests.len(), 1, "{name}: exact root test inventory");
+    assert_eq!(
+        suite.tests.len(),
+        test_groups(name),
+        "{name}: exact root test inventory"
+    );
     let mut code = hgl_program::emit_tests(&suite)
         .replace("hgl_kernel::run_simulation(", "crate::measured_simulation(");
     if runtime == CAPTURE_RUNTIME {
@@ -355,18 +391,29 @@ mod native {
 }
 "#;
 
+fn test_groups(name: &str) -> usize {
+    if name == "capture-declared-ref-shared" {
+        3
+    } else {
+        1
+    }
+}
+
 fn verify_counts(name: &str, bytes: &[u8]) {
     let evaluations = match name {
+        "map-key-connections" => 19,
         "result-errors" | "capture-errors" => 16,
-        "native-result-data" | "native-result-image-data" => 4,
+        "native-result-data" | "native-result-image-data" | "capture-declared-ref-shared" => 4,
         "prepared-result-data" | "capture-call-selection" => 3,
         "capture-unused-child" | "capture-unused-start-child" => 1,
+        "capture-declared-ref" | "finite-map-connections" => 6,
         _ => unreachable!("registered source inventory for {name}"),
     };
     let output = String::from_utf8_lossy(bytes);
+    let groups = test_groups(name);
     assert!(
         output.contains(&format!(
-            "1 executed tests, {evaluations} evaluations, 0 failures"
+            "{groups} executed tests, {evaluations} evaluations, 0 failures"
         )),
         "{name}: {output}"
     );

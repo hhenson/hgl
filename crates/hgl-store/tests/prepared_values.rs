@@ -16,6 +16,50 @@ impl Wake for Wakes {
 }
 type Nested = List<List<String>>;
 #[test]
+fn scalar_from_global_preflights_before_replacing_or_notifying() -> NodeResult {
+    let mut store = Store::new();
+    store.global_state().provision();
+    let text = "a source larger than the deliberately small output".to_owned();
+    store
+        .global_state()
+        .prepare_value::<String>("source", &text.len())?;
+    let source = store.global_state().bind::<String>("source")?;
+    store.global_state().set(source, &text)?;
+    let slot = store.global_state().destination(source).fields();
+    let output = store.add_output::<String>(NodeId(0));
+    let input = store.add_input::<String>(NodeId(1), true);
+    store
+        .bind(input.id(), output.id())
+        .map_err(|e| NodeError::new(format!("{e:?}")))?;
+    store.prepared().prepare_scalar::<String>(output.id(), 2)?;
+    let mut wakes = Wakes::default();
+    let first = EngineTime::from_micros(1);
+    store.begin_cycle(first);
+    store.prepared().tick(first, NodeId(0), &mut wakes).scalar(
+        output.id(),
+        output.generation(),
+        &"ok".to_owned(),
+    )?;
+    assert_eq!(wakes.0, 1);
+    let second = EngineTime::from_micros(2);
+    store.begin_cycle(second);
+    let result = store
+        .prepared()
+        .tick(second, NodeId(0), &mut wakes)
+        .scalar_from_global::<String>(output.id(), output.generation(), slot);
+    assert!(
+        result
+            .unwrap_err()
+            .message
+            .contains("prepared scalar capacity exceeded")
+    );
+    assert_eq!(store.get_ref(input), "ok");
+    assert_eq!(store.bindings().output(output.id()).modified_at, first);
+    assert_eq!(wakes.0, 1);
+    assert_eq!(store.global_state().get(source)?, text);
+    Ok(())
+}
+#[test]
 fn first_repeated_empty_and_larger_copies_reuse_independent_descendants() -> NodeResult {
     let first = vec![
         vec!["first".into()],

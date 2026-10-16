@@ -116,6 +116,8 @@ fn query_value(plan: &Plan, op: &str, args: &[Value]) -> String {
         map_lookup(plan, op, args)
     } else if op == "\0reference" {
         reference_value(plan, &args[0])
+    } else if op == "\0map_connection" {
+        map_connection(plan, args)
     } else if op.starts_with("\0family-eq:") {
         crate::owner_comparisons::comparison(plan, op, args)
     } else if op.starts_with("collection_") {
@@ -229,6 +231,17 @@ fn binary(plan: &Plan, result: &Ty, op: &str, a: &Value, b: &Value) -> String {
     }
 }
 fn presence(plan: &Plan, value: &Value) -> String {
+    if crate::finite_domains::prepared(plan)
+        && matches!(value.ty, Ty::Nullable(_))
+        && let Some((arena, slot)) = crate::source_slots::optional(plan, value)
+    {
+        let columns = if arena == "configuration_columns" {
+            "&self.configuration_columns".into()
+        } else {
+            format!("_ctx.store().{arena}()")
+        };
+        return format!("{{let slot={slot};!({columns}).list(slot.fields()).is_empty()}}");
+    }
     let option = if let Kind::Local(id) = value.kind {
         format!("local{id}")
     } else {
@@ -892,4 +905,46 @@ fn lookup_key(plan: &Plan, key: &Value) -> (bool, String) {
         value(plan, key)
     };
     (false, operand)
+}
+
+fn map_connection(plan: &Plan, args: &[Value]) -> String {
+    let Kind::Input(input, _) = args[0].kind else {
+        unreachable!("checked map connection")
+    };
+    let key = &args[1];
+    let marker = global_type(&key.ty);
+    let lookup = if let Some((arena, slot)) = crate::source_slots::source(plan, key) {
+        let columns = if arena == "configuration_columns" {
+            "&self.configuration_columns".into()
+        } else {
+            format!("_ctx.store().{arena}()")
+        };
+        format!(
+            "{{let slot={slot};let source={columns};{}?}}",
+            crate::composite_keys::slot_find(&key.ty, "slot", global_type)
+        )
+    } else if let Kind::Input(index, _) = key.kind {
+        if crate::composite_keys::composite(&key.ty) {
+            format!(
+                "{}?",
+                crate::composite_keys::input_find(
+                    &key.ty,
+                    &format!("self.input{index}"),
+                    global_type
+                )
+            )
+        } else {
+            format!(
+                "<{marker} as hgl_store::Key>::find(keys,_ctx.store().get_ref(self.input{index}))?"
+            )
+        }
+    } else {
+        format!(
+            "<{marker} as hgl_store::Key>::find(keys,&({}))?",
+            value(plan, key)
+        )
+    };
+    format!(
+        "{{let keys=&_ctx.store().keys;let key={lookup};key.and_then(|key|_ctx.store().bindings().child_input(self.input{input}.id(),key)).map_or(hgl_store::Reference::default(),|child|_ctx.store().bindings().input_reference(child))}}"
+    )
 }

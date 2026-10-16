@@ -105,6 +105,15 @@ impl<T: NativeType, D: NativeKeyDomain<Scalar = T>> Native<T, D> {
             .ok_or_else(|| NodeError::new("native key domain was not prepared"))?;
         Ok(NativeView::<T>::from_provider(table.get(id)?))
     }
+    /// Lookup without insertion; absence does not suppress provider hash/equality errors.
+    pub fn key_view_find(keys: &Keys, value: NativeView<'_, T>) -> NodeResult<Option<i64>> {
+        if let Some(table) = keys.natives.get(slot::<D>()?) {
+            table.find(value)
+        } else {
+            T::hash(value.data())?;
+            Ok(None)
+        }
+    }
     /// Resolve a borrowed native key in its compiled domain without retaining data.
     pub fn key_view_id(keys: &Keys, value: NativeView<'_, T>) -> NodeResult<i64> {
         keys.natives
@@ -136,6 +145,9 @@ impl<T: NativeType, D: NativeKeyDomain<Scalar = T>> Key for Native<T, D> {
     }
     fn id(keys: &Keys, value: &NativeValue<T>) -> NodeResult<i64> {
         Self::key_view_id(keys, value.view())
+    }
+    fn find(keys: &Keys, value: &NativeValue<T>) -> NodeResult<Option<i64>> {
+        Self::key_view_find(keys, value.view())
     }
     fn value(keys: &Keys, id: i64) -> NodeResult<NativeValue<T>> {
         Self::key_view(keys, id)?.retain()

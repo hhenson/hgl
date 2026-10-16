@@ -444,10 +444,12 @@ keyword or declaration clause and does not alter callers' language type. Source
 A language `result<T,error>` return remains typed data, including when transported
 inside private operational NodeResult.
 
-The current Rust capture target excludes a source-declared normal `ref<T>`
-connection before bundle formation and shared test layout emission, with an
-explicit target diagnostic. A declared logical T whose checked graph producer
-is a physical REF<T> remains supported through finite original-endpoint routes.
+Capture preserves a source-declared normal `ref<T>` as the original live REF
+endpoint. Its projected normal field stays invalid until that carrier's first
+publication, including an empty publication; target invalidity is independent.
+A declared logical T whose checked graph producer is a physical REF<T> instead
+uses finite original-target routes. Output assignment shares return publication
+checking, so an explicit REF write before failure remains published.
 
 Bound eval captures compare contextually with sparse expected sequences during
 ordinary test preparation. The capture supplies the exact payload type; sparse
@@ -457,3 +459,12 @@ comparison. Capture aliases and reversed literal comparisons preserve this rule;
 wrong payload types reject. Captured literals evaluate their written present
 operands once when the assertion runs. The private resolve/captured checker is
 restricted to this test phase and equality/inequality.
+
+Graph non-atomic map indexing is a checked `hgl.map_connection` operation with
+exact `ref<V>` result. A fixed ordinary key is retained in configuration; a
+temporal key remains an active typed input. The map input follows an outer REF
+without exposing its payload to ordinary node expressions. Missing membership
+or an unpublished map selects an empty designation once the key is readable.
+The initial MAP-CONN profile rejects selection of children containing REF leaves
+without rejecting formation of those map types. Ordinary/atomic lookups retain
+their strict/nullable rules. `resolve/map_connections` owns this admission and IR.

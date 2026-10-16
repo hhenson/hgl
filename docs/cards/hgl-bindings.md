@@ -241,6 +241,9 @@ checks. Active, unrelated, mismatched and started preparation rejects.
 current passive fixed designations cold. This is a snapshot; compiled code must
 prepare possible assemblies separately for retargeting, with no hot interning.
 Normal typed endpoints and generations remain the source of value/validity.
+A bound REF-shaped field retains the carrier endpoint itself, even before its
+first publication. Its target can change without replacing the assembly; an
+ordinary T field following a REF instead snapshots the current T endpoint.
 
 `Store::replace_active_hook(Option<NodeId>) -> Option<NodeId>` brackets a live
 Graph hook. Upward cross-scope notification stops at that exact already executing
