@@ -30,3 +30,11 @@ Complete staged Tuple results publish directly from their canonical global slots
 through structural_publication::ordinary. This preserves independent operand
 owners and the existing whole-source evaluation order while avoiding an owning
 read of variable-width scalar children before publication.
+
+Exact scalar returns with a typed global source publish through the existing
+scalar_from_global capacity preflight. Guarded Result payloads retain their
+selected slot identity through publication, without an owning scalar read.
+Literal String returns use the checked prepared text writer too, preserving the
+same capacity after empty or shorter fallback values before a later larger copy.
+Nullable Error code/context presence reads their existing Optional descriptors;
+ordinary nullable payload locals retain their existing owning representation.

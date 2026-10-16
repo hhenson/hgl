@@ -132,6 +132,94 @@ assert eval(observed_normal,value:["x",_,"a much longer ordinary string","x"])==
 }
 
 #[test]
+fn finite_result_strings_publish_selected_slots_without_allocating()
+-> Result<(), Box<dyn std::error::Error>> {
+    let source = r#"module finite_result_strings
+struct Holder {text:str}
+fn success(value:result<str,i64>)->str {when {let outcome=value
+if is_ok(outcome) {return outcome.value}return ""}}
+fn failure(value:result<i64,str>)->str {when {let outcome=value
+if is_err(outcome) {return outcome.error}return ""}}
+fn both(value:result<str,str>)->str {when {let outcome=value
+if is_ok(outcome) {return outcome.value}return outcome.error}}
+fn nested(value:result<Holder,error>)->str {when {let outcome=value
+if is_ok(outcome) {return outcome.value.text}return outcome.error.message}}
+fn deep(value:result<result<str,i64>,error>)->str {when {let outcome=value
+if is_ok(outcome) {let inner=outcome.value
+if is_ok(inner) {return inner.value}return "inactive"}return outcome.error.message}}
+fn metadata(value:error)->str {when {let cause=value
+if cause.context!=null {return "context"}
+if cause.code!=null {return cause.message}return "absent"}}
+test selected_strings {
+let short:result<str,i64> = ok("x")
+let longer:result<str,i64> = ok("a longer selected string")
+let empty:result<str,i64> = ok("")
+let inactive:result<str,i64> = err(7)
+assert eval(success,value:[short,_,longer,inactive,empty,longer,short])==["x",_,"a longer selected string","","","a longer selected string","x"]
+let short_error:result<i64,str> = err("x")
+let longer_error:result<i64,str> = err("a longer selected string")
+let empty_error:result<i64,str> = err("")
+let inactive_error:result<i64,str> = ok(7)
+assert eval(failure,value:[short_error,_,longer_error,inactive_error,empty_error,longer_error,short_error])==["x",_,"a longer selected string","","","a longer selected string","x"]
+let ok:result<str,str> = ok("x")
+let err:result<str,str> = err("a longer selected string")
+let blank:result<str,str> = err("")
+assert eval(both,value:[ok,_,err,err,blank,ok])==["x",_,"a longer selected string","a longer selected string","","x"]
+let nested_ok:result<Holder,error> = ok(Holder(text:"x"))
+let nested_err:result<Holder,error> = err(error(message:"a longer selected string"))
+let nested_empty:result<Holder,error> = ok(Holder(text:""))
+assert eval(nested,value:[nested_ok,_,nested_err,nested_empty,nested_err,nested_ok])==["x",_,"a longer selected string","","a longer selected string","x"]
+let deep_ok:result<result<str,i64>,error> = ok(short)
+let deep_long:result<result<str,i64>,error> = ok(longer)
+let deep_err:result<result<str,i64>,error> = ok(inactive)
+let deep_empty:result<result<str,i64>,error> = err(error(message:""))
+assert eval(deep,value:[deep_ok,_,deep_long,deep_err,deep_empty,deep_ok])==["x",_,"a longer selected string","inactive","","x"]
+let absent=error(message:"unselected",code:null)
+let present=error(message:"x",code:"")
+let long=error(message:"a longer selected string",code:"present")
+let empty_cause=error(message:"",code:"")
+assert eval(metadata,value:[present,_,long,absent,empty_cause,long,present])==["x",_,"a longer selected string","absent","","a longer selected string","x"]
+}
+"#;
+    execute(
+        source,
+        "finite-result-string-slots",
+        STRICT_RUNTIME,
+        "",
+        (1, 6),
+    )
+}
+
+#[test]
+fn finite_result_index_projections_evaluate_the_index_once()
+-> Result<(), Box<dyn std::error::Error>> {
+    let source = r#"module finite_result_index
+native const fn pick(value:i64)->i64
+native const fn pick(value:i64)->i64 {}
+fn selected(value:result<list<str>,i64>,offset:i64)->str {when {let outcome=value
+if is_ok(outcome) {return outcome.value[pick(offset)]}return "absent"}}
+test selected_index {
+let first:result<list<str>,i64> = ok(["x","tail"])
+let longer:result<list<str>,i64> = ok(["other","a longer selected string"])
+let empty:result<list<str>,i64> = ok(["",""])
+let inactive:result<list<str>,i64> = err(7)
+assert eval(selected,value:[first,_,longer,inactive,empty,first],offset:[0,_,1,99,0,1])==["x",_,"a longer selected string","absent","","tail"]
+}
+"#;
+    let controls = r"
+static PROJECTION_CALLS:std::sync::atomic::AtomicUsize=std::sync::atomic::AtomicUsize::new(0);
+fn main(){authored_main();assert_eq!(PROJECTION_CALLS.load(std::sync::atomic::Ordering::Relaxed),4);}
+";
+    execute(
+        source,
+        "finite-result-string-index",
+        STRICT_RUNTIME,
+        controls,
+        (1, 1),
+    )
+}
+
+#[test]
 fn finite_strings_outside_diagnostic_flow_keep_prepared_transport()
 -> Result<(), Box<dyn std::error::Error>> {
     let source = r#"module finite_text
@@ -207,6 +295,39 @@ code:if value==0 {None}else{Some(if value==2 {"a much longer diagnostic code"}el
             image.to_string_lossy()
         ),
     ))
+}
+
+fn projection_index_provider(
+    root: &std::path::Path,
+) -> Result<(String, String), Box<dyn std::error::Error>> {
+    let image = root.join("target/projection-index-provider.rs");
+    generated_cache::write(
+        &image,
+        r#"
+pub const PROVIDER:&str="hgl.projection_index";pub const FINGERPRINT:&str="projection-index-v1";
+pub fn pick_i64(value:i64)->i64{crate::PROJECTION_CALLS.fetch_add(1,std::sync::atomic::Ordering::Relaxed);value}
+"#,
+    )?;
+    Ok((
+        "projection-index.hgl-native".into(),
+        format!(
+            "native_descriptor 1 target \"hgl-rust-1\"\nmodule finite_result_index\nprovider \"hgl.projection_index\" fingerprint \"projection-index-v1\" image {:?}\nvalue pick(value:i64)->i64 symbol \"pick_i64\" ownership owned phases {{setup,cold,evaluation}} effects {{}}\n",
+            image.to_string_lossy()
+        ),
+    ))
+}
+
+fn add_test_provider(
+    sources: &mut Vec<(String, String)>,
+    root: &std::path::Path,
+    name: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if name == "captured-diagnostic-text" {
+        sources.push(diagnostic_text_provider(root)?);
+    } else if name == "finite-result-string-index" {
+        sources.push(projection_index_provider(root)?);
+    }
+    Ok(())
 }
 
 fn codec_controls() -> String {
@@ -339,9 +460,7 @@ fn execute(
         ],
     )?;
     sources.insert(0, ("any_outcomes.hgl".into(), source.into()));
-    if name == "captured-diagnostic-text" {
-        sources.push(diagnostic_text_provider(&root)?);
-    }
+    add_test_provider(&mut sources, &root, name)?;
     hgl_program::compile_tests(&sources)?;
     let suite = hgl_program::compile_module_suite(&sources)?;
     assert_eq!(suite.tests.len(), tests);

@@ -20,8 +20,10 @@ may allocate; typed prepared controls state their narrower zero-allocation proof
 
 The finite unseeded Result controls measure complete prepared publication and
 retention, including nested String payloads and selected primitive projections,
-with zero startup, successful-tick and cleanup allocations. Returning a String
-payload from a Result local still lowers through an owning `ValueSlot<String>::read`
-before scalar publication. A direct `let outcome=value; if is_ok(outcome) {return
-outcome.value}` probe measured one allocation on its first nonempty String
-publication tick; that projection is outside the complete prepared publication proof.
+with zero startup, successful-tick and cleanup allocations. Finite guarded String
+payload returns now copy from their typed global slots directly into the prepared
+scalar output. Ok/Err alternation, fixed fields, checked list indexes, repeated
+longer/empty payloads and nullable Error metadata presence retain that same proof.
+Index operands execute once; capacity failure preserves output data and metadata.
+Ordinary nullable payload locals still retain their owning Option representation,
+and unknown runtime diagnostic data retains its generic allocation boundary.

@@ -33,6 +33,9 @@ pub(crate) fn source(plan: &Plan, value: &Value) -> Option<(&'static str, String
             ),
         ));
     }
+    if let Some(source) = child(plan, value) {
+        return Some(source);
+    }
     if let Some(source) = crate::constructor_owners::source(plan, value) {
         return Some(("global_values", source));
     }
@@ -79,6 +82,51 @@ pub(crate) fn source(plan: &Plan, value: &Value) -> Option<(&'static str, String
         ));
     }
     None
+}
+
+fn child(plan: &Plan, value: &Value) -> Option<(&'static str, String)> {
+    if let Kind::Field(parent, field) = &value.kind
+        && let Some((arena, source)) = source(plan, parent)
+    {
+        let slot = if let hgl_source::Ty::Family(family) = &parent.ty {
+            crate::collections::family_field(family, *field, &source, true)
+        } else {
+            format!("({source}).fields().{field}")
+        };
+        return Some((arena, slot));
+    }
+    if let Kind::Index(parent, index) = &value.kind
+        && matches!(parent.ty, hgl_source::Ty::List(..))
+        && let Some((arena, source)) = source(plan, parent)
+    {
+        let columns = if arena == "configuration_columns" {
+            "&self.configuration_columns".into()
+        } else {
+            format!("_ctx.store().{arena}()")
+        };
+        return Some((
+            arena,
+            format!(
+                "{{let parent={source};let index={};hgl_store::ValueSlot::<{}>::bind(&mut hgl_store::list_index(({columns}).list(parent.fields()),index)?.as_slice())}}",
+                crate::values::condition_code(plan, index),
+                crate::layouts::global_type(&value.ty)
+            ),
+        ));
+    }
+    None
+}
+
+pub(crate) fn optional(plan: &Plan, value: &Value) -> Option<(&'static str, String)> {
+    let Kind::Query(op, args) = &value.kind else {
+        return None;
+    };
+    let field = match op.as_str() {
+        "\0error_code" => 1,
+        "\0error_context" => 2,
+        _ => return None,
+    };
+    let (arena, parent) = source(plan, &args[0])?;
+    Some((arena, format!("({parent}).fields().{field}")))
 }
 
 /// Read a typed configuration or atomic projection without retaining its parent.

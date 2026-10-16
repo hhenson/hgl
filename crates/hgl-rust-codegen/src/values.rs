@@ -231,6 +231,17 @@ fn binary(plan: &Plan, result: &Ty, op: &str, a: &Value, b: &Value) -> String {
     }
 }
 fn presence(plan: &Plan, value: &Value) -> String {
+    if crate::finite_domains::prepared(plan)
+        && matches!(value.ty, Ty::Nullable(_))
+        && let Some((arena, slot)) = crate::source_slots::optional(plan, value)
+    {
+        let columns = if arena == "configuration_columns" {
+            "&self.configuration_columns".into()
+        } else {
+            format!("_ctx.store().{arena}()")
+        };
+        return format!("{{let slot={slot};!({columns}).list(slot.fields()).is_empty()}}");
+    }
     let option = if let Kind::Local(id) = value.kind {
         format!("local{id}")
     } else {
