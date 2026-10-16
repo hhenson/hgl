@@ -87,6 +87,8 @@ native const fn failure(value:i64)->result<i64,error>
 native const fn failure(value:i64)->result<i64,error> {}
 native const fn error_data(value:i64)->error
 native const fn error_data(value:i64)->error {}
+native const fn normal(value:i64)->result<str,error>
+native const fn normal(value:i64)->result<str,error> {}
 fn required(value:i64)->i64 {when {return failure(value)?}}
 fn message(failure:error)->str {when {return failure.message}}
 fn code(failure:error)->str {when {let code=failure.code
@@ -220,6 +222,54 @@ fn main(){authored_main();assert_eq!(PROJECTION_CALLS.load(std::sync::atomic::Or
 }
 
 #[test]
+fn capture_normal_string_ports_keep_their_finite_producer_bounds()
+-> Result<(), Box<dyn std::error::Error>> {
+    let source = r#"module finite_capture_normal
+fn text(value:str)->str {when {return delta_value(value)}}
+fn observed(value:str)->str {let seen=capture(text,value)
+text(text(seen.value))}
+test normal_strings {
+assert eval(observed,value:["x",_,"a longer normal string","","a longer normal string","x"])==["x",_,"a longer normal string","","a longer normal string","x"]
+}
+"#;
+    execute(source, "finite-capture-normal", STRICT_RUNTIME, "", (1, 1))
+}
+
+#[test]
+fn capture_normal_ports_keep_unbounded_native_and_diagnostic_lineage()
+-> Result<(), Box<dyn std::error::Error>> {
+    let source = r#"module diagnostic_text
+native const fn failure(value:i64)->result<i64,error>
+native const fn failure(value:i64)->result<i64,error> {}
+native const fn error_data(value:i64)->error
+native const fn error_data(value:i64)->error {}
+native const fn normal(value:i64)->result<str,error>
+native const fn normal(value:i64)->result<str,error> {}
+fn required(value:i64)->i64 {when {return failure(value)?}}
+fn message(value:error)->str {when {return value.message}}
+fn text(value:str)->str {when {return delta_value(value)}}
+fn from_diagnostics(value:i64)->str {let failure=capture(required,value)
+let normal=capture(message,failure.error)
+text(text(normal.value))}
+fn native_text(value:i64)->str {when {let outcome=normal(value)
+if is_ok(outcome) {return outcome.value}return "absent"}}
+fn from_native(value:i64)->str {let normal=capture(native_text,value)
+text(text(normal.value))}
+test unbounded_normals {
+assert eval(from_diagnostics,value:[1,_,2,1])==["x",_,"a much longer diagnostic message","x"]
+assert eval(from_native,value:[1,_,2,1])==["x",_,"a much longer diagnostic message","x"]
+}
+"#;
+    execute(
+        source,
+        "capture-normal-provenance",
+        GENERIC_RUNTIME,
+        "",
+        (1, 2),
+    )
+}
+
+#[test]
 fn finite_strings_outside_diagnostic_flow_keep_prepared_transport()
 -> Result<(), Box<dyn std::error::Error>> {
     let source = r#"module finite_text
@@ -283,6 +333,7 @@ fn diagnostic_text_provider(
         r#"
 pub const PROVIDER:&str="hgl.diagnostic_text";pub const FINGERPRINT:&str="diagnostic-text-v1";
 pub fn failure_i64(value:i64)->Result<i64,hgl_types::ErrorValue>{Err(error_data_i64(value))}
+pub fn normal_i64(value:i64)->Result<String,hgl_types::ErrorValue>{Ok(error_data_i64(value).message)}
 pub fn error_data_i64(value:i64)->hgl_types::ErrorValue{hgl_types::ErrorValue{
 message:if value==2 {"a much longer diagnostic message"}else{"x"}.into(),
 code:if value==0 {None}else{Some(if value==2 {"a much longer diagnostic code"}else{"a"}.into())},context:None}}
@@ -291,7 +342,7 @@ code:if value==0 {None}else{Some(if value==2 {"a much longer diagnostic code"}el
     Ok((
         "diagnostic-text.hgl-native".into(),
         format!(
-            "native_descriptor 1 target \"hgl-rust-1\"\nmodule diagnostic_text\nprovider \"hgl.diagnostic_text\" fingerprint \"diagnostic-text-v1\" image {:?}\nvalue failure(value:i64)->result<i64,error> symbol \"failure_i64\" ownership owned phases {{setup,cold,evaluation}} effects {{allocation}}\nvalue error_data(value:i64)->error symbol \"error_data_i64\" ownership owned phases {{setup,cold,evaluation}} effects {{allocation}}\n",
+            "native_descriptor 1 target \"hgl-rust-1\"\nmodule diagnostic_text\nprovider \"hgl.diagnostic_text\" fingerprint \"diagnostic-text-v1\" image {:?}\nvalue failure(value:i64)->result<i64,error> symbol \"failure_i64\" ownership owned phases {{setup,cold,evaluation}} effects {{allocation}}\nvalue error_data(value:i64)->error symbol \"error_data_i64\" ownership owned phases {{setup,cold,evaluation}} effects {{allocation}}\nvalue normal(value:i64)->result<str,error> symbol \"normal_i64\" ownership owned phases {{setup,cold,evaluation}} effects {{allocation}}\n",
             image.to_string_lossy()
         ),
     ))
@@ -322,7 +373,10 @@ fn add_test_provider(
     root: &std::path::Path,
     name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    if name == "captured-diagnostic-text" {
+    if matches!(
+        name,
+        "captured-diagnostic-text" | "capture-normal-provenance"
+    ) {
         sources.push(diagnostic_text_provider(root)?);
     } else if name == "finite-result-string-index" {
         sources.push(projection_index_provider(root)?);
@@ -464,17 +518,7 @@ fn execute(
     hgl_program::compile_tests(&sources)?;
     let suite = hgl_program::compile_module_suite(&sources)?;
     assert_eq!(suite.tests.len(), tests);
-    if name == "shared-any-outcomes" {
-        assert_eq!(suite.plans.len(), 13);
-    } else if name == "captured-diagnostic-text" {
-        assert_eq!(suite.plans.len(), 6);
-    } else if name == "finite-unmarked-text" {
-        assert_eq!(suite.plans.len(), 1);
-        assert!(hgl_rust::execution_proof::prepared(&suite.plans[0]));
-        assert!(
-            hgl_semantics::constructor_owners::unbounded_failure_data(&suite.plans[0]).is_empty()
-        );
-    }
+    assert_plan_profile(name, &suite.plans);
     let code = decorate(hgl_program::emit_tests(&suite), runtime, controls);
     let project = regression_cache::open(&root, name)?;
     generated_cache::write(project.path.join("src/main.rs"), code)?;
@@ -528,11 +572,46 @@ fn execute(
     Ok(())
 }
 
+fn assert_plan_profile(name: &str, plans: &[hgl_semantics::ir::Plan]) {
+    if name == "shared-any-outcomes" {
+        assert_eq!(plans.len(), 13);
+    } else if name == "captured-diagnostic-text" {
+        assert_eq!(plans.len(), 6);
+    } else if name == "finite-unmarked-text" {
+        assert_eq!(plans.len(), 1);
+        assert!(hgl_rust::execution_proof::prepared(&plans[0]));
+        assert!(hgl_semantics::constructor_owners::unbounded_failure_data(&plans[0]).is_empty());
+    } else if name == "finite-capture-normal" {
+        assert_eq!(plans.len(), 1);
+        let plan = &plans[0];
+        let unknown = hgl_semantics::constructor_owners::unbounded_failure_data(plan);
+        assert_eq!(unknown.len(), 1);
+        assert!(unknown.contains(&plan.captures[0].owner));
+        assert!(
+            plan.output
+                .as_ref()
+                .is_some_and(|(output, _)| !unknown.contains(output))
+        );
+    } else if name == "capture-normal-provenance" {
+        assert_eq!(plans.len(), 2);
+        for plan in plans {
+            let unknown = hgl_semantics::constructor_owners::unbounded_failure_data(plan);
+            assert!(
+                plan.output
+                    .as_ref()
+                    .is_some_and(|(output, _)| unknown.contains(output))
+            );
+        }
+    }
+}
+
 fn report_allocations(root: &std::path::Path, name: &str, bytes: &[u8]) -> std::io::Result<()> {
     let report = if name == "any-captured-map-key" {
         "target/any-captured-map-key-allocation-report.txt"
     } else if name == "captured-diagnostic-text" {
         "target/captured-diagnostic-text-allocation-report.txt"
+    } else if name == "capture-normal-provenance" {
+        "target/capture-normal-provenance-allocation-report.txt"
     } else {
         "target/any-captured-allocation-report.txt"
     };
