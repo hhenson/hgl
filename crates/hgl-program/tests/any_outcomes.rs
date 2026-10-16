@@ -6,6 +6,60 @@ mod generated_cache;
 mod regression_cache;
 
 #[test]
+fn observed_tuple_scalar_projections_preserve_payload_and_presence()
+-> Result<(), Box<dyn std::error::Error>> {
+    execute(
+        include_str!("../../../external/hgraph_std/hgl/hgraph/tests/tuple_observation_values.hgl"),
+        "observed-tuple-projections",
+        STRICT_RUNTIME,
+        "",
+        (3, 8),
+    )
+}
+
+#[test]
+fn observed_nested_scalar_projections_use_the_selected_snapshot_layout()
+-> Result<(), Box<dyn std::error::Error>> {
+    let source = r#"module observed_scalar_slots
+fn nested(value:tuple<tuple<i64,bool>,bool>)->i64 {when valid(value,value[0],value[0][0]) {
+let copy=value
+return copy[0][0]}}
+fn flag(value:tuple<i64,bool>)->bool {when valid(value,value[1]) {
+let copy=value
+return copy[1]}}
+fn text(value:tuple<str,bool>)->str {when valid(value,value[0]) {
+let copy=value
+return copy[0]}}
+fn indexed(value:tuple<list<i64,2>,bool>)->i64 {when valid(value,value[0],value[0][0]) {
+let copy=value
+return copy[0][0]}}
+test selected_payloads {
+assert eval(nested,value:[((7,_),_),(_,false),((9,false),_),_])==[7,7,9,_]
+assert eval(flag,value:[(_,false),(7,_),(_,true),_])==[false,false,true,_]
+assert eval(text,value:[("x",_),_,("a longer retained string",false),("",_)])==["x",_,"a longer retained string",""]
+let first=delta<tuple<list<i64,2>,bool>>(items:[0:delta<list<i64,2>>(items:[0:7,1:8]),1:false])
+let later=delta<tuple<list<i64,2>,bool>>(items:[0:delta<list<i64,2>>(items:[0:9,1:10])])
+assert eval(indexed,value:[first,_,later])==[7,_,9]
+}
+"#;
+    execute(source, "observed-scalar-slots", STRICT_RUNTIME, "", (1, 4))
+}
+
+#[test]
+fn observed_scalar_slots_keep_shared_unset_read_failures_and_controls()
+-> Result<(), Box<dyn std::error::Error>> {
+    execute(
+        include_str!(
+            "../../../external/hgraph_std/hgl/hgraph/tests/unset_required_read_values.hgl"
+        ),
+        "observed-scalar-presence",
+        STRICT_RUNTIME,
+        "",
+        (2, 11),
+    )
+}
+
+#[test]
 fn result_and_error_boxes_execute_through_ordinary_and_temporal_owners()
 -> Result<(), Box<dyn std::error::Error>> {
     execute(SOURCE, "any-outcomes", STRICT_RUNTIME, "", (1, 21))

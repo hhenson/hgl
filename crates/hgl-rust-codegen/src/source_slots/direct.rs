@@ -33,9 +33,6 @@ pub(crate) fn source(plan: &Plan, value: &Value) -> Option<(&'static str, String
             ),
         ));
     }
-    if let Some(source) = child(plan, value) {
-        return Some(source);
-    }
     if let Some(source) = crate::constructor_owners::source(plan, value) {
         return Some(("global_values", source));
     }
@@ -81,7 +78,7 @@ pub(crate) fn source(plan: &Plan, value: &Value) -> Option<(&'static str, String
             crate::snapshot_slots::projection(value, |v| crate::values::condition_code(plan, v)),
         ));
     }
-    None
+    child(plan, value)
 }
 
 fn child(plan: &Plan, value: &Value) -> Option<(&'static str, String)> {
