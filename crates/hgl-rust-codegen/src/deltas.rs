@@ -58,6 +58,9 @@ fn operations(ty: &Ty) -> String {
 }
 /// Emit publication of an already retained owning payload.
 pub fn publish(ty: &Ty, payload: &str) -> String {
+    if matches!(ty, Ty::Ref(_)) {
+        return format!("_ctx.set_reference(self._output,{payload})?;");
+    }
     if matches!(
         ty,
         Ty::Any

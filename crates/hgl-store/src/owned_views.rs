@@ -21,14 +21,17 @@ impl Store {
         }
     }
     /// Intern the currently prepared fixed child designations in a passive owner view.
-    /// This cold snapshot does not track later carrier retargeting.
+    /// Ordinary fields snapshot targets; REF fields retain the live carrier itself.
     pub fn assemble_owned_view(&mut self, input: InputId) -> Result<Reference, BindError> {
         self.bindings.mark_owned_view(input)?;
         self.assemble_owned(input)
     }
     fn assemble_owned(&mut self, input: InputId) -> Result<Reference, BindError> {
         let view = self.bindings.input(input);
-        if view.source.is_some() || !view.kind.fixed() {
+        if let Some(source) = view.source {
+            return Ok(self.reference(source));
+        }
+        if !view.kind.fixed() {
             return Ok(self.bindings.input_reference(input));
         }
         let kind = view.kind.clone();

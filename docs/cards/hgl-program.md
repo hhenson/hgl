@@ -444,10 +444,12 @@ keyword or declaration clause and does not alter callers' language type. Source
 A language `result<T,error>` return remains typed data, including when transported
 inside private operational NodeResult.
 
-The current Rust capture target excludes a source-declared normal `ref<T>`
-connection before bundle formation and shared test layout emission, with an
-explicit target diagnostic. A declared logical T whose checked graph producer
-is a physical REF<T> remains supported through finite original-endpoint routes.
+Capture preserves a source-declared normal `ref<T>` as the original live REF
+endpoint. Its projected normal field stays invalid until that carrier's first
+publication, including an empty publication; target invalidity is independent.
+A declared logical T whose checked graph producer is a physical REF<T> instead
+uses finite original-target routes. Output assignment shares return publication
+checking, so an explicit REF write before failure remains published.
 
 Bound eval captures compare contextually with sparse expected sequences during
 ordinary test preparation. The capture supplies the exact payload type; sparse

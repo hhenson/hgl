@@ -158,25 +158,22 @@ test calls {
 }
 ";
 #[test]
-fn source_declared_ref_capture_reports_the_target_limit_before_shared_emission()
--> Result<(), Box<dyn std::error::Error>> {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let mut sources = hgl_program::library_files::sources(
-        &[],
-        &[
-            root.join("external/hgraph_std/hgl/hgraph"),
-            root.join("native/stdlib"),
-        ],
+fn source_declared_ref_capture_preserves_live_connection() -> Result<(), Box<dyn std::error::Error>>
+{
+    execute(
+        include_str!("fixtures/capture_declared_ref.hgl"),
+        STRICT_RUNTIME,
+        "capture-declared-ref",
+    )
+}
+#[test]
+fn shared_reference_capture_traces_preserve_both_channels() -> Result<(), Box<dyn std::error::Error>>
+{
+    let source = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../external/hgraph_std/hgl/hgraph/tests/reference_capture.hgl"),
     )?;
-    sources.insert(0,("ref_capture.hgl".into(),"module ref_capture\nfn route(value:ref<i64>)->ref<i64>{when {return value}}\nfn observed(value:i64) {let seen=capture(route,value)}\ntest attempt {eval(observed,value:[1])}\n".into()));
-    let error =
-        hgl_program::compile_tests(&sources).expect_err("declared REF target proof is excluded");
-    assert!(
-        error
-            .contains("Rust capture target cannot prepare a source-declared REF normal connection"),
-        "{error}"
-    );
-    Ok(())
+    execute(&source, CAPTURE_RUNTIME, "capture-declared-ref-shared")
 }
 #[test]
 fn specified_capture_rejections_keep_their_codes() -> Result<(), Box<dyn std::error::Error>> {
@@ -285,7 +282,11 @@ fn execute(source: &str, runtime: &str, name: &str) -> Result<(), Box<dyn std::e
     }
     sources.insert(0, ("any_lookup.hgl".into(), source.into()));
     let suite = hgl_program::compile_module_suite(&sources)?;
-    assert_eq!(suite.tests.len(), 1, "{name}: exact root test inventory");
+    assert_eq!(
+        suite.tests.len(),
+        test_groups(name),
+        "{name}: exact root test inventory"
+    );
     let mut code = hgl_program::emit_tests(&suite)
         .replace("hgl_kernel::run_simulation(", "crate::measured_simulation(");
     if runtime == CAPTURE_RUNTIME {
@@ -355,18 +356,28 @@ mod native {
 }
 "#;
 
+fn test_groups(name: &str) -> usize {
+    if name == "capture-declared-ref-shared" {
+        3
+    } else {
+        1
+    }
+}
+
 fn verify_counts(name: &str, bytes: &[u8]) {
     let evaluations = match name {
         "result-errors" | "capture-errors" => 16,
-        "native-result-data" | "native-result-image-data" => 4,
+        "native-result-data" | "native-result-image-data" | "capture-declared-ref-shared" => 4,
         "prepared-result-data" | "capture-call-selection" => 3,
         "capture-unused-child" | "capture-unused-start-child" => 1,
+        "capture-declared-ref" => 6,
         _ => unreachable!("registered source inventory for {name}"),
     };
     let output = String::from_utf8_lossy(bytes);
+    let groups = test_groups(name);
     assert!(
         output.contains(&format!(
-            "1 executed tests, {evaluations} evaluations, 0 failures"
+            "{groups} executed tests, {evaluations} evaluations, 0 failures"
         )),
         "{name}: {output}"
     );

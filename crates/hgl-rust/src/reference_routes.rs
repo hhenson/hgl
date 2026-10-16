@@ -6,11 +6,6 @@ use std::fmt::Write as _;
 
 pub(crate) fn target_error(plan: &Plan) -> Option<String> {
     for capture in &plan.captures {
-        if matches!(capture.value, Ty::Ref(_)) {
-            return Some(
-                "Rust capture target cannot prepare a source-declared REF normal connection".into(),
-            );
-        }
         if let Err(error) = capture_targets(plan, capture.owner) {
             return Some(error);
         }

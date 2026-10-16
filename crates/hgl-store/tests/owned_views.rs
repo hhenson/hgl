@@ -1,6 +1,6 @@
 //! Internal passive owner views preserve typed child endpoints and consumer ordering.
 use hgl_alloc_count::{CountingAllocator, count_in};
-use hgl_store::{BindError, Kind, Store, Wake};
+use hgl_store::{BindError, Kind, Reference, Store, Wake};
 use hgl_types::{EngineTime, NodeId, ScalarType};
 #[global_allocator]
 static ALLOCATOR: CountingAllocator = CountingAllocator;
@@ -86,5 +86,44 @@ fn descendant_carrier_retarget_updates_passive_view_without_value_copy_or_alloca
     }
     store.enter_scope(parent);
     assert_eq!(store.bindings().input(value).source, Some(second.id()));
+    Ok(())
+}
+
+#[test]
+fn reference_field_assembly_retains_unpublished_carrier_across_retargets() -> Result<(), BindError>
+{
+    let mut store = Store::new();
+    let parent = store.scope();
+    let shape = Kind::Bundle(vec![("value".into(), Kind::Reference(Box::new(scalar())))]);
+    let bundle = store.add_shaped_input(NodeId(1), shape.clone(), false);
+    let child = store.child_scope(NodeId(1));
+    store.enter_scope(child);
+    let target = store.add_output::<i64>(NodeId(0));
+    let carrier = store.add_reference(NodeId(1), ScalarType::I64, false);
+    store.enter_scope(parent);
+    let value = store.bindings().fixed_input(bundle, 0);
+    store.prepare_owned_view(value, carrier)?;
+    let assembly = store.assemble_owned_view(bundle)?;
+    let expected = store.items_reference(shape, vec![store.reference(carrier)])?;
+    assert_eq!(assembly, expected);
+    assert!(!store.bindings().valid(value));
+    assert_eq!(store.bindings().input(value).source, Some(carrier));
+    store.reserve_reference_target(target.id(), 1);
+    store.enter_scope(child);
+    for designation in [
+        store.reference(target.id()),
+        Reference::default(),
+        store.reference(target.id()),
+    ] {
+        let (result, allocations) = count_in(|| {
+            store.set_reference(carrier, designation, EngineTime::MIN_START, &mut Quiet)
+        });
+        result?;
+        assert_eq!(allocations, 0);
+        assert!(store.bindings().valid(value));
+        assert_eq!(store.bindings().input(value).source, Some(carrier));
+        assert_eq!(store.bindings().input_reference(value), designation);
+        assert_eq!(store.bindings().input_reference(bundle), assembly);
+    }
     Ok(())
 }

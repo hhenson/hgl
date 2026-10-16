@@ -69,6 +69,8 @@ Own-output assignment delegates complete ordinary/delta compatibility to
 structural_admission. Writable ordinary local widening remains separate from
 exact temporal output compatibility. Retained concrete Struct/fixed List/Map
 locals share Tuple ownership rules; mutable retained locals remain diagnosed.
+Declared REF outputs share return designation checking instead of constructing
+an unsupported delta<ref<T>> publication context.
 
 GraphLocals retains uninitialized declared types separately from Value IR.
 declare/declaration/initialized/read provide direct graph first-assignment

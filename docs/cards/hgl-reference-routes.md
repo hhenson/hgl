@@ -22,3 +22,7 @@ Conditional branch outputs expand to their actual possible targets. Scoped cold
 endpoint inventories include every prepared generation. Reservation counts all
 possible consumers; prepared structural views skip rank-incompatible sibling
 instances. No scoped inventory or source name lookup remains on the tick path.
+
+Capture target discovery preserves a declared REF result's carrier as its normal
+endpoint. Ordinary followers still expand that carrier's possible targets for
+subscription and structural-view reservation.
